@@ -1,0 +1,15 @@
+*.pyc
+*.egg
+*.egg-info
+build/
+dist/
+.eggs/
+.ropeproject/
+ChangeLog
+man/*.1
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*

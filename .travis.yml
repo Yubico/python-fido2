@@ -1,0 +1,33 @@
+language: python
+sudo: false
+
+python:
+  - "2.7"
+  - "3.4"
+  - "3.5"
+  - "3.6"
+  - "pypy-5.7"
+  - "pypy3.5-5.7.1-beta"
+
+cache:
+  directories:
+    - $HOME/.cache/pip
+
+addons:
+  apt:
+    packages:
+      - libffi-dev
+      - libssl-dev
+      - swig
+
+install:
+  - pip install pre-commit
+  - pip install -e .
+
+script:
+  - pre-commit run --all-files
+  - python setup.py test
+
+
+after_success:
+  - coveralls
