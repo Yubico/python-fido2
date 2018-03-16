@@ -1,4 +1,6 @@
 == fido-host
+image:https://travis-ci.org/Yubico/python-fido-host.svg?branch=master["Travis CI Status", link="https://travis-ci.org/Yubico/python-fido-host"]
+image:https://ci.appveyor.com/api/projects/status/8orx9nbdfq52w47s/branch/master?svg=true["Appveyor Status", link="https://ci.appveyor.com/project/Yubico53275/python-fido-host/branch/master"]
 Provides library functionality for communicationg with a FIDO device over USB.
 
 WARNING: The state of this project is alpha. Expect things to change and break at any time!
