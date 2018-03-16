@@ -1,6 +1,9 @@
 language: python
 sudo: false
 
+services:
+  - docker
+
 python:
   - "2.7"
   - "3.4"
@@ -19,6 +22,11 @@ addons:
       - libssl-dev
       - swig
 
+before_install:
+  - docker build -t xenial -f docker/xenial/Dockerfile .
+  - pip install --disable-pip-version-check --upgrade pip
+
+
 install:
   - pip install pre-commit
   - pip install -e .
@@ -26,3 +34,8 @@ install:
 script:
   - pre-commit run --all-files
   - python setup.py test
+
+after_success:
+  - mkdir deploy
+  - id=$(docker create xenial)
+  - docker cp $id:/python-fido-host-debian-packages.tar.gz deploy/python-fido-host-$TRAVIS_BRANCH-deb.tar.gz
