@@ -18,7 +18,7 @@ environment:
     - PYTHON: "C:\\Python36-x64"
 
 matrix:
-  fast_finish: true
+  fast_finish: false
 
 build_script:
   - pip install -e .

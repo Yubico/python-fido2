@@ -372,6 +372,6 @@ class Fido2Client(object):
                     ),
                     auth_resp.signature
                 )]
-            except ApduError as e:
+            except ApduError:
                 pass  # Ignore this handle
         raise CtapError(CtapError.ERR.NO_CREDENTIALS)

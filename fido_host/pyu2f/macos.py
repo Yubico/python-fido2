@@ -111,13 +111,16 @@ K_CF_RUN_LOOP_RUN_STOPPED = 2
 K_CF_RUN_LOOP_RUN_TIMED_OUT = 3
 K_CF_RUN_LOOP_RUN_HANDLED_SOURCE = 4
 
-# Load relevant libraries
-iokit = ctypes.cdll.LoadLibrary(ctypes.util.find_library('IOKit'))
-cf = ctypes.cdll.LoadLibrary(ctypes.util.find_library('CoreFoundation'))
+iokit = None
+cf = None
 
 # Only use iokit and cf if we're on macos, this way we can still run tests
 # on other platforms if we properly mock
 if sys.platform.startswith('darwin'):
+  # Load relevant libraries
+  iokit = ctypes.cdll.LoadLibrary(ctypes.util.find_library('IOKit'))
+  cf = ctypes.cdll.LoadLibrary(ctypes.util.find_library('CoreFoundation'))
+
   # Exported constants
   K_CF_RUNLOOP_DEFAULT_MODE = CF_STRING_REF.in_dll(cf, 'kCFRunLoopDefaultMode')
 
