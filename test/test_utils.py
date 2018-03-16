@@ -114,5 +114,5 @@ class TestTimeout(unittest.TestCase):
 
     def test_timer_triggers(self):
         with Timeout(0.01) as e:
-            self.assertTrue(e.wait(0.02))
+            self.assertTrue(e.wait(1.0))
         self.assertTrue(e.is_set())
