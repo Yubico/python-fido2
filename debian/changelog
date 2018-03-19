@@ -1,5 +1,5 @@
-python-fido-host (0.1.0~dev) xenial; urgency=low
+python-fido-host (0.1.1~dev) xenial; urgency=low
 
   * Build for ppa
 
- -- Dain Nilsson <dain@yubico.com>  Fri, 16 Mar 2018 15:27:28 +0100
+ -- Dain Nilsson <dain@yubico.com>  Mon, 19 Mar 2018 13:27:28 +0100
