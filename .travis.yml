@@ -28,7 +28,7 @@ install:
 
 script:
   - |
-    if [[ "$TRAVIS_PYTHON_VERSION" != "pypy" ]]
+    if [[ "$TRAVIS_PYTHON_VERSION" != "pypy3.5-5.7.1-beta" ]]
     then
       pre-commit run --all-files
     fi
