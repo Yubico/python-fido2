@@ -30,7 +30,7 @@ Connects to the first FIDO device found, creates a new credential for it,
 and authenticates the credential. This works with both FIDO 2.0 devices as well
 as with U2F devices.
 """
-from __future__ import print_function, absolute_import
+from __future__ import print_function, absolute_import, unicode_literals
 
 from fido_host.hid import CtapHidDevice
 from fido_host.client import Fido2Client

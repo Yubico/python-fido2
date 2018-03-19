@@ -28,7 +28,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 
-from __future__ import unicode_literals
+from __future__ import absolute_import, unicode_literals
 
 from fido_host import cbor
 from binascii import a2b_hex, b2a_hex

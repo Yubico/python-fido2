@@ -27,6 +27,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import absolute_import, unicode_literals
+
 from fido_host.rpid import verify_app_id, verify_rp_id
 import unittest
 
@@ -50,6 +52,14 @@ class TestAppId(unittest.TestCase):
             'https://xyz.companyA.hosting.example.com'
         ))
 
+    def test_valid_ids_mixed_type(self):
+        self.assertTrue(verify_app_id(b'https://example.com',
+                                      'https://register.example.com'))
+        self.assertTrue(verify_app_id('https://example.com',
+                                      b'https://fido.example.com'))
+        self.assertTrue(verify_app_id(b'https://example.com',
+                                      b'https://www.example.com:444'))
+
     def test_invalid_ids(self):
         self.assertFalse(verify_app_id('https://example.com',
                                        'http://example.com'))
@@ -66,6 +76,14 @@ class TestAppId(unittest.TestCase):
             'https://companyA.hosting.example.com',
             'https://companyB.hosting.example.com'
         ))
+
+    def test_invalid_ids_mixed_type(self):
+        self.assertFalse(verify_app_id(b'https://example.com',
+                                       'http://example.com'))
+        self.assertFalse(verify_app_id('https://example.com',
+                                       b'http://www.example.com'))
+        self.assertFalse(verify_app_id(b'https://example.com',
+                                       b'https://example-test.com'))
 
     def test_effective_tld_names(self):
         self.assertFalse(verify_app_id(
@@ -88,6 +106,14 @@ class TestRpId(unittest.TestCase):
         self.assertTrue(verify_rp_id('example.com',
                                      'https://www.example.com:444'))
 
+    def test_valid_ids_mixed_type(self):
+        self.assertTrue(verify_rp_id(b'example.com',
+                                     'https://register.example.com'))
+        self.assertTrue(verify_rp_id('example.com',
+                                     b'https://fido.example.com'))
+        self.assertTrue(verify_rp_id(b'example.com',
+                                     b'https://www.example.com:444'))
+
     def test_invalid_ids(self):
         self.assertFalse(verify_rp_id('example.com',
                                       'http://example.com'))
@@ -104,3 +130,11 @@ class TestRpId(unittest.TestCase):
             'companyA.hosting.example.com',
             'https://companyB.hosting.example.com'
         ))
+
+    def test_invalid_ids_mixed_type(self):
+        self.assertFalse(verify_rp_id(b'example.com',
+                                      'http://example.com'))
+        self.assertFalse(verify_rp_id('example.com',
+                                      b'http://www.example.com'))
+        self.assertFalse(verify_rp_id(b'example.com',
+                                      b'https://example-test.com'))

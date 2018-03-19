@@ -35,6 +35,8 @@ Advanced APP_ID values pointing to JSON files containing valid facets are not
 supported by this implementation.
 """
 
+from __future__ import absolute_import, unicode_literals
+
 import os
 import six
 from six.moves.urllib.parse import urlparse
@@ -48,8 +50,12 @@ with open(tld_fname, 'rb') as f:
 
 
 def verify_rp_id(rp_id, origin):
-    if not isinstance(rp_id, six.string_types) or not rp_id:
+    if isinstance(rp_id, six.binary_type):
+        rp_id = rp_id.decode()
+    if not rp_id:
         return False
+    if isinstance(origin, six.binary_type):
+        origin = origin.decode()
 
     url = urlparse(origin)
     if url.scheme != 'https':
@@ -63,6 +69,8 @@ def verify_rp_id(rp_id, origin):
 
 
 def verify_app_id(app_id, origin):
+    if isinstance(app_id, six.binary_type):
+        app_id = app_id.decode()
     url = urlparse(app_id)
     if url.scheme != 'https':
         return False

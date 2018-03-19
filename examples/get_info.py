@@ -30,7 +30,7 @@ Connects to each attached FIDO device, and:
     1. If the device supports CBOR commands, perform a getInfo command.
     2. If the device supports WINK, perform the wink command.
 """
-from __future__ import print_function, absolute_import
+from __future__ import print_function, absolute_import, unicode_literals
 
 from fido_host.hid import CtapHidDevice, CAPABILITY
 from fido_host.fido2 import CTAP2
