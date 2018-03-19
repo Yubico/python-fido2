@@ -1,7 +1,6 @@
 #!/usr/bin/make -f
 
+export PYBUILD_DISABLE=test
+
 %:
 	dh $@ --with python2,python3 --buildsystem=pybuild
-
-override_dh_auto_test:
-	-dh_auto_test
