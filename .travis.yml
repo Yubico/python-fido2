@@ -35,11 +35,11 @@ script:
   - python setup.py test
 
 after_success:
+  - mkdir deploy
   - |
     if [[ "$TRAVIS_PYTHON_VERSION" == "3.6" ]]
     then
       docker build -t xenial -f docker/xenial/Dockerfile .
-      mkdir deploy
       id=$(docker create xenial)
       docker cp $id:/python-fido-host-debian-packages.tar.gz deploy/python-fido-host-$TRAVIS_BRANCH-deb.tar.gz
     fi
