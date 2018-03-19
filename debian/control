@@ -27,7 +27,7 @@ Depends: ${misc:Depends},
          python-cryptography,
          python-setuptools,
          python-six,
-Description: Python 2 library for communicating with a FIDO device
+Description: Python library for communicating with a FIDO device
  A Python library for communicating with a FIDO device over USB HID.
  Supports FIDO U2F and FIDO 2.0.
  This is the Python 2 version of the package.
@@ -41,7 +41,7 @@ Depends: ${misc:Depends},
          python3-cryptography,
          python3-setuptools,
          python3-six,
-Description: Python 2 library for communicating with a FIDO device
+Description: Python library for communicating with a FIDO device
  A Python library for communicating with a FIDO device over USB HID.
  Supports FIDO U2F and FIDO 2.0.
  This is the Python 3 version of the package.
