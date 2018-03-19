@@ -5,7 +5,7 @@ Uploaders: Dag Heyman <dag@yubico.com>,
            Emil Lundberg <emil@yubico.com>
 Section: python
 Priority: optional
-Standards-Version: 3.9.7
+Standards-Version: 4.1.1
 Build-Depends: debhelper (>= 9),
                dh-python,
                python-all,
