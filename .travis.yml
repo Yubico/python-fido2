@@ -27,7 +27,11 @@ install:
   - pip install -e .
 
 script:
-  - pre-commit run --all-files
+  - |
+    if [[ "$TRAVIS_PYTHON_VERSION" != "pypy" ]]
+    then
+      pre-commit run --all-files
+    fi
   - python setup.py test
 
 after_success:
@@ -39,3 +43,16 @@ after_success:
       id=$(docker create xenial)
       docker cp $id:/python-fido-host-debian-packages.tar.gz deploy/python-fido-host-$TRAVIS_BRANCH-deb.tar.gz
     fi
+
+deploy:
+  provider: s3
+  access_key_id: "$AWS_KEY_ID"
+  secret_access_key: "$AWS_SECRET_KEY"
+  bucket: "$AWS_BUCKET"
+  skip_cleanup: true
+  acl: public-read
+  region: eu-west-1
+  local-dir: "deploy/"
+  upload-dir: "python-fido-host"
+  on:
+    all_branches: true
