@@ -95,7 +95,7 @@ def _call_polling(poll_delay, timeout, func, *args, **kwargs):
                     event.wait(poll_delay)
                 else:
                     raise
-        raise ClientError.ERR.TIMEOUT()
+    raise ClientError.ERR.TIMEOUT()
 
 
 class U2fClient(object):
@@ -241,7 +241,8 @@ class Fido2Client(object):
         if pin:
             pin_protocol = self.pin_protocol.VERSION
             if pin_protocol not in info.pin_protocols:
-                raise ValueError('Device does not support PIN protocol 1!')
+                raise ValueError('Device does not support PIN protocol: %d!' %
+                                 pin_protocol)
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
         elif info.options.get('clientPin'):
@@ -278,9 +279,12 @@ class Fido2Client(object):
                 if e.code == APDU.USE_NOT_SATISFIED:
                     raise CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
 
-        reg_resp = _call_polling(self.ctap1_poll_delay, timeout,
-                                 self.ctap.register, client_data.hash,
-                                 app_param)
+        try:
+            reg_resp = _call_polling(self.ctap1_poll_delay, timeout,
+                                     self.ctap.register, client_data.hash,
+                                     app_param)
+        except ClientError:  # Only happens for timeout/cancel
+            raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
 
         return AttestationObject.create(
             'fido-u2f',
@@ -329,7 +333,8 @@ class Fido2Client(object):
         if pin:
             pin_protocol = self.pin_protocol.VERSION
             if pin_protocol not in info.pin_protocols:
-                raise ValueError('Device does not support PIN protocol 1!')
+                raise ValueError('Device does not support PIN protocol %d!' %
+                                 pin_protocol)
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
         elif info.options.get('clientPin'):
@@ -374,4 +379,6 @@ class Fido2Client(object):
                 )]
             except ApduError:
                 pass  # Ignore this handle
+            except ClientError:  # Only happens for timeout/cancel
+                raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
         raise CtapError(CtapError.ERR.NO_CREDENTIALS)
