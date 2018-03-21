@@ -34,8 +34,9 @@ import unittest
 from threading import Event
 from binascii import a2b_hex
 from fido_host.utils import sha256, websafe_decode
+from fido_host.ctap import CtapError
 from fido_host.u2f import ApduError, APDU, RegistrationData, SignatureData
-from fido_host.client import ClientData, U2fClient, ClientError
+from fido_host.client import ClientData, U2fClient, ClientError, Fido2Client
 
 
 class TestClientData(unittest.TestCase):
@@ -301,5 +302,18 @@ class TestU2fClient(unittest.TestCase):
                          SIG_DATA)
 
 
+RP_ID = 'foo.example.com'
+
+
 class TestFido2Client(unittest.TestCase):
-    pass
+    def test_register_wrong_app_id(self):
+        client = Fido2Client(None, APP_ID)
+        try:
+            client.register(
+                'https://bar.example.com',
+                [{'version': 'U2F_V2', 'challenge': 'foobar'}],
+                [],
+                timeout=1)
+            self.fail('register did not raise error')
+        except CtapError as e:
+            self.assertEqual(e.code, CtapError.ERR.NOT_ALLOWED)

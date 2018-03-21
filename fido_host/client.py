@@ -27,7 +27,7 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from .hid import CtapError
+from .ctap import CtapError
 from .u2f import CTAP1, APDU, ApduError
 from .fido2 import (CTAP2, PinProtocolV1, AttestedCredentialData,
                     AuthenticatorData, AttestationObject, AssertionResponse)

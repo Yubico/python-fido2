@@ -28,7 +28,8 @@
 from __future__ import absolute_import, unicode_literals
 
 from . import cbor
-from .hid import CTAPHID, CAPABILITY, CtapError
+from .ctap import CtapError
+from .hid import CTAPHID, CAPABILITY
 from .utils import Timeout, sha256, hmac_sha256
 
 from cryptography.hazmat.backends import default_backend
