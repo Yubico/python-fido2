@@ -68,6 +68,18 @@ SIG_DATA = SignatureData(a2b_hex(b'0100000001304402204b5f0cd17534cedd8c34ee09570
 
 class TestU2fClient(unittest.TestCase):
 
+    def test_register_wrong_app_id(self):
+        client = U2fClient(None, APP_ID)
+        try:
+            client.register(
+                'https://bar.example.com',
+                [{'version': 'U2F_V2', 'challenge': 'foobar'}],
+                [],
+                timeout=1)
+            self.fail('register did not raise error')
+        except ClientError as e:
+            self.assertEqual(e.code, ClientError.ERR.BAD_REQUEST)
+
     def test_register_unsupported_version(self):
         client = U2fClient(None, APP_ID)
         client.ctap = mock.MagicMock()
@@ -179,6 +191,20 @@ class TestU2fClient(unittest.TestCase):
                          REG_DATA)
         self.assertEqual(sha256(APP_ID.encode()), app_param)
 
+    def test_sign_wrong_app_id(self):
+        client = U2fClient(None, APP_ID)
+        client.ctap = mock.MagicMock()
+        client.ctap.get_version.return_value = 'U2F_V2'
+
+        try:
+            client.sign(
+                'http://foo.example.com', 'challenge',
+                [{'version': 'U2F_V2', 'keyHandle': 'a2V5'}]
+            )
+            self.fail('sign did not raise error')
+        except ClientError as e:
+            self.assertEqual(e.code, ClientError.ERR.BAD_REQUEST)
+
     def test_sign_unsupported_version(self):
         client = U2fClient(None, APP_ID)
         client.ctap = mock.MagicMock()
@@ -189,7 +215,7 @@ class TestU2fClient(unittest.TestCase):
                 APP_ID, 'challenge',
                 [{'version': 'U2F_V2', 'keyHandle': 'a2V5'}]
             )
-            self.fail('register did not raise error')
+            self.fail('sign did not raise error')
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
 
@@ -206,7 +232,7 @@ class TestU2fClient(unittest.TestCase):
                 APP_ID, 'challenge',
                 [{'version': 'U2F_V2', 'keyHandle': 'a2V5'}],
             )
-            self.fail('register did not raise error')
+            self.fail('sign did not raise error')
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
 
@@ -273,3 +299,7 @@ class TestU2fClient(unittest.TestCase):
         self.assertEqual(key_handle, b'key')
         self.assertEqual(websafe_decode(resp['signatureData']),
                          SIG_DATA)
+
+
+class TestFido2Client(unittest.TestCase):
+    pass

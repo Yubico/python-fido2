@@ -1,2 +1,7 @@
+* Version 0.2.0 (unreleased)
+ ** Fix Exception thrown in Fido2Client when using CTAP1 to be consistent with CTAP2.
+ ** Fix string types used in makeCredential/getAssertion on Python2.
+ ** New example for multi-device use.
+
 * Version 0.1.0 (released 2018-03-16)
  ** First beta release.
