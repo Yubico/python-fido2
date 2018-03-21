@@ -32,8 +32,8 @@ and the operation is cancelled for the others.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
-from fido_host.hid import CtapHidDevice, CtapError
-from fido_host.client import Fido2Client
+from fido_host.hid import CtapHidDevice
+from fido_host.client import Fido2Client, ClientError
 from threading import Event, Thread
 import sys
 
@@ -58,8 +58,8 @@ def work(client):
     try:
         attestation, client_data = client.make_credential(rp, user, challenge,
                                                           timeout=cancel)
-    except CtapError as e:
-        if e.code not in (CtapError.ERR.KEEPALIVE_CANCEL,):
+    except ClientError as e:
+        if e.code != ClientError.ERR.TIMEOUT:
             raise
         else:
             return
