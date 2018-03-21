@@ -75,14 +75,53 @@ class ClientError(Exception):
         DEVICE_INELIGIBLE = 4
         TIMEOUT = 5
 
-        def __call__(self):
-            return ClientError(self)
+        def __call__(self, cause=None):
+            return ClientError(self, cause)
 
-    def __init__(self, code):
+    def __init__(self, code, cause=None):
         self.code = ClientError.ERR(code)
+        self.cause = None
 
     def __repr__(self):
-        return 'U2F Client error: {0} - {0.name}'.format(self.code)
+        r = 'U2F Client error: {0} - {0.name}'.format(self.code)
+        if self.cause:
+            r += '. Caused by {}'.format(self.cause)
+        return r
+
+
+def _ctap2client_err(e):
+    if e.code in [CtapError.ERR.CREDENTIAL_EXCLUDED,
+                  CtapError.ERR.NO_CREDENTIALS]:
+        ce = ClientError.ERR.DEVICE_INELIGIBLE
+    elif e.code in [CtapError.ERR.KEEPALIVE_CANCEL,
+                    CtapError.ERR.ACTION_TIMEOUT,
+                    CtapError.ERR.USER_ACTION_TIMEOUT]:
+        ce = ClientError.ERR.TIMEOUT
+    elif e.code in [CtapError.ERR.UNSUPPORTED_ALGORITHM,
+                    CtapError.ERR.UNSUPPORTED_OPTION,
+                    CtapError.ERR.UNSUPPORTED_EXTENSION,
+                    CtapError.ERR.KEY_STORE_FULL]:
+        ce = ClientError.ERR.CONFIGURATION_UNSUPPORTED
+    elif e.code in [CtapError.ERR.INVALID_COMMAND,
+                    CtapError.ERR.CBOR_UNEXPECTED_TYPE,
+                    CtapError.ERR.INVALID_CBOR,
+                    CtapError.ERR.MISSING_PARAMETER,
+                    CtapError.ERR.INVALID_OPTION,
+                    CtapError.ERR.PIN_REQUIRED,
+                    CtapError.ERR.PIN_INVALID,
+                    CtapError.ERR.PIN_BLOCKED,
+                    CtapError.ERR.PIN_NOT_SET,
+                    CtapError.ERR.PIN_POLICY_VIOLATION,
+                    CtapError.ERR.PIN_TOKEN_EXPIRED,
+                    CtapError.ERR.PIN_AUTH_INVALID,
+                    CtapError.ERR.PIN_AUTH_BLOCKED,
+                    CtapError.ERR.REQUEST_TOO_LARGE,
+                    CtapError.ERR.OPERATION_DENIED]:
+        ce = ClientError.ERR.BAD_REQUEST
+    else:
+        ce = ClientError.ERR.OTHER_ERROR
+
+    return ce(e)
 
 
 def _call_polling(poll_delay, timeout, func, *args, **kwargs):
@@ -94,7 +133,9 @@ def _call_polling(poll_delay, timeout, func, *args, **kwargs):
                 if e.code == APDU.USE_NOT_SATISFIED:
                     event.wait(poll_delay)
                 else:
-                    raise
+                    raise ClientError.ERR.OTHER_ERROR(e)
+            except CtapError as e:
+                raise _ctap2client_err(e)
     raise ClientError.ERR.TIMEOUT()
 
 
@@ -132,6 +173,8 @@ class U2fClient(object):
             except ApduError as e:
                 if e.code == APDU.USE_NOT_SATISFIED:
                     raise ClientError.ERR.DEVICE_INELIGIBLE()
+            except CtapError as e:
+                raise _ctap2client_err(e)
 
         for request in register_requests:
             if request['version'] == version:
@@ -173,7 +216,7 @@ class U2fClient(object):
                         self.poll_delay, timeout, self.ctap.authenticate,
                         client_data.hash, app_param, key_handle)
                     break
-                except ApduError:
+                except ClientError:
                     pass  # Ignore and try next key
         else:
             raise ClientError.ERR.DEVICE_INELIGIBLE()
@@ -226,10 +269,13 @@ class Fido2Client(object):
             origin=self.origin
         )
 
-        attestation = self._do_make_credential(
-            client_data, rp, user, algos, exclude_list, extensions, rk, uv, pin,
-            timeout)
-        return attestation, client_data
+        try:
+            return self._do_make_credential(
+                client_data, rp, user, algos, exclude_list, extensions, rk, uv,
+                pin, timeout
+            ), client_data
+        except CtapError as e:
+            raise _ctap2client_err(e)
 
     def _ctap2_make_credential(self, client_data, rp, user, algos, exclude_list,
                                extensions, rk, uv, pin, timeout):
@@ -279,12 +325,9 @@ class Fido2Client(object):
                 if e.code == APDU.USE_NOT_SATISFIED:
                     raise CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
 
-        try:
-            reg_resp = _call_polling(self.ctap1_poll_delay, timeout,
-                                     self.ctap.register, client_data.hash,
-                                     app_param)
-        except ClientError:  # Only happens for timeout/cancel
-            raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
+        reg_resp = _call_polling(self.ctap1_poll_delay, timeout,
+                                 self.ctap.register, client_data.hash,
+                                 app_param)
 
         return AttestationObject.create(
             'fido-u2f',
@@ -321,9 +364,12 @@ class Fido2Client(object):
             origin=self.origin
         )
 
-        assertions = self._do_get_assertion(
-            client_data, rp_id, allow_list, extensions, rk, uv, pin, timeout)
-        return assertions, client_data
+        try:
+            return self._do_get_assertion(
+                client_data, rp_id, allow_list, extensions, rk, uv, pin, timeout
+            ), client_data
+        except CtapError as e:
+            raise _ctap2client_err(e)
 
     def _ctap2_get_assertion(self, client_data, rp_id, allow_list, extensions,
                              rk, uv, pin, timeout):
@@ -377,8 +423,7 @@ class Fido2Client(object):
                     ),
                     auth_resp.signature
                 )]
-            except ApduError:
-                pass  # Ignore this handle
-            except ClientError:  # Only happens for timeout/cancel
-                raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
-        raise CtapError(CtapError.ERR.NO_CREDENTIALS)
+            except ClientError as e:
+                if e.code == ClientError.ERR.TIMEOUT:
+                    raise  # Other errors are ignored so we move to the next.
+        raise ClientError.ERR.DEVICE_INELIGIBLE()

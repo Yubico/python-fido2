@@ -34,7 +34,6 @@ import unittest
 from threading import Event
 from binascii import a2b_hex
 from fido_host.utils import sha256, websafe_decode
-from fido_host.ctap import CtapError
 from fido_host.u2f import ApduError, APDU, RegistrationData, SignatureData
 from fido_host.client import ClientData, U2fClient, ClientError, Fido2Client
 
@@ -303,17 +302,21 @@ class TestU2fClient(unittest.TestCase):
 
 
 RP_ID = 'foo.example.com'
+rp = {'id': 'example.com', 'name': 'Example RP'}
+user = {'id': b'user_id', 'name': 'A. User'}
+challenge = 'Y2hhbGxlbmdl'
 
 
 class TestFido2Client(unittest.TestCase):
-    def test_register_wrong_app_id(self):
-        client = Fido2Client(None, APP_ID)
+    def test_make_credential_wrong_app_id(self):
+        ctap = mock.MagicMock()
+        client = Fido2Client(ctap, APP_ID)
         try:
-            client.register(
-                'https://bar.example.com',
-                [{'version': 'U2F_V2', 'challenge': 'foobar'}],
-                [],
+            client.make_credential(
+                {'id': 'bar.example.com', 'name': 'Invalid RP'},
+                user,
+                challenge,
                 timeout=1)
-            self.fail('register did not raise error')
-        except CtapError as e:
-            self.assertEqual(e.code, CtapError.ERR.NOT_ALLOWED)
+            self.fail('make_credential did not raise error')
+        except ClientError as e:
+            self.assertEqual(e.code, ClientError.ERR.BAD_REQUEST)
