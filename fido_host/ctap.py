@@ -53,9 +53,10 @@ class CtapDevice(abc.ABC):
         data is the binary string value of the payload.
         event is an instance of threading.Event which can be used to cancel the
         invocation.
-        on_keepalive is an optional callback function that is invoked on each
+        on_keepalive is an optional callback function that is invoked on
         keepalive message from the authenticator, with the keepalive status code
-        as an argument.
+        as an argument. The callback is only invoked once for consecutive
+        keepalive messages with the same status.
         """
         pass
 

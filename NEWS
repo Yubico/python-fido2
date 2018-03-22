@@ -1,4 +1,5 @@
 * Version 0.2.0 (unreleased)
+ ** Add optional on_keepalive callback to handle CTAP keepalive status.
  ** Fix Exception thrown in Fido2Client when using CTAP1 to be consistent with CTAP2.
  ** Fix string types used in makeCredential/getAssertion on Python2.
  ** New example for multi-device use.
