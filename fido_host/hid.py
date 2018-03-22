@@ -26,6 +26,12 @@ class CTAPHID(IntEnum):
 
 
 @unique
+class STATUS(IntEnum):
+    PROCESSING = 1
+    UPNEEDED = 2
+
+
+@unique
 class CAPABILITY(IntEnum):
     WINK = 0x01
     LOCK = 0x02  # Not used
@@ -74,9 +80,10 @@ class CtapHidDevice(CtapDevice):
     def capabilities(self):
         return self._dev.capabilities
 
-    def call(self, cmd, data=b'', event=None):
+    def call(self, cmd, data=b'', event=None, on_keepalive=None):
         event = event or Event()
         self._dev.InternalSend(TYPE_INIT | cmd, bytearray(data))
+        last_ka = None
         while not event.is_set():
             status, resp = self._dev.InternalRecv()
             status ^= TYPE_INIT
@@ -85,6 +92,14 @@ class CtapHidDevice(CtapDevice):
             elif status == CTAPHID.ERROR:
                 raise CtapError(resp[0])
             elif status == CTAPHID.KEEPALIVE:
+                ka_status = resp[0]
+                if on_keepalive and last_ka != ka_status:
+                    try:
+                        ka_status = STATUS(ka_status)
+                    except ValueError:
+                        pass  # Unknown status value
+                    last_ka = ka_status
+                    on_keepalive(ka_status)
                 continue
             else:
                 raise CtapError(CtapError.ERR.INVALID_COMMAND)

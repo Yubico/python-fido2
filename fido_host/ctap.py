@@ -47,12 +47,15 @@ class CtapDevice(abc.ABC):
     """
 
     @abc.abstractmethod
-    def call(self, cmd, data=b'', event=None):
+    def call(self, cmd, data=b'', event=None, on_keepalive=None):
         """
         cmd is the integer value of the command.
         data is the binary string value of the payload.
         event is an instance of threading.Event which can be used to cancel the
         invocation.
+        on_keepalive is an optional callback function that is invoked on each
+        keepalive message from the authenticator, with the keepalive status code
+        as an argument.
         """
         pass
 

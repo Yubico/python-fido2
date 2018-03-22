@@ -32,7 +32,7 @@ and the operation is cancelled for the others.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
-from fido_host.hid import CtapHidDevice
+from fido_host.hid import CtapHidDevice, STATUS
 from fido_host.client import Fido2Client, ClientError
 from threading import Event, Thread
 import sys
@@ -52,12 +52,22 @@ challenge = 'Y2hhbGxlbmdl'
 cancel = Event()
 attestation, client_data = None, None
 
+has_prompted = False
+
+
+def on_keepalive(status):
+    global has_prompted  # Don't prompt for each device.
+    if status == STATUS.UPNEEDED and not has_prompted:
+        print('\nTouch your authenticator device now...\n')
+        has_prompted = True
+
 
 def work(client):
     global attestation, client_data
     try:
-        attestation, client_data = client.make_credential(rp, user, challenge,
-                                                          timeout=cancel)
+        attestation, client_data = client.make_credential(
+            rp, user, challenge, timeout=cancel, on_keepalive=on_keepalive
+        )
     except ClientError as e:
         if e.code != ClientError.ERR.TIMEOUT:
             raise
@@ -75,8 +85,6 @@ for client in clients:
     t = Thread(target=work, args=(client,))
     threads.append(t)
     t.start()
-
-print('\nTouch your authenticator device now...\n')
 
 for t in threads:
     t.join()

@@ -126,14 +126,14 @@ class TestCTAP2(unittest.TestCase):
 
         self.assertEqual({1: b'response'}, ctap.send_cbor(2, b'foobar'))
         ctap.device.call.assert_called_with(0x10, b'\2' + cbor.dumps(b'foobar'),
-                                            None)
+                                            None, None)
 
     def test_get_info(self):
         ctap = CTAP2(mock.MagicMock())
         ctap.device.call.return_value = b'\0' + _INFO
 
         info = ctap.get_info()
-        ctap.device.call.assert_called_with(0x10, b'\4', None)
+        ctap.device.call.assert_called_with(0x10, b'\4', None, None)
         self.assertIsInstance(info, Info)
 
     def test_make_credential(self):
@@ -142,7 +142,7 @@ class TestCTAP2(unittest.TestCase):
 
         resp = ctap.make_credential(1, 2, 3, 4)
         ctap.device.call.assert_called_with(
-            0x10, b'\1' + cbor.dumps({1: 1, 2: 2, 3: 3, 4: 4}), None)
+            0x10, b'\1' + cbor.dumps({1: 1, 2: 2, 3: 3, 4: 4}), None, None)
 
         self.assertIsInstance(resp, AttestationObject)
         self.assertEqual(resp, _MC_RESP)
@@ -157,7 +157,7 @@ class TestCTAP2(unittest.TestCase):
 
         resp = ctap.get_assertion(1, 2)
         ctap.device.call.assert_called_with(
-            0x10, b'\2' + cbor.dumps({1: 1, 2: 2}), None)
+            0x10, b'\2' + cbor.dumps({1: 1, 2: 2}), None, None)
 
         self.assertIsInstance(resp, AssertionResponse)
         self.assertEqual(resp, _GA_RESP)

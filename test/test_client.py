@@ -34,7 +34,10 @@ import unittest
 from threading import Event
 from binascii import a2b_hex
 from fido_host.utils import sha256, websafe_decode
+from fido_host.hid import CAPABILITY
+from fido_host.ctap import CtapError
 from fido_host.u2f import ApduError, APDU, RegistrationData, SignatureData
+from fido_host.fido2 import Info, AttestationObject
 from fido_host.client import ClientData, U2fClient, ClientError, Fido2Client
 
 
@@ -297,26 +300,119 @@ class TestU2fClient(unittest.TestCase):
                          sha256(websafe_decode(resp['clientData'])))
         self.assertEqual(app_param, sha256(APP_ID.encode()))
         self.assertEqual(key_handle, b'key')
-        self.assertEqual(websafe_decode(resp['signatureData']),
-                         SIG_DATA)
+        self.assertEqual(websafe_decode(resp['signatureData']), SIG_DATA)
 
 
-RP_ID = 'foo.example.com'
 rp = {'id': 'example.com', 'name': 'Example RP'}
 user = {'id': b'user_id', 'name': 'A. User'}
 challenge = 'Y2hhbGxlbmdl'
+_INFO_NO_PIN = a2b_hex('a60182665532465f5632684649444f5f325f3002826375766d6b686d61632d7365637265740350f8a011f38c0a4d15800617111f9edc7d04a462726bf5627570f564706c6174f469636c69656e7450696ef4051904b0068101')  # noqa
+_MC_RESP = a2b_hex('a301667061636b6564025900c40021f5fc0b85cd22e60623bcd7d1ca48948909249b4776eb515154e57b66ae12410000001cf8a011f38c0a4d15800617111f9edc7d0040fe3aac036d14c1e1c65518b698dd1da8f596bc33e11072813466c6bf3845691509b80fb76d59309b8d39e0a93452688f6ca3a39a76f3fc52744fb73948b15783a5010203262001215820643566c206dd00227005fa5de69320616ca268043a38f08bde2e9dc45a5cafaf225820171353b2932434703726aae579fa6542432861fe591e481ea22d63997e1a529003a363616c67266373696758483046022100cc1ef43edf07de8f208c21619c78a565ddcf4150766ad58781193be8e0a742ed022100f1ed7c7243e45b7d8e5bda6b1abf10af7391789d1ef21b70bd69fed48dba4cb163783563815901973082019330820138a003020102020900859b726cb24b4c29300a06082a8648ce3d0403023047310b300906035504061302555331143012060355040a0c0b59756269636f205465737431223020060355040b0c1941757468656e74696361746f72204174746573746174696f6e301e170d3136313230343131353530305a170d3236313230323131353530305a3047310b300906035504061302555331143012060355040a0c0b59756269636f205465737431223020060355040b0c1941757468656e74696361746f72204174746573746174696f6e3059301306072a8648ce3d020106082a8648ce3d03010703420004ad11eb0e8852e53ad5dfed86b41e6134a18ec4e1af8f221a3c7d6e636c80ea13c3d504ff2e76211bb44525b196c44cb4849979cf6f896ecd2bb860de1bf4376ba30d300b30090603551d1304023000300a06082a8648ce3d0403020349003046022100e9a39f1b03197525f7373e10ce77e78021731b94d0c03f3fda1fd22db3d030e7022100c4faec3445a820cf43129cdb00aabefd9ae2d874f9c5d343cb2f113da23723f3')  # noqa
 
 
 class TestFido2Client(unittest.TestCase):
+
     def test_make_credential_wrong_app_id(self):
-        ctap = mock.MagicMock()
-        client = Fido2Client(ctap, APP_ID)
+        dev = mock.Mock()
+        dev.capabilities = CAPABILITY.CBOR
+        client = Fido2Client(dev, APP_ID)
         try:
             client.make_credential(
                 {'id': 'bar.example.com', 'name': 'Invalid RP'},
                 user,
                 challenge,
-                timeout=1)
+                timeout=1
+            )
             self.fail('make_credential did not raise error')
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.BAD_REQUEST)
+
+    def test_make_credential_existing_key(self):
+        dev = mock.Mock()
+        dev.capabilities = CAPABILITY.CBOR
+        client = Fido2Client(dev, APP_ID)
+        client.ctap = mock.MagicMock()
+        client.ctap.get_info.return_value = Info(_INFO_NO_PIN)
+        client.ctap.make_credential.side_effect = CtapError(
+            CtapError.ERR.CREDENTIAL_EXCLUDED)
+
+        try:
+            client.make_credential(
+                rp,
+                user,
+                challenge,
+                timeout=1
+            )
+            self.fail('make_credential did not raise error')
+        except ClientError as e:
+            self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
+
+        client.ctap.get_info.assert_called_with()
+        client.ctap.make_credential.assert_called_once()
+
+    def test_make_credential_ctap2(self):
+        dev = mock.Mock()
+        dev.capabilities = CAPABILITY.CBOR
+        client = Fido2Client(dev, APP_ID)
+        client.ctap = mock.MagicMock()
+        client.ctap.get_info.return_value = Info(_INFO_NO_PIN)
+        client.ctap.make_credential.return_value = AttestationObject(_MC_RESP)
+
+        attestation, client_data = client.make_credential(
+            rp,
+            user,
+            challenge,
+            timeout=1
+        )
+
+        self.assertIsInstance(attestation, AttestationObject)
+        self.assertIsInstance(client_data, ClientData)
+
+        client.ctap.get_info.assert_called_with()
+        client.ctap.make_credential.assert_called_with(
+            client_data.hash,
+            rp,
+            user,
+            [{'type': 'public-key', 'alg': -7}],
+            None,
+            None,
+            None,
+            None,
+            None,
+            1,
+            None
+        )
+
+        self.assertEqual(client_data.origin, APP_ID)
+        self.assertEqual(client_data.data['type'], 'webauthn.create')
+        self.assertEqual(client_data.data['challenge'], challenge)
+
+    def test_make_credential_ctap1(self):
+        dev = mock.Mock()
+        dev.capabilities = 0  # No CTAP2
+        client = Fido2Client(dev, APP_ID)
+
+        client.ctap = mock.MagicMock()
+        client.ctap.get_version.return_value = 'U2F_V2'
+        client.ctap.register.return_value = REG_DATA
+
+        attestation, client_data = client.make_credential(
+            rp,
+            user,
+            challenge,
+            timeout=1
+        )
+
+        self.assertIsInstance(attestation, AttestationObject)
+        self.assertIsInstance(client_data, ClientData)
+
+        client.ctap.register.assert_called_with(
+            client_data.hash,
+            sha256(rp['id'].encode()),
+        )
+
+        self.assertEqual(client_data.origin, APP_ID)
+        self.assertEqual(client_data.data['type'], 'webauthn.create')
+        self.assertEqual(client_data.data['challenge'], challenge)
+
+        self.assertEqual(attestation.fmt, 'fido-u2f')

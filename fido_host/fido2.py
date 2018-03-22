@@ -264,7 +264,8 @@ class CTAP2(object):
             raise ValueError('Device does not support CTAP2.')
         self.device = device
 
-    def send_cbor(self, cmd, data=None, timeout=None, parse=_parse_cbor):
+    def send_cbor(self, cmd, data=None, timeout=None, parse=_parse_cbor,
+                  on_keepalive=None):
         """
         Sends a CBOR message to the device, and waits for a response.
         The optional parameter 'timeout' can either be a numeric time in seconds
@@ -274,7 +275,8 @@ class CTAP2(object):
         if data is not None:
             request += cbor.dumps(data)
         with Timeout(timeout) as event:
-            response = self.device.call(CTAPHID.CBOR, request, event)
+            response = self.device.call(CTAPHID.CBOR, request, event,
+                                        on_keepalive)
         status = six.indexbytes(response, 0)
         if status != 0x00:
             raise CtapError(status)
@@ -284,7 +286,8 @@ class CTAP2(object):
 
     def make_credential(self, client_data_hash, rp, user, key_params,
                         exclude_list=None, extensions=None, options=None,
-                        pin_auth=None, pin_protocol=None, timeout=None):
+                        pin_auth=None, pin_protocol=None, timeout=None,
+                        on_keepalive=None):
         return self.send_cbor(CTAP2.CMD.MAKE_CREDENTIAL, args(
             client_data_hash,
             rp,
@@ -295,11 +298,11 @@ class CTAP2(object):
             options,
             pin_auth,
             pin_protocol
-        ), timeout, AttestationObject)
+        ), timeout, AttestationObject, on_keepalive)
 
     def get_assertion(self, rp_id, client_data_hash, allow_list=None,
                       extensions=None, options=None, pin_auth=None,
-                      pin_protocol=None, timeout=None):
+                      pin_protocol=None, timeout=None, on_keepalive=None):
         return self.send_cbor(CTAP2.CMD.GET_ASSERTION, args(
             rp_id,
             client_data_hash,
@@ -308,7 +311,7 @@ class CTAP2(object):
             options,
             pin_auth,
             pin_protocol
-        ), timeout, AssertionResponse)
+        ), timeout, AssertionResponse, on_keepalive)
 
     def get_info(self):
         return self.send_cbor(CTAP2.CMD.GET_INFO, parse=Info)
@@ -324,8 +327,9 @@ class CTAP2(object):
             pin_hash_enc
         ))
 
-    def reset(self, timeout=None):
-        self.send_cbor(CTAP2.CMD.RESET, timeout)
+    def reset(self, timeout=None, on_keepalive=None):
+        self.send_cbor(CTAP2.CMD.RESET, timeout=timeout,
+                       on_keepalive=on_keepalive)
 
     def get_next_assertion(self):
         return self.send_cbor(CTAP2.CMD.GET_NEXT_ASSERTION,
