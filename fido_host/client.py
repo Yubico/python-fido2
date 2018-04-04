@@ -42,7 +42,9 @@ import six
 class ClientData(bytes):
     def __init__(self, data):
         self.data = json.loads(data.decode())
-        self.origin = self.data['origin']
+
+    def get(self, key):
+        return self.data[key]
 
     @property
     def b64(self):

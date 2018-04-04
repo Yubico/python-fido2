@@ -47,7 +47,7 @@ class TestClientData(unittest.TestCase):
         client_data = ClientData(b'{"typ":"navigator.id.finishEnrollment","challenge":"vqrS6WXDe1JUs5_c3i4-LkKIHRr-3XVb3azuA5TifHo","cid_pubkey":{"kty":"EC","crv":"P-256","x":"HzQwlfXX7Q4S5MtCCnZUNBw3RMzPO9tOyWjBqRl4tJ8","y":"XVguGFLIZx1fXg3wNqfdbn75hi4-_7-BxhMljw42Ht4"},"origin":"http://example.com"}')  # noqa
 
         self.assertEqual(client_data.hash, a2b_hex('4142d21c00d94ffb9d504ada8f99b721f4b191ae4e37ca0140f696b6983cfacb'))  # noqa
-        self.assertEqual(client_data.origin, 'http://example.com')
+        self.assertEqual(client_data.get('origin'), 'http://example.com')
 
         self.assertEqual(client_data, ClientData.from_b64(client_data.b64))
 
@@ -383,9 +383,9 @@ class TestFido2Client(unittest.TestCase):
             None
         )
 
-        self.assertEqual(client_data.origin, APP_ID)
-        self.assertEqual(client_data.data['type'], 'webauthn.create')
-        self.assertEqual(client_data.data['challenge'], challenge)
+        self.assertEqual(client_data.get('origin'), APP_ID)
+        self.assertEqual(client_data.get('type'), 'webauthn.create')
+        self.assertEqual(client_data.get('challenge'), challenge)
 
     def test_make_credential_ctap1(self):
         dev = mock.Mock()
@@ -411,8 +411,8 @@ class TestFido2Client(unittest.TestCase):
             sha256(rp['id'].encode()),
         )
 
-        self.assertEqual(client_data.origin, APP_ID)
-        self.assertEqual(client_data.data['type'], 'webauthn.create')
-        self.assertEqual(client_data.data['challenge'], challenge)
+        self.assertEqual(client_data.get('origin'), APP_ID)
+        self.assertEqual(client_data.get('type'), 'webauthn.create')
+        self.assertEqual(client_data.get('challenge'), challenge)
 
         self.assertEqual(attestation.fmt, 'fido-u2f')
