@@ -30,13 +30,14 @@ from __future__ import absolute_import, unicode_literals
 from . import cbor
 from .ctap import CtapError
 from .hid import CTAPHID, CAPABILITY
-from .utils import Timeout, sha256, hmac_sha256
+from .utils import Timeout, sha256, hmac_sha256, bytes2int, int2bytes
+from .attestation import Attestation
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from binascii import b2a_hex, a2b_hex
+from binascii import b2a_hex
 from enum import IntEnum, unique
 import struct
 import six
@@ -206,9 +207,43 @@ class AttestationObject(bytes):
     def __str__(self):
         return self.__repr__()
 
+    def verify(self, client_param):
+        attestation = Attestation.for_type(self.fmt)
+        if attestation:
+            attestation().verify(self.att_statement, self.auth_data,
+                                 client_param)
+        else:
+            raise ValueError('Unsupported format: %s' % self.fmt)
+
     @classmethod
     def create(cls, fmt, auth_data, att_stmt):
         return cls(cbor.dumps(args(fmt, auth_data, att_stmt)))
+
+    @classmethod
+    def from_ctap1(cls, app_param, registration):
+        return cls.create(
+            'fido-u2f',
+            AuthenticatorData.create(
+                app_param,
+                0x41,
+                0,
+                AttestedCredentialData.create(
+                    b'\0'*16,  # aaguid
+                    registration.key_handle,
+                    {  # EC256 public key
+                        1: 2,
+                        3: -7,
+                        -1: 1,
+                        -2: registration.public_key[1:1+32],
+                        -3: registration.public_key[33:33+32]
+                    }
+                )
+            ),
+            {  # att_statement
+                'x5c': [registration.certificate],
+                'sig': registration.signature
+            }
+        )
 
 
 class AssertionResponse(bytes):
@@ -243,10 +278,25 @@ class AssertionResponse(bytes):
     def __str__(self):
         return self.__repr__()
 
+    def verify(self, client_param, public_key):
+        public_key.verify(self.auth_data + client_param)
+
     @classmethod
     def create(cls, credential, auth_data, signature, user=None, n_creds=None):
         return cls(cbor.dumps(args(credential, auth_data, signature, user,
                                    n_creds)))
+
+    @classmethod
+    def from_ctap1(cls, app_param, credential, authentication):
+        return cls.create(
+            credential,
+            AuthenticatorData.create(
+                app_param,
+                authentication.user_presence & 0x01,
+                authentication.counter
+            ),
+            authentication.signature
+        )
 
 
 class CTAP2(object):
@@ -372,22 +422,21 @@ class PinProtocolV1(object):
     def _init_shared_secret(self):
         be = default_backend()
         sk = ec.generate_private_key(ec.SECP256R1(), be)
-        pk = sk.public_key().public_numbers()
+        pn = sk.public_key().public_numbers()
         key_agreement = {
             1: 2,
-            3: -15,
             -1: 1,
-            -2: a2b_hex('%064x' % pk.x),
-            -3: a2b_hex('%064x' % pk.y)
+            -2: int2bytes(pn.x, 32),
+            -3: int2bytes(pn.y, 32)
         }
 
         resp = self.ctap.client_pin(PinProtocolV1.VERSION,
                                     PinProtocolV1.CMD.GET_KEY_AGREEMENT)
         pk = resp[PinProtocolV1.RESULT.KEY_AGREEMENT]
-        x = int(b2a_hex(pk[-2]), 16)
-        y = int(b2a_hex(pk[-3]), 16)
+        x = bytes2int(pk[-2])
+        y = bytes2int(pk[-3])
         pk = ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key(be)
-        shared_secret = sha256(sk.exchange(ec.ECDH(), pk))
+        shared_secret = sha256(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
         return key_agreement, shared_secret
 
     def get_pin_token(self, pin):

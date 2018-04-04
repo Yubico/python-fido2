@@ -29,6 +29,7 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from threading import Timer, Event
+from binascii import b2a_hex
 import six
 import numbers
 
@@ -37,7 +38,9 @@ __all__ = [
     'websafe_encode',
     'websafe_decode',
     'sha256',
-    'hmac_sha256'
+    'hmac_sha256',
+    'bytes2int',
+    'int2bytes'
 ]
 
 
@@ -51,6 +54,20 @@ def hmac_sha256(key, data):
     h = hmac.HMAC(key, hashes.SHA256(), default_backend())
     h.update(data)
     return h.finalize()
+
+
+def bytes2int(value):
+    return int(b2a_hex(value), 16)
+
+
+def int2bytes(value, minlen=-1):
+    ba = []
+    while value > 0xff:
+        ba.append(0xff & value)
+        value >>= 8
+    ba.append(value)
+    ba.extend([0]*(minlen - len(ba)))
+    return bytes(bytearray(reversed(ba)))
 
 
 def websafe_decode(data):

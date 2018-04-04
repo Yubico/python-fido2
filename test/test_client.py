@@ -36,8 +36,8 @@ from binascii import a2b_hex
 from fido_host.utils import sha256, websafe_decode
 from fido_host.hid import CAPABILITY
 from fido_host.ctap import CtapError
-from fido_host.u2f import ApduError, APDU, RegistrationData, SignatureData
-from fido_host.fido2 import Info, AttestationObject
+from fido_host.ctap1 import ApduError, APDU, RegistrationData, SignatureData
+from fido_host.ctap2 import Info, AttestationObject
 from fido_host.client import ClientData, U2fClient, ClientError, Fido2Client
 
 

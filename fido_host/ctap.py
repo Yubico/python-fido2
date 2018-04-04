@@ -29,15 +29,6 @@ from __future__ import absolute_import
 
 from enum import IntEnum, unique
 import abc
-import six
-
-
-if six.PY2:
-    @six.add_metaclass(abc.ABCMeta)
-    class ABC(object):
-        pass
-    abc.ABC = ABC
-    abc.abstractclassmethod = abc.abstractmethod
 
 
 class CtapDevice(abc.ABC):
@@ -58,14 +49,12 @@ class CtapDevice(abc.ABC):
         as an argument. The callback is only invoked once for consecutive
         keepalive messages with the same status.
         """
-        pass
 
     @abc.abstractclassmethod
     def list_devices(cls):
         """
         Generates instances of cls for discoverable devices.
         """
-        pass
 
 
 class CtapError(Exception):

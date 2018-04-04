@@ -25,4 +25,16 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import abc
+import six
+
+
+if six.PY2:
+    @six.add_metaclass(abc.ABCMeta)
+    class ABC(object):
+        pass
+    abc.ABC = ABC
+    abc.abstractclassmethod = abc.abstractmethod
+
+
 __version__ = '0.2.0-dev0'

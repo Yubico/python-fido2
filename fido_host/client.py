@@ -27,15 +27,16 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from .ctap import CtapError
 from .hid import STATUS
-from .u2f import CTAP1, APDU, ApduError
-from .fido2 import (CTAP2, PinProtocolV1, AttestedCredentialData,
-                    AuthenticatorData, AttestationObject, AssertionResponse)
+from .ctap import CtapError
+from .ctap1 import CTAP1, APDU, ApduError
+from .ctap2 import (CTAP2, PinProtocolV1, AttestationObject, AssertionResponse)
+from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
-from enum import IntEnum, unique
+from enum import Enum, IntEnum, unique
 import json
+import six
 
 
 class ClientData(bytes):
@@ -84,7 +85,7 @@ class ClientError(Exception):
         self.cause = None
 
     def __repr__(self):
-        r = 'U2F Client error: {0} - {0.name}'.format(self.code)
+        r = 'Client error: {0} - {0.name}'.format(self.code)
         if self.cause:
             r += '. Caused by {}'.format(self.cause)
         return r
@@ -143,6 +144,12 @@ def _call_polling(poll_delay, timeout, on_keepalive, func, *args, **kwargs):
     raise ClientError.ERR.TIMEOUT()
 
 
+@unique
+class U2F_TYPE(six.text_type, Enum):
+    REGISTER = 'navigator.id.finishEnrollment'
+    SIGN = 'navigator.id.getAssertion'
+
+
 class U2fClient(object):
     def __init__(self, device, origin, verify=verify_app_id):
         self.poll_delay = 0.25
@@ -188,7 +195,7 @@ class U2fClient(object):
             raise ClientError.ERR.DEVICE_INELIGIBLE()
 
         client_data = ClientData.build(
-            typ='navigator.id.finishEnrollment',
+            typ=U2F_TYPE.REGISTER,
             challenge=challenge,
             origin=self.origin
         )
@@ -198,6 +205,7 @@ class U2fClient(object):
             self.poll_delay, timeout, on_keepalive, self.ctap.register,
             client_data.hash, app_param
         )
+
         return {
             'registrationData': reg_data.b64,
             'clientData': client_data.b64
@@ -206,7 +214,7 @@ class U2fClient(object):
     def sign(self, app_id, challenge, registered_keys, timeout=None,
              on_keepalive=None):
         client_data = ClientData.build(
-            typ='navigator.id.getAssertion',
+            typ=U2F_TYPE.SIGN,
             challenge=challenge,
             origin=self.origin
         )
@@ -238,9 +246,9 @@ class U2fClient(object):
 
 
 @unique
-class CRED_ALGO(IntEnum):
-    ES256 = -7
-    RS256 = -257
+class FIDO2_TYPE(six.text_type, Enum):
+    MAKE_CREDENTIAL = 'webauthn.create'
+    GET_ASSERTION = 'webauthn.get'
 
 
 class Fido2Client(object):
@@ -266,13 +274,13 @@ class Fido2Client(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def make_credential(self, rp, user, challenge, algos=[CRED_ALGO.ES256],
+    def make_credential(self, rp, user, challenge, algos=[ES256.ALGORITHM],
                         exclude_list=None, extensions=None, rk=False, uv=False,
                         pin=None, timeout=None, on_keepalive=None):
         self._verify_rp_id(rp['id'])
 
         client_data = ClientData.build(
-            type='webauthn.create',
+            type=FIDO2_TYPE.MAKE_CREDENTIAL,
             clientExtensions={},
             challenge=challenge,
             origin=self.origin
@@ -319,7 +327,7 @@ class Fido2Client(object):
 
     def _ctap1_make_credential(self, client_data, rp, user, algos, exclude_list,
                                extensions, rk, uv, pin, timeout, on_keepalive):
-        if rk or uv:
+        if rk or uv or ES256.ALGORITHM not in algos:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
         app_param = sha256(rp['id'].encode())
@@ -336,32 +344,10 @@ class Fido2Client(object):
                                   self.ctap.register, dummy_param, app_param)
                     raise ClientError.ERR.DEVICE_INELIGIBLE()
 
-        reg_resp = _call_polling(self.ctap1_poll_delay, timeout, on_keepalive,
-                                 self.ctap.register, client_data.hash,
-                                 app_param)
-
-        return AttestationObject.create(
-            'fido-u2f',
-            AuthenticatorData.create(
-                app_param,
-                0x41,
-                0,
-                AttestedCredentialData.create(
-                    b'\0'*16,  # aaguid
-                    reg_resp.key_handle,
-                    {  # EC256 public key
-                        1: 2,
-                        3: -7,
-                        -1: 1,
-                        -2: reg_resp.public_key[1:1+32],
-                        -3: reg_resp.public_key[33:33+32]
-                    }
-                )
-            ),
-            {  # att_statement
-                'x5c': [reg_resp.certificate],
-                'sig': reg_resp.signature
-            }
+        return AttestationObject.from_ctap1(
+            app_param,
+            _call_polling(self.ctap1_poll_delay, timeout, on_keepalive,
+                          self.ctap.register, client_data.hash, app_param)
         )
 
     def get_assertion(self, rp_id, challenge, allow_list=None, extensions=None,
@@ -370,7 +356,7 @@ class Fido2Client(object):
         self._verify_rp_id(rp_id)
 
         client_data = ClientData.build(
-            type='webauthn.get',
+            type=FIDO2_TYPE.GET_ASSERTION,
             clientExtensions={},
             challenge=challenge,
             origin=self.origin
@@ -429,15 +415,9 @@ class Fido2Client(object):
                     self.ctap1_poll_delay, timeout, on_keepalive,
                     self.ctap.authenticate, client_param, app_param, cred['id']
                 )
-                return [AssertionResponse.create(
-                    cred,
-                    AuthenticatorData.create(
-                        app_param,
-                        auth_resp.user_presence & 0x01,
-                        auth_resp.counter
-                    ),
-                    auth_resp.signature
-                )]
+                return [
+                    AssertionResponse.from_ctap1(app_param, cred, auth_resp)
+                ]
             except ClientError as e:
                 if e.code == ClientError.ERR.TIMEOUT:
                     raise  # Other errors are ignored so we move to the next.

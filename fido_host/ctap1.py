@@ -28,7 +28,9 @@
 from __future__ import absolute_import, unicode_literals
 
 from .hid import CTAPHID
-from .utils import websafe_encode
+from .utils import websafe_encode, websafe_decode, bytes2int
+from .cose import ES256
+from .attestation import FidoU2FAttestation
 from enum import IntEnum, unique
 from binascii import b2a_hex
 import struct
@@ -43,7 +45,6 @@ class APDU(IntEnum):
 
 
 class ApduError(Exception):
-
     def __init__(self, code, data=b''):
         self.code = code
         self.data = data
@@ -66,7 +67,7 @@ class RegistrationData(bytes):
         cert_len = six.indexbytes(self, cert_offs + 1)
         if cert_len > 0x80:
             n_bytes = cert_len - 0x80
-            cert_len = int(b2a_hex(self[cert_offs+2:cert_offs+2+n_bytes]), 16) \
+            cert_len = bytes2int(self[cert_offs+2:cert_offs+2+n_bytes]) \
                 + n_bytes
         cert_len += 2
         self.certificate = self[cert_offs:cert_offs+cert_len]
@@ -75,6 +76,11 @@ class RegistrationData(bytes):
     @property
     def b64(self):
         return websafe_encode(self)
+
+    def verify(self, app_param, client_param):
+        FidoU2FAttestation.verify_signature(
+            app_param, client_param, self.key_handle, self.public_key,
+            self.certificate, self.signature)
 
     def __repr__(self):
         return ("RegistrationData(public_key: h'%s', key_handle: h'%s', "
@@ -90,6 +96,10 @@ class RegistrationData(bytes):
     def __str__(self):
         return '%r' % self
 
+    @classmethod
+    def from_b64(cls, data):
+        return cls(websafe_decode(data))
+
 
 class SignatureData(bytes):
     def __init__(self, _):
@@ -100,6 +110,10 @@ class SignatureData(bytes):
     def b64(self):
         return websafe_encode(self)
 
+    def verify(self, app_param, client_param, public_key):
+        m = app_param + self[:5] + client_param
+        ES256.from_ctap1(public_key).verify(m, self.signature)
+
     def __repr__(self):
         return ('SignatureData(user_presence: 0x%02x, counter: %d, '
                 "signature: h'%s'") % (self.user_presence, self.counter,
@@ -108,9 +122,12 @@ class SignatureData(bytes):
     def __str__(self):
         return '%r' % self
 
+    @classmethod
+    def from_b64(cls, data):
+        return cls(websafe_decode(data))
+
 
 class CTAP1(object):
-
     @unique
     class INS(IntEnum):
         REGISTER = 0x01
