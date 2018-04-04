@@ -33,7 +33,7 @@ Connects to each attached FIDO device, and:
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido_host.hid import CtapHidDevice, CAPABILITY
-from fido_host.fido2 import CTAP2
+from fido_host.ctap2 import CTAP2
 
 
 for dev in CtapHidDevice.list_devices():

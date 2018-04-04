@@ -61,12 +61,17 @@ print('ATTESTATION OBJECT:', attestation_object)
 print()
 print('CREDENTIAL DATA:', attestation_object.auth_data.credential_data)
 
+# Verify signature
+attestation_object.verify(client_data.hash)
+print('Attestation signature verified!')
+
+credential = attestation_object.auth_data.credential_data
 
 # Prepare parameters for getAssertion
 challenge = 'Q0hBTExFTkdF'  # Use a new challenge for each call.
 allow_list = [{
     'type': 'public-key',
-    'id': attestation_object.auth_data.credential_data.credential_id
+    'id': credential.credential_id
 }]
 
 # Authenticate the credential
@@ -79,3 +84,7 @@ assertion = assertions[0]  # Only one cred in allowList, only one response.
 print('CLIENT DATA:', client_data)
 print()
 print('ASSERTION DATA:', assertion)
+
+# Verify signature
+assertion.verify(client_data.hash, credential.public_key)
+print('Assertion signature verified!')

@@ -72,7 +72,8 @@ class FidoU2FAttestation(Attestation):
                          signature):
         m = b'\0' + app_param + client_param + key_handle + public_key
         certificate = x509.load_der_x509_certificate(cert, default_backend())
-        ES256(certificate.public_key()).verify(m, signature)
+        ES256.from_cryptography_key(certificate.public_key()).verify(
+            m, signature)
 
 
 class PackedAttestation(Attestation):
@@ -85,10 +86,11 @@ class PackedAttestation(Attestation):
         x5c = statement.get('x5c')
         if x5c:
             cert = x509.load_der_x509_certificate(x5c[0], default_backend())
-            pub_key = CoseKey.for_alg(alg)(cert.public_key())
+            pub_key = CoseKey.for_alg(alg).from_cryptography_key(
+                cert.public_key())
             # TODO: Additional verification based on extension, etc.
         else:
-            pub_key = CoseKey.parse(auth_data.credential_data.public_key)
+            pub_key = CoseKey(auth_data.credential_data.public_key)
             if pub_key.ALGORITHM != alg:
                 raise ValueError('Algorithm does not match that of public key!')
         pub_key.verify(auth_data + client_data_hash, statement['sig'])

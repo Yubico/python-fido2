@@ -31,82 +31,79 @@ from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
-import abc
 
 
-class CoseKey(abc.ABC):
-    @abc.abstractmethod
+class CoseKey(dict):
     def verify(self, message, signature):
         raise NotImplementedError('Signature verification not supported.')
 
-    @abc.abstractmethod
-    def to_cose(self):
-        raise NotImplemented
-
-    @abc.abstractclassmethod
-    def from_cose(cls, cose):
-        raise NotImplemented
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        raise NotImplementedError('Creation from cryptography not supported.')
 
     @staticmethod
     def for_alg(alg):
-        return next(cls for cls in CoseKey.__subclasses__()
-                    if getattr(cls, 'ALGORITHM') == alg or cls.__name__ == alg)
+        for cls in CoseKey.__subclasses__():
+            if getattr(cls, 'ALGORITHM', None) == alg:
+                return cls
+        return UnsupportedKey
 
     @staticmethod
     def parse(cose):
-        return CoseKey.for_alg(cose[3]).from_cose(cose)
+        return CoseKey.for_alg(cose[3])(cose)
+
+
+class UnsupportedKey(CoseKey):
+    pass
 
 
 class ES256(CoseKey):
     ALGORITHM = -7
 
-    def __init__(self, public_key):
-        self.public_key = public_key
-
     def verify(self, message, signature):
-        self.public_key.verify(signature, message, ec.ECDSA(hashes.SHA256()))
+        ec.EllipticCurvePublicNumbers(
+            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256R1()
+        ).public_key(default_backend()).verify(
+            signature, message, ec.ECDSA(hashes.SHA256())
+        )
 
-    def to_cose(self):
-        pn = self.public_key.public_numbers()
-        return {
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        pn = public_key.public_numbers()
+        return cls({
             1: 2,
-            3: self.ALGORITHM,
+            3: cls.ALGORITHM,
             -1: 1,
             -2: int2bytes(pn.x, 32),
             -3: int2bytes(pn.y, 32)
-        }
-
-    @classmethod
-    def from_cose(cls, cose):
-        return cls(ec.EllipticCurvePublicNumbers(
-            bytes2int(cose[-2]), bytes2int(cose[-3]),
-            ec.SECP256R1()).public_key(default_backend()))
+        })
 
     @classmethod
     def from_ctap1(cls, data):
-        return cls.from_cose({-2: data[1:33], -3: data[33:65]})
+        return cls({
+            1: 2,
+            3: cls.ALGORITHM,
+            -2: data[1:33],
+            -3: data[33:65]
+        })
 
 
 class RS256(CoseKey):
     ALGORITHM = -257
 
-    def __init__(self, public_key):
-        self.public_key = public_key
-
     def verify(self, message, signature):
-        self.public_key.verify(signature, message, padding.PKCS1v15(),
-                               hashes.SHA256())
-
-    def to_cose(self):
-        pn = self.public_key.public_numbers()
-        return {
-            1: 3,
-            3: self.ALGORITHM,
-            -1: int2bytes(pn.n),
-            -2: int2bytes(pn.e)
-        }
+        rsa.RSAPublicNumbers(
+            bytes2int(self[-2]), bytes2int(self[-1])
+        ).public_key(default_backend()).verify(
+            signature, message, padding.PKCS1v15(), hashes.SHA256()
+        )
 
     @classmethod
-    def from_cose(cls, cose):
-        return cls(rsa.RSAPublicNumbers(bytes2int(cose[-2]), bytes2int(cose[-1])
-                                        ).public_key(default_backend()))
+    def from_cryptography_key(cls, public_key):
+        pn = public_key.public_numbers()
+        return cls({
+            1: 3,
+            3: cls.ALGORITHM,
+            -1: int2bytes(pn.n),
+            -2: int2bytes(pn.e)
+        })

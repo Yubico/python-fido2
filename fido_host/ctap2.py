@@ -29,6 +29,7 @@ from __future__ import absolute_import, unicode_literals
 
 from . import cbor
 from .ctap import CtapError
+from .cose import CoseKey
 from .hid import CTAPHID, CAPABILITY
 from .utils import Timeout, sha256, hmac_sha256, bytes2int, int2bytes
 from .attestation import Attestation
@@ -122,7 +123,7 @@ class AttestedCredentialData(bytes):
         c_len = struct.unpack('>H', data[16:18])[0]
         cred_id = data[18:18+c_len]
         pub_key, rest = cbor.loads(data[18+c_len:])
-        return aaguid, cred_id, pub_key, rest
+        return aaguid, cred_id, CoseKey.parse(pub_key), rest
 
     @classmethod
     def create(cls, aaguid, credential_id, public_key):
@@ -267,7 +268,7 @@ class AssertionResponse(bytes):
         self.data = data
 
     def __repr__(self):
-        r = 'AssertionResponse(credential: %r, auth_data: %r, signature: %r' %\
+        r = 'AssertionResponse(credential: %r, auth_data: %r, signature: %s' %\
             (self.credential, self.auth_data, hexstr(self.signature))
         if self.user:
             r += ', user: %s' % self.user
@@ -279,7 +280,7 @@ class AssertionResponse(bytes):
         return self.__repr__()
 
     def verify(self, client_param, public_key):
-        public_key.verify(self.auth_data + client_param)
+        public_key.verify(self.auth_data + client_param, self.signature)
 
     @classmethod
     def create(cls, credential, auth_data, signature, user=None, n_creds=None):
