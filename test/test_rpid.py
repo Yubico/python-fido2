@@ -29,7 +29,7 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido_host.rpid import verify_app_id, verify_rp_id
+from fido2.rpid import verify_app_id, verify_rp_id
 import unittest
 
 

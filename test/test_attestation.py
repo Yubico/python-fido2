@@ -28,9 +28,8 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido_host.ctap2 import AuthenticatorData
-from fido_host.attestation import (Attestation, FidoU2FAttestation,
-                                   PackedAttestation)
+from fido2.ctap2 import AuthenticatorData
+from fido2.attestation import Attestation, FidoU2FAttestation, PackedAttestation
 from binascii import a2b_hex
 
 import unittest

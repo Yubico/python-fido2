@@ -32,7 +32,7 @@ import unittest
 from binascii import a2b_hex
 from threading import Event
 
-from fido_host.utils import (
+from fido2.utils import (
     Timeout,
     hmac_sha256,
     sha256,

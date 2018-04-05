@@ -27,8 +27,8 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido_host.ctap import CtapError
-from fido_host.hid import CtapHidDevice
+from fido2.ctap import CtapError
+from fido2.hid import CtapHidDevice
 import unittest
 import mock
 

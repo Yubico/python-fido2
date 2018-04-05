@@ -32,8 +32,8 @@ as with U2F devices.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
-from fido_host.hid import CtapHidDevice
-from fido_host.client import Fido2Client
+from fido2.hid import CtapHidDevice
+from fido2.client import Fido2Client
 import sys
 
 

@@ -22,7 +22,7 @@ import mock
 
 import six
 from six.moves import builtins
-from fido_host.pyu2f import linux
+from fido2.pyu2f import linux
 
 try:
   from pyfakefs import fake_filesystem  # pylint: disable=g-import-not-at-top

@@ -4,4 +4,4 @@ repos:
     hooks:
     -   id: flake8
     -   id: double-quote-string-fixer
-exclude: '^(fido_host|test)/pyu2f/.*'
+exclude: '^(fido2|test)/pyu2f/.*'

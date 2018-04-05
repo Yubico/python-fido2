@@ -30,7 +30,7 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido_host import cbor
+from fido2 import cbor
 from binascii import a2b_hex, b2a_hex
 import unittest
 

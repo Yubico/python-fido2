@@ -1,4 +1,4 @@
-Source: python-fido-host
+Source: python-fido2
 Maintainer: Debian Authentication Maintainers <pkg-auth-maintainers@lists.alioth.debian.org>
 Uploaders: Dag Heyman <dag@yubico.com>,
            Dain Nilsson <dain@yubico.com>,
@@ -15,11 +15,11 @@ Build-Depends: debhelper (>= 9),
                python-enum34,
                python-setuptools,
                python3-setuptools
-Homepage: https://www.github.com/python-fido-host/
+Homepage: https://www.github.com/python-fido2/
 X-Python-Version: >= 2.7
 X-Python3-Version: >= 3.4
 
-Package: python-fido-host
+Package: python-fido2
 Architecture: all
 Section: python
 Depends: ${misc:Depends},
@@ -33,7 +33,7 @@ Description: Python library for communicating with a FIDO device
  This is the Python 2 version of the package.
 
 
-Package: python3-fido-host
+Package: python3-fido2
 Architecture: all
 Section: python
 Depends: ${misc:Depends},

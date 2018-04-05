@@ -27,8 +27,8 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido_host.ctap1 import CTAP1, ApduError
-from fido_host.client import ClientData
+from fido2.ctap1 import CTAP1, ApduError
+from fido2.client import ClientData
 from binascii import a2b_hex
 import unittest
 import mock

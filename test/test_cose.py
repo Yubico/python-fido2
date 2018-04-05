@@ -28,8 +28,8 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido_host import cbor
-from fido_host.cose import CoseKey, ES256, RS256, UnsupportedKey
+from fido2 import cbor
+from fido2.cose import CoseKey, ES256, RS256, UnsupportedKey
 from binascii import a2b_hex
 
 import unittest

@@ -18,7 +18,7 @@ import ctypes
 import sys
 import mock
 
-from fido_host.pyu2f import macos, errors
+from fido2.pyu2f import macos, errors
 
 
 if sys.version_info[:2] < (2, 7):

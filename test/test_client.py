@@ -33,12 +33,12 @@ import mock
 import unittest
 from threading import Event
 from binascii import a2b_hex
-from fido_host.utils import sha256, websafe_decode
-from fido_host.hid import CAPABILITY
-from fido_host.ctap import CtapError
-from fido_host.ctap1 import ApduError, APDU, RegistrationData, SignatureData
-from fido_host.ctap2 import Info, AttestationObject
-from fido_host.client import ClientData, U2fClient, ClientError, Fido2Client
+from fido2.utils import sha256, websafe_decode
+from fido2.hid import CAPABILITY
+from fido2.ctap import CtapError
+from fido2.ctap1 import ApduError, APDU, RegistrationData, SignatureData
+from fido2.ctap2 import Info, AttestationObject
+from fido2.client import ClientData, U2fClient, ClientError, Fido2Client
 
 
 class TestClientData(unittest.TestCase):

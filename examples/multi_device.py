@@ -32,8 +32,8 @@ and the operation is cancelled for the others.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
-from fido_host.hid import CtapHidDevice, STATUS
-from fido_host.client import Fido2Client, ClientError
+from fido2.hid import CtapHidDevice, STATUS
+from fido2.client import Fido2Client, ClientError
 from threading import Event, Thread
 import sys
 

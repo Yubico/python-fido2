@@ -27,11 +27,11 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido_host.ctap1 import RegistrationData
-from fido_host.ctap2 import (CTAP2, PinProtocolV1, Info, AttestedCredentialData,
-                             AuthenticatorData, AttestationObject,
-                             AssertionResponse)
-from fido_host import cbor
+from fido2.ctap1 import RegistrationData
+from fido2.ctap2 import (CTAP2, PinProtocolV1, Info, AttestedCredentialData,
+                         AuthenticatorData, AttestationObject,
+                         AssertionResponse)
+from fido2 import cbor
 from binascii import a2b_hex
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec

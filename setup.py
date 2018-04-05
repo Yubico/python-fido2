@@ -34,7 +34,7 @@ VERSION_PATTERN = re.compile(r"(?m)^__version__\s*=\s*['\"](.+)['\"]$")
 
 
 def get_version():
-    with open('fido_host/__init__.py', 'r') as f:
+    with open('fido2/__init__.py', 'r') as f:
         match = VERSION_PATTERN.search(f.read())
         return match.group(1)
 
@@ -44,14 +44,14 @@ if sys.version_info < (3, 4):
     install_requires.append('enum34')
 
 setup(
-    name='fido-host',
+    name='fido2',
     version=get_version(),
     packages=find_packages(),
     include_package_data=True,
     author='Dain Nilsson',
     author_email='dain@yubico.com',
     description='Python based FIDO host library',
-    url='https://github.com/Yubico/python-fido-host',
+    url='https://github.com/Yubico/python-fido2',
     install_requires=install_requires,
     test_suite='test',
     tests_require=['mock>=1.0.1', 'pyfakefs>=2.4'],

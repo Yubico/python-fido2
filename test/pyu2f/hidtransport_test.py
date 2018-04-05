@@ -19,7 +19,7 @@ from __future__ import absolute_import
 import six
 import mock
 
-from fido_host.pyu2f import hidtransport, errors
+from fido2.pyu2f import hidtransport, errors
 from . import util
 
 import unittest

@@ -2,5 +2,5 @@ include COPYING*
 include README.adoc
 include NEWS
 include ChangeLog
-include fido_host/public_suffix_list.dat
+include fido2/public_suffix_list.dat
 include examples/*

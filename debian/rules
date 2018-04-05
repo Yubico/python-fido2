@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-export PYBUILD_NAME=fido-host
+export PYBUILD_NAME=fido2
 export PYBUILD_DISABLE=test
 
 %:

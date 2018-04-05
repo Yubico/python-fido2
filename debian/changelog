@@ -1,4 +1,4 @@
-python-fido-host (0.1.1~dev) xenial; urgency=low
+python-fido2 (0.3.0~dev) xenial; urgency=low
 
   * Build for ppa
 
