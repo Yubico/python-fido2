@@ -52,4 +52,4 @@ fido2 is compatible with CPython 2.7, 3.4 onwards, and is tested on Windows,
 MacOS, and Linux.
 
 This project depends on Cryptography. For instructions on installing this
-dependency, see link:https://cryptography.io/en/latest/installation/.
+dependency, see https://cryptography.io/en/latest/installation/.
