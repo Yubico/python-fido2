@@ -50,7 +50,7 @@ setup(
     include_package_data=True,
     author='Dain Nilsson',
     author_email='dain@yubico.com',
-    description='Python based FIDO host library',
+    description='Python based FIDO 2.0 library',
     url='https://github.com/Yubico/python-fido2',
     install_requires=install_requires,
     test_suite='test',

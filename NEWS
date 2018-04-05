@@ -1,3 +1,5 @@
+* Version 0.2.1 (unreleased)
+
 * Version 0.2.0 (released 2018-04-05)
  ** Changed name of project to python-fido2 to better reflect its scope.
  ** Added attestation and assertion verification methods.
