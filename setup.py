@@ -46,7 +46,7 @@ if sys.version_info < (3, 4):
 setup(
     name='fido2',
     version=get_version(),
-    packages=find_packages(),
+    packages=find_packages(exclude=['test', 'test.*']),
     include_package_data=True,
     author='Dain Nilsson',
     author_email='dain@yubico.com',
