@@ -1,6 +1,7 @@
 == fido2
 image:https://travis-ci.org/Yubico/python-fido2.svg?branch=master["Travis CI Status", link="https://travis-ci.org/Yubico/python-fido2"]
-image:https://ci.appveyor.com/api/projects/status/8orx9nbdfq52w47s/branch/master?svg=true["Appveyor Status", link="https://ci.appveyor.com/project/Yubico53275/python-fido2/branch/master"]
+image:https://ci.appveyor.com/api/projects/status/8orx9nbdfq52w47s/branch/master?svg=true["Appveyor Status", link="https://ci.appveyor.com/project/Yubico53275/python-fido-host/branch/master"]
+
 
 Provides library functionality for communicating with a FIDO device over USB as
 well as verifying attestation and assertion signatures.
