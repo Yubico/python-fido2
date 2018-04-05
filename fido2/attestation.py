@@ -29,8 +29,21 @@ from __future__ import absolute_import, unicode_literals
 
 from .cose import CoseKey, ES256
 from cryptography.hazmat.backends import default_backend
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography import x509
 import abc
+
+
+class InvalidAttestation(Exception):
+    pass
+
+
+class InvalidData(InvalidAttestation):
+    pass
+
+
+class InvalidSignature(InvalidAttestation):
+    pass
 
 
 class Attestation(abc.ABC):
@@ -43,7 +56,12 @@ class Attestation(abc.ABC):
         for cls in Attestation.__subclasses__():
             if getattr(cls, 'FORMAT', None) == fmt:
                 return cls
-        return None
+        return UnsupportedAttestation
+
+
+class UnsupportedAttestation(Attestation):
+    def verify(self, statement, auth_data, client_data_hash):
+        raise NotImplementedError('This attestation format is not supported!')
 
 
 class NoneAttestation(Attestation):
@@ -51,7 +69,7 @@ class NoneAttestation(Attestation):
 
     def verify(self, statement, auth_data, client_data_hash):
         if statement != {}:
-            raise ValueError('None Attestation requires empty statement.')
+            raise InvalidData('None Attestation requires empty statement.')
 
 
 class FidoU2FAttestation(Attestation):
@@ -70,12 +88,14 @@ class FidoU2FAttestation(Attestation):
         )
 
     @staticmethod
-    def verify_signature(app_param, client_param, key_handle, public_key, cert,
-                         signature):
+    def verify_signature(app_param, client_param, key_handle, public_key,
+                         cert_bytes, signature):
         m = b'\0' + app_param + client_param + key_handle + public_key
-        certificate = x509.load_der_x509_certificate(cert, default_backend())
-        ES256.from_cryptography_key(certificate.public_key()).verify(
-            m, signature)
+        cert = x509.load_der_x509_certificate(cert_bytes, default_backend())
+        try:
+            ES256.from_cryptography_key(cert.public_key()).verify(m, signature)
+        except _InvalidSignature:
+            raise InvalidSignature()
 
 
 OID_AAGUID = x509.ObjectIdentifier('1.3.6.1.4.1.45724.1.1.4')
@@ -83,30 +103,30 @@ OID_AAGUID = x509.ObjectIdentifier('1.3.6.1.4.1.45724.1.1.4')
 
 def _validate_attestation_certificate(cert, aaguid):
     if cert.version != x509.Version.v3:
-        raise ValueError('Attestation certificate must use version 3!')
+        raise InvalidData('Attestation certificate must use version 3!')
     c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
     if not c:
-        raise ValueError('Subject must have C set!')
+        raise InvalidData('Subject must have C set!')
     o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
     if not o:
-        raise ValueError('Subject must have O set!')
+        raise InvalidData('Subject must have O set!')
     ou = cert.subject.get_attributes_for_oid(
         x509.NameOID.ORGANIZATIONAL_UNIT_NAME)[0]
     if ou.value != 'Authenticator Attestation':
-        raise ValueError('Subject must have OU == "Authenticator Attestation"!')
+        raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
     cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
     if not cn:
-        raise ValueError('Subject must have CN set!')
+        raise InvalidData('Subject must have CN set!')
 
     bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
     if bc.value.ca:
-        raise ValueError('Attestation certificate must have CA=false!')
+        raise InvalidData('Attestation certificate must have CA=false!')
     try:
         ext = cert.extensions.get_extension_for_oid(OID_AAGUID)
         ext_aaguid = ext.value.value[2:]
         if ext_aaguid != aaguid:
-            raise ValueError('AAGUID in Authenticator data does not '
-                             'match attestation certificate!')
+            raise InvalidData('AAGUID in Authenticator data does not '
+                              'match attestation certificate!')
     except x509.ExtensionNotFound:
         pass  # If missing, ignore
 
@@ -129,5 +149,8 @@ class PackedAttestation(Attestation):
         else:
             pub_key = CoseKey(auth_data.credential_data.public_key)
             if pub_key.ALGORITHM != alg:
-                raise ValueError('Algorithm does not match that of public key!')
-        pub_key.verify(auth_data + client_data_hash, statement['sig'])
+                raise InvalidData('Wrong algorithm of public key!')
+        try:
+            pub_key.verify(auth_data + client_data_hash, statement['sig'])
+        except _InvalidSignature:
+            raise InvalidSignature()

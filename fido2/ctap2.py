@@ -32,7 +32,7 @@ from .ctap import CtapError
 from .cose import CoseKey
 from .hid import CTAPHID, CAPABILITY
 from .utils import Timeout, sha256, hmac_sha256, bytes2int, int2bytes
-from .attestation import Attestation
+from .attestation import Attestation, FidoU2FAttestation
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -223,7 +223,7 @@ class AttestationObject(bytes):
     @classmethod
     def from_ctap1(cls, app_param, registration):
         return cls.create(
-            'fido-u2f',
+            FidoU2FAttestation.FORMAT,
             AuthenticatorData.create(
                 app_param,
                 0x41,
