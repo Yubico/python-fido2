@@ -39,9 +39,11 @@ class Attestation(abc.ABC):
         pass
 
     @staticmethod
-    def for_type(format):
-        return next(cls for cls in Attestation.__subclasses__()
-                    if getattr(cls, 'FORMAT') == format)
+    def for_type(fmt):
+        for cls in Attestation.__subclasses__():
+            if getattr(cls, 'FORMAT', None) == fmt:
+                return cls
+        return None
 
 
 class NoneAttestation(Attestation):
@@ -76,6 +78,39 @@ class FidoU2FAttestation(Attestation):
             m, signature)
 
 
+OID_AAGUID = x509.ObjectIdentifier('1.3.6.1.4.1.45724.1.1.4')
+
+
+def _validate_attestation_certificate(cert, aaguid):
+    if cert.version != x509.Version.v3:
+        raise ValueError('Attestation certificate must use version 3!')
+    c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
+    if not c:
+        raise ValueError('Subject must have C set!')
+    o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
+    if not o:
+        raise ValueError('Subject must have O set!')
+    ou = cert.subject.get_attributes_for_oid(
+        x509.NameOID.ORGANIZATIONAL_UNIT_NAME)[0]
+    if ou.value != 'Authenticator Attestation':
+        raise ValueError('Subject must have OU == "Authenticator Attestation"!')
+    cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
+    if not cn:
+        raise ValueError('Subject must have CN set!')
+
+    bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
+    if bc.value.ca:
+        raise ValueError('Attestation certificate must have CA=false!')
+    try:
+        ext = cert.extensions.get_extension_for_oid(OID_AAGUID)
+        ext_aaguid = ext.value.value[2:]
+        if ext_aaguid != aaguid:
+            raise ValueError('AAGUID in Authenticator data does not '
+                             'match attestation certificate!')
+    except x509.ExtensionNotFound:
+        pass  # If missing, ignore
+
+
 class PackedAttestation(Attestation):
     FORMAT = 'packed'
 
@@ -86,9 +121,11 @@ class PackedAttestation(Attestation):
         x5c = statement.get('x5c')
         if x5c:
             cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+            _validate_attestation_certificate(cert,
+                                              auth_data.credential_data.aaguid)
+
             pub_key = CoseKey.for_alg(alg).from_cryptography_key(
                 cert.public_key())
-            # TODO: Additional verification based on extension, etc.
         else:
             pub_key = CoseKey(auth_data.credential_data.public_key)
             if pub_key.ALGORITHM != alg:
