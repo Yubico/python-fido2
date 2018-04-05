@@ -41,7 +41,7 @@ after_success:
     then
       docker build -t xenial -f docker/xenial/Dockerfile .
       id=$(docker create xenial)
-      docker cp $id:/python-fido-host-debian-packages.tar.gz deploy/python-fido-host-$TRAVIS_BRANCH-deb.tar.gz
+      docker cp $id:/python-fido2-debian-packages.tar.gz deploy/python-fido2-$TRAVIS_BRANCH-deb.tar.gz
     fi
 
 deploy:
@@ -53,6 +53,6 @@ deploy:
   acl: public-read
   region: eu-west-1
   local-dir: "deploy/"
-  upload-dir: "python-fido-host"
+  upload-dir: "python-fido2"
   on:
     all_branches: true
