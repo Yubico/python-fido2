@@ -42,6 +42,7 @@ from binascii import b2a_hex
 from enum import IntEnum, unique
 import struct
 import six
+import re
 
 
 def args(*args):
@@ -184,6 +185,10 @@ class AuthenticatorData(bytes):
         return self.__repr__()
 
 
+def _to_uppercase(value):
+    return re.sub('([a-z])([A-Z])', r'\1_\2', value).upper()
+
+
 class AttestationObject(bytes):
     @unique
     class KEY(IntEnum):
@@ -191,8 +196,15 @@ class AttestationObject(bytes):
         AUTH_DATA = 2
         ATT_STMT = 3
 
+        @classmethod
+        def for_key(cls, key):
+            try:
+                return cls(key)
+            except ValueError:
+                return getattr(cls, _to_uppercase(key))
+
     def __init__(self, data):
-        data = dict((AttestationObject.KEY(k), v) for (k, v) in
+        data = dict((AttestationObject.KEY.for_key(k), v) for (k, v) in
                     _parse_cbor(data).items())
         self.fmt = data[AttestationObject.KEY.FMT]
         self.auth_data = AuthenticatorData(

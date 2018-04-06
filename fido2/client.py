@@ -47,6 +47,10 @@ class ClientData(bytes):
         return self.data[key]
 
     @property
+    def challenge(self):
+        return websafe_decode(self.get('challenge'))
+
+    @property
     def b64(self):
         return websafe_encode(self)
 
