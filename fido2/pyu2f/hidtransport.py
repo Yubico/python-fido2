@@ -303,9 +303,12 @@ class UsbHidTransport(object):
 
   def InternalRecv(self):
     """Receives a message from the device, including defragmenting it."""
-    first_read = self.InternalReadFrame()
-    first_packet = UsbHidTransport.InitPacket.FromWireFormat(self.packet_size,
-                                                             first_read)
+    first_packet_read = False
+    while not first_packet_read:
+        first_read = self.InternalReadFrame()
+        first_packet = UsbHidTransport.InitPacket.FromWireFormat(
+            self.packet_size, first_read)
+        first_packet_read = self.cid == first_packet.cid
 
     data = first_packet.payload
     to_read = first_packet.size - len(first_packet.payload)
