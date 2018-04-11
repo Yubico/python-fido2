@@ -19,7 +19,7 @@ from __future__ import absolute_import
 import ctypes
 import ctypes.util
 import logging
-from six.moves.queue import Queue
+from six.moves.queue import Queue, Empty
 import sys
 import threading
 
@@ -96,6 +96,8 @@ IO_HID_REPORT_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
                                           ctypes.c_uint32,
                                           ctypes.POINTER(ctypes.c_uint8),
                                           CF_INDEX)
+IO_HID_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
+                                   ctypes.c_void_p)
 
 # Define C constants
 K_CF_NUMBER_SINT32_TYPE = 3
@@ -156,6 +158,9 @@ if sys.platform.startswith('darwin'):
                                                   CF_TYPE_REF]
   iokit.IOHIDDeviceGetProperty.restype = CF_TYPE_REF
   iokit.IOHIDDeviceGetProperty.argtypes = [IO_HID_DEVICE_REF, CF_STRING_REF]
+  iokit.IOHIDDeviceRegisterRemovalCallback.restype = None
+  iokit.IOHIDDeviceRegisterRemovalCallback.argtypes = [
+      IO_HID_DEVICE_REF, IO_HID_CALLBACK, ctypes.py_object]
   iokit.IOHIDDeviceRegisterInputReportCallback.restype = None
   iokit.IOHIDDeviceRegisterInputReportCallback.argtypes = [
       IO_HID_DEVICE_REF, ctypes.POINTER(ctypes.c_uint8), CF_INDEX,
@@ -269,6 +274,14 @@ def HidReadCallback(read_queue, result, sender, report_type, report_id, report,
 REGISTERED_READ_CALLBACK = IO_HID_REPORT_CALLBACK(HidReadCallback)
 
 
+def HidRemovalCallback(hid_device, result, sender):
+  del result, sender
+  cf.CFRunLoopStop(hid_device.run_loop_ref)
+
+
+REMOVAL_CALLBACK = IO_HID_CALLBACK(HidRemovalCallback)
+
+
 def DeviceReadThread(hid_device):
   """Binds a device to the thread's run loop, then starts the run loop.
 
@@ -289,17 +302,18 @@ def DeviceReadThread(hid_device):
                                        hid_device.run_loop_ref,
                                        K_CF_RUNLOOP_DEFAULT_MODE)
 
+  iokit.IOHIDDeviceRegisterRemovalCallback(
+      hid_device.device_handle, REMOVAL_CALLBACK,
+      ctypes.py_object(hid_device))
+
   # Run the run loop
-  run_loop_run_result = K_CF_RUN_LOOP_RUN_TIMED_OUT
-  while (run_loop_run_result == K_CF_RUN_LOOP_RUN_TIMED_OUT
-         or run_loop_run_result == K_CF_RUN_LOOP_RUN_HANDLED_SOURCE):
-    run_loop_run_result = cf.CFRunLoopRunInMode(
-        K_CF_RUNLOOP_DEFAULT_MODE,
-        1000,  # Timeout in seconds
-        False)  # Return after source handled
+  run_loop_run_result = cf.CFRunLoopRunInMode(
+    K_CF_RUNLOOP_DEFAULT_MODE,
+    4,  # Timeout in seconds
+    True)  # Return after source handled
 
   # log any unexpected run loop exit
-  if run_loop_run_result != K_CF_RUN_LOOP_RUN_STOPPED:
+  if run_loop_run_result != K_CF_RUN_LOOP_RUN_HANDLED_SOURCE:
     logger.error('Unexpected run loop exit code: %d', run_loop_run_result)
 
   # Unschedule from run loop
@@ -380,10 +394,6 @@ class MacOsHidDevice(base.HidDevice):
 
     # Create and start read thread
     self.run_loop_ref = None
-    self.read_thread = threading.Thread(target=DeviceReadThread,
-                                        args=(self,))
-    self.read_thread.daemon = True
-    self.read_thread.start()
 
     # Read max report sizes for in/out
     self.internal_max_in_report_len = GetDeviceIntProperty(
@@ -433,7 +443,14 @@ class MacOsHidDevice(base.HidDevice):
 
   def Read(self):
     """See base class."""
-    return self.read_queue.get(timeout=0xffffffff)
+    read_thread = threading.Thread(target=DeviceReadThread,
+                                   args=(self,))
+    read_thread.start()
+    read_thread.join()
+    try:
+        return self.read_queue.get(False)
+    except Empty:
+        raise TimeoutError('Failed reading a response')
 
   def __del__(self):
     # Unregister the callback
@@ -441,11 +458,5 @@ class MacOsHidDevice(base.HidDevice):
         self.device_handle,
         self.in_report_buffer,
         self.internal_max_in_report_len,
-        None,
+        ctypes.cast(0, IO_HID_REPORT_CALLBACK),
         None)
-
-    # Stop the run loop
-    cf.CFRunLoopStop(self.run_loop_ref)
-
-    # Wait for the read thread to exit
-    self.read_thread.join()

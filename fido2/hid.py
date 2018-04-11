@@ -110,7 +110,7 @@ class CtapHidDevice(CtapDevice):
     def wink(self):
         self.call(CTAPHID.WINK)
 
-    def ping(self, msg=b'Hello U2F'):
+    def ping(self, msg=b'Hello FIDO'):
         return self.call(CTAPHID.PING, msg)
 
     def lock(self, lock_time=10):
