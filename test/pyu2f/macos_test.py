@@ -18,7 +18,7 @@ import ctypes
 import sys
 import mock
 
-from fido2.pyu2f import macos, errors
+from fido2.pyu2f import macos
 
 
 if sys.version_info[:2] < (2, 7):
@@ -113,7 +113,7 @@ class MacOsTest(unittest.TestCase):
     data = bytearray(range(64))
 
     # Write should throw an OsHidError exception
-    with self.assertRaises(errors.OsHidError):
+    with self.assertRaises(OSError):
       device.Write(data)
 
   @mock.patch.object(macos.threading, 'Thread')

@@ -23,7 +23,7 @@ from six.moves.queue import Queue, Empty
 import sys
 import threading
 
-from . import base, errors
+from . import base
 
 logger = logging.getLogger('pyu2f.macos')
 
@@ -209,7 +209,7 @@ def GetDeviceIntProperty(dev_ref, key):
     return None
 
   if cf.CFGetTypeID(type_ref) != cf.CFNumberGetTypeID():
-    raise errors.OsHidError('Expected number type, got {}'.format(
+    raise OSError('Expected number type, got {}'.format(
         cf.CFGetTypeID(type_ref)))
 
   out = ctypes.c_int32()
@@ -230,7 +230,7 @@ def GetDeviceStringProperty(dev_ref, key):
     return None
 
   if cf.CFGetTypeID(type_ref) != cf.CFStringGetTypeID():
-    raise errors.OsHidError('Expected string type, got {}'.format(
+    raise OSError('Expected string type, got {}'.format(
         cf.CFGetTypeID(type_ref)))
 
   type_ref = ctypes.cast(type_ref, CF_STRING_REF)
@@ -334,13 +334,13 @@ class MacOsHidDevice(base.HidDevice):
     # Init a HID manager
     hid_mgr = iokit.IOHIDManagerCreate(None, None)
     if not hid_mgr:
-      raise errors.OsHidError('Unable to obtain HID manager reference')
+      raise OSError('Unable to obtain HID manager reference')
     iokit.IOHIDManagerSetDeviceMatching(hid_mgr, None)
 
     # Get devices from HID manager
     device_set_ref = iokit.IOHIDManagerCopyDevices(hid_mgr)
     if not device_set_ref:
-      raise errors.OsHidError('Failed to obtain devices from HID manager')
+      raise OSError('Failed to obtain devices from HID manager')
 
     num = iokit.CFSetGetCount(device_set_ref)
     devices = (IO_HID_DEVICE_REF * num)()
@@ -371,13 +371,13 @@ class MacOsHidDevice(base.HidDevice):
     # Resolve the path to device handle
     device_entry = iokit.IORegistryEntryFromPath(K_IO_MASTER_PORT_DEFAULT, path)
     if not device_entry:
-      raise errors.OsHidError('Device path does not match any HID device on '
+      raise OSError('Device path does not match any HID device on '
                               'the system')
 
     self.device_handle = iokit.IOHIDDeviceCreate(K_CF_ALLOCATOR_DEFAULT,
                                                  device_entry)
     if not self.device_handle:
-      raise errors.OsHidError('Failed to obtain device handle from registry '
+      raise OSError('Failed to obtain device handle from registry '
                               'entry')
     iokit.IOObjectRelease(device_entry)
 
@@ -386,7 +386,7 @@ class MacOsHidDevice(base.HidDevice):
     # Open device
     result = iokit.IOHIDDeviceOpen(self.device_handle, 0)
     if result != K_IO_RETURN_SUCCESS:
-      raise errors.OsHidError('Failed to open device for communication: {}'
+      raise OSError('Failed to open device for communication: {}'
                               .format(result))
 
     # Create read queue
@@ -400,13 +400,13 @@ class MacOsHidDevice(base.HidDevice):
         self.device_handle,
         HID_DEVICE_PROPERTY_MAX_INPUT_REPORT_SIZE)
     if not self.internal_max_in_report_len:
-      raise errors.OsHidError('Unable to obtain max in report size')
+      raise OSError('Unable to obtain max in report size')
 
     self.internal_max_out_report_len = GetDeviceIntProperty(
         self.device_handle,
         HID_DEVICE_PROPERTY_MAX_OUTPUT_REPORT_SIZE)
     if not self.internal_max_out_report_len:
-      raise errors.OsHidError('Unable to obtain max out report size')
+      raise OSError('Unable to obtain max out report size')
 
     # Register read callback
     self.in_report_buffer = (ctypes.c_uint8 * self.internal_max_in_report_len)()
@@ -439,7 +439,7 @@ class MacOsHidDevice(base.HidDevice):
 
     # Non-zero status indicates failure
     if result != K_IO_RETURN_SUCCESS:
-      raise errors.OsHidError('Failed to write report to device')
+      raise OSError('Failed to write report to device')
 
   def Read(self):
     """See base class."""
@@ -450,7 +450,7 @@ class MacOsHidDevice(base.HidDevice):
     try:
         return self.read_queue.get(False)
     except Empty:
-        raise errors.OsHidError('Failed reading a response')
+        raise OSError('Failed reading a response')
 
   def __del__(self):
     # Unregister the callback

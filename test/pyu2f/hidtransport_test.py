@@ -19,7 +19,7 @@ from __future__ import absolute_import
 import six
 import mock
 
-from fido2.pyu2f import hidtransport, errors
+from fido2.pyu2f import hidtransport
 from . import util
 
 import unittest
@@ -125,7 +125,7 @@ class TransportTest(unittest.TestCase):
     # the second will succeed on the second retry.
     fake_hid_dev.SetChannelBusyCount(3)
     with mock.patch.object(hidtransport, 'time') as _:
-      six.assertRaisesRegex(self, errors.HidError, '^Device Busy', t.SendMsgBytes,
+      six.assertRaisesRegex(self, OSError, '^Device Busy', t.SendMsgBytes,
                             [0x00, 0x01, 0x00, 0x00])
 
       reply = t.SendMsgBytes([0x00, 0x01, 0x00, 0x00])

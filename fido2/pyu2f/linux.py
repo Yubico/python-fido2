@@ -20,7 +20,7 @@ import os
 import struct
 import six
 
-from . import base, errors
+from . import base
 
 REPORT_DESCRIPTOR_KEY_MASK = 0xfc
 LONG_ITEM_ENCODING = 0xfe
@@ -56,7 +56,7 @@ def GetValueLength(rd, pos):
     if pos + 1 < len(rd):
       return (3, rd[pos + 1])
     else:
-      raise errors.HidError('Malformed report descriptor')
+      raise OSError('Malformed report descriptor')
 
   else:
     # If the key is tagged as a short item, then the item tag and data len are
@@ -69,7 +69,7 @@ def GetValueLength(rd, pos):
     elif code == 0x03:
       return (1, 4)
 
-  raise errors.HidError('Cannot happen')
+  raise OSError('Cannot happen')
 
 
 def ReadLsbBytes(rd, offset, value_size):
@@ -83,7 +83,7 @@ def ReadLsbBytes(rd, offset, value_size):
   elif value_size == 4:
     encoding = '<L'
   else:
-    raise errors.HidError('Invalid value size specified')
+    raise OSError('Invalid value size specified')
 
   ret, = struct.unpack(encoding, rd[offset:offset + value_size])
   return ret

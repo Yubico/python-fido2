@@ -25,7 +25,7 @@ import struct
 import time
 import six
 
-from . import errors, hid
+from . import hid
 
 
 def HidUsageSelector(device):
@@ -91,9 +91,9 @@ class UsbHidTransport(object):
     def __init__(self, packet_size, cid, cmd, size, payload):
       self.packet_size = packet_size
       if len(cid) != 4 or cmd > 255 or size >= 2**16:
-        raise errors.InvalidPacketError()
+        raise OSError('Invalid packet')
       if len(payload) > self.packet_size - 7:
-        raise errors.InvalidPacketError()
+        raise OSError('Invalid packet')
 
       self.cid = cid  # byte array
       self.cmd = cmd  # number
@@ -123,11 +123,11 @@ class UsbHidTransport(object):
         InitPacket object for specified data
 
       Raises:
-        InvalidPacketError: if the data isn't a valid InitPacket
+        OSError: if the data isn't a valid InitPacket
       """
       ba = bytearray(data)
       if len(ba) != packet_size:
-        raise errors.InvalidPacketError()
+        raise OSError('Invalid packet')
       cid = ba[0:4]
       cmd = ba[4]
       size = struct.unpack('>H', bytes(ba[5:7]))[0]
@@ -157,9 +157,9 @@ class UsbHidTransport(object):
       self.seq = seq
       self.payload = payload
       if len(payload) > self.packet_size - 5:
-        raise errors.InvalidPacketError()
+        raise OSError('Invalid packet')
       if seq > 127:
-        raise errors.InvalidPacketError()
+        raise OSError('Invalid packet')
 
     def ToWireFormat(self):
       """Serializes the packet."""
@@ -183,11 +183,11 @@ class UsbHidTransport(object):
         InitPacket object for specified data
 
       Raises:
-        InvalidPacketError: if the data isn't a valid ContPacket
+        OSError: if the data isn't a valid ContPacket
       """
       ba = bytearray(data)
       if len(ba) != packet_size:
-        raise errors.InvalidPacketError()
+        raise OSError('Invalid packet')
       cid = ba[0:4]
       seq = ba[4]
       # We don't know the size limit a priori here without seeing the init
@@ -203,10 +203,10 @@ class UsbHidTransport(object):
     in_size = hid_device.GetInReportDataLength()
     out_size = hid_device.GetOutReportDataLength()
     if in_size != out_size:
-      raise errors.HardwareError(
+      raise OSError(
           'unsupported device with different in/out packet sizes.')
     if in_size == 0:
-      raise errors.HardwareError('unable to determine packet size')
+      raise OSError('unable to determine packet size')
 
     self.packet_size = in_size
     self.read_timeout_secs = read_timeout_secs
@@ -234,9 +234,9 @@ class UsbHidTransport(object):
     nonce = bytearray(os.urandom(8))
     r = self.InternalExchange(UsbHidTransport.U2FHID_INIT, nonce)
     if len(r) < 17:
-      raise errors.HidError('unexpected init reply len')
+      raise OSError('unexpected init reply len')
     if r[0:8] != nonce:
-      raise errors.HidError('nonce mismatch')
+      raise OSError('nonce mismatch')
     self.cid = bytearray(r[8:12])
 
     self.u2fhid_version = r[12]
@@ -257,12 +257,12 @@ class UsbHidTransport(object):
         if ret_payload == UsbHidTransport.ERR_CHANNEL_BUSY:
           time.sleep(0.5)
           continue
-        raise errors.HidError('Device error: %d' % int(ret_payload[0]))
+        raise OSError('Device error: %d' % int(ret_payload[0]))
       elif ret_cmd != cmd:
-        raise errors.HidError('Command mismatch!')
+        raise OSError('Command mismatch!')
 
       return ret_payload
-    raise errors.HidError('Device Busy.  Please retry')
+    raise OSError('Device Busy.  Please retry')
 
   def InternalSend(self, cmd, payload):
     """Sends a message to the device, including fragmenting it."""
@@ -327,7 +327,7 @@ class UsbHidTransport(object):
         continue
 
       if seq != next_packet.seq:
-        raise errors.HardwareError('Packets received out of order')
+        raise OSError('Packets received out of order')
 
       # This packet for us at this point, so debit it against our
       # balance of bytes to read.

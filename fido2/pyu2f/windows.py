@@ -21,7 +21,7 @@ from ctypes import wintypes
 
 import platform
 
-from . import base, errors
+from . import base
 
 
 # Load relevant DLLs
@@ -47,7 +47,7 @@ if platform.architecture()[0] == '64bit':
 elif platform.architecture()[0] == '32bit':
   SETUPAPI_PACK = 1
 else:
-  raise errors.HidError('Unknown architecture: %s' % platform.architecture()[0])
+  raise OSError('Unknown architecture: %s' % platform.architecture()[0])
 
 class DeviceInterfaceData(ctypes.Structure):
   _fields_ = [('cbSize', wintypes.DWORD),
@@ -336,7 +336,7 @@ class WindowsHidDevice(base.HidDevice):
   def Write(self, packet):
     """See base class."""
     if len(packet) != self.GetOutReportDataLength():
-      raise errors.HidError('Packet length must match report data length.')
+      raise OSError('Packet length must match report data length.')
 
     out = bytes(bytearray([0] + packet))  # Prepend the zero-byte (report ID)
     num_written = wintypes.DWORD()
@@ -345,7 +345,7 @@ class WindowsHidDevice(base.HidDevice):
             self.dev, out, len(out),
             ctypes.byref(num_written), None))
     if num_written.value != len(out):
-      raise errors.HidError(
+      raise OSError(
           'Failed to write complete packet.  ' + 'Expected %d, but got %d' %
           (len(out), num_written.value))
     if not ret:
@@ -359,7 +359,7 @@ class WindowsHidDevice(base.HidDevice):
         self.dev, buf, len(buf), ctypes.byref(num_read), None)
 
     if num_read.value != self.desc.internal_max_in_report_len:
-      raise errors.HidError('Failed to read full length report from device.')
+      raise OSError('Failed to read full length report from device.')
 
     if not ret:
       raise ctypes.WinError()
