@@ -450,7 +450,7 @@ class MacOsHidDevice(base.HidDevice):
     try:
         return self.read_queue.get(False)
     except Empty:
-        raise TimeoutError('Failed reading a response')
+        raise IOError('Failed reading a response')
 
   def __del__(self):
     # Unregister the callback
