@@ -185,15 +185,6 @@ class AuthenticatorData(bytes):
         return self.__repr__()
 
 
-def _to_uppercase(value):
-    return re.sub('([a-z])([A-Z])', r'\1_\2', value).upper()
-
-
-def _to_camelcase(value):
-    value = ''.join(w.capitalize() for w in value.split('_'))
-    return value[0].lower() + value[1:]
-
-
 class AttestationObject(bytes):
     @unique
     class KEY(IntEnum):
@@ -206,7 +197,13 @@ class AttestationObject(bytes):
             try:
                 return cls(key)
             except ValueError:
-                return getattr(cls, _to_uppercase(key))
+                name = re.sub('([a-z])([A-Z])', r'\1_\2', key).upper()
+                return getattr(cls, name)
+
+        @property
+        def string_key(self):
+            value = ''.join(w.capitalize() for w in self.name.split('_'))
+            return value[0].lower() + value[1:]
 
     def __init__(self, data):
         data = dict((AttestationObject.KEY.for_key(k), v) for (k, v) in
@@ -268,7 +265,7 @@ class AttestationObject(bytes):
 
     def with_string_keys(self):
         return AttestationObject(cbor.dumps(
-            dict((_to_camelcase(k.name), v) for k, v in self.data.items())))
+            dict((k.string_key, v) for k, v in self.data.items())))
 
 
 class AssertionResponse(bytes):

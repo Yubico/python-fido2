@@ -121,6 +121,11 @@ _SIGNATURE = a2b_hex('304402206765CBF6E871D3AF7F01AE96F06B13C90F26F54B905C5166A2
 
 
 class TestAttestationObject(unittest.TestCase):
+    def test_string_keys(self):
+        self.assertEqual(AttestationObject.KEY.FMT.string_key, 'fmt')
+        self.assertEqual(AttestationObject.KEY.AUTH_DATA.string_key, 'authData')
+        self.assertEqual(AttestationObject.KEY.ATT_STMT.string_key, 'attStmt')
+
     def test_fido_u2f_attestation(self):
         att = AttestationObject.from_ctap1(
             a2b_hex(b'1194228DA8FDBDEEFD261BD7B6595CFD70A50D70C6407BCF013DE96D4EFB17DE'),  # noqa
