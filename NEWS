@@ -1,4 +1,6 @@
 * Version 0.2.3 (unreleased)
+ ** Bugfix: Don't use TimeoutError which isn't available on Python 2.
+ ** Add conversion between string/int keys for AttestationObject.
 
 * Version 0.2.2 (released 2018-04-11)
  ** Bugfix: Better handling of unplugged devices on MacOS and avoid leaking threads.

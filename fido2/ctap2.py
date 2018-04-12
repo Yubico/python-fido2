@@ -189,6 +189,11 @@ def _to_uppercase(value):
     return re.sub('([a-z])([A-Z])', r'\1_\2', value).upper()
 
 
+def _to_camelcase(value):
+    value = ''.join(w.capitalize() for w in value.split('_'))
+    return value[0].lower() + value[1:]
+
+
 class AttestationObject(bytes):
     @unique
     class KEY(IntEnum):
@@ -257,6 +262,13 @@ class AttestationObject(bytes):
                 'sig': registration.signature
             }
         )
+
+    def with_int_keys(self):
+        return AttestationObject(cbor.dumps(self.data))
+
+    def with_string_keys(self):
+        return AttestationObject(cbor.dumps(
+            dict((_to_camelcase(k.name), v) for k, v in self.data.items())))
 
 
 class AssertionResponse(bytes):
