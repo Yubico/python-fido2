@@ -107,3 +107,27 @@ class RS256(CoseKey):
             -1: int2bytes(pn.n),
             -2: int2bytes(pn.e)
         })
+
+
+class PS256(CoseKey):
+    ALGORITHM = -37
+
+    def verify(self, message, signature):
+        rsa.RSAPublicNumbers(
+            bytes2int(self[-2]), bytes2int(self[-1])
+        ).public_key(default_backend()).verify(
+            signature, message, padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ), hashes.SHA256()
+        )
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        pn = public_key.public_numbers()
+        return cls({
+            1: 3,
+            3: cls.ALGORITHM,
+            -1: int2bytes(pn.n),
+            -2: int2bytes(pn.e)
+        })
