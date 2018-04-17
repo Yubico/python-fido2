@@ -347,7 +347,7 @@ class Fido2Client(object):
             except ApduError as e:
                 if e.code == APDU.USE_NOT_SATISFIED:
                     _call_polling(self.ctap1_poll_delay, timeout, on_keepalive,
-                                  self.ctap.register, dummy_param, app_param)
+                                  self.ctap.register, dummy_param, dummy_param)
                     raise ClientError.ERR.DEVICE_INELIGIBLE()
 
         return AttestationObject.from_ctap1(
