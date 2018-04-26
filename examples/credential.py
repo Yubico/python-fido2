@@ -35,6 +35,7 @@ from __future__ import print_function, absolute_import, unicode_literals
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client
 import sys
+import click
 
 
 # Locate a device
@@ -53,7 +54,15 @@ challenge = 'Y2hhbGxlbmdl'
 
 # Create a credential
 print('\nTouch your authenticator device now...\n')
-attestation_object, client_data = client.make_credential(rp, user, challenge)
+try:
+    attestation_object, client_data = client.make_credential(
+        rp, user, challenge)
+except ValueError:
+    attestation_object, client_data = client.make_credential(
+        rp, user, challenge,
+        pin=click.prompt('Please enter PIN', hide_input=True))
+
+
 print('New credential created!')
 
 print('CLIENT DATA:', client_data)
@@ -76,7 +85,15 @@ allow_list = [{
 
 # Authenticate the credential
 print('\nTouch your authenticator device now...\n')
-assertions, client_data = client.get_assertion(rp['id'], challenge, allow_list)
+
+try:
+    assertions, client_data = client.get_assertion(
+        rp['id'], challenge, allow_list)
+except ValueError:
+    assertions, client_data = client.get_assertion(
+        rp['id'], challenge, allow_list,
+        pin=click.prompt('Please enter PIN', hide_input=True))
+
 print('Credential authenticated!')
 
 assertion = assertions[0]  # Only one cred in allowList, only one response.
