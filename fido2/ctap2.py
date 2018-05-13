@@ -81,7 +81,7 @@ class Info(bytes):
         self.extensions = data.get(Info.KEY.EXTENSIONS, [])
         self.aaguid = data[Info.KEY.AAGUID]
         self.options = data.get(Info.KEY.OPTIONS, {})
-        self.max_msg_size = data.get(Info.KEY.MAX_MSG_SIZE)
+        self.max_msg_size = data.get(Info.KEY.MAX_MSG_SIZE, 1024)
         self.pin_protocols = data.get(Info.KEY.PIN_PROTOCOLS, [])
         self.data = data
 
