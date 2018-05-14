@@ -34,8 +34,8 @@ from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client
+from getpass import getpass
 import sys
-import click
 
 
 # Locate a device
@@ -60,7 +60,7 @@ try:
 except ValueError:
     attestation_object, client_data = client.make_credential(
         rp, user, challenge,
-        pin=click.prompt('Please enter PIN', hide_input=True))
+        pin=getpass('Please enter PIN:'))
 
 
 print('New credential created!')
@@ -92,7 +92,7 @@ try:
 except ValueError:
     assertions, client_data = client.get_assertion(
         rp['id'], challenge, allow_list,
-        pin=click.prompt('Please enter PIN', hide_input=True))
+        pin=getpass('Please enter PIN:'))
 
 print('Credential authenticated!')
 
