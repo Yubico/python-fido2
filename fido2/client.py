@@ -357,7 +357,7 @@ class Fido2Client(object):
         )
 
     def get_assertion(self, rp_id, challenge, allow_list=None, extensions=None,
-                      rk=False, uv=False, pin=None, timeout=None,
+                      up=True, uv=False, pin=None, timeout=None,
                       on_keepalive=None):
         self._verify_rp_id(rp_id)
 
@@ -370,14 +370,14 @@ class Fido2Client(object):
 
         try:
             return self._do_get_assertion(
-                client_data, rp_id, allow_list, extensions, rk, uv, pin,
+                client_data, rp_id, allow_list, extensions, up, uv, pin,
                 timeout, on_keepalive
             ), client_data
         except CtapError as e:
             raise _ctap2client_err(e)
 
     def _ctap2_get_assertion(self, client_data, rp_id, allow_list, extensions,
-                             rk, uv, pin, timeout, on_keepalive):
+                             up, uv, pin, timeout, on_keepalive):
         info = self.ctap.get_info()
         pin_auth = None
         pin_protocol = None
@@ -391,14 +391,13 @@ class Fido2Client(object):
         elif info.options.get('clientPin'):
             raise ValueError('PIN required!')
 
-        if not (rk or uv):
+        options = {}
+        if not up:
+            options['up'] = False
+        if uv:
+            options['uv'] = True
+        if len(options) == 0:
             options = None
-        else:
-            options = {}
-            if rk:
-                options['rk'] = True
-            if uv:
-                options['uv'] = True
 
         assertions = [self.ctap.get_assertion(
             rp_id, client_data.hash, allow_list, extensions, options, pin_auth,
@@ -409,8 +408,8 @@ class Fido2Client(object):
         return assertions
 
     def _ctap1_get_assertion(self, client_data, rp_id, allow_list, extensions,
-                             rk, uv, pin, timeout, on_keepalive):
-        if rk or uv or not allow_list:
+                             up, uv, pin, timeout, on_keepalive):
+        if (not up) or uv or not allow_list:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
         app_param = sha256(rp_id.encode())
