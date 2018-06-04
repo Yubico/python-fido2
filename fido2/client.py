@@ -88,7 +88,7 @@ class ClientError(Exception):
 
     def __init__(self, code, cause=None):
         self.code = ClientError.ERR(code)
-        self.cause = None
+        self.cause = cause
 
     def __repr__(self):
         r = 'Client error: {0} - {0.name}'.format(self.code)
