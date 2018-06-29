@@ -5,3 +5,4 @@ include ChangeLog
 include fido2/public_suffix_list.dat
 include examples/*.py
 include examples/server/*.py examples/server/*.txt
+recursive-include test *.py
