@@ -34,27 +34,51 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
 
 
 class CoseKey(dict):
+    """A COSE formatted public key.
+
+    :param _: The COSE key paramters.
+    :cvar ALGORITHM: COSE algorithm identifier.
+    """
+    ALGORITHM = None
+
     def verify(self, message, signature):
+        """Validates a digital signature over a given message.
+
+        :param message: The message which was signed.
+        :param signature: The signature to check.
+        """
         raise NotImplementedError('Signature verification not supported.')
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        """Converts a PublicKey object from Cryptography into a COSE key.
+
+        :param public_key: Either an EC or RSA public key.
+        :return: A CoseKey.
+        """
         raise NotImplementedError('Creation from cryptography not supported.')
 
     @staticmethod
     def for_alg(alg):
+        """Get a subclass of CoseKey corresponding to an algorithm identifier.
+
+        :param alg: The COSE identifier of the algorithm.
+        :return: A CoseKey.
+        """
         for cls in CoseKey.__subclasses__():
-            if getattr(cls, 'ALGORITHM', None) == alg:
+            if cls.ALGORITHM == alg:
                 return cls
         return UnsupportedKey
 
     @staticmethod
     def parse(cose):
+
+        """Create a CoseKey from a dict"""
         return CoseKey.for_alg(cose[3])(cose)
 
 
 class UnsupportedKey(CoseKey):
-    pass
+    """A COSE key with an unsupported algorithm."""
 
 
 class ES256(CoseKey):
@@ -80,6 +104,11 @@ class ES256(CoseKey):
 
     @classmethod
     def from_ctap1(cls, data):
+        """Creates an ES256 key from a CTAP1 formatted public key byte string.
+
+        :param data: A 65 byte SECP256R1 public key.
+        :return: A ES256 key.
+        """
         return cls({
             1: 2,
             3: cls.ALGORITHM,

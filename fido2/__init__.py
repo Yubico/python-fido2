@@ -34,7 +34,6 @@ if six.PY2:
     class ABC(object):
         pass
     abc.ABC = ABC
-    abc.abstractclassmethod = abc.abstractmethod
 
 
 __version__ = '0.3.1-dev0'

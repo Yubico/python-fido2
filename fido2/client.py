@@ -40,8 +40,9 @@ import six
 
 
 class ClientData(bytes):
-    def __init__(self, data):
-        self.data = json.loads(data.decode())
+    def __init__(self, _):
+        super(ClientData, self).__init__()
+        self.data = json.loads(self.decode())
 
     def get(self, key):
         return self.data[key]
@@ -74,7 +75,6 @@ class ClientData(bytes):
 
 
 class ClientError(Exception):
-
     @unique
     class ERR(IntEnum):
         OTHER_ERROR = 1
@@ -161,7 +161,7 @@ class U2fClient(object):
         self.poll_delay = 0.25
         self.ctap = CTAP1(device)
         self.origin = origin
-        self._verify = verify_app_id
+        self._verify = verify
 
     def _verify_app_id(self, app_id):
         try:
@@ -171,12 +171,12 @@ class U2fClient(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def register(self, app_id, register_requests, registered_keys,
-                 timeout=None, on_keepalive=None):
+    def register(self, app_id, register_requests, registered_keys, timeout=None,
+                 on_keepalive=None):
         self._verify_app_id(app_id)
 
         version = self.ctap.get_version()
-        dummy_param = b'\0'*32
+        dummy_param = b'\0' * 32
         for key in registered_keys:
             if key['version'] != version:
                 continue
@@ -263,12 +263,12 @@ class Fido2Client(object):
         self.origin = origin
         self._verify = verify
         try:
-            self.ctap = CTAP2(device)
-            self.pin_protocol = PinProtocolV1(self.ctap)
+            self.ctap2 = CTAP2(device)
+            self.pin_protocol = PinProtocolV1(self.ctap2)
             self._do_make_credential = self._ctap2_make_credential
             self._do_get_assertion = self._ctap2_get_assertion
         except ValueError:
-            self.ctap = CTAP1(device)
+            self.ctap1 = CTAP1(device)
             self._do_make_credential = self._ctap1_make_credential
             self._do_get_assertion = self._ctap1_get_assertion
 
@@ -283,6 +283,7 @@ class Fido2Client(object):
     def make_credential(self, rp, user, challenge, algos=[ES256.ALGORITHM],
                         exclude_list=None, extensions=None, rk=False, uv=False,
                         pin=None, timeout=None, on_keepalive=None):
+
         self._verify_rp_id(rp['id'])
 
         client_data = ClientData.build(
@@ -304,7 +305,7 @@ class Fido2Client(object):
                                extensions, rk, uv, pin, timeout, on_keepalive):
         key_params = [{'type': 'public-key', 'alg': alg} for alg in algos]
 
-        info = self.ctap.get_info()
+        info = self.ctap2.get_info()
         pin_auth = None
         pin_protocol = None
         if pin:
@@ -326,10 +327,10 @@ class Fido2Client(object):
             if uv:
                 options['uv'] = True
 
-        return self.ctap.make_credential(client_data.hash, rp, user,
-                                         key_params, exclude_list,
-                                         extensions, options, pin_auth,
-                                         pin_protocol, timeout, on_keepalive)
+        return self.ctap2.make_credential(client_data.hash, rp, user,
+                                          key_params, exclude_list,
+                                          extensions, options, pin_auth,
+                                          pin_protocol, timeout, on_keepalive)
 
     def _ctap1_make_credential(self, client_data, rp, user, algos, exclude_list,
                                extensions, rk, uv, pin, timeout, on_keepalive):
@@ -338,27 +339,29 @@ class Fido2Client(object):
 
         app_param = sha256(rp['id'].encode())
 
-        dummy_param = b'\0'*32
+        dummy_param = b'\0' * 32
         for cred in exclude_list or []:
             key_handle = cred['id']
             try:
-                self.ctap.authenticate(dummy_param, app_param, key_handle, True)
+                self.ctap1.authenticate(
+                    dummy_param, app_param, key_handle, True)
                 raise ClientError.ERR.OTHER_ERROR()  # Shouldn't happen
             except ApduError as e:
                 if e.code == APDU.USE_NOT_SATISFIED:
                     _call_polling(self.ctap1_poll_delay, timeout, on_keepalive,
-                                  self.ctap.register, dummy_param, dummy_param)
+                                  self.ctap1.register, dummy_param, dummy_param)
                     raise ClientError.ERR.DEVICE_INELIGIBLE()
 
         return AttestationObject.from_ctap1(
             app_param,
             _call_polling(self.ctap1_poll_delay, timeout, on_keepalive,
-                          self.ctap.register, client_data.hash, app_param)
+                          self.ctap1.register, client_data.hash, app_param)
         )
 
     def get_assertion(self, rp_id, challenge, allow_list=None, extensions=None,
                       up=True, uv=False, pin=None, timeout=None,
                       on_keepalive=None):
+
         self._verify_rp_id(rp_id)
 
         client_data = ClientData.build(
@@ -399,12 +402,12 @@ class Fido2Client(object):
         if len(options) == 0:
             options = None
 
-        assertions = [self.ctap.get_assertion(
+        assertions = [self.ctap2.get_assertion(
             rp_id, client_data.hash, allow_list, extensions, options, pin_auth,
             pin_protocol, timeout, on_keepalive
         )]
         for _ in range((assertions[0].number_of_credentials or 1) - 1):
-            assertions.append(self.ctap.get_next_assertion())
+            assertions.append(self.ctap2.get_next_assertion())
         return assertions
 
     def _ctap1_get_assertion(self, client_data, rp_id, allow_list, extensions,
@@ -418,7 +421,7 @@ class Fido2Client(object):
             try:
                 auth_resp = _call_polling(
                     self.ctap1_poll_delay, timeout, on_keepalive,
-                    self.ctap.authenticate, client_param, app_param, cred['id']
+                    self.ctap1.authenticate, client_param, app_param, cred['id']
                 )
                 return [
                     AssertionResponse.from_ctap1(app_param, cred, auth_resp)

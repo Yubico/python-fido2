@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 from .ctap import CtapDevice, CtapError
-from .pyu2f import hidtransport
+from ._pyu2f import hidtransport
 
 from enum import IntEnum, unique
 from threading import Event
@@ -59,6 +59,8 @@ class _SingleEvent(object):
 class CtapHidDevice(CtapDevice):
     """
     CtapDevice implementation using the HID transport.
+
+    :cvar descriptor: Device descriptor.
     """
 
     def __init__(self, descriptor, dev):
@@ -70,14 +72,20 @@ class CtapHidDevice(CtapDevice):
 
     @property
     def version(self):
+        """CTAP HID protocol version.
+
+        :rtype: Tuple[int, int, int]
+        """
         return self._dev.u2fhid_version
 
     @property
     def device_version(self):
+        """Device version number."""
         return self._dev.device_version
 
     @property
     def capabilities(self):
+        """Capabilities supported by the device."""
         return self._dev.capabilities
 
     def call(self, cmd, data=b'', event=None, on_keepalive=None):
@@ -108,12 +116,19 @@ class CtapHidDevice(CtapDevice):
         raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
 
     def wink(self):
+        """Causes the authenticator to blink."""
         self.call(CTAPHID.WINK)
 
     def ping(self, msg=b'Hello FIDO'):
+        """Sends data to the authenticator, which echoes it back.
+
+        :param msg: The data to send.
+        :return: The response from the authenticator.
+        """
         return self.call(CTAPHID.PING, msg)
 
     def lock(self, lock_time=10):
+        """Locks the channel."""
         self.call(CTAPHID.LOCK, struct.pack('>B', lock_time))
 
     @classmethod

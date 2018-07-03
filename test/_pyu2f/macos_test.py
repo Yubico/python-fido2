@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for pyu2f.hid.macos."""
+"""Tests for _pyu2f.hid.macos."""
 
 import ctypes
 import sys
 import mock
 
-from fido2.pyu2f import macos
+from fido2._pyu2f import macos
 
 
 if sys.version_info[:2] < (2, 7):

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for pyu2f.hid.linux."""
+"""Tests for _pyu2f.hid.linux."""
 
 import base64
 import os
@@ -22,7 +22,7 @@ import mock
 
 import six
 from six.moves import builtins
-from fido2.pyu2f import linux
+from fido2._pyu2f import linux
 
 try:
   from pyfakefs import fake_filesystem  # pylint: disable=g-import-not-at-top

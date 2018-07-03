@@ -1,0 +1,46 @@
+<html>
+<head>
+  <title>Fido 2.0 webauthn demo</title>
+  <script src="/cbor.js"></script>
+</head>
+<body>
+  <h1>Webauthn demo</h1>
+  <p>
+    <strong>This demo requires a browser supporting the WebAuthn API!</strong>
+  </p>
+  <hr>
+
+<h2>Register a credential</h2>
+<p>Touch your authenticator device now...</p>
+<script>
+  fetch('/api/register/begin', {
+    method: 'POST',
+  }).then(function(response) {
+    return response.arrayBuffer();
+  }).then(function(data) {
+    return CBOR.decode(data);
+  }).then(function(options) {
+    navigator.credentials.create(options).then(function(attestation) {
+      console.log(attestation.response);
+      console.log(CBOR.encode(attestation.response));
+      fetch('/api/register/complete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/cbor'},
+        body: CBOR.encode({
+          "attestationObject": new Uint8Array(attestation.response.attestationObject),
+          "clientDataJSON": new Uint8Array(attestation.response.clientDataJSON),
+        })
+      }).then(function() {
+        alert('Registration successful. More details in server log...');
+        window.location = '/index.html';
+      });
+    }, function(reason) {
+      console.log('Failed', reason);
+      alert(reason);
+      window.location = '/index.html';
+    });
+  });
+</script>
+
+</body>
+</html>

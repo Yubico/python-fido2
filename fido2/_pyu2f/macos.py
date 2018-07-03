@@ -25,7 +25,7 @@ import threading
 
 from . import base
 
-logger = logging.getLogger('pyu2f.macos')
+logger = logging.getLogger('_pyu2f.macos')
 
 # Constants
 DEVICE_PATH_BUFFER_SIZE = 512

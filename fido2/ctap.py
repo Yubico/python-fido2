@@ -39,22 +39,22 @@ class CtapDevice(abc.ABC):
 
     @abc.abstractmethod
     def call(self, cmd, data=b'', event=None, on_keepalive=None):
-        """
-        cmd is the integer value of the command.
-        data is the binary string value of the payload.
-        event is an instance of threading.Event which can be used to cancel the
-        invocation.
-        on_keepalive is an optional callback function that is invoked on
-        keepalive message from the authenticator, with the keepalive status code
-        as an argument. The callback is only invoked once for consecutive
-        keepalive messages with the same status.
+        """Sends a command to the authenticator, and reads the response.
+
+        :param cmd: The integer value of the command.
+        :param data: The payload of the command.
+        :param event: An optional threading.Event which can be used to cancel
+            the invocation.
+        :param on_keepalive: An optional callback to handle keep-alive messages
+            from the authenticator. The function is only called once for
+            consecutive keep-alive messages with the same status.
+        :return: The response from the authenticator.
         """
 
-    @abc.abstractclassmethod
+    @classmethod
+    @abc.abstractmethod
     def list_devices(cls):
-        """
-        Generates instances of cls for discoverable devices.
-        """
+        """Generates instances of cls for discoverable devices."""
 
 
 class CtapError(Exception):

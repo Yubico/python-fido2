@@ -210,7 +210,7 @@ class UsbHidTransport(object):
 
     self.packet_size = in_size
     self.read_timeout_secs = read_timeout_secs
-    self.logger = logging.getLogger('pyu2f.hidtransport')
+    self.logger = logging.getLogger('_pyu2f.hidtransport')
 
     self.InternalInit()
 

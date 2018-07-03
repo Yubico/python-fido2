@@ -64,7 +64,7 @@ def dump_list(data):
 
 def _sort_keys(entry):
     key = entry[0]
-    return (six.indexbytes(key, 0), len(key), key)
+    return six.indexbytes(key, 0), len(key), key
 
 
 def dump_dict(data):
@@ -78,8 +78,8 @@ def dump_bytes(data):
 
 
 def dump_text(data):
-    data = data.encode('utf8')
-    return dump_int(len(data), mt=3) + data
+    data_bytes = data.encode('utf8')
+    return dump_int(len(data_bytes), mt=3) + data_bytes
 
 
 _SERIALIZERS = [

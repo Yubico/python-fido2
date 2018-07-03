@@ -87,10 +87,6 @@ class TestWebSafe(unittest.TestCase):
         self.assertEqual(websafe_encode(b'fooba'), u'Zm9vYmE')
         self.assertEqual(websafe_encode(b'foobar'), u'Zm9vYmFy')
 
-    def test_websafe_encode_unicode(self):
-        self.assertEqual(websafe_encode(u''), u'')
-        self.assertEqual(websafe_encode(u'foobar'), u'Zm9vYmFy')
-
 
 class TestTimeout(unittest.TestCase):
 

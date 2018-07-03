@@ -331,9 +331,9 @@ class TestFido2Client(unittest.TestCase):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
         client = Fido2Client(dev, APP_ID)
-        client.ctap = mock.MagicMock()
-        client.ctap.get_info.return_value = Info(_INFO_NO_PIN)
-        client.ctap.make_credential.side_effect = CtapError(
+        client.ctap2 = mock.MagicMock()
+        client.ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        client.ctap2.make_credential.side_effect = CtapError(
             CtapError.ERR.CREDENTIAL_EXCLUDED)
 
         try:
@@ -347,16 +347,16 @@ class TestFido2Client(unittest.TestCase):
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
 
-        client.ctap.get_info.assert_called_with()
-        client.ctap.make_credential.assert_called_once()
+        client.ctap2.get_info.assert_called_with()
+        client.ctap2.make_credential.assert_called_once()
 
     def test_make_credential_ctap2(self):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
         client = Fido2Client(dev, APP_ID)
-        client.ctap = mock.MagicMock()
-        client.ctap.get_info.return_value = Info(_INFO_NO_PIN)
-        client.ctap.make_credential.return_value = AttestationObject(_MC_RESP)
+        client.ctap2 = mock.MagicMock()
+        client.ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        client.ctap2.make_credential.return_value = AttestationObject(_MC_RESP)
 
         attestation, client_data = client.make_credential(
             rp,
@@ -368,8 +368,8 @@ class TestFido2Client(unittest.TestCase):
         self.assertIsInstance(attestation, AttestationObject)
         self.assertIsInstance(client_data, ClientData)
 
-        client.ctap.get_info.assert_called_with()
-        client.ctap.make_credential.assert_called_with(
+        client.ctap2.get_info.assert_called_with()
+        client.ctap2.make_credential.assert_called_with(
             client_data.hash,
             rp,
             user,
@@ -392,9 +392,9 @@ class TestFido2Client(unittest.TestCase):
         dev.capabilities = 0  # No CTAP2
         client = Fido2Client(dev, APP_ID)
 
-        client.ctap = mock.MagicMock()
-        client.ctap.get_version.return_value = 'U2F_V2'
-        client.ctap.register.return_value = REG_DATA
+        client.ctap1 = mock.MagicMock()
+        client.ctap1.get_version.return_value = 'U2F_V2'
+        client.ctap1.register.return_value = REG_DATA
 
         attestation, client_data = client.make_credential(
             rp,
@@ -406,7 +406,7 @@ class TestFido2Client(unittest.TestCase):
         self.assertIsInstance(attestation, AttestationObject)
         self.assertIsInstance(client_data, ClientData)
 
-        client.ctap.register.assert_called_with(
+        client.ctap1.register.assert_called_with(
             client_data.hash,
             sha256(rp['id'].encode()),
         )

@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for pyu2f.hidtransport."""
+"""Tests for _pyu2f.hidtransport."""
 
 from __future__ import absolute_import
 
 import six
 import mock
 
-from fido2.pyu2f import hidtransport
+from fido2._pyu2f import hidtransport
 from . import util
 
 import unittest

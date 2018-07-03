@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for pyu2f.tests.lib.util."""
+"""Tests for _pyu2f.tests.lib.util."""
 
 from __future__ import absolute_import
 

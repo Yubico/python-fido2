@@ -42,7 +42,7 @@ class TestAttestationObject(unittest.TestCase):
         attestation = Attestation.for_type('__unsupported__')()
         self.assertIsInstance(attestation, UnsupportedAttestation)
         with self.assertRaises(NotImplementedError):
-            attestation.verify({}, 0, 0)
+            attestation.verify({}, 0, b'')
 
     def test_none_attestation(self):
         attestation = Attestation.for_type('none')()

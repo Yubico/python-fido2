@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Testing utilties for pyu2f.
+"""Testing utilties for _pyu2f.
 
 Testing utilities such as a fake implementation of the pyhidapi device object
 that implements parts of the U2FHID frame protocol.  This makes it easy to tests
 of higher level abstractions without having to use mock to mock out low level
 framing details.
 """
-from fido2.pyu2f import base, hidtransport
+from fido2._pyu2f import base, hidtransport
 
 
 class UnsupportedCommandError(Exception):

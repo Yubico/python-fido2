@@ -4,6 +4,7 @@
 build/
 dist/
 .eggs/
+.idea/
 .ropeproject/
 ChangeLog
 man/*.1

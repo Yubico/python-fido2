@@ -25,13 +25,18 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+"""Various utility functions.
+
+This module contains various functions used throughout the rest of the project.
+"""
+
 from base64 import urlsafe_b64decode, urlsafe_b64encode
+from threading import Timer, Event
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
-from threading import Timer, Event
 from binascii import b2a_hex
+from numbers import Number
 import six
-import numbers
 
 __all__ = [
     'Timeout',
@@ -45,32 +50,61 @@ __all__ = [
 
 
 def sha256(data):
+    """Produces a SHA256 hash of the input.
+
+    :param data: The input data to hash.
+    :return: The resulting hash.
+    """
     h = hashes.Hash(hashes.SHA256(), default_backend())
     h.update(data)
     return h.finalize()
 
 
 def hmac_sha256(key, data):
+    """Performs an HMAC-SHA256 operation on the given data, using the given key.
+
+    :param key: The key to use.
+    :param data: The input data to hash.
+    :return: The resulting hash.
+    """
     h = hmac.HMAC(key, hashes.SHA256(), default_backend())
     h.update(data)
     return h.finalize()
 
 
 def bytes2int(value):
+    """Parses an arbitrarily sized integer from a byte string.
+
+    :param value: A byte string encoding a big endian unsigned integer.
+    :return: The parsed int.
+    """
     return int(b2a_hex(value), 16)
 
 
 def int2bytes(value, minlen=-1):
+    """Encodes an int as a byte string.
+
+    :param value: The integer value to encode.
+    :param minlen: An optional minimum length for the resulting byte string.
+    :return: The value encoded as a big endian byte string.
+    """
     ba = []
     while value > 0xff:
         ba.append(0xff & value)
         value >>= 8
     ba.append(value)
-    ba.extend([0]*(minlen - len(ba)))
+    ba.extend([0] * (minlen - len(ba)))
     return bytes(bytearray(reversed(ba)))
 
 
 def websafe_decode(data):
+    """Decodes a websafe-base64 encoded string (bytes or str).
+    See: "Base 64 Encoding with URL and Filename Safe Alphabet" from Section 5
+    in RFC4648 without padding.
+
+    :param data: The input to decode.
+    :return: The decoded bytes.
+    """
     if isinstance(data, six.text_type):
         data = data.encode('ascii')
     data += b'=' * (-len(data) % 4)
@@ -78,16 +112,28 @@ def websafe_decode(data):
 
 
 def websafe_encode(data):
-    if isinstance(data, six.text_type):
-        data = data.encode('ascii')
+    """Encodes a byte string into websafe-base64 encoding.
+
+    :param data: The input to encode.
+    :return: The encoded string.
+    """
     return urlsafe_b64encode(data).replace(b'=', b'').decode('ascii')
 
 
 class Timeout(object):
+    """Utility class for adding a timeout to an event.
+
+    :param time_or_event: A number, in seconds, or a threading.Event object.
+    :ivar event: The Event associated with the Timeout.
+    :ivar timer: The Timer associated with the Timeout, if any.
+    """
+
     def __init__(self, time_or_event):
-        if isinstance(time_or_event, numbers.Number):
+
+        if isinstance(time_or_event, Number):
             self.event = Event()
-            self.timer = Timer(time_or_event, self.event.set)
+            self.timer = Timer(time_or_event,
+                               self.event.set)
         else:
             self.event = time_or_event
             self.timer = None

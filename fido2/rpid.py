@@ -50,6 +50,12 @@ with open(tld_fname, 'rb') as f:
 
 
 def verify_rp_id(rp_id, origin):
+    """Checks if a Webauthn RP ID is usable for a given origin.
+
+    :param rp_id: The RP ID to validate.
+    :param origin: The origin of the request.
+    :return: True if the RP ID is usable by the origin, False if not.
+    """
     if isinstance(rp_id, six.binary_type):
         rp_id = rp_id.decode()
     if not rp_id:
@@ -69,6 +75,12 @@ def verify_rp_id(rp_id, origin):
 
 
 def verify_app_id(app_id, origin):
+    """Checks if a FIDO U2F App ID is usable for a given origin.
+
+    :param app_id: The App ID to validate.
+    :param origin: The origin of the request.
+    :return: True if the App ID is usable by the origin, False if not.
+    """
     if isinstance(app_id, six.binary_type):
         app_id = app_id.decode()
     url = urlparse(app_id)
