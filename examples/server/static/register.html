@@ -14,6 +14,7 @@
 <p>Touch your authenticator device now...</p>
 <script>
   fetch('/api/register/begin', {
+    credentials: 'include',
     method: 'POST',
   }).then(function(response) {
     return response.arrayBuffer();
@@ -24,6 +25,7 @@
       console.log(attestation.response);
       console.log(CBOR.encode(attestation.response));
       fetch('/api/register/complete', {
+        credentials: 'include',
         method: 'POST',
         headers: {'Content-Type': 'application/cbor'},
         body: CBOR.encode({
