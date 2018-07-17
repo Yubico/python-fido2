@@ -381,7 +381,7 @@ class Fido2Client(object):
 
     def _ctap2_get_assertion(self, client_data, rp_id, allow_list, extensions,
                              up, uv, pin, timeout, on_keepalive):
-        info = self.ctap.get_info()
+        info = self.ctap2.get_info()
         pin_auth = None
         pin_protocol = None
         if pin:
