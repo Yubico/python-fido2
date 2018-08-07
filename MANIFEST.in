@@ -4,5 +4,7 @@ include NEWS
 include ChangeLog
 include fido2/public_suffix_list.dat
 include examples/*.py
-include examples/server/*.py examples/server/*.txt
+include examples/server/*.py
+include examples/server/requirements.txt
+include examples/server/static/*
 recursive-include test *.py
