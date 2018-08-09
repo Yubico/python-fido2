@@ -1,0 +1,43 @@
+== WebAuthn Server Example
+This example shows a minimal website that uses python-fido2 to implement
+WebAuthn credential registration, and use.
+
+
+=== Running
+To run this sample, you will need `pipenv`. For instructions on installing
+`pipenv`, see https://docs.pipenv.org.
+
+Run the following command in the `examples/server` directory to set up the
+example:
+
+  $ pipenv install
+
+Once the environment has been created, you can run the server by running:
+
+  $ pipenv run python server.py
+
+When the server is running, use a browser supporting WebAuthn and open
+https://localhost:5000 to access the website.
+
+NOTE: As this server uses a self-signed certificate, you will get warnings in
+your browser about the connection not being secure. This is expected, and you
+can safely proceed to the site.
+
+=== Using the website
+The site allows you to register a WebAuthn credential, and to authenticate it.
+Credentials are only stored in memory, and stopping the server will cause it to
+"forget" any registered credentials.
+
+==== Registration
+1. Click on the `Register` link to begin credential registration.
+2. If not already inserted, insert your U2F/FIDO2 Authenticator now.
+3. Touch the button to activate the Authenticator.
+4. A popup will indicate whether the registration was successful. Click `OK`.
+
+==== Authentication
+NOTE: You must register a credential prior to authentication.
+
+1. Click on the `Authenticate` link to begin authentication.
+2. If not already inserted, insert your U2F/FIDO2 Authenticator now.
+3. Touch the button to activate the Authenticator.
+4. A popup will indicate whether the authentication was successful. Click `OK`.

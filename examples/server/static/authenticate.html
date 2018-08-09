@@ -2,27 +2,32 @@
 <head>
   <title>Fido 2.0 webauthn demo</title>
   <script src="/cbor.js"></script>
+  <style>
+    body { font-family: sans-serif; line-height: 1.5em; padding: 2em 10em; }
+    h1, h2 { color: #325F74; }
+    a { color: #0080ac; font-weight: bold; text-decoration: none;}
+    a:hover { text-decoration: underline; }
+  </style>
 </head>
 <body>
-  <h1>Webauthn demo</h1>
-  <p>
-    <strong>This demo requires a browser supporting the WebAuthn API!</strong>
-  </p>
+  <h1>WebAuthn demo using python-fido2</h1>
+  <p>This demo requires a browser supporting the WebAuthn API!</p>
   <hr>
 
-<h2>Authenticate using a credential</h2>
-<p>Touch your authenticator device now...</p>
-<script>
-  fetch('/api/authenticate/begin', {
-    method: 'POST',
-  }).then(function(response) {
-    return response.arrayBuffer();
-  }).then(function(data) {
-    return CBOR.decode(data);
-  }).then(function(options) {
-    navigator.credentials.get(options).then(function(assertion) {
-      console.log(assertion);
-      fetch('/api/authenticate/complete', {
+  <h2>Authenticate using a credential</h2>
+  <p>Touch your authenticator device now...</p>
+  <a href="/index.html">Cancel</a>
+
+  <script>
+    fetch('/api/authenticate/begin', {
+      method: 'POST',
+    }).then(function(response) {
+      if(response.ok) return response.arrayBuffer();
+      throw new Error('No credential available to authenticate!');
+    }).then(CBOR.decode).then(function(options) {
+      return navigator.credentials.get(options);
+    }).then(function(assertion) {
+      return fetch('/api/authenticate/complete', {
         method: 'POST',
         headers: {'Content-Type': 'application/cbor'},
         body: CBOR.encode({
@@ -31,17 +36,15 @@
           "clientDataJSON": new Uint8Array(assertion.response.clientDataJSON),
           "signature": new Uint8Array(assertion.response.signature)
         })
-      }).then(function() {
-        alert('Authentication successful. More details in server log...');
-        window.location = '/index.html';
-      });
+      })
+    }).then(function() {
+      alert('Authentication successful. More details in server log...');
     }, function(reason) {
-      console.log('Failed', reason);
       alert(reason);
+    }).then(function() {
       window.location = '/index.html';
     });
-  });
-</script>
+  </script>
 
 </body>
 </html>

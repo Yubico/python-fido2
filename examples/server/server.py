@@ -29,11 +29,9 @@
 Example demo server to use a supported web browser to call the WebAuthn APIs
 to register and use a credential.
 
-To run (using a virtualenv is recommended):
-  $ pip install -r requirements.txt
-  $ python server.py
+See the file README.adoc in this directory for details.
 
-Now navigate to https://localhost:5000 in a supported web browser.
+Navigate to https://localhost:5000 in a supported web browser.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
