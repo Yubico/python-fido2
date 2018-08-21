@@ -249,6 +249,38 @@ class AuthenticatorData(bytes):
             (cbor.dumps(extensions) if extensions is not None else b'')
         )
 
+    def is_up_flag_set(self):
+        """Return true if the UP flag is set.
+
+        :return: True if UP is set, False otherwise.
+        :rtype: bool
+        """
+        return self.flags & AuthenticatorData.FLAG.UP != 0
+
+    def is_uv_flag_set(self):
+        """Return true if the UV flag is set.
+
+        :return: True if UV is set, False otherwise.
+        :rtype: bool
+        """
+        return self.flags & AuthenticatorData.FLAG.UV != 0
+
+    def is_at_flag_set(self):
+        """Return true if the AT flag is set.
+
+        :return: True if AT is set, False otherwise.
+        :rtype: bool
+        """
+        return self.flags & AuthenticatorData.FLAG.AT != 0
+
+    def is_ed_flag_set(self):
+        """Return true if the ED flag is set.
+
+        :return: True if ED is set, False otherwise.
+        :rtype: bool
+        """
+        return self.flags & AuthenticatorData.FLAG.ED != 0
+
     def __repr__(self):
         r = 'AuthenticatorData(rp_id_hash: %s, flags: 0x%02x, counter: %d' %\
             (hexstr(self.rp_id_hash), self.flags, self.counter)

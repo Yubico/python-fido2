@@ -49,13 +49,33 @@ class ATTESTATION(six.text_type, Enum):
     DIRECT = 'direct'
 
 
+@unique
+class USER_VERIFICATION(six.text_type, Enum):
+    DISCOURAGED = 'discouraged'
+    PREFERRED = 'preferred'
+    REQUIRED = 'required'
+
+
 class Fido2Server(object):
-    def __init__(self, rp, attestation=None, verify_origin=None):
+    def __init__(
+            self,
+            rp,
+            attestation=None,
+            verify_origin=None,
+            resident_key=False,
+            user_verification=USER_VERIFICATION.PREFERRED
+    ):
+        if user_verification not in USER_VERIFICATION:
+            raise ValueError('"{}" is not a member of {}'
+                             .format(user_verification, USER_VERIFICATION))
+
         self.rp = rp
         self._verify = verify_origin or _verify_origin_for_rp(rp['id'])
         self.timeout = 30
         self.attestation = attestation or ATTESTATION.NONE
         self.allowed_algorithms = [ES256.ALGORITHM]
+        self.user_verification = user_verification
+        self.resident_key = resident_key
 
     def register_begin(self, user, credentials=None):
         if not self.allowed_algorithms:
@@ -80,7 +100,11 @@ class Fido2Server(object):
                     } for cred in credentials or []
                 ],
                 'timeout': int(self.timeout * 1000),
-                'attestation': self.attestation
+                'attestation': self.attestation,
+                'authenticatorSelection': {
+                    'requireResidentKey': self.resident_key,
+                    'userVerification': self.user_verification
+                }
             }
         }
 
@@ -98,6 +122,11 @@ class Fido2Server(object):
                 and self.attestation != ATTESTATION.NONE:
             raise ValueError('Attestation required, but not provided.')
         attestation_object.verify(client_data.hash)
+
+        if self.user_verification is USER_VERIFICATION.REQUIRED and \
+           not attestation_object.auth_data.is_uv_flag_set():
+            raise ValueError('User verification required, but UV flag not set.')
+
         return attestation_object.auth_data
 
     def authenticate_begin(self, credentials):
@@ -112,7 +141,8 @@ class Fido2Server(object):
                         'id': cred.credential_id
                     } for cred in credentials
                 ],
-                'timeout': int(self.timeout * 1000)
+                'timeout': int(self.timeout * 1000),
+                'userVerification': self.user_verification
             }
         }
 
@@ -127,6 +157,10 @@ class Fido2Server(object):
         if not constant_time.bytes_eq(sha256(self.rp['id'].encode()),
                                       auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
+
+        if self.user_verification is USER_VERIFICATION.REQUIRED and \
+           not auth_data.is_uv_flag_set():
+            raise ValueError('User verification required, but UV flag not set.')
 
         for cred in credentials:
             if cred.credential_id == credential_id:
