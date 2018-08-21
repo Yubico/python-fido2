@@ -252,7 +252,7 @@ class U2fClient(object):
 
 
 @unique
-class FIDO2_TYPE(six.text_type, Enum):
+class WEBAUTHN_TYPE(six.text_type, Enum):
     MAKE_CREDENTIAL = 'webauthn.create'
     GET_ASSERTION = 'webauthn.get'
 
@@ -287,7 +287,7 @@ class Fido2Client(object):
         self._verify_rp_id(rp['id'])
 
         client_data = ClientData.build(
-            type=FIDO2_TYPE.MAKE_CREDENTIAL,
+            type=WEBAUTHN_TYPE.MAKE_CREDENTIAL,
             clientExtensions={},
             challenge=challenge,
             origin=self.origin
@@ -365,7 +365,7 @@ class Fido2Client(object):
         self._verify_rp_id(rp_id)
 
         client_data = ClientData.build(
-            type=FIDO2_TYPE.GET_ASSERTION,
+            type=WEBAUTHN_TYPE.GET_ASSERTION,
             clientExtensions={},
             challenge=challenge,
             origin=self.origin

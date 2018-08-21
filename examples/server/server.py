@@ -47,11 +47,11 @@ import os
 app = Flask(__name__, static_url_path='')
 app.secret_key = os.urandom(32)  # Used for session.
 
-server = Fido2Server('localhost')
 rp = {
     'id': 'localhost',
     'name': 'Demo server'
 }
+server = Fido2Server(rp)
 
 
 # Registered credentials are stored globally, in memory only. Single user
@@ -66,7 +66,7 @@ def index():
 
 @app.route('/api/register/begin', methods=['POST'])
 def register_begin():
-    registration_data = server.register_begin(rp, {
+    registration_data = server.register_begin({
         'id': b'user_id',
         'name': 'a_user',
         'displayName': 'A. User',
@@ -89,7 +89,10 @@ def register_complete():
     print('AttestationObject:', att_obj)
 
     auth_data = server.register_complete(
-        session['challenge'], client_data, att_obj)
+        session['challenge'],
+        client_data,
+        att_obj
+    )
 
     credentials.append(auth_data.credential_data)
     print('REGISTERED CREDENTIAL:', auth_data.credential_data)
@@ -101,7 +104,7 @@ def authenticate_begin():
     if not credentials:
         abort(404)
 
-    auth_data = server.authenticate_begin(rp['id'], credentials)
+    auth_data = server.authenticate_begin(credentials)
     session['challenge'] = auth_data['publicKey']['challenge']
     return cbor.dumps(auth_data)
 
@@ -119,9 +122,14 @@ def authenticate_complete():
     print('clientData', client_data)
     print('AuthenticatorData', auth_data)
 
-    server.authenticate_complete(credentials, credential_id,
-                                 session.pop('challenge'), client_data,
-                                 auth_data, signature)
+    server.authenticate_complete(
+        credentials,
+        credential_id,
+        session.pop('challenge'),
+        client_data,
+        auth_data,
+        signature
+    )
     print('ASSERTION OK')
     return cbor.dumps({'status': 'OK'})
 

@@ -37,8 +37,9 @@
           "signature": new Uint8Array(assertion.response.signature)
         })
       })
-    }).then(function() {
-      alert('Authentication successful. More details in server log...');
+    }).then(function(response) {
+      var stat = response.ok ? 'successful' : 'unsuccessful';
+      alert('Authentication' + stat + ' More details in server log...');
     }, function(reason) {
       alert(reason);
     }).then(function() {

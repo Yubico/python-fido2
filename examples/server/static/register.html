@@ -35,8 +35,9 @@
           "clientDataJSON": new Uint8Array(attestation.response.clientDataJSON),
         })
       });
-    }).then(function() {
-      alert('Registration successful. More details in server log...');
+    }).then(function(response) {
+      var stat = response.ok ? 'successful' : 'unsuccessful';
+      alert('Registration ' + stat + ' More details in server log...');
     }, function(reason) {
       alert(reason);
     }).then(function() {

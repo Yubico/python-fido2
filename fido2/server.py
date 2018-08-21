@@ -29,9 +29,12 @@ from __future__ import absolute_import, unicode_literals
 
 from .rpid import verify_rp_id
 from .cose import ES256
+from .client import WEBAUTHN_TYPE
 from .utils import sha256
 
 import os
+import six
+from enum import Enum, unique
 from cryptography.hazmat.primitives import constant_time
 
 
@@ -39,26 +42,36 @@ def _verify_origin_for_rp(rp_id):
     return lambda o: verify_rp_id(rp_id, o)
 
 
-class Fido2Server(object):
-    def __init__(self, rp_id, attestation=None, verify_origin=None):
-        self.rp_id = rp_id
-        self._verify = verify_origin or _verify_origin_for_rp(rp_id)
-        self.timeout = 30
-        self.attestation = attestation or 'none'
-        self.cred_algorithms = [ES256.ALGORITHM]
+@unique
+class ATTESTATION(six.text_type, Enum):
+    NONE = 'none'
+    INDIRECT = 'indirect'
+    DIRECT = 'direct'
 
-    def register_begin(self, rp, user, credentials=None):
+
+class Fido2Server(object):
+    def __init__(self, rp, attestation=None, verify_origin=None):
+        self.rp = rp
+        self._verify = verify_origin or _verify_origin_for_rp(rp['id'])
+        self.timeout = 30
+        self.attestation = attestation or ATTESTATION.NONE
+        self.allowed_algorithms = [ES256.ALGORITHM]
+
+    def register_begin(self, user, credentials=None):
+        if not self.allowed_algorithms:
+            raise ValueError('Server has no allowed algorithms.')
+
         challenge = os.urandom(32)
         return {
             'publicKey': {
-                'rp': rp,
+                'rp': self.rp,
                 'user': user,
                 'challenge': challenge,
                 'pubKeyCredParams': [
                     {
                         'type': 'public-key',
                         'alg': alg
-                    } for alg in self.cred_algorithms
+                    } for alg in self.allowed_algorithms
                 ],
                 'excludeCredentials': [
                     {
@@ -72,24 +85,26 @@ class Fido2Server(object):
         }
 
     def register_complete(self, challenge, client_data, attestation_object):
-        if client_data.get('type') != 'webauthn.create':
+        if client_data.get('type') != WEBAUTHN_TYPE.MAKE_CREDENTIAL:
             raise ValueError('Incorrect type in ClientData.')
         if not self._verify(client_data.get('origin')):
             raise ValueError('Invalid origin in ClientData.')
         if not constant_time.bytes_eq(challenge, client_data.challenge):
             raise ValueError('Wrong challenge in response.')
-        if not constant_time.bytes_eq(sha256(self.rp_id.encode()),
+        if not constant_time.bytes_eq(sha256(self.rp['id'].encode()),
                                       attestation_object.auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
-        # TODO: Ensure that we're using an acceptable attestation format.
+        if attestation_object.fmt == ATTESTATION.NONE \
+                and self.attestation != ATTESTATION.NONE:
+            raise ValueError('Attestation required, but not provided.')
         attestation_object.verify(client_data.hash)
         return attestation_object.auth_data
 
-    def authenticate_begin(self, rp_id, credentials):
+    def authenticate_begin(self, credentials):
         challenge = os.urandom(32)
         return {
             'publicKey': {
-                'rpId': rp_id,
+                'rpId': self.rp['id'],
                 'challenge': challenge,
                 'allowCredentials': [
                     {
@@ -103,13 +118,13 @@ class Fido2Server(object):
 
     def authenticate_complete(self, credentials, credential_id, challenge,
                               client_data, auth_data, signature):
-        if client_data.get('type') != 'webauthn.get':
+        if client_data.get('type') != WEBAUTHN_TYPE.GET_ASSERTION:
             raise ValueError('Incorrect type in ClientData.')
         if not self._verify(client_data.get('origin')):
             raise ValueError('Invalid origin in ClientData.')
         if challenge != client_data.challenge:
             raise ValueError('Wrong challenge in response.')
-        if not constant_time.bytes_eq(sha256(self.rp_id.encode()),
+        if not constant_time.bytes_eq(sha256(self.rp['id'].encode()),
                                       auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
 
