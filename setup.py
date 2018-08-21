@@ -29,12 +29,9 @@ from setuptools import setup, find_packages
 import re
 
 
-VERSION_PATTERN = re.compile(r"(?m)^__version__\s*=\s*['\"](.+)['\"]$")
-
-
 def get_version():
     with open('fido2/__init__.py', 'r') as f:
-        match = VERSION_PATTERN.search(f.read())
+        match = re.search(r"(?m)^__version__\s*=\s*['\"](.+)['\"]$", f.read())
         return match.group(1)
 
 
