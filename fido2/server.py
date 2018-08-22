@@ -60,21 +60,17 @@ class Fido2Server(object):
     def __init__(
             self,
             rp,
-            attestation=None,
+            attestation=ATTESTATION.NONE,
             verify_origin=None,
             resident_key=False,
             user_verification=USER_VERIFICATION.PREFERRED
     ):
-        if user_verification not in USER_VERIFICATION:
-            raise ValueError('"{}" is not a member of {}'
-                             .format(user_verification, USER_VERIFICATION))
-
         self.rp = rp
         self._verify = verify_origin or _verify_origin_for_rp(rp['id'])
         self.timeout = 30
-        self.attestation = attestation or ATTESTATION.NONE
+        self.attestation = ATTESTATION(attestation)
         self.allowed_algorithms = [ES256.ALGORITHM]
-        self.user_verification = user_verification
+        self.user_verification = USER_VERIFICATION(user_verification)
         self.resident_key = resident_key
 
     def register_begin(self, user, credentials=None):
