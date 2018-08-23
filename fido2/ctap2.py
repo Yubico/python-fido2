@@ -204,10 +204,16 @@ class AuthenticatorData(bytes):
 
     @unique
     class FLAG(IntEnum):
-        UP = 0x01
-        UV = 0x04
-        AT = 0x40
-        ED = 0x80
+        """
+        Authenticator data flags
+
+        See https://www.w3.org/TR/webauthn/#sec-authenticator-data for details
+        """
+
+        USER_PRESENT = 0x01
+        USER_VERIFIED = 0x04
+        ATTESTED = 0x40
+        EXTENSION_DATA = 0x80
 
     def __init__(self, _):
         super(AuthenticatorData, self).__init__()
@@ -217,13 +223,13 @@ class AuthenticatorData(bytes):
         self.counter = struct.unpack('>I', self[33:33+4])[0]
         rest = self[37:]
 
-        if self.flags & AuthenticatorData.FLAG.AT:
+        if self.flags & AuthenticatorData.FLAG.ATTESTED:
             self.credential_data, rest = \
                 AttestedCredentialData.unpack_from(self[37:])
         else:
             self.credential_data = None
 
-        if self.flags & AuthenticatorData.FLAG.ED:
+        if self.flags & AuthenticatorData.FLAG.EXTENSION_DATA:
             self.extensions, rest = cbor.loads(rest)
         else:
             self.extensions = None
@@ -239,8 +245,8 @@ class AuthenticatorData(bytes):
         :param rp_id_hash: SHA256 hash of the RP ID.
         :param flags: Flags of the AuthenticatorData.
         :param counter: Signature counter of the authenticator data.
-        :param credential_data: Authenticated credential data (only if AT flag
-            is set).
+        :param credential_data: Authenticated credential data (only if attested
+            credential data flag is set).
         :param extensions: Authenticator extensions (only if ED flag is set).
         :return: The authenticator data.
         """
@@ -249,37 +255,37 @@ class AuthenticatorData(bytes):
             (cbor.dumps(extensions) if extensions is not None else b'')
         )
 
-    def is_up_flag_set(self):
-        """Return true if the UP flag is set.
+    def is_user_present(self):
+        """Return true if the User Present flag is set.
 
-        :return: True if UP is set, False otherwise.
+        :return: True if User Present is set, False otherwise.
         :rtype: bool
         """
-        return self.flags & AuthenticatorData.FLAG.UP != 0
+        return bool(self.flags & AuthenticatorData.FLAG.USER_PRESENT)
 
-    def is_uv_flag_set(self):
-        """Return true if the UV flag is set.
+    def is_user_verified(self):
+        """Return true if the User Verified flag is set.
 
-        :return: True if UV is set, False otherwise.
+        :return: True if User Verified is set, False otherwise.
         :rtype: bool
         """
-        return self.flags & AuthenticatorData.FLAG.UV != 0
+        return bool(self.flags & AuthenticatorData.FLAG.USER_VERIFIED)
 
-    def is_at_flag_set(self):
-        """Return true if the AT flag is set.
+    def is_attested(self):
+        """Return true if the Attested credential data flag is set.
 
-        :return: True if AT is set, False otherwise.
+        :return: True if Attested credential data is set, False otherwise.
         :rtype: bool
         """
-        return self.flags & AuthenticatorData.FLAG.AT != 0
+        return bool(self.flags & AuthenticatorData.FLAG.ATTESTED)
 
-    def is_ed_flag_set(self):
-        """Return true if the ED flag is set.
+    def has_extension_data(self):
+        """Return true if the Extenstion data flag is set.
 
-        :return: True if ED is set, False otherwise.
+        :return: True if Extenstion data is set, False otherwise.
         :rtype: bool
         """
-        return self.flags & AuthenticatorData.FLAG.ED != 0
+        return bool(self.flags & AuthenticatorData.FLAG.EXTENSION_DATA)
 
     def __repr__(self):
         r = 'AuthenticatorData(rp_id_hash: %s, flags: 0x%02x, counter: %d' %\
