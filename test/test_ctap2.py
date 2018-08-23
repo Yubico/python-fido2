@@ -36,6 +36,7 @@ from binascii import a2b_hex
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 
+import base64
 import unittest
 import mock
 
@@ -88,6 +89,17 @@ class TestAttestedCredentialData(unittest.TestCase):
     def test_create_from_args(self):
         data = AttestedCredentialData.create(_AAGUID, _CRED_ID, _PUB_KEY)
         self.assertEqual(_ATT_CRED_DATA, data)
+
+    def test_from_base64(self):
+        data = AttestedCredentialData.from_base64(
+            base64.b64encode(_ATT_CRED_DATA))
+        self.assertEqual(data.aaguid, _AAGUID)
+        self.assertEqual(data.credential_id, _CRED_ID)
+        self.assertEqual(data.public_key, _PUB_KEY)
+
+    def test_to_base64(self):
+        data = AttestedCredentialData(_ATT_CRED_DATA)
+        self.assertEqual(data.to_base64(), base64.b64encode(_ATT_CRED_DATA))
 
 
 _AUTH_DATA_MC = a2b_hex('0021F5FC0B85CD22E60623BCD7D1CA48948909249B4776EB515154E57B66AE12410000001CF8A011F38C0A4D15800617111F9EDC7D0040FE3AAC036D14C1E1C65518B698DD1DA8F596BC33E11072813466C6BF3845691509B80FB76D59309B8D39E0A93452688F6CA3A39A76F3FC52744FB73948B15783A5010203262001215820643566C206DD00227005FA5DE69320616CA268043A38F08BDE2E9DC45A5CAFAF225820171353B2932434703726AAE579FA6542432861FE591E481EA22D63997E1A5290')  # noqa
