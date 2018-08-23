@@ -40,6 +40,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from binascii import b2a_hex
 from enum import IntEnum, unique
+import base64
 import struct
 import six
 import re
@@ -188,6 +189,25 @@ class AttestedCredentialData(bytes):
         """
         parts = cls.parse(data)
         return cls.create(*parts[:-1]), parts[-1]
+
+    @classmethod
+    def from_base64(cls, encoded_data):
+        """Create an AuthenticatorData instance from base64 encoded string.
+
+        :param encoded_data: Base64 encoded data representation of Authenticator
+            data.
+        :type encoded_data: six.text_type
+        :return: The authenticator data.
+        """
+        return cls(base64.b64decode(encoded_data))
+
+    def to_base64(self):
+        """Return a base64 encoded string with authenticator data.
+
+        :return: Base64 encoded authenticator data
+        :rtype: six.text_type
+        """
+        return base64.b64encode(self).decode('utf-8')
 
 
 class AuthenticatorData(bytes):

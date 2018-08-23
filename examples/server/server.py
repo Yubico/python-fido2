@@ -37,7 +37,8 @@ from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.client import ClientData
 from fido2.server import Fido2Server
-from fido2.ctap2 import AttestationObject, AuthenticatorData
+from fido2.ctap2 import AttestationObject, AttestedCredentialData, \
+    AuthenticatorData
 from fido2 import cbor
 from flask import Flask, session, request, redirect, abort
 
@@ -59,6 +60,10 @@ server = Fido2Server(rp)
 credentials = []
 
 
+def deserialize_credentials(creds):
+    """Return deserialized credentials."""
+    return (AttestedCredentialData.from_base64(c) for c in creds)
+
 @app.route('/')
 def index():
     return redirect('/index.html')
@@ -71,7 +76,7 @@ def register_begin():
         'name': 'a_user',
         'displayName': 'A. User',
         'icon': 'https://example.com/image.png'
-    }, credentials)
+    }, deserialize_credentials(credentials))
 
     session['challenge'] = registration_data['publicKey']['challenge']
     print('\n\n\n\n')
@@ -94,7 +99,7 @@ def register_complete():
         att_obj
     )
 
-    credentials.append(auth_data.credential_data)
+    credentials.append(auth_data.credential_data.to_base64())
     print('REGISTERED CREDENTIAL:', auth_data.credential_data)
     return cbor.dumps({'status': 'OK'})
 
@@ -104,7 +109,7 @@ def authenticate_begin():
     if not credentials:
         abort(404)
 
-    auth_data = server.authenticate_begin(credentials)
+    auth_data = server.authenticate_begin(deserialize_credentials(credentials))
     session['challenge'] = auth_data['publicKey']['challenge']
     return cbor.dumps(auth_data)
 
@@ -123,7 +128,7 @@ def authenticate_complete():
     print('AuthenticatorData', auth_data)
 
     server.authenticate_complete(
-        credentials,
+        deserialize_credentials(credentials),
         credential_id,
         session.pop('challenge'),
         client_data,
