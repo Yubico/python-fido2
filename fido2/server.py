@@ -120,8 +120,9 @@ class Fido2Server(object):
         attestation_object.verify(client_data.hash)
 
         if self.user_verification is USER_VERIFICATION.REQUIRED and \
-           not attestation_object.auth_data.is_uv_flag_set():
-            raise ValueError('User verification required, but UV flag not set.')
+           not attestation_object.auth_data.is_user_verified():
+            raise ValueError(
+                'User verification required, but User verified flag not set.')
 
         return attestation_object.auth_data
 
@@ -155,8 +156,9 @@ class Fido2Server(object):
             raise ValueError('Wrong RP ID hash in response.')
 
         if self.user_verification is USER_VERIFICATION.REQUIRED and \
-           not auth_data.is_uv_flag_set():
-            raise ValueError('User verification required, but UV flag not set.')
+           not auth_data.is_user_verified():
+            raise ValueError(
+                'User verification required, but user verified flag not set.')
 
         for cred in credentials:
             if cred.credential_id == credential_id:
