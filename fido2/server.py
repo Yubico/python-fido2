@@ -56,7 +56,34 @@ class USER_VERIFICATION(six.text_type, Enum):
     REQUIRED = 'required'
 
 
+class RelyingParty(object):
+    """Representation of relying party data.
+
+    See https://www.w3.org/TR/webauthn/#sctn-rp-credential-params for details.
+
+    :ivar ident: Unique identifier of the relying party,
+        see https://www.w3.org/TR/webauthn/#rp-id for details
+    :ivar name: Name of the relying party
+    :ivar icon: URL with the relying party icon
+    """
+
+    def __init__(self, ident, name=None, icon=None):
+        self.ident = ident
+        self.name = name or ident
+        self.icon = icon
+
+    @property
+    def id_hash(self):
+        """Return SHA256 hash of the identifier."""
+        return sha256(self.ident.encode())
+
+
 class Fido2Server(object):
+    """FIDO2 server
+
+    :ivar rp: Relying party data as `RelyingParty` instance.
+    """
+
     def __init__(
             self,
             rp,
@@ -65,7 +92,7 @@ class Fido2Server(object):
             user_verification=USER_VERIFICATION.PREFERRED
     ):
         self.rp = rp
-        self._verify = verify_origin or _verify_origin_for_rp(rp['id'])
+        self._verify = verify_origin or _verify_origin_for_rp(rp.ident)
         self.timeout = 30
         self.attestation = ATTESTATION(attestation)
         self.allowed_algorithms = [ES256.ALGORITHM]
@@ -76,9 +103,15 @@ class Fido2Server(object):
             raise ValueError('Server has no allowed algorithms.')
 
         challenge = os.urandom(32)
+
+        # Serialize RP
+        rp_data = {'id': self.rp.ident, 'name': self.rp.name}
+        if self.rp.icon:
+            rp_data['icon'] = self.rp.icon
+
         return {
             'publicKey': {
-                'rp': self.rp,
+                'rp': rp_data,
                 'user': user,
                 'challenge': challenge,
                 'pubKeyCredParams': [
@@ -109,7 +142,7 @@ class Fido2Server(object):
             raise ValueError('Invalid origin in ClientData.')
         if not constant_time.bytes_eq(challenge, client_data.challenge):
             raise ValueError('Wrong challenge in response.')
-        if not constant_time.bytes_eq(sha256(self.rp['id'].encode()),
+        if not constant_time.bytes_eq(self.rp.id_hash,
                                       attestation_object.auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
         if attestation_object.fmt == ATTESTATION.NONE \
@@ -128,7 +161,7 @@ class Fido2Server(object):
         challenge = os.urandom(32)
         return {
             'publicKey': {
-                'rpId': self.rp['id'],
+                'rpId': self.rp.ident,
                 'challenge': challenge,
                 'allowCredentials': [
                     {
@@ -149,8 +182,7 @@ class Fido2Server(object):
             raise ValueError('Invalid origin in ClientData.')
         if challenge != client_data.challenge:
             raise ValueError('Wrong challenge in response.')
-        if not constant_time.bytes_eq(sha256(self.rp['id'].encode()),
-                                      auth_data.rp_id_hash):
+        if not constant_time.bytes_eq(self.rp.id_hash, auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
 
         if self.user_verification is USER_VERIFICATION.REQUIRED and \
