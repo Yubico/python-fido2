@@ -14,7 +14,7 @@ example:
 
 Once the environment has been created, you can run the server by running:
 
-  $ pipenv run python server.py
+  $ pipenv run server
 
 When the server is running, use a browser supporting WebAuthn and open
 https://localhost:5000 to access the website.

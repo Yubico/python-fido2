@@ -7,3 +7,6 @@ url = "https://pypi.org/simple"
 flask = "*"
 pyOpenSSL = "*"
 "5448283" = {editable = true, path = "./../.."}
+
+[scripts]
+server = "python server.py"
