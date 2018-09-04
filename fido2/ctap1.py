@@ -110,7 +110,7 @@ class RegistrationData(bytes):
 
     def __repr__(self):
         return ("RegistrationData(public_key: h'%s', key_handle: h'%s', "
-                "certificate: h'%s', signature: h'%s')") % (
+                "certificate: h'%s', signature: h'%s')") % tuple(
                     b2a_hex(x).decode() for x in (
                         self.public_key,
                         self.key_handle,
