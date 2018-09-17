@@ -62,7 +62,6 @@ class Fido2Server(object):
             rp,
             attestation=ATTESTATION.NONE,
             verify_origin=None,
-            resident_key=False,
             user_verification=USER_VERIFICATION.PREFERRED
     ):
         self.rp = rp
@@ -71,9 +70,8 @@ class Fido2Server(object):
         self.attestation = ATTESTATION(attestation)
         self.allowed_algorithms = [ES256.ALGORITHM]
         self.user_verification = USER_VERIFICATION(user_verification)
-        self.resident_key = resident_key
 
-    def register_begin(self, user, credentials=None):
+    def register_begin(self, user, credentials=None, resident_key=False):
         if not self.allowed_algorithms:
             raise ValueError('Server has no allowed algorithms.')
 
@@ -98,7 +96,7 @@ class Fido2Server(object):
                 'timeout': int(self.timeout * 1000),
                 'attestation': self.attestation,
                 'authenticatorSelection': {
-                    'requireResidentKey': self.resident_key,
+                    'requireResidentKey': resident_key,
                     'userVerification': self.user_verification
                 }
             }
