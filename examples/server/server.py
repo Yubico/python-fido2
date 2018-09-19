@@ -36,7 +36,7 @@ Navigate to https://localhost:5000 in a supported web browser.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.client import ClientData
-from fido2.server import Fido2Server
+from fido2.server import Fido2Server, RelyingParty
 from fido2.ctap2 import AttestationObject, AuthenticatorData
 from fido2 import cbor
 from flask import Flask, session, request, redirect, abort
@@ -47,10 +47,7 @@ import os
 app = Flask(__name__, static_url_path='')
 app.secret_key = os.urandom(32)  # Used for session.
 
-rp = {
-    'id': 'localhost',
-    'name': 'Demo server'
-}
+rp = RelyingParty('localhost', 'Demo server')
 server = Fido2Server(rp)
 
 
