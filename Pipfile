@@ -1,0 +1,12 @@
+[[source]]
+verify_ssl = true
+name = "pypi"
+url = "https://pypi.org/simple"
+
+[dev-packages]
+
+[packages]
+"fido2" = {editable = true, path = "."}
+
+[scripts]
+test = "python setup.py test"
