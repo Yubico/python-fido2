@@ -4,6 +4,8 @@ name = "pypi"
 url = "https://pypi.org/simple"
 
 [dev-packages]
+"mock" = ">=1.0.1"
+"pyfakefs" = ">=2.4"
 
 [packages]
 "fido2" = {editable = true, path = "."}
