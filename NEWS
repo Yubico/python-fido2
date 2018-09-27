@@ -1,4 +1,6 @@
-* Version 0.3.1 (unreleased)
+* Version 0.4.0 (released 2018-09-27)
+ ** Add classes for implementing a server.
+ ** Various small changes, some affecting backwards compatibility.
 
 * Version 0.3.0 (released 2018-04-13)
  ** Add conversion between string/int keys for AttestationObject.
