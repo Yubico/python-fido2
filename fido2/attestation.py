@@ -147,7 +147,7 @@ class PackedAttestation(Attestation):
             pub_key = CoseKey.for_alg(alg).from_cryptography_key(
                 cert.public_key())
         else:
-            pub_key = CoseKey(auth_data.credential_data.public_key)
+            pub_key = CoseKey.parse(auth_data.credential_data.public_key)
             if pub_key.ALGORITHM != alg:
                 raise InvalidData('Wrong algorithm of public key!')
         try:
