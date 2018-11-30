@@ -33,7 +33,6 @@ from binascii import a2b_hex
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.hazmat.primitives.constant_time import bytes_eq
 import abc
@@ -106,36 +105,20 @@ class FidoU2FAttestation(Attestation):
 
 # GS Root R2 (https://pki.goog/)
 _GSR2_DER = a2b_hex(b'308203ba308202a2a003020102020b0400000000010f8626e60d300d06092a864886f70d0101050500304c3120301e060355040b1317476c6f62616c5369676e20526f6f74204341202d20523231133011060355040a130a476c6f62616c5369676e311330110603550403130a476c6f62616c5369676e301e170d3036313231353038303030305a170d3231313231353038303030305a304c3120301e060355040b1317476c6f62616c5369676e20526f6f74204341202d20523231133011060355040a130a476c6f62616c5369676e311330110603550403130a476c6f62616c5369676e30820122300d06092a864886f70d01010105000382010f003082010a0282010100a6cf240ebe2e6f28994542c4ab3e21549b0bd37f8470fa12b3cbbf875fc67f86d3b2305cd6fdadf17bdce5f86096099210f5d053defb7b7e7388ac52887b4aa6ca49a65ea8a78c5a11bc7a82ebbe8ce9b3ac962507974a992a072fb41e77bf8a0fb5027c1b96b8c5b93a2cbcd612b9eb597de2d006865f5e496ab5395e8834ecbc780c0898846ca8cd4bb4a07d0c794df0b82dcb21cad56c5b7de1a02984a1f9d39449cb24629120bcdd0bd5d9ccf9ea270a2b7391c69d1bacc8cbe8e0a0f42f908b4dfbb0361bf6197a85e06df26113885c9fe0930a51978a5aceafabd5f7aa09aa60bddcd95fdf72a960135e0001c94afa3fa4ea070321028e82ca03c29b8f0203010001a3819c308199300e0603551d0f0101ff040403020106300f0603551d130101ff040530030101ff301d0603551d0e041604149be20757671c1ec06a06de59b49a2ddfdc19862e30360603551d1f042f302d302ba029a0278625687474703a2f2f63726c2e676c6f62616c7369676e2e6e65742f726f6f742d72322e63726c301f0603551d230418301680149be20757671c1ec06a06de59b49a2ddfdc19862e300d06092a864886f70d01010505000382010100998153871c68978691ece04ab8440bab81ac274fd6c1b81c4378b30c9afcea2c3c6e611b4d4b29f59f051d26c1b8e983006245b6a90893b9a9334b189ac2f887884edbdd71341ac154da463fe0d32aab6d5422f53a62cd206fba2989d7dd91eed35ca23ea15b41f5dfe564432de9d539abd2a2dfb78bd0c080191c45c02d8ce8f82da4745649c505b54f15de6e44783987a87ebbf3791891bbf46f9dc1f08c358c5d01fbc36db9ef446d7946317e0afea982c1ffefab6e20c450c95f9d4d9b178c0ce501c9a0416a7353faa550b46e250ffb4c18f4fd52d98e69b1e8110fde88d8fb1d49f7aade95cf2078c26012db25408c6afc7e4238406412f79e81e1932e')  # noqa
-_CA_DER = None
 
 
 class AndroidSafetynetAttestation(Attestation):
     FORMAT = 'android-safetynet'
 
-    @staticmethod
-    def set_ca_cert(ca_cert_der):
-        global _CA_PK_DER
-        if ca_cert_der is None:
-            _CA_PK_DER = None
-        else:
-            ca = x509.load_der_certificate(ca_cert_der, default_backend())
-            _CA_PK_DER = ca.public_key().public_bytes(
-                serialization.iEncoding.DER,
-                serialization.PublicFormat.SubjectPublicKeyInfo
-            )
-
-    @staticmethod
-    def _get_ca():
-        return x509.load_der_x509_certificate(
-            _CA_DER or _GSR2_DER,
-            default_backend()
-        )
+    def __init__(self, allow_rooted=False, ca=_GSR2_DER):
+        self.allow_rooted = allow_rooted
+        self._ca = x509.load_der_x509_certificate(ca, default_backend())
 
     def verify(self, statement, auth_data, client_data_hash):
         jwt = statement['response']
         header, payload, sig = (websafe_decode(x) for x in jwt.split(b'.'))
         data = json.loads(payload.decode('utf8'))
-        if data['ctsProfileMatch'] is not True:
+        if not self.allow_rooted and data['ctsProfileMatch'] is not True:
             raise InvalidData('ctsProfileMatch must be true!')
         expected_nonce = sha256(auth_data + client_data_hash)
         if not bytes_eq(expected_nonce, websafe_decode(data['nonce'])):
@@ -147,7 +130,7 @@ class AndroidSafetynetAttestation(Attestation):
                 websafe_decode(x), default_backend())
             for x in data['x5c']
         ]
-        certs.append(AndroidSafetynetAttestation._get_ca())
+        certs.append(self.ca)
 
         cert = certs.pop(0)
         cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
