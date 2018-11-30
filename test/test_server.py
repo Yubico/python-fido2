@@ -20,7 +20,7 @@ class TestFido2Server(unittest.TestCase):
         rp = RelyingParty('example.com', 'Example')
         server = Fido2Server(rp)
 
-        request = server.register_begin({})
+        request, state = server.register_begin({})
 
         self.assertEqual(request['publicKey']['rp'],
                          {'id': 'example.com', 'name': 'Example'})
@@ -30,7 +30,7 @@ class TestFido2Server(unittest.TestCase):
                           'http://example.com/icon.svg')
         server = Fido2Server(rp)
 
-        request = server.register_begin({})
+        request, state = server.register_begin({})
 
         data = {'id': 'example.com', 'name': 'Example',
                 'icon': 'http://example.com/icon.svg'}

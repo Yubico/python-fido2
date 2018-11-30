@@ -31,6 +31,7 @@ from .rpid import verify_rp_id
 from .cose import ES256
 from .client import WEBAUTHN_TYPE
 from .utils import sha256
+from .ctap2 import AttestedCredentialData
 
 import os
 import six
@@ -89,19 +90,28 @@ class Fido2Server(object):
             rp,
             attestation=ATTESTATION.NONE,
             verify_origin=None,
-            user_verification=USER_VERIFICATION.PREFERRED
     ):
         self.rp = rp
         self._verify = verify_origin or _verify_origin_for_rp(rp.ident)
         self.timeout = 30
         self.attestation = ATTESTATION(attestation)
         self.allowed_algorithms = [ES256.ALGORITHM]
-        self.user_verification = USER_VERIFICATION(user_verification)
 
-    def register_begin(self, user, credentials=None, resident_key=False):
+    def register_begin(self, user, credentials=None, resident_key=False,
+                       user_verification=USER_VERIFICATION.PREFERRED):
+        """Return a PublicKeyCredentialCreationOptions registration object and
+        the internal state dictionary that needs to be passed as is to the
+        corresponding `register_complete` call.
+
+        :param user: The dict containing the user data.
+        :param credentials: The list of previously registered credentials.
+        :param resident_key: True to request a resident credential.
+        :param user_verification: The desired USER_VERIFICATION level.
+        :return: Registration data, internal state."""
         if not self.allowed_algorithms:
             raise ValueError('Server has no allowed algorithms.')
 
+        uv = USER_VERIFICATION(user_verification)
         challenge = os.urandom(32)
 
         # Serialize RP
@@ -109,7 +119,7 @@ class Fido2Server(object):
         if self.rp.icon:
             rp_data['icon'] = self.rp.icon
 
-        return {
+        data = {
             'publicKey': {
                 'rp': rp_data,
                 'user': user,
@@ -130,17 +140,30 @@ class Fido2Server(object):
                 'attestation': self.attestation,
                 'authenticatorSelection': {
                     'requireResidentKey': resident_key,
-                    'userVerification': self.user_verification
+                    'userVerification': uv
                 }
             }
         }
 
-    def register_complete(self, challenge, client_data, attestation_object):
+        state = self._make_internal_state(challenge, uv)
+
+        return data, state
+
+    def register_complete(self, state, client_data, attestation_object):
+        """Verify the correctness of the registration data received from
+        the client.
+
+        :param state: The state data returned by the corresponding
+            `register_begin`.
+        :param client_data: The client data.
+        :param attestation_object: The attestation object.
+        :return: The authenticator data"""
         if client_data.get('type') != WEBAUTHN_TYPE.MAKE_CREDENTIAL:
             raise ValueError('Incorrect type in ClientData.')
         if not self._verify(client_data.get('origin')):
             raise ValueError('Invalid origin in ClientData.')
-        if not constant_time.bytes_eq(challenge, client_data.challenge):
+        if not constant_time.bytes_eq(state['challenge'],
+                                      client_data.challenge):
             raise ValueError('Wrong challenge in response.')
         if not constant_time.bytes_eq(self.rp.id_hash,
                                       attestation_object.auth_data.rp_id_hash):
@@ -150,16 +173,26 @@ class Fido2Server(object):
             raise ValueError('Attestation required, but not provided.')
         attestation_object.verify(client_data.hash)
 
-        if self.user_verification is USER_VERIFICATION.REQUIRED and \
+        if state['user_verification'] is USER_VERIFICATION.REQUIRED and \
            not attestation_object.auth_data.is_user_verified():
             raise ValueError(
                 'User verification required, but User verified flag not set.')
 
         return attestation_object.auth_data
 
-    def authenticate_begin(self, credentials):
+    def authenticate_begin(self, credentials,
+                           user_verification=USER_VERIFICATION.PREFERRED):
+        """Return a PublicKeyCredentialRequestOptions assertion object and
+        the internal state dictionary that needs to be passed as is to the
+        corresponding `authenticate_complete` call.
+
+        :param credentials: The list of previously registered credentials.
+        :param user_verification: The desired USER_VERIFICATION level.
+        :return: Assertion data, internal state."""
+        uv = USER_VERIFICATION(user_verification)
         challenge = os.urandom(32)
-        return {
+
+        data = {
             'publicKey': {
                 'rpId': self.rp.ident,
                 'challenge': challenge,
@@ -170,28 +203,52 @@ class Fido2Server(object):
                     } for cred in credentials
                 ],
                 'timeout': int(self.timeout * 1000),
-                'userVerification': self.user_verification
+                'userVerification': uv
             }
         }
 
-    def authenticate_complete(self, credentials, credential_id, challenge,
+        state = self._make_internal_state(challenge, uv,
+                                          credentials=credentials)
+
+        return data, state
+
+    def authenticate_complete(self,  state, credential_id,
                               client_data, auth_data, signature):
+        """Verify the correctness of the assertion data received from
+        the client.
+
+        :param state: The state data returned by the corresponding
+            `register_begin`.
+        :param credentials: The list of previously registered credentials.
+        :param credential_id: The credential id of the new credential.
+        :param client_data: The client data.
+        :param auth_data: The authenticator data.
+        :param signature: The signature provided by the client."""
         if client_data.get('type') != WEBAUTHN_TYPE.GET_ASSERTION:
             raise ValueError('Incorrect type in ClientData.')
         if not self._verify(client_data.get('origin')):
             raise ValueError('Invalid origin in ClientData.')
-        if challenge != client_data.challenge:
+        if state['challenge'] != client_data.challenge:
             raise ValueError('Wrong challenge in response.')
         if not constant_time.bytes_eq(self.rp.id_hash, auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
 
-        if self.user_verification is USER_VERIFICATION.REQUIRED and \
+        if state['user_verification'] is USER_VERIFICATION.REQUIRED and \
            not auth_data.is_user_verified():
             raise ValueError(
                 'User verification required, but user verified flag not set.')
 
-        for cred in credentials:
-            if cred.credential_id == credential_id:
-                cred.public_key.verify(auth_data + client_data.hash, signature)
-                return cred
+        for cred in state['credentials']:
+            c = AttestedCredentialData(cred)
+            if c.credential_id == credential_id:
+                c.public_key.verify(auth_data + client_data.hash, signature)
+                return c
         raise ValueError('Unknown credential ID.')
+
+    @staticmethod
+    def _make_internal_state(challenge, user_verification, credentials=[]):
+        return {
+            'challenge': challenge,
+            'user_verification': user_verification,
+            'credentials': credentials
+        }

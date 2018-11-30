@@ -63,14 +63,14 @@ def index():
 
 @app.route('/api/register/begin', methods=['POST'])
 def register_begin():
-    registration_data = server.register_begin({
+    registration_data, state = server.register_begin({
         'id': b'user_id',
         'name': 'a_user',
         'displayName': 'A. User',
         'icon': 'https://example.com/image.png'
     }, credentials)
 
-    session['challenge'] = registration_data['publicKey']['challenge']
+    session['state'] = state
     print('\n\n\n\n')
     print(registration_data)
     print('\n\n\n\n')
@@ -86,7 +86,7 @@ def register_complete():
     print('AttestationObject:', att_obj)
 
     auth_data = server.register_complete(
-        session['challenge'],
+        session['state'],
         client_data,
         att_obj
     )
@@ -101,8 +101,8 @@ def authenticate_begin():
     if not credentials:
         abort(404)
 
-    auth_data = server.authenticate_begin(credentials)
-    session['challenge'] = auth_data['publicKey']['challenge']
+    auth_data, state = server.authenticate_begin(credentials)
+    session['state'] = state
     return cbor.dumps(auth_data)
 
 
@@ -120,9 +120,8 @@ def authenticate_complete():
     print('AuthenticatorData', auth_data)
 
     server.authenticate_complete(
-        credentials,
+        session.pop('state'),
         credential_id,
-        session.pop('challenge'),
         client_data,
         auth_data,
         signature
