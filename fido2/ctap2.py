@@ -374,11 +374,7 @@ class AttestationObject(bytes):
         :type client_param: bytes
         """
         attestation = Attestation.for_type(self.fmt)
-        if attestation:
-            attestation().verify(self.att_statement, self.auth_data,
-                                 client_param)
-        else:
-            raise ValueError('Unsupported format: %s' % self.fmt)
+        attestation().verify(self.att_statement, self.auth_data, client_param)
 
     @classmethod
     def create(cls, fmt, auth_data, att_stmt):

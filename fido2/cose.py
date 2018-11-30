@@ -71,8 +71,19 @@ class CoseKey(dict):
         return UnsupportedKey
 
     @staticmethod
-    def parse(cose):
+    def for_name(name):
+        """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
+        :param alg: The COSE identifier of the algorithm.
+        :return: A CoseKey.
+        """
+        for cls in CoseKey.__subclasses__():
+            if cls.__name__ == name:
+                return cls
+        return UnsupportedKey
+
+    @staticmethod
+    def parse(cose):
         """Create a CoseKey from a dict"""
         return CoseKey.for_alg(cose[3])(cose)
 
