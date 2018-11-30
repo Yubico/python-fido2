@@ -130,7 +130,7 @@ class AndroidSafetynetAttestation(Attestation):
                 websafe_decode(x), default_backend())
             for x in data['x5c']
         ]
-        certs.append(self.ca)
+        certs.append(self._ca)
 
         cert = certs.pop(0)
         cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
