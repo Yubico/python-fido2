@@ -134,14 +134,14 @@ class AndroidSafetynetAttestation(Attestation):
     def verify(self, statement, auth_data, client_data_hash):
         jwt = statement['response']
         header, payload, sig = (websafe_decode(x) for x in jwt.split(b'.'))
-        data = json.loads(payload)
+        data = json.loads(payload.decode('utf8'))
         if data['ctsProfileMatch'] is not True:
             raise InvalidData('ctsProfileMatch must be true!')
         expected_nonce = sha256(auth_data + client_data_hash)
         if not bytes_eq(expected_nonce, websafe_decode(data['nonce'])):
             raise InvalidData('Nonce does not match!')
 
-        data = json.loads(header)
+        data = json.loads(header.decode('utf8'))
         certs = [
             x509.load_der_x509_certificate(
                 websafe_decode(x), default_backend())
