@@ -121,6 +121,7 @@ def authenticate_complete():
 
     server.authenticate_complete(
         session.pop('state'),
+        credentials,
         credential_id,
         client_data,
         auth_data,

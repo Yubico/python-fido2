@@ -31,7 +31,6 @@ from .rpid import verify_rp_id
 from .cose import ES256
 from .client import WEBAUTHN_TYPE
 from .utils import sha256
-from .ctap2 import AttestedCredentialData
 
 import os
 import six
@@ -207,12 +206,11 @@ class Fido2Server(object):
             }
         }
 
-        state = self._make_internal_state(challenge, uv,
-                                          credentials=credentials)
+        state = self._make_internal_state(challenge, uv)
 
         return data, state
 
-    def authenticate_complete(self,  state, credential_id,
+    def authenticate_complete(self,  state, credentials, credential_id,
                               client_data, auth_data, signature):
         """Verify the correctness of the assertion data received from
         the client.
@@ -238,17 +236,15 @@ class Fido2Server(object):
             raise ValueError(
                 'User verification required, but user verified flag not set.')
 
-        for cred in state['credentials']:
-            c = AttestedCredentialData(cred)
-            if c.credential_id == credential_id:
-                c.public_key.verify(auth_data + client_data.hash, signature)
-                return c
+        for cred in credentials:
+            if cred.credential_id == credential_id:
+                cred.public_key.verify(auth_data + client_data.hash, signature)
+                return cred
         raise ValueError('Unknown credential ID.')
 
     @staticmethod
-    def _make_internal_state(challenge, user_verification, credentials=[]):
+    def _make_internal_state(challenge, user_verification):
         return {
             'challenge': challenge,
             'user_verification': user_verification,
-            'credentials': credentials
         }
