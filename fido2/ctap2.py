@@ -32,7 +32,7 @@ from .ctap import CtapError
 from .cose import CoseKey
 from .hid import CTAPHID, CAPABILITY
 from .utils import Timeout, sha256, hmac_sha256, bytes2int, int2bytes
-from .attestation import Attestation, FidoU2FAttestation
+from .attestation import FidoU2FAttestation
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -365,16 +365,6 @@ class AttestationObject(bytes):
 
     def __str__(self):
         return self.__repr__()
-
-    def verify(self, client_param):
-        """Verify the digital signature of an AttestationObject, with regard to
-        the given client_param.
-
-        :param client_param: SHA256 hash of the ClientData for the request.
-        :type client_param: bytes
-        """
-        attestation = Attestation.for_type(self.fmt)
-        attestation().verify(self.att_statement, self.auth_data, client_param)
 
     @classmethod
     def create(cls, fmt, auth_data, att_stmt):

@@ -30,6 +30,7 @@ from __future__ import absolute_import, unicode_literals
 from .rpid import verify_rp_id
 from .cose import ES256
 from .client import WEBAUTHN_TYPE
+from .attestation import Attestation
 from .utils import sha256
 
 import os
@@ -78,6 +79,10 @@ class RelyingParty(object):
         return sha256(self.ident.encode())
 
 
+def _default_attestations():
+    return [cls() for cls in Attestation.__subclasses__()]
+
+
 class Fido2Server(object):
     """FIDO2 server
 
@@ -89,12 +94,14 @@ class Fido2Server(object):
             rp,
             attestation=ATTESTATION.NONE,
             verify_origin=None,
+            attestation_types=None,
     ):
         self.rp = rp
         self._verify = verify_origin or _verify_origin_for_rp(rp.ident)
         self.timeout = 30
         self.attestation = ATTESTATION(attestation)
         self.allowed_algorithms = [ES256.ALGORITHM]
+        self._attestation_types = attestation_types or _default_attestations()
 
     def register_begin(self, user, credentials=None, resident_key=False,
                        user_verification=USER_VERIFICATION.PREFERRED):
@@ -170,7 +177,17 @@ class Fido2Server(object):
         if attestation_object.fmt == ATTESTATION.NONE \
                 and self.attestation != ATTESTATION.NONE:
             raise ValueError('Attestation required, but not provided.')
-        attestation_object.verify(client_data.hash)
+        for at in self._attestation_types:
+            if getattr(at, 'FORMAT', None) == attestation_object.fmt:
+                at.verify(
+                    attestation_object.att_statement,
+                    attestation_object.auth_data,
+                    client_data.hash
+                )
+                break
+        else:
+            raise ValueError('Unsupported attestation type: %s' %
+                             attestation_object.fmt)
 
         if state['user_verification'] is USER_VERIFICATION.REQUIRED and \
            not attestation_object.auth_data.is_user_verified():
