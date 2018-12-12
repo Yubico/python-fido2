@@ -62,10 +62,10 @@ class RelyingParty(object):
 
     See https://www.w3.org/TR/webauthn/#sctn-rp-credential-params for details.
 
-    :ivar ident: Unique identifier of the relying party,
-        see https://www.w3.org/TR/webauthn/#rp-id for details
-    :ivar name: Name of the relying party
-    :ivar icon: URL with the relying party icon
+    :param ident: Unique identifier of the relying party,
+        see https://www.w3.org/TR/webauthn/#rp-id for details.
+    :param name: Name of the relying party.
+    :param icon: URL with the relying party icon.
     """
 
     def __init__(self, ident, name=None, icon=None):
@@ -86,7 +86,12 @@ def _default_attestations():
 class Fido2Server(object):
     """FIDO2 server
 
-    :ivar rp: Relying party data as `RelyingParty` instance.
+    :param rp: Relying party data as `RelyingParty` instance.
+    :param attestation: (optional) Requirement on authenticator attestation.
+    :param verify_origin: (optional) Alternative function to validate an origin.
+    :param attestation_types: (optional) List of `Attestation` subclasses to use
+        to verify attestation. By default, all available subclasses of
+        `Attestation` will be used.
     """
 
     def __init__(
