@@ -29,7 +29,7 @@ from __future__ import absolute_import, unicode_literals
 
 from . import cbor
 from .ctap import CtapError
-from .cose import CoseKey
+from .cose import CoseKey, ES256
 from .hid import CTAPHID, CAPABILITY
 from .utils import Timeout, sha256, hmac_sha256, bytes2int, int2bytes
 from .attestation import FidoU2FAttestation
@@ -189,6 +189,24 @@ class AttestedCredentialData(bytes):
         parts = cls.parse(data)
         return cls.create(*parts[:-1]), parts[-1]
 
+    @classmethod
+    def from_ctap1(cls, key_handle, public_key):
+        """Create an AttestatedCredentialData from a CTAP1 RegistrationData
+        instance.
+
+        :param key_handle: The CTAP1 credential key_handle.
+        :type key_handle: bytes
+        :param public_key: The CTAP1 65 byte public key.
+        :type public_key: bytes
+        :return: The credential data, using an all-zero AAGUID.
+        :rtype: AttestedCredentialData
+        """
+        return cls.create(
+            b'\0'*16,  # AAGUID
+            key_handle,
+            ES256.from_ctap1(public_key)
+        )
+
 
 class AuthenticatorData(bytes):
     """Binary encoding of the authenticator data.
@@ -204,8 +222,7 @@ class AuthenticatorData(bytes):
 
     @unique
     class FLAG(IntEnum):
-        """
-        Authenticator data flags
+        """Authenticator data flags
 
         See https://www.w3.org/TR/webauthn/#sec-authenticator-data for details
         """
@@ -398,16 +415,9 @@ class AttestationObject(bytes):
                 app_param,
                 0x41,
                 0,
-                AttestedCredentialData.create(
-                    b'\0'*16,  # aaguid
+                AttestedCredentialData.from_ctap1(
                     registration.key_handle,
-                    {  # EC256 public key
-                        1: 2,
-                        3: -7,
-                        -1: 1,
-                        -2: registration.public_key[1:1+32],
-                        -3: registration.public_key[33:33+32]
-                    }
+                    registration.public_key
                 )
             ),
             {  # att_statement
