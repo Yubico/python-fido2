@@ -32,7 +32,7 @@ from fido2.ctap2 import AuthenticatorData
 from fido2.attestation import (Attestation, UnsupportedAttestation,
                                FidoU2FAttestation, PackedAttestation,
                                NoneAttestation, AndroidSafetynetAttestation,
-                               InvalidData, InvalidSignature)
+                               InvalidData, InvalidSignature, UnsupportedType)
 from binascii import a2b_hex
 
 import unittest
@@ -42,7 +42,7 @@ class TestAttestationObject(unittest.TestCase):
     def test_unsupported_attestation(self):
         attestation = Attestation.for_type('__unsupported__')()
         self.assertIsInstance(attestation, UnsupportedAttestation)
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(UnsupportedType):
             attestation.verify({}, 0, b'')
 
     def test_none_attestation(self):

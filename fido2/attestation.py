@@ -51,6 +51,14 @@ class InvalidSignature(InvalidAttestation):
     pass
 
 
+class UnsupportedType(InvalidAttestation):
+
+    def __init__(self, auth_data):
+        super(UnsupportedType, self).__init__(
+            'This attestation format is not supported!')
+        self.auth_data = auth_data
+
+
 class Attestation(abc.ABC):
     @abc.abstractmethod
     def verify(self, statement, auth_data, client_data_hash):
@@ -66,7 +74,7 @@ class Attestation(abc.ABC):
 
 class UnsupportedAttestation(Attestation):
     def verify(self, statement, auth_data, client_data_hash):
-        raise NotImplementedError('This attestation format is not supported!')
+        raise UnsupportedType(auth_data)
 
 
 class NoneAttestation(Attestation):
