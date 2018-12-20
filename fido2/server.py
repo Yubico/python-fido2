@@ -31,7 +31,7 @@ from .rpid import verify_rp_id, verify_app_id
 from .cose import ES256
 from .client import WEBAUTHN_TYPE
 from .attestation import Attestation, FidoU2FAttestation
-from .utils import sha256
+from .utils import sha256, websafe_encode, websafe_decode
 
 import os
 import six
@@ -173,7 +173,7 @@ class Fido2Server(object):
             raise ValueError('Incorrect type in ClientData.')
         if not self._verify(client_data.get('origin')):
             raise ValueError('Invalid origin in ClientData.')
-        if not constant_time.bytes_eq(state['challenge'],
+        if not constant_time.bytes_eq(websafe_decode(state['challenge']),
                                       client_data.challenge):
             raise ValueError('Wrong challenge in response.')
         if not constant_time.bytes_eq(self.rp.id_hash,
@@ -248,7 +248,7 @@ class Fido2Server(object):
             raise ValueError('Incorrect type in ClientData.')
         if not self._verify(client_data.get('origin')):
             raise ValueError('Invalid origin in ClientData.')
-        if state['challenge'] != client_data.challenge:
+        if websafe_decode(state['challenge']) != client_data.challenge:
             raise ValueError('Wrong challenge in response.')
         if not constant_time.bytes_eq(self.rp.id_hash, auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
@@ -267,7 +267,7 @@ class Fido2Server(object):
     @staticmethod
     def _make_internal_state(challenge, user_verification):
         return {
-            'challenge': challenge,
+            'challenge': websafe_encode(challenge),
             'user_verification': user_verification,
         }
 
