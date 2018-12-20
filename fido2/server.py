@@ -240,7 +240,7 @@ class Fido2Server(object):
         :param state: The state data returned by the corresponding
             `register_begin`.
         :param credentials: The list of previously registered credentials.
-        :param credential_id: The credential id of the new credential.
+        :param credential_id: The credential id from the client response.
         :param client_data: The client data.
         :param auth_data: The authenticator data.
         :param signature: The signature provided by the client."""
