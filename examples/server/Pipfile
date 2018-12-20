@@ -10,3 +10,4 @@ pyOpenSSL = "*"
 
 [scripts]
 server = "python server.py"
+server-u2f = "python server-u2f.py"

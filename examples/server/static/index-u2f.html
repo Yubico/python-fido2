@@ -1,0 +1,27 @@
+<html>
+<head>
+  <title>Fido 2.0 webauthn demo</title>
+  <script src="/cbor.js"></script>
+  <style>
+    body { font-family: sans-serif; line-height: 1.5em; padding: 2em 10em; }
+    h1, h2 { color: #325F74; }
+    a { color: #0080ac; font-weight: bold; text-decoration: none;}
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>WebAuthn demo using python-fido2</h1>
+  <p>This demo requires a browser supporting the WebAuthn API!</p>
+  <hr>
+
+  <h2>Available actions</h2>
+  <a href="/register.html">Register</a><br>
+  <a href="/authenticate.html">Authenticate</a><br>
+
+  <p>
+  To allow the testing of authenticating with legacy U2F credentials, you can
+  also register a U2F credential:
+  <a href="/u2f.html">Register U2F</a>
+  </p>
+</body>
+</html>

@@ -27,10 +27,10 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from .rpid import verify_rp_id
+from .rpid import verify_rp_id, verify_app_id
 from .cose import ES256
 from .client import WEBAUTHN_TYPE
-from .attestation import Attestation
+from .attestation import Attestation, FidoU2FAttestation
 from .utils import sha256
 
 import os
@@ -232,7 +232,7 @@ class Fido2Server(object):
 
         return data, state
 
-    def authenticate_complete(self,  state, credentials, credential_id,
+    def authenticate_complete(self, state, credentials, credential_id,
                               client_data, auth_data, signature):
         """Verify the correctness of the assertion data received from
         the client.
@@ -270,3 +270,36 @@ class Fido2Server(object):
             'challenge': challenge,
             'user_verification': user_verification,
         }
+
+
+class U2FFido2Server(Fido2Server):
+    """Fido2Server which can be used with existing U2F credentials.
+
+    This Fido2Server can be used with existing U2F credentials by using the
+    WebAuthn appid extension, as well as with new WebAuthn credentials.
+    See https://www.w3.org/TR/webauthn/#sctn-appid-extension for details.
+
+    :param app_id: The appId which was used for U2F registration.
+    For other parameters, see Fido2Server.
+    """
+
+    def __init__(self, app_id, rp, *args, **kwargs):
+        super(U2FFido2Server, self).__init__(rp, *args, **kwargs)
+        kwargs['verify_origin'] = lambda o: verify_app_id(app_id, o)
+        kwargs['attestation_types'] = [FidoU2FAttestation()]
+        self._app_id = app_id
+        self._app_id_server = Fido2Server(RelyingParty(app_id), *args, **kwargs)
+
+    def authenticate_begin(self, *args, **kwargs):
+        req, state = super(U2FFido2Server, self).authenticate_begin(
+            *args,
+            **kwargs
+        )
+        req['publicKey'].setdefault('extensions', {})['appid'] = self._app_id
+        return req, state
+
+    def authenticate_complete(self, *args, **kwargs):
+        try:
+            super(U2FFido2Server, self).authenticate_complete(*args, **kwargs)
+        except ValueError as e:
+            self._app_id_server.authenticate_complete(*args, **kwargs)

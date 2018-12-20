@@ -16,7 +16,7 @@
 
   <h2>Register a credential</h2>
   <p>Touch your authenticator device now...</p>
-  <a href="/index.html">Cancel</a>
+  <a href="/">Cancel</a>
 
   <script>
     fetch('/api/register/begin', {
@@ -41,7 +41,7 @@
     }, function(reason) {
       alert(reason);
     }).then(function() {
-      window.location = '/index.html';
+      window.location = '/';
     });
   </script>
 
