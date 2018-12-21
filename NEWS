@@ -1,3 +1,10 @@
+* Version 0.5.0 (released 2018-12-21)
+ ** Changes to server classes, some backwards breaking.
+ ** Add ability to authenticate U2F credentials by using the appid extension.
+ ** Make verification of attestation more explicit.
+ ** Add support for Android SafetyNet attestation.
+ ** Make it easier to work with U2F/CTAP1 data formats.
+
 * Version 0.4.0 (released 2018-09-27)
  ** Add classes for implementing a server.
  ** Various small changes, some affecting backwards compatibility.
