@@ -30,7 +30,7 @@ from __future__ import absolute_import, unicode_literals
 from .rpid import verify_rp_id, verify_app_id
 from .cose import ES256
 from .client import WEBAUTHN_TYPE
-from .attestation import Attestation, FidoU2FAttestation
+from .attestation import Attestation, FidoU2FAttestation, UnsupportedAttestation
 from .utils import sha256, websafe_encode, websafe_decode
 
 import os
@@ -80,7 +80,8 @@ class RelyingParty(object):
 
 
 def _default_attestations():
-    return [cls() for cls in Attestation.__subclasses__()]
+    return [cls() for cls in Attestation.__subclasses__()
+            if getattr(cls, 'FORMAT', 'none') != 'none']
 
 
 class Fido2Server(object):
@@ -91,7 +92,8 @@ class Fido2Server(object):
     :param verify_origin: (optional) Alternative function to validate an origin.
     :param attestation_types: (optional) List of `Attestation` subclasses to use
         to verify attestation. By default, all available subclasses of
-        `Attestation` will be used.
+        `Attestation` will be used, excluding the NoneAttestation format. This
+        parameter is ignored if `attestation` is set to `none`.
     """
 
     def __init__(
@@ -179,25 +181,28 @@ class Fido2Server(object):
         if not constant_time.bytes_eq(self.rp.id_hash,
                                       attestation_object.auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
-        if attestation_object.fmt == ATTESTATION.NONE \
-                and self.attestation != ATTESTATION.NONE:
-            raise ValueError('Attestation required, but not provided.')
-        for at in self._attestation_types:
-            if getattr(at, 'FORMAT', None) == attestation_object.fmt:
-                at.verify(
-                    attestation_object.att_statement,
-                    attestation_object.auth_data,
-                    client_data.hash
-                )
-                break
-        else:
-            raise ValueError('Unsupported attestation type: %s' %
-                             attestation_object.fmt)
 
         if state['user_verification'] is USER_VERIFICATION.REQUIRED and \
-           not attestation_object.auth_data.is_user_verified():
+                not attestation_object.auth_data.is_user_verified():
             raise ValueError(
                 'User verification required, but User verified flag not set.')
+
+        if self.attestation != ATTESTATION.NONE:
+            att_verifier = UnsupportedAttestation()
+            for at in self._attestation_types:
+                if getattr(at, 'FORMAT', None) == attestation_object.fmt:
+                    att_verifier = at
+                    break
+            # An unsupported format causes an exception to be thrown, which
+            # includes the auth_data. The caller may choose to handle this case
+            # and allow the registration.
+            att_verifier.verify(
+                attestation_object.att_statement,
+                attestation_object.auth_data,
+                client_data.hash
+            )
+        # We simply ignore attestation if self.attestation == 'none', as not all
+        # clients strip the attestation.
 
         return attestation_object.auth_data
 
@@ -254,7 +259,7 @@ class Fido2Server(object):
             raise ValueError('Wrong RP ID hash in response.')
 
         if state['user_verification'] is USER_VERIFICATION.REQUIRED and \
-           not auth_data.is_user_verified():
+                not auth_data.is_user_verified():
             raise ValueError(
                 'User verification required, but user verified flag not set.')
 
