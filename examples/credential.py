@@ -73,7 +73,11 @@ print('CREDENTIAL DATA:', attestation_object.auth_data.credential_data)
 
 # Verify signature
 verifier = Attestation.for_type(attestation_object.fmt)
-verifier().verify(attestation_object.att_statement, attestation_object.auth_data, client_data.hash)
+verifier().verify(
+    attestation_object.att_statement,
+    attestation_object.auth_data,
+    client_data.hash
+)
 print('Attestation signature verified!')
 
 credential = attestation_object.auth_data.credential_data
