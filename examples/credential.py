@@ -34,6 +34,7 @@ from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client
+from fido2.attestation import Attestation
 from getpass import getpass
 import sys
 
@@ -71,7 +72,8 @@ print()
 print('CREDENTIAL DATA:', attestation_object.auth_data.credential_data)
 
 # Verify signature
-attestation_object.verify(client_data.hash)
+verifier = Attestation.for_type(attestation_object.fmt)
+verifier().verify(attestation_object.att_statement, attestation_object.auth_data, client_data.hash)
 print('Attestation signature verified!')
 
 credential = attestation_object.auth_data.credential_data
