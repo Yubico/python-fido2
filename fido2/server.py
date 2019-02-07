@@ -57,6 +57,12 @@ class USER_VERIFICATION(six.text_type, Enum):
     REQUIRED = 'required'
 
 
+@unique
+class AUTHENTICATOR_ATTACHMENT(six.text_type, Enum):
+    PLATFORM = 'platform'
+    CROSS_PLATFORM = 'cross-platform'
+
+
 class RelyingParty(object):
     """Representation of relying party data.
 
@@ -111,7 +117,8 @@ class Fido2Server(object):
         self._attestation_types = attestation_types or _default_attestations()
 
     def register_begin(self, user, credentials=None, resident_key=False,
-                       user_verification=USER_VERIFICATION.PREFERRED):
+                       user_verification=USER_VERIFICATION.PREFERRED,
+                       authenticator_attachment=None):
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
         corresponding `register_complete` call.
@@ -120,6 +127,8 @@ class Fido2Server(object):
         :param credentials: The list of previously registered credentials.
         :param resident_key: True to request a resident credential.
         :param user_verification: The desired USER_VERIFICATION level.
+        :param authenticator_attachment: The desired AUTHENTICATOR_ATTACHMENT
+            or None to not provide a preference (and get both types).
         :return: Registration data, internal state."""
         if not self.allowed_algorithms:
             raise ValueError('Server has no allowed algorithms.')
@@ -131,6 +140,15 @@ class Fido2Server(object):
         rp_data = {'id': self.rp.ident, 'name': self.rp.name}
         if self.rp.icon:
             rp_data['icon'] = self.rp.icon
+
+        authenticator_selection = {
+            'requireResidentKey': resident_key,
+            'userVerification': uv
+        }
+
+        if authenticator_attachment:
+            authenticator_selection['authenticatorAttachment'] = \
+                AUTHENTICATOR_ATTACHMENT(authenticator_attachment)
 
         data = {
             'publicKey': {
@@ -151,10 +169,7 @@ class Fido2Server(object):
                 ],
                 'timeout': int(self.timeout * 1000),
                 'attestation': self.attestation,
-                'authenticatorSelection': {
-                    'requireResidentKey': resident_key,
-                    'userVerification': uv
-                }
+                'authenticatorSelection': authenticator_selection
             }
         }
 
