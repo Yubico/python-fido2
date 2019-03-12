@@ -182,8 +182,13 @@ def _validate_attestation_certificate(cert, aaguid):
     o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
     if not o:
         raise InvalidData('Subject must have O set!')
-    ou = cert.subject.get_attributes_for_oid(
-        x509.NameOID.ORGANIZATIONAL_UNIT_NAME)[0]
+    ous = cert.subject.get_attributes_for_oid(
+        x509.NameOID.ORGANIZATIONAL_UNIT_NAME
+    )
+    if not ous:
+        raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
+
+    ou = ous[0]
     if ou.value != 'Authenticator Attestation':
         raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
     cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
