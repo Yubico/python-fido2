@@ -44,7 +44,7 @@ setup(
     author_email='dain@yubico.com',
     description='Python based FIDO 2.0 library',
     url='https://github.com/Yubico/python-fido2',
-    python_requires='>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    python_requires='>=2.7.6,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
     install_requires=[
         'six',
         'cryptography>=1.0',

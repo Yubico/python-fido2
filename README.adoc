@@ -50,8 +50,8 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", \
 ----
 
 === Dependencies
-fido2 is compatible with CPython 2.7, 3.4 onwards, and is tested on Windows,
-MacOS, and Linux.
+fido2 is compatible with CPython 2.7 (2.7.6 and up), 3.4 onwards, and is tested
+on Windows, MacOS, and Linux.
 
 This project depends on Cryptography. For instructions on installing this
 dependency, see https://cryptography.io/en/latest/installation/.
