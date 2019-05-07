@@ -37,6 +37,7 @@ import os
 import six
 from enum import Enum, unique
 from cryptography.hazmat.primitives import constant_time
+from cryptography.exceptions import InvalidSignature
 
 
 def _verify_origin_for_rp(rp_id):
@@ -280,7 +281,11 @@ class Fido2Server(object):
 
         for cred in credentials:
             if cred.credential_id == credential_id:
-                cred.public_key.verify(auth_data + client_data.hash, signature)
+                try:
+                    cred.public_key.verify(auth_data + client_data.hash,
+                                           signature)
+                except InvalidSignature:
+                    raise ValueError('Invalid signature.')
                 return cred
         raise ValueError('Unknown credential ID.')
 
