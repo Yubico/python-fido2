@@ -85,7 +85,10 @@ class CoseKey(dict):
     @staticmethod
     def parse(cose):
         """Create a CoseKey from a dict"""
-        return CoseKey.for_alg(cose[3])(cose)
+        alg = cose.get(3)
+        if not alg:
+            raise ValueError('COSE alg identifier must be provided.')
+        return CoseKey.for_alg(alg)(cose)
 
 
 class UnsupportedKey(CoseKey):
