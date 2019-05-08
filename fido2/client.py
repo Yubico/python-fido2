@@ -30,7 +30,8 @@ from __future__ import absolute_import, unicode_literals
 from .hid import STATUS
 from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
-from .ctap2 import (CTAP2, PinProtocolV1, AttestationObject, AssertionResponse)
+from .ctap2 import (CTAP2, PinProtocolV1, AttestationObject, AssertionResponse,
+                    Info)
 from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
@@ -257,6 +258,9 @@ class WEBAUTHN_TYPE(six.text_type, Enum):
     GET_ASSERTION = 'webauthn.get'
 
 
+_CTAP1_INFO = b'\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50' + b'\0' * 16
+
+
 class Fido2Client(object):
     def __init__(self, device, origin, verify=verify_rp_id):
         self.ctap1_poll_delay = 0.25
@@ -264,11 +268,16 @@ class Fido2Client(object):
         self._verify = verify
         try:
             self.ctap2 = CTAP2(device)
-            self.pin_protocol = PinProtocolV1(self.ctap2)
+            self.info = self.ctap2.get_info()
+            if PinProtocolV1.VERSION in self.info.pin_protocols:
+                self.pin_protocol = PinProtocolV1(self.ctap2)
+            else:
+                self.pin_protocol = None
             self._do_make_credential = self._ctap2_make_credential
             self._do_get_assertion = self._ctap2_get_assertion
         except ValueError:
             self.ctap1 = CTAP1(device)
+            self.info = Info(_CTAP1_INFO)
             self._do_make_credential = self._ctap1_make_credential
             self._do_get_assertion = self._ctap1_get_assertion
 
@@ -305,17 +314,13 @@ class Fido2Client(object):
                                extensions, rk, uv, pin, timeout, on_keepalive):
         key_params = [{'type': 'public-key', 'alg': alg} for alg in algos]
 
-        info = self.ctap2.get_info()
         pin_auth = None
         pin_protocol = None
         if pin:
             pin_protocol = self.pin_protocol.VERSION
-            if pin_protocol not in info.pin_protocols:
-                raise ValueError('Device does not support PIN protocol: %d!' %
-                                 pin_protocol)
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
-        elif info.options.get('clientPin'):
+        elif self.info.options.get('clientPin'):
             raise ValueError('PIN required!')
 
         if not (rk or uv):
@@ -381,17 +386,13 @@ class Fido2Client(object):
 
     def _ctap2_get_assertion(self, client_data, rp_id, allow_list, extensions,
                              up, uv, pin, timeout, on_keepalive):
-        info = self.ctap2.get_info()
         pin_auth = None
         pin_protocol = None
         if pin:
             pin_protocol = self.pin_protocol.VERSION
-            if pin_protocol not in info.pin_protocols:
-                raise ValueError('Device does not support PIN protocol %d!' %
-                                 pin_protocol)
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
-        elif info.options.get('clientPin'):
+        elif self.info.options.get('clientPin'):
             raise ValueError('PIN required!')
 
         options = {}

@@ -312,9 +312,20 @@ _MC_RESP = a2b_hex('a301667061636b6564025900c40021f5fc0b85cd22e60623bcd7d1ca4894
 
 class TestFido2Client(unittest.TestCase):
 
-    def test_make_credential_wrong_app_id(self):
+    def test_ctap1_info(self):
+        dev = mock.Mock()
+        dev.capabilities = 0
+        client = Fido2Client(dev, APP_ID)
+        self.assertEqual(client.info.versions, ['U2F_V2'])
+        self.assertEqual(client.info.pin_protocols, [])
+
+    @mock.patch('fido2.client.CTAP2')
+    def test_make_credential_wrong_app_id(self, PatchedCTAP2):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
+        ctap2 = mock.MagicMock()
+        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        PatchedCTAP2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
         try:
             client.make_credential(
@@ -327,14 +338,16 @@ class TestFido2Client(unittest.TestCase):
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.BAD_REQUEST)
 
-    def test_make_credential_existing_key(self):
+    @mock.patch('fido2.client.CTAP2')
+    def test_make_credential_existing_key(self, PatchedCTAP2):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
-        client = Fido2Client(dev, APP_ID)
-        client.ctap2 = mock.MagicMock()
-        client.ctap2.get_info.return_value = Info(_INFO_NO_PIN)
-        client.ctap2.make_credential.side_effect = CtapError(
+        ctap2 = mock.MagicMock()
+        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        ctap2.make_credential.side_effect = CtapError(
             CtapError.ERR.CREDENTIAL_EXCLUDED)
+        PatchedCTAP2.return_value = ctap2
+        client = Fido2Client(dev, APP_ID)
 
         try:
             client.make_credential(
@@ -347,16 +360,18 @@ class TestFido2Client(unittest.TestCase):
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
 
-        client.ctap2.get_info.assert_called_with()
-        client.ctap2.make_credential.assert_called_once()
+        ctap2.get_info.assert_called_with()
+        ctap2.make_credential.assert_called_once()
 
-    def test_make_credential_ctap2(self):
+    @mock.patch('fido2.client.CTAP2')
+    def test_make_credential_ctap2(self, PatchedCTAP2):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
+        ctap2 = mock.MagicMock()
+        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        ctap2.make_credential.return_value = AttestationObject(_MC_RESP)
+        PatchedCTAP2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
-        client.ctap2 = mock.MagicMock()
-        client.ctap2.get_info.return_value = Info(_INFO_NO_PIN)
-        client.ctap2.make_credential.return_value = AttestationObject(_MC_RESP)
 
         attestation, client_data = client.make_credential(
             rp,
@@ -368,8 +383,8 @@ class TestFido2Client(unittest.TestCase):
         self.assertIsInstance(attestation, AttestationObject)
         self.assertIsInstance(client_data, ClientData)
 
-        client.ctap2.get_info.assert_called_with()
-        client.ctap2.make_credential.assert_called_with(
+        ctap2.get_info.assert_called_with()
+        ctap2.make_credential.assert_called_with(
             client_data.hash,
             rp,
             user,
