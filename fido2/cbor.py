@@ -59,7 +59,7 @@ def dump_bool(data):
 
 
 def dump_list(data):
-    return dump_int(len(data), mt=4) + b''.join([dumps(x) for x in data])
+    return dump_int(len(data), mt=4) + b''.join([encode(x) for x in data])
 
 
 def _sort_keys(entry):
@@ -68,7 +68,7 @@ def _sort_keys(entry):
 
 
 def dump_dict(data):
-    items = [(dumps(k), dumps(v)) for k, v in data.items()]
+    items = [(encode(k), encode(v)) for k, v in data.items()]
     items.sort(key=_sort_keys)
     return dump_int(len(items), mt=5) + b''.join([k+v for (k, v) in items])
 
@@ -92,7 +92,7 @@ _SERIALIZERS = [
 ]
 
 
-def dumps(data):
+def encode(data):
     for k, v in _SERIALIZERS:
         if isinstance(data, k):
             return v(data)
@@ -136,7 +136,7 @@ def load_array(ai, data):
     l, data = load_int(ai, data)
     values = []
     for i in range(l):
-        val, data = loads(data)
+        val, data = decode_from(data)
         values.append(val)
     return values, data
 
@@ -145,8 +145,8 @@ def load_map(ai, data):
     l, data = load_int(ai, data)
     values = {}
     for i in range(l):
-        k, data = loads(data)
-        v, data = loads(data)
+        k, data = decode_from(data)
+        v, data = decode_from(data)
         values[k] = v
     return values, data
 
@@ -162,6 +162,13 @@ _DESERIALIZERS = {
 }
 
 
-def loads(data):
+def decode_from(data):
     fb = six.indexbytes(data, 0)
     return _DESERIALIZERS[fb >> 5](fb & 0b11111, data[1:])
+
+
+def decode(data):
+    value, rest = decode_from(data)
+    if rest != b'':
+        raise ValueError('Extraneous data')
+    return value

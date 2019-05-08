@@ -122,7 +122,7 @@ _TEST_VECTORS = [
 
 
 def cbor2hex(data):
-    return b2a_hex(cbor.dumps(data)).decode()
+    return b2a_hex(cbor.encode(data)).decode()
 
 
 class TestCborTestVectors(unittest.TestCase):
@@ -134,7 +134,8 @@ class TestCborTestVectors(unittest.TestCase):
     def test_vectors(self):
         for (data, value) in _TEST_VECTORS:
             try:
-                self.assertEqual(cbor.loads(a2b_hex(data)), (value, b''))
+                self.assertEqual(cbor.decode_from(a2b_hex(data)), (value, b''))
+                self.assertEqual(cbor.decode(a2b_hex(data)), value)
                 self.assertEqual(cbor2hex(value), data)
             except Exception:
                 print('\nERROR in test vector, %s' % data)

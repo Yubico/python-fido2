@@ -41,7 +41,7 @@ _RS256_KEY = a2b_hex(b'A401030339010020590100B610DCE84B65029FAE24F7BF8A1730D37BC
 
 class TestCoseKey(unittest.TestCase):
     def test_ES256_parse_verify(self):
-        key = CoseKey.parse(cbor.loads(_ES256_KEY)[0])
+        key = CoseKey.parse(cbor.decode(_ES256_KEY))
         self.assertIsInstance(key, ES256)
         self.assertEqual(key, {
             1: 2,
@@ -57,7 +57,7 @@ class TestCoseKey(unittest.TestCase):
         )
 
     def test_RS256_parse_verify(self):
-        key = CoseKey.parse(cbor.loads(_RS256_KEY)[0])
+        key = CoseKey.parse(cbor.decode(_RS256_KEY))
         self.assertIsInstance(key, RS256)
         self.assertEqual(key, {
             1: 3,

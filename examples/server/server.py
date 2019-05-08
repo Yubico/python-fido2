@@ -74,12 +74,12 @@ def register_begin():
     print('\n\n\n\n')
     print(registration_data)
     print('\n\n\n\n')
-    return cbor.dumps(registration_data)
+    return cbor.encode(registration_data)
 
 
 @app.route('/api/register/complete', methods=['POST'])
 def register_complete():
-    data = cbor.loads(request.get_data())[0]
+    data = cbor.decode(request.get_data())
     client_data = ClientData(data['clientDataJSON'])
     att_obj = AttestationObject(data['attestationObject'])
     print('clientData', client_data)
@@ -93,7 +93,7 @@ def register_complete():
 
     credentials.append(auth_data.credential_data)
     print('REGISTERED CREDENTIAL:', auth_data.credential_data)
-    return cbor.dumps({'status': 'OK'})
+    return cbor.encode({'status': 'OK'})
 
 
 @app.route('/api/authenticate/begin', methods=['POST'])
@@ -103,7 +103,7 @@ def authenticate_begin():
 
     auth_data, state = server.authenticate_begin(credentials)
     session['state'] = state
-    return cbor.dumps(auth_data)
+    return cbor.encode(auth_data)
 
 
 @app.route('/api/authenticate/complete', methods=['POST'])
@@ -111,7 +111,7 @@ def authenticate_complete():
     if not credentials:
         abort(404)
 
-    data = cbor.loads(request.get_data())[0]
+    data = cbor.decode(request.get_data())
     credential_id = data['credentialId']
     client_data = ClientData(data['clientDataJSON'])
     auth_data = AuthenticatorData(data['authenticatorData'])
@@ -128,7 +128,7 @@ def authenticate_complete():
         signature
     )
     print('ASSERTION OK')
-    return cbor.dumps({'status': 'OK'})
+    return cbor.encode({'status': 'OK'})
 
 
 if __name__ == '__main__':

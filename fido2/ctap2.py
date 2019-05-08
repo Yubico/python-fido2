@@ -64,13 +64,6 @@ def hexstr(bs):
     return "h'%s'" % b2a_hex(bs).decode()
 
 
-def _parse_cbor(data):
-    resp, rest = cbor.loads(data)
-    if rest:
-        raise ValueError('Extraneous data')
-    return resp
-
-
 class Info(bytes):
     """Binary CBOR encoded response data returned by the CTAP2 GET_INFO command.
 
@@ -105,7 +98,7 @@ class Info(bytes):
         super(Info, self).__init__()
 
         data = dict((Info.KEY.get(k), v) for (k, v) in
-                    _parse_cbor(self).items())
+                    cbor.decode(self).items())
         self.versions = data[Info.KEY.VERSIONS]
         self.extensions = data.get(Info.KEY.EXTENSIONS, [])
         self.aaguid = data[Info.KEY.AAGUID]
@@ -170,7 +163,7 @@ class AttestedCredentialData(bytes):
         aaguid = data[:16]
         c_len = struct.unpack('>H', data[16:18])[0]
         cred_id = data[18:18+c_len]
-        pub_key, rest = cbor.loads(data[18+c_len:])
+        pub_key, rest = cbor.decode_from(data[18+c_len:])
         return aaguid, cred_id, CoseKey.parse(pub_key), rest
 
     @classmethod
@@ -183,7 +176,7 @@ class AttestedCredentialData(bytes):
         :return: The attested credential data.
         """
         return cls(aaguid + struct.pack('>H', len(credential_id))
-                   + credential_id + cbor.dumps(public_key))
+                   + credential_id + cbor.encode(public_key))
 
     @classmethod
     def unpack_from(cls, data):
@@ -255,7 +248,7 @@ class AuthenticatorData(bytes):
             self.credential_data = None
 
         if self.flags & AuthenticatorData.FLAG.EXTENSION_DATA:
-            self.extensions, rest = cbor.loads(rest)
+            self.extensions, rest = cbor.decode_from(rest)
         else:
             self.extensions = None
 
@@ -277,7 +270,7 @@ class AuthenticatorData(bytes):
         """
         return cls(
             rp_id_hash + struct.pack('>BI', flags, counter) + credential_data +
-            (cbor.dumps(extensions) if extensions is not None else b'')
+            (cbor.encode(extensions) if extensions is not None else b'')
         )
 
     def is_user_present(self):
@@ -375,7 +368,7 @@ class AttestationObject(bytes):
         super(AttestationObject, self).__init__()
 
         data = dict((AttestationObject.KEY.for_key(k), v) for (k, v) in
-                    _parse_cbor(self).items())
+                    cbor.decode(self).items())
         self.fmt = data[AttestationObject.KEY.FMT]
         self.auth_data = AuthenticatorData(data[AttestationObject.KEY.AUTH_DATA]
                                            )
@@ -404,7 +397,7 @@ class AttestationObject(bytes):
         :return: The attestation object.
         :rtype: AttestationObject
         """
-        return cls(cbor.dumps(args(fmt, auth_data, att_stmt)))
+        return cls(cbor.encode(args(fmt, auth_data, att_stmt)))
 
     @classmethod
     def from_ctap1(cls, app_param, registration):
@@ -441,7 +434,7 @@ class AttestationObject(bytes):
         :return: The attestation object, using int keys.
         :rtype: AttestationObject
         """
-        return AttestationObject(cbor.dumps(self.data))
+        return AttestationObject(cbor.encode(self.data))
 
     def with_string_keys(self):
         """Get a copy of this AttestationObject, using Webauthn string values as
@@ -450,7 +443,7 @@ class AttestationObject(bytes):
         :return: The attestation object, using str keys.
         :rtype: AttestationObject
         """
-        return AttestationObject(cbor.dumps(
+        return AttestationObject(cbor.encode(
             dict((k.string_key, v) for k, v in self.data.items())))
 
 
@@ -478,7 +471,7 @@ class AssertionResponse(bytes):
         super(AssertionResponse, self).__init__()
 
         data = dict((AssertionResponse.KEY(k), v) for (k, v) in
-                    _parse_cbor(self).items())
+                    cbor.decode(self).items())
         self.credential = data.get(
             AssertionResponse.KEY.CREDENTIAL)
         self.auth_data = AuthenticatorData(
@@ -522,8 +515,8 @@ class AssertionResponse(bytes):
         :param n_creds: The number of responses available.
         :return: The assertion response.
         """
-        return cls(cbor.dumps(args(credential, auth_data, signature, user,
-                                   n_creds)))
+        return cls(cbor.encode(args(credential, auth_data, signature, user,
+                                    n_creds)))
 
     @classmethod
     def from_ctap1(cls, app_param, credential, authentication):
@@ -566,7 +559,7 @@ class CTAP2(object):
             raise ValueError('Device does not support CTAP2.')
         self.device = device
 
-    def send_cbor(self, cmd, data=None, timeout=None, parse=_parse_cbor,
+    def send_cbor(self, cmd, data=None, timeout=None, parse=cbor.decode,
                   on_keepalive=None):
 
         """Sends a CBOR message to the device, and waits for a response.
@@ -587,7 +580,7 @@ class CTAP2(object):
         """
         request = struct.pack('>B', cmd)
         if data is not None:
-            request += cbor.dumps(data)
+            request += cbor.encode(data)
         with Timeout(timeout) as event:
             response = self.device.call(CTAPHID.CBOR, request, event,
                                         on_keepalive)
