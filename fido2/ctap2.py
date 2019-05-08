@@ -94,10 +94,18 @@ class Info(bytes):
         MAX_MSG_SIZE = 5
         PIN_PROTOCOLS = 6
 
+        @classmethod
+        def get(cls, key):
+            try:
+                return cls(key)
+            except ValueError:
+                return key
+
     def __init__(self, _):
         super(Info, self).__init__()
 
-        data = dict((Info.KEY(k), v) for (k, v) in _parse_cbor(self).items())
+        data = dict((Info.KEY.get(k), v) for (k, v) in
+                    _parse_cbor(self).items())
         self.versions = data[Info.KEY.VERSIONS]
         self.extensions = data.get(Info.KEY.EXTENSIONS, [])
         self.aaguid = data[Info.KEY.AAGUID]
