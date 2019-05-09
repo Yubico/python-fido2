@@ -53,15 +53,16 @@ rp = {'id': 'example.com', 'name': 'Example RP'}
 user = {'id': b'user_id', 'name': 'A. User'}
 challenge = 'Y2hhbGxlbmdl'
 
+# Prompt for PIN if needed
+pin = None
+if client.info.options.get('clientPin'):
+    pin = getpass('Please enter PIN:')
+
 # Create a credential
 print('\nTouch your authenticator device now...\n')
-try:
-    attestation_object, client_data = client.make_credential(
-        rp, user, challenge)
-except ValueError:
-    attestation_object, client_data = client.make_credential(
-        rp, user, challenge,
-        pin=getpass('Please enter PIN:'))
+attestation_object, client_data = client.make_credential(
+    rp, user, challenge, pin=pin
+)
 
 
 print('New credential created!')
@@ -92,13 +93,9 @@ allow_list = [{
 # Authenticate the credential
 print('\nTouch your authenticator device now...\n')
 
-try:
-    assertions, client_data = client.get_assertion(
-        rp['id'], challenge, allow_list)
-except ValueError:
-    assertions, client_data = client.get_assertion(
-        rp['id'], challenge, allow_list,
-        pin=getpass('Please enter PIN:'))
+assertions, client_data = client.get_assertion(
+    rp['id'], challenge, allow_list, pin=pin
+)
 
 print('Credential authenticated!')
 
