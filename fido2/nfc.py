@@ -1,7 +1,7 @@
 
 from .ctap import CtapDevice, CtapError
 from .hid import CAPABILITY, CTAPHID
-from .pcsc import PCSCDevice, UseNFC
+from .pcsc import PCSCDevice, NFCEnable
 
 import struct
 
@@ -14,7 +14,7 @@ class CtapNFCDevice(CtapDevice):
     """
 
     def __init__(self, descriptor, dev):
-        UseNFC()
+        NFCEnable()
 
         self.descriptor = descriptor
         self._dev = dev
@@ -82,14 +82,7 @@ class CtapNFCDevice(CtapDevice):
 
     @classmethod
     def list_devices(cls, selector=""):  # selector="CL"
-        '''
-        for d in hidtransport.hid.Enumerate():
-            if selector(d):
-                try:
-                    dev = hidtransport.hid.Open(d['path'])
-                    yield cls(d, hidtransport.UsbHidTransport(dev))
-                except OSError:
-                    # Insufficient permissions to access device
-                    pass
-        '''
-        return
+        NFCEnable()
+        for v in PCSCDevice.list_devices(selector):
+            yield v
+        raise StopIteration

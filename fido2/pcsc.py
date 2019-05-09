@@ -4,7 +4,6 @@ import binascii
 
 UseNFC = False
 
-
 def NFCEnable():
     global UseNFC
     UseNFC = True
@@ -22,6 +21,15 @@ class _PCSCDevice:
         '''
         self.reader = reader
         return
+
+    @classmethod
+    @abc.abstractmethod
+    def list_devices(cls, selector=""):
+        '''
+
+        :param selector:
+        :return: iterator. next pcsc device.
+        '''
 
     @abc.abstractmethod
     def GetATS(self):
@@ -56,8 +64,13 @@ class _PCSCDevice:
         '''
 
 
-if not UseNFC:
+if not ('UseNFC' in globals()):
     class PCSCDevice(_PCSCDevice):
+        @classmethod
+        def list_devices(cls, selector=""):
+            print("abstract!!!!.")
+            raise StopIteration
+
         def GetATS(self):
             return b""
 
@@ -81,6 +94,13 @@ else:
             self.reader = reader
             self.connection = None
             return
+
+        @classmethod
+        def list_devices(cls, selector=""):
+            for reader in readers():
+                yield reader
+            print("No devices found.")
+            raise StopIteration
 
         def GetATS(self):
             try:
