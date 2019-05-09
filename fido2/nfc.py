@@ -1,7 +1,7 @@
 
 from .ctap import CtapDevice, CtapError
 from .hid import CAPABILITY, CTAPHID
-from .pcsc import PCSCDevice
+from .pcsc import PCSCDevice, UseNFC
 
 import struct
 
@@ -14,6 +14,8 @@ class CtapNFCDevice(CtapDevice):
     """
 
     def __init__(self, descriptor, dev):
+        UseNFC()
+
         self.descriptor = descriptor
         self._dev = dev
 
@@ -32,8 +34,7 @@ class CtapNFCDevice(CtapDevice):
     @property
     def device_version(self):
         """Device version number."""
-        #return self._dev.device_version
-        return "ATS: "
+        return "ATS: " + self._dev.GetATS()
 
     @property
     def capabilities(self):
@@ -41,6 +42,31 @@ class CtapNFCDevice(CtapDevice):
         return CAPABILITY.CBOR
 
     def call(self, cmd, data=b'', event=None, on_keepalive=None):
+        if cmd == CTAPHID.MSG:
+            apdu = data[7:]
+            apdu = apdu[:-2]
+            if data.find(b"\x00\x01") == 0:
+                apdu = b"\x00\x01\x03\x00" + bytes([len(apdu)]) + apdu
+            else:
+                apdu = data[0:4] + bytes([len(apdu)]) + apdu
+
+            apdu += b"\x00"
+            print("apdu changed", apdu.hex())
+            return self._dev.APDUExchange(apdu)
+
+        if cmd == CTAPHID.CBOR:
+            apdu = data
+            apdu = b"\x80\x10\x00\x00" + bytes([len(apdu)]) + apdu
+            apdu += b"\x00"
+            print("apdu CBOR changed", apdu.hex())
+            return self._dev.APDUExchange(apdu)
+
+        if cmd == CTAPHID.PING:
+            return data
+
+        if cmd == CTAPHID.WINK:
+            return data
+
         return b""
 
     def ping(self, msg=b'Hello FIDO'):
