@@ -84,7 +84,7 @@ if not ('UseNFC' in globals()):
             return
 
 else:
-    from smartcard.Exceptions import NoCardException, SWException
+    from smartcard.Exceptions import NoCardException
     from smartcard.System import readers
 
     class PCSCDevice(_PCSCDevice):
@@ -98,8 +98,10 @@ else:
         @classmethod
         def list_devices(cls, selector=""):
             for reader in readers():
-                yield reader
-            print("No devices found.")
+                if reader.name.find(selector) >= 0:
+                    yield reader
+
+            print("No more devices found.")
             raise StopIteration
 
         def GetATS(self):
@@ -150,8 +152,7 @@ else:
                     apdu = b"\xff\x00\x40" + bytes(cbyte & 0xff) + b"\4" + b"\5\3" + bytes(blink) + "\0"
                     self.connection.transmit(list(apdu))
 
-                except SWException as e:
-                    print("ERROR: " + str(e))
+                except:
                     pass
             return
 

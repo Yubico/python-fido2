@@ -81,8 +81,9 @@ class CtapNFCDevice(CtapDevice):
         return
 
     @classmethod
-    def list_devices(cls, selector=""):  # selector="CL"
+    def list_devices(cls, selector="CL"): 
         NFCEnable()
         for v in PCSCDevice.list_devices(selector):
-            yield v
+            print(v)
+            yield cls(v.name, PCSCDevice(v))
         raise StopIteration
