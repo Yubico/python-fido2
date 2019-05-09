@@ -107,6 +107,8 @@ class ES256(CoseKey):
     ALGORITHM = -7
 
     def verify(self, message, signature):
+        if self[-1] != 1:
+            raise ValueError('Unsupported elliptic curve')
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256R1()
         ).public_key(default_backend()).verify(
@@ -134,6 +136,7 @@ class ES256(CoseKey):
         return cls({
             1: 2,
             3: cls.ALGORITHM,
+            -1: 1,
             -2: data[1:33],
             -3: data[33:65]
         })
@@ -188,6 +191,8 @@ class EdDSA(CoseKey):
     ALGORITHM = -8
 
     def verify(self, message, signature):
+        if self[-1] != 6:
+            raise ValueError('Unsupported elliptic curve')
         ed25519.Ed25519PublicKey.from_public_bytes(self[-2]).verify(
             signature, message
         )
