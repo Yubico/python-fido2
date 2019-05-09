@@ -68,7 +68,7 @@ def register_begin():
         'name': 'a_user',
         'displayName': 'A. User',
         'icon': 'https://example.com/image.png'
-    }, credentials)
+    }, credentials, user_verification='discouraged')
 
     session['state'] = state
     print('\n\n\n\n')

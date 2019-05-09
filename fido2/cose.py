@@ -98,6 +98,15 @@ class CoseKey(dict):
             raise ValueError('COSE alg identifier must be provided.')
         return CoseKey.for_alg(alg)(cose)
 
+    @staticmethod
+    def supported_algorithms():
+        """Get a list of all supported algorithm identifiers"""
+        if ed25519:
+            algs = (ES256, EdDSA, PS256, RS256)
+        else:
+            algs = (ES256, PS256, RS256)
+        return [cls.ALGORITHM for cls in algs]
+
 
 class UnsupportedKey(CoseKey):
     """A COSE key with an unsupported algorithm."""
