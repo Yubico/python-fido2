@@ -29,8 +29,13 @@ from __future__ import absolute_import, unicode_literals
 
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
+
+try:
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+except ImportError:  # EdDSA requires Cryptography >= 2.6.
+    ed25519 = None
 
 
 class CoseKey(dict):
@@ -65,6 +70,9 @@ class CoseKey(dict):
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
+        if alg == EdDSA.ALGORITHM and ed25519 is None:
+            # EdDSA requires Cryptography >= 2.6.
+            return UnsupportedKey
         for cls in CoseKey.__subclasses__():
             if cls.ALGORITHM == alg:
                 return cls
@@ -173,4 +181,25 @@ class PS256(CoseKey):
             3: cls.ALGORITHM,
             -1: int2bytes(pn.n),
             -2: int2bytes(pn.e)
+        })
+
+
+class EdDSA(CoseKey):
+    ALGORITHM = -8
+
+    def verify(self, message, signature):
+        ed25519.Ed25519PublicKey.from_public_bytes(self[-2]).verify(
+            signature, message
+        )
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        return cls({
+            1: 1,
+            3: cls.ALGORITHM,
+            -1: 6,
+            -2: public_key.public_bytes(
+                serialization.Encoding.Raw,
+                serialization.PublicFormat.Raw
+            ),
         })
