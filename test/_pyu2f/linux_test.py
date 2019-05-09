@@ -44,14 +44,14 @@ KEYBOARD_RD = (
 
 def AddDevice(fs, dev_name, product_name,
               vendor_id, product_id, report_descriptor_b64):
-  uevent = fs.CreateFile('/sys/class/hidraw/%s/device/uevent' % dev_name)
-  rd = fs.CreateFile('/sys/class/hidraw/%s/device/report_descriptor' % dev_name)
+  uevent = fs.create_file('/sys/class/hidraw/%s/device/uevent' % dev_name)
+  rd = fs.create_file('/sys/class/hidraw/%s/device/report_descriptor' % dev_name)
   report_descriptor = base64.b64decode(report_descriptor_b64)
-  rd.SetContents(report_descriptor)
+  rd.set_contents(report_descriptor)
 
   buf = 'HID_NAME=%s\n' % product_name.encode('utf8')
   buf += 'HID_ID=0001:%08X:%08X\n' % (vendor_id, product_id)
-  uevent.SetContents(buf)
+  uevent.set_contents(buf)
 
 
 class FakeDeviceOsModule(object):
@@ -74,10 +74,10 @@ class FakeDeviceOsModule(object):
 class LinuxTest(unittest.TestCase):
   def setUp(self):
     self.fs = fake_filesystem.FakeFilesystem()
-    self.fs.CreateDirectory('/sys/class/hidraw')
+    self.fs.create_dir('/sys/class/hidraw')
 
   def tearDown(self):
-    self.fs.RemoveObject('/sys/class/hidraw')
+    self.fs.remove_object('/sys/class/hidraw')
 
   def testCallEnumerate(self):
     AddDevice(self.fs, 'hidraw1', 'Logitech USB Keyboard',
