@@ -54,7 +54,7 @@ class CtapNFCDevice(CtapDevice):
         return
 
     @classmethod
-    def list_devices(cls, selector="CL"):
+    def list_devices(cls, selector=""):  # selector="CL"
         '''
         for d in hidtransport.hid.Enumerate():
             if selector(d):
