@@ -1,6 +1,7 @@
 
 from .ctap import CtapDevice, CtapError
 from .hid import CAPABILITY, CTAPHID
+from .pcsc import PCSCDevice
 
 import struct
 
