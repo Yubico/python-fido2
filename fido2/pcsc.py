@@ -1,6 +1,7 @@
 
 import abc
 import binascii
+from enum import IntEnum, unique
 
 UseNFC = False
 
@@ -8,6 +9,11 @@ def NFCEnable():
     global UseNFC
     UseNFC = True
 
+@unique
+class STATUS(IntEnum):
+    INIT = 1
+    GOTATS = 2
+    SELECTED = 3
 
 class _PCSCDevice:
     '''
@@ -86,10 +92,11 @@ if not ('UseNFC' in globals()):
 else:
     from smartcard.Exceptions import NoCardException
     from smartcard.System import readers
+    from smartcard.CardConnection import CardConnection
 
     class PCSCDevice(_PCSCDevice):
         def __init__(self, reader):
-            self.init = False
+            self.state = STATUS.INIT
             self.ATS = b""
             self.reader = reader
             self.connection = None
@@ -109,19 +116,22 @@ else:
                 if self.connection is None:
                     self.connection = self.reader.createConnection()
                 self.connection.connect()
-                self.init = True
-                self.ATS = self.connection.getATR()
-                print("ats", self.reader, self.connection.getATR().hex())
+                self.state = STATUS.GOTATS
+                self.ATS = bytes(self.connection.getATR())
+                print("ats", self.reader, self.ATS.hex())
             except NoCardException:
                 print("ats", self.reader, 'no card inserted')
                 self.ATS = b""
             return self.ATS
 
         def SelectApplet(self, aid=binascii.unhexlify("A0000006472F0001")):
-            if not self.init:
+            if self.state != STATUS.GOTATS:
                 self.GetATS()
 
-            return self.APDUExchangeEx(b"\x00\xA4\x04\x00", aid)
+            res, sw1, sw2 = self.APDUExchangeEx(b"\x00\xA4\x04\x00", aid)
+            if sw1 == 0x90:
+                self.state = STATUS.SELECTED
+            return res, sw1, sw2
 
         def APDUExchangeEx(self, cmd, data):
             return self.APDUExchange(cmd + bytes([len(data)]) + data + b"\0")
@@ -129,6 +139,7 @@ else:
         def APDUExchange(self, apdu):
             response = b""
             sw1, sw2 = 0, 0
+            print("apdu", apdu.hex())
             if (self.connection is not None) and (len(self.ATS) > 0):
                 try:
                     lres, sw1, sw2 = self.connection.transmit(list(apdu))
@@ -138,9 +149,10 @@ else:
                         lres, sw1, sw2 = self.connection.transmit(list(b"\x00\xC0\x00\x00") + [sw2])
                         response += bytes(lres)
 
-                except SWException as e:
+                except Exception as e:
                     print("ERROR: " + str(e))
 
+            print("response", response.hex())
             return response, sw1, sw2
 
         def LED(self, red=False, green=False, blink=0):
@@ -155,4 +167,20 @@ else:
                 except:
                     pass
             return
+
+        def ReaderVersion(self):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    res, sw1, sw2 = self.connection.transmit(list(b"\xff\x00\x48\x00\x00"), protocol=CardConnection.T0_protocol)
+                    if len(res) > 0:
+                        strres = bytes(res) + bytes(sw1) + bytes(sw1)
+                        strres = strres.decode("utf-8")
+                        print("version: " + strres)
+                        return strres
+                except:
+                    pass
+            return "n/a"
 

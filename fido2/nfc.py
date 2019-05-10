@@ -1,7 +1,7 @@
 
 from .ctap import CtapDevice, CtapError
 from .hid import CAPABILITY, CTAPHID
-from .pcsc import PCSCDevice, NFCEnable
+from .pcsc import PCSCDevice, NFCEnable, STATUS
 
 import struct
 
@@ -28,7 +28,6 @@ class CtapNFCDevice(CtapDevice):
 
         :rtype: Tuple[int, int, int]
         """
-        #return self._dev.u2fhid_version
         return [1, 0, 0]
 
     @property
@@ -42,6 +41,9 @@ class CtapNFCDevice(CtapDevice):
         return CAPABILITY.CBOR
 
     def call(self, cmd, data=b'', event=None, on_keepalive=None):
+        if self._dev.state != STATUS.SELECTED:
+            self._dev.SelectApplet()
+
         if cmd == CTAPHID.MSG:
             apdu = data[7:]
             apdu = apdu[:-2]
@@ -81,7 +83,7 @@ class CtapNFCDevice(CtapDevice):
         return
 
     @classmethod
-    def list_devices(cls, selector="CL"): 
+    def list_devices(cls, selector=""):  # selector="CL"
         NFCEnable()
         for v in PCSCDevice.list_devices(selector):
             print(v)
