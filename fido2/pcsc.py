@@ -156,12 +156,15 @@ else:
             return response, sw1, sw2
 
         def LED(self, red=False, green=False, blink=0):
-            if (self.connection is not None) and (len(self.ATS) > 0):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
                 try:
                     cbyte = 0b00001100 + 0b01 if red else 0b00 + 0b10 if green else 0b00
                     if blink > 0:
                         cbyte |= 0b00110000 | ((cbyte << 6) & 0xc0)
-                    apdu = b"\xff\x00\x40" + bytes(cbyte & 0xff) + b"\4" + b"\5\3" + bytes(blink) + "\0"
+                    apdu = b"\xff\x00\x40" + bytes(cbyte & 0xff) + b"\4" + b"\5\3" + bytes(blink) + b"\0"
                     self.connection.transmit(list(apdu))
 
                 except:
