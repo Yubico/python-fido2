@@ -39,7 +39,7 @@ from fido2.ctap2 import CTAP2
 
 for dev in CtapNFCDevice.list_devices():
     print('CONNECT: %s' % dev)
-    print('info: %s' % dev.version)
+    print('version: %s' % dev.version)
 
     if dev.capabilities & CAPABILITY.CBOR:
         ctap2 = CTAP2(dev)
