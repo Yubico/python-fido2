@@ -53,7 +53,7 @@ setup(
         ':python_version < "3.4"': ['enum34']
     },
     test_suite='test',
-    tests_require=['mock>=1.0.1', 'pyfakefs>=2.4'],
+    tests_require=['mock>=1.0.1', 'pyfakefs>=3.4'],
     classifiers=[
         'License :: OSI Approved :: BSD License',
         'License :: OSI Approved :: Apache Software License',
