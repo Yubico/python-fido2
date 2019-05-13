@@ -56,7 +56,7 @@ class CtapNFCDevice(CtapDevice):
             apdu += b"\x00"
             #print("apdu changed", apdu.hex())
             resp, sw1, sw2 = self._dev.APDUExchange(apdu)
-            return resp
+            return resp + bytes([sw1, sw2])
 
         if cmd == CTAPHID.CBOR:
             apdu = data
