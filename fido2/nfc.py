@@ -1,7 +1,7 @@
 
 from .ctap import CtapDevice, CtapError
 from .hid import CAPABILITY, CTAPHID
-from .pcsc import PCSCDevice, NFCEnable, STATUS
+from .pcsc import PCSCDevice, STATUS
 
 import struct
 
@@ -14,8 +14,6 @@ class CtapNFCDevice(CtapDevice):
     """
 
     def __init__(self, descriptor, dev):
-        NFCEnable()
-
         self.descriptor = descriptor
         self._dev = dev
 
@@ -56,7 +54,7 @@ class CtapNFCDevice(CtapDevice):
                 apdu = data[0:4] + bytes([len(apdu)]) + apdu
 
             apdu += b"\x00"
-            print("apdu changed", apdu.hex())
+            #print("apdu changed", apdu.hex())
             resp, sw1, sw2 = self._dev.APDUExchange(apdu)
             return resp
 
@@ -64,7 +62,7 @@ class CtapNFCDevice(CtapDevice):
             apdu = data
             apdu = b"\x80\x10\x00\x00" + bytes([len(apdu)]) + apdu
             apdu += b"\x00"
-            print("apdu CBOR changed", apdu.hex())
+            #print("apdu CBOR changed", apdu.hex())
             resp, sw1, sw2 = self._dev.APDUExchange(apdu)
             return resp
 
@@ -89,7 +87,6 @@ class CtapNFCDevice(CtapDevice):
 
     @classmethod
     def list_devices(cls, selector="CL"):  # selector="CL"
-        NFCEnable()
         for v in PCSCDevice.list_devices(selector):
             print(v)
             yield cls(v.name, PCSCDevice(v))

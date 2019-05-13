@@ -4,10 +4,7 @@ import binascii
 from enum import IntEnum, unique
 
 UseNFC = False
-
-def NFCEnable():
-    global UseNFC
-    UseNFC = True
+APDULogging = True
 
 @unique
 class STATUS(IntEnum):
@@ -144,7 +141,8 @@ else:
         def APDUExchange(self, apdu):
             response = b""
             sw1, sw2 = 0, 0
-            #print("apdu", apdu.hex())
+            if APDULogging:
+                print("apdu", apdu.hex())
             if (self.connection is not None) and (len(self.ATS) > 0):
                 try:
                     response, sw1, sw2 = self._transmit(apdu)
@@ -156,7 +154,8 @@ else:
                 except Exception as e:
                     print("ERROR: " + str(e))
 
-            #print("response", response.hex())
+            if APDULogging:
+                print("response", response.hex())
             return response, sw1, sw2
 
         def LED(self, red=False, green=False, blink=0):
