@@ -109,7 +109,12 @@ else:
                     yield reader
 
             print("No more devices found.")
-            raise StopIteration
+            return
+
+        def _transmit(self, apdu, protocol=None):
+            res, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
+            res = bytes(res)
+            return res, sw1, sw2
 
         def GetATS(self):
             try:
@@ -139,20 +144,19 @@ else:
         def APDUExchange(self, apdu):
             response = b""
             sw1, sw2 = 0, 0
-            print("apdu", apdu.hex())
+            #print("apdu", apdu.hex())
             if (self.connection is not None) and (len(self.ATS) > 0):
                 try:
-                    lres, sw1, sw2 = self.connection.transmit(list(apdu))
-                    response = bytes(lres)
+                    response, sw1, sw2 = self._transmit(apdu)
 
                     while sw1 == 0x9F or sw1 == 0x61:
-                        lres, sw1, sw2 = self.connection.transmit(list(b"\x00\xC0\x00\x00") + [sw2])
-                        response += bytes(lres)
+                        lres, sw1, sw2 = self._transmit(b"\x00\xC0\x00\x00" + bytes([sw2]))
+                        response += lres
 
                 except Exception as e:
                     print("ERROR: " + str(e))
 
-            print("response", response.hex())
+            #print("response", response.hex())
             return response, sw1, sw2
 
         def LED(self, red=False, green=False, blink=0):
@@ -165,7 +169,7 @@ else:
                     if blink > 0:
                         cbyte |= 0b00110000 | ((cbyte << 6) & 0xc0)
                     apdu = b"\xff\x00\x40" + bytes(cbyte & 0xff) + b"\4" + b"\5\3" + bytes(blink) + b"\0"
-                    self.connection.transmit(list(apdu))
+                    self._transmit(apdu)
 
                 except:
                     pass
@@ -177,13 +181,19 @@ else:
 
             if self.connection is not None:
                 try:
-                    res, sw1, sw2 = self.connection.transmit(list(b"\xff\x00\x48\x00\x00"), protocol=CardConnection.T0_protocol)
+                    print("start:", self.state, self.connection)
+                    res = self.connection.control(3500, list(b"\xff\x00\x48\x00\x00"))
+                    print("res:", res)
+
+                    sw1,sw1 = 0,0
+                    print(f"sw1: {sw1}")
                     if len(res) > 0:
-                        strres = bytes(res) + bytes(sw1) + bytes(sw1)
+                        strres = res + bytes(sw1) + bytes(sw2)
                         strres = strres.decode("utf-8")
                         print("version: " + strres)
                         return strres
-                except:
+                except Exception as e:
+                    print("err:", e)
                     pass
             return "n/a"
 

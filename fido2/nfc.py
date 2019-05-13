@@ -19,6 +19,9 @@ class CtapNFCDevice(CtapDevice):
         self.descriptor = descriptor
         self._dev = dev
 
+    def GetPCSC(self):
+        return self._dev
+
     def __repr__(self):
         return 'CtapNFCDevice(%s)' % self.descriptor
 
@@ -54,14 +57,16 @@ class CtapNFCDevice(CtapDevice):
 
             apdu += b"\x00"
             print("apdu changed", apdu.hex())
-            return self._dev.APDUExchange(apdu)
+            resp, sw1, sw2 = self._dev.APDUExchange(apdu)
+            return resp
 
         if cmd == CTAPHID.CBOR:
             apdu = data
             apdu = b"\x80\x10\x00\x00" + bytes([len(apdu)]) + apdu
             apdu += b"\x00"
             print("apdu CBOR changed", apdu.hex())
-            return self._dev.APDUExchange(apdu)
+            resp, sw1, sw2 = self._dev.APDUExchange(apdu)
+            return resp
 
         if cmd == CTAPHID.PING:
             return data
@@ -83,9 +88,9 @@ class CtapNFCDevice(CtapDevice):
         return
 
     @classmethod
-    def list_devices(cls, selector=""):  # selector="CL"
+    def list_devices(cls, selector="CL"):  # selector="CL"
         NFCEnable()
         for v in PCSCDevice.list_devices(selector):
             print(v)
             yield cls(v.name, PCSCDevice(v))
-        raise StopIteration
+        return
