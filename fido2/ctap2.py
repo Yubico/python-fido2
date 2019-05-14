@@ -688,7 +688,7 @@ class CTAP2(object):
             sub_cmd_params,
             pin_protocol,
             pin_auth
-            ))
+        ))
 
     def reset(self, timeout=None, on_keepalive=None):
         """CTAP2 reset command, erases all credentials and PIN.
@@ -878,29 +878,30 @@ class CredentialManagement(object):
         TOTAL_CREDENTIALS = 0x09
         CRED_PROTECT = 0x0a
 
-    def __init__(self, ctap, pintoken):
+    def __init__(self, ctap, pin_protocol, pin_token):
         self.ctap = ctap
-        self.token = pintoken
+        self.pin_protocol = pin_protocol
+        self.pin_token = pin_token
 
     def get_metadata(self):
         pin_auth = hmac_sha256(
-            self.token,
+            self.pin_token,
             struct.pack('>B', CredentialManagement.CMD.GET_CREDS_METADATA)
         )[:16]
         return self.ctap.credential_mgmt(
             CredentialManagement.CMD.GET_CREDS_METADATA,
-            pin_protocol=PinProtocolV1.VERSION,
+            pin_protocol=self.pin_protocol,
             pin_auth=pin_auth
         )
 
     def enumerate_rps_begin(self):
         pin_auth = hmac_sha256(
-            self.token,
+            self.pin_token,
             struct.pack('>B', CredentialManagement.CMD.ENUMERATE_RPS_BEGIN)
         )[:16]
         return self.ctap.credential_mgmt(
             CredentialManagement.CMD.ENUMERATE_RPS_BEGIN,
-            pin_protocol=PinProtocolV1.VERSION,
+            pin_protocol=self.pin_protocol,
             pin_auth=pin_auth
         )
 
@@ -912,14 +913,14 @@ class CredentialManagement(object):
     def enumerate_creds_begin(self, rpid_hash):
         params = {CredentialManagement.SUB_PARAMETER.RPID_HASH: rpid_hash}
         pin_auth = hmac_sha256(
-            self.token,
+            self.pin_token,
             struct.pack('>B', CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN) +
             cbor.encode(params)
         )
         return self.ctap.credential_mgmt(
             CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN,
             sub_cmd_params=params,
-            pin_protocol=PinProtocolV1.VERSION,
+            pin_protocol=self.pin_protocol,
             pin_auth=pin_auth
         )
 
@@ -931,13 +932,13 @@ class CredentialManagement(object):
     def delete_cred(self, cred_id):
         params = {CredentialManagement.SUB_PARAMETER.CREDENTIAL_ID: cred_id}
         pin_auth = hmac_sha256(
-            self.token,
+            self.pin_token,
             struct.pack('>B', CredentialManagement.CMD.DELETE_CREDENTIAL) +
             cbor.encode(params)
         )
         return self.ctap.credential_mgmt(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
             sub_cmd_params=params,
-            pin_protocol=PinProtocolV1.VERSION,
+            pin_protocol=self.pin_protocol,
             pin_auth=pin_auth
         )
