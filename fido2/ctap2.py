@@ -681,7 +681,8 @@ class CTAP2(object):
             pin_hash_enc
         ))
 
-    def credential_mgmt(self, sub_cmd, sub_cmd_params = None, pin_protocol = None, pin_auth = None):
+    def credential_mgmt(self, sub_cmd, sub_cmd_params=None, pin_protocol=None,
+                        pin_auth=None):
         return self.send_cbor(CTAP2.CMD.CREDENTIAL_MGMT, args(
             sub_cmd,
             sub_cmd_params,
@@ -847,6 +848,7 @@ class PinProtocolV1(object):
                              new_pin_enc=new_pin_enc,
                              pin_auth=pin_auth)
 
+
 class CredentialManagement(object):
 
     @unique
@@ -881,25 +883,61 @@ class CredentialManagement(object):
         self.token = pintoken
 
     def get_metadata(self):
-        pin_auth = hmac_sha256(self.token, struct.pack("b", CredentialManagement.CMD.GET_CREDS_METADATA))[:16]
-        return self.ctap.credential_mgmt(CredentialManagement.CMD.GET_CREDS_METADATA, pin_protocol = PinProtocolV1.VERSION, pin_auth = pin_auth)
+        pin_auth = hmac_sha256(
+            self.token,
+            struct.pack('>B', CredentialManagement.CMD.GET_CREDS_METADATA)
+        )[:16]
+        return self.ctap.credential_mgmt(
+            CredentialManagement.CMD.GET_CREDS_METADATA,
+            pin_protocol=PinProtocolV1.VERSION,
+            pin_auth=pin_auth
+        )
 
     def enumerate_rps_begin(self):
-        pin_auth = hmac_sha256(self.token, struct.pack("b", CredentialManagement.CMD.ENUMERATE_RPS_BEGIN))[:16]
-        return self.ctap.credential_mgmt(CredentialManagement.CMD.ENUMERATE_RPS_BEGIN, pin_protocol = PinProtocolV1.VERSION, pin_auth = pin_auth)
+        pin_auth = hmac_sha256(
+            self.token,
+            struct.pack('>B', CredentialManagement.CMD.ENUMERATE_RPS_BEGIN)
+        )[:16]
+        return self.ctap.credential_mgmt(
+            CredentialManagement.CMD.ENUMERATE_RPS_BEGIN,
+            pin_protocol=PinProtocolV1.VERSION,
+            pin_auth=pin_auth
+        )
 
     def enumerate_rps_next(self):
-        return self.ctap.credential_mgmt(CredentialManagement.CMD.ENUMERATE_RPS_NEXT)
+        return self.ctap.credential_mgmt(
+            CredentialManagement.CMD.ENUMERATE_RPS_NEXT
+        )
 
     def enumerate_creds_begin(self, rpid_hash):
         params = {CredentialManagement.SUB_PARAMETER.RPID_HASH: rpid_hash}
-        pin_auth = hmac_sha256(self.token, struct.pack("b", CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN) + cbor.encode(params))
-        return self.ctap.credential_mgmt(CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN, sub_cmd_params = params, pin_protocol = PinProtocolV1.VERSION, pin_auth = pin_auth)
+        pin_auth = hmac_sha256(
+            self.token,
+            struct.pack('>B', CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN) +
+            cbor.encode(params)
+        )
+        return self.ctap.credential_mgmt(
+            CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN,
+            sub_cmd_params=params,
+            pin_protocol=PinProtocolV1.VERSION,
+            pin_auth=pin_auth
+        )
 
     def enumerate_creds_next(self):
-        return self.ctap.credential_mgmt(CredentialManagement.CMD.ENUMERATE_CREDS_NEXT)
+        return self.ctap.credential_mgmt(
+            CredentialManagement.CMD.ENUMERATE_CREDS_NEXT
+        )
 
     def delete_cred(self, cred_id):
         params = {CredentialManagement.SUB_PARAMETER.CREDENTIAL_ID: cred_id}
-        pin_auth = hmac_sha256(self.token, struct.pack("b", CredentialManagement.CMD.DELETE_CREDENTIAL) + cbor.encode(params))
-        return self.ctap.credential_mgmt(CredentialManagement.CMD.DELETE_CREDENTIAL, sub_cmd_params = params, pin_protocol = PinProtocolV1.VERSION, pin_auth = pin_auth)
+        pin_auth = hmac_sha256(
+            self.token,
+            struct.pack('>B', CredentialManagement.CMD.DELETE_CREDENTIAL) +
+            cbor.encode(params)
+        )
+        return self.ctap.credential_mgmt(
+            CredentialManagement.CMD.DELETE_CREDENTIAL,
+            sub_cmd_params=params,
+            pin_protocol=PinProtocolV1.VERSION,
+            pin_auth=pin_auth
+        )
