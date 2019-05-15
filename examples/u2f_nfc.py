@@ -25,8 +25,8 @@ except:
 
 
 try:
-    res = reg.verify(chal, appid)
-    print("verify result: ", res)
+    reg.verify(appid, chal)
+    print("Register message verify OK")
 except:
     print("Register message verify error.")
 
@@ -35,7 +35,7 @@ auth = ctap1.authenticate(chal, appid, reg.key_handle)
 print("authenticate result: ", auth)
 
 try:
-    res = auth.verify(chal, appid, reg.public_key)
-    print("verify result: ", res)
+    res = auth.verify(appid, chal, reg.public_key)
+    print("Authenticate message verify OK")
 except:
     print("Authenticate message verify error.")
