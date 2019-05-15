@@ -16,9 +16,26 @@ ctap1 = CTAP1(dev)
 
 print("version:", ctap1.get_version())
 
-reg = ctap1.register(chal, appid)
-print("register:", reg)
+try:
+    reg = ctap1.register(chal, appid)
+    print("register:", reg)
+except:
+    print("No U2F card in field.")
+    sys.exit(2)
 
-res = reg.verify(chal, appid)
-print("verify result: ", res)
 
+try:
+    res = reg.verify(chal, appid)
+    print("verify result: ", res)
+except:
+    print("Register message verify error.")
+
+
+auth = ctap1.authenticate(chal, appid, reg.key_handle)
+print("authenticate result: ", auth)
+
+try:
+    res = auth.verify(chal, appid, reg.public_key)
+    print("verify result: ", res)
+except:
+    print("Authenticate message verify error.")
