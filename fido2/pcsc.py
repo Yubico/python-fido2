@@ -4,7 +4,7 @@ import binascii
 from enum import IntEnum, unique
 
 UseNFC = False
-APDULogging = True
+APDULogging = False
 
 @unique
 class STATUS(IntEnum):
@@ -117,7 +117,7 @@ else:
             try:
                 if self.connection is None:
                     self.connection = self.reader.createConnection()
-                self.connection.connect() # protocol=CardConnection.T0_protocol
+                self.connection.connect()  # protocol=CardConnection.T0_protocol
                 print("protocol", self.connection.getProtocol())
                 self.state = STATUS.GOTATS
                 self.ATS = bytes(self.connection.getATR())
