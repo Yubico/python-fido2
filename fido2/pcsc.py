@@ -108,7 +108,7 @@ else:
             print("No more devices found.")
             return
 
-        def _transmit(self, apdu, protocol=None):
+        def _transmit(self, apdu, protocol=None):  #CardConnection.T1_protocol
             res, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
             res = bytes(res)
             return res, sw1, sw2
@@ -117,7 +117,8 @@ else:
             try:
                 if self.connection is None:
                     self.connection = self.reader.createConnection()
-                self.connection.connect()
+                self.connection.connect() # protocol=CardConnection.T0_protocol
+                print("protocol", self.connection.getProtocol())
                 self.state = STATUS.GOTATS
                 self.ATS = bytes(self.connection.getATR())
                 print("ats", self.reader, self.ATS.hex())
@@ -141,12 +142,13 @@ else:
         def APDUExchange(self, apdu):
             response = b""
             sw1, sw2 = 0, 0
+
             if APDULogging:
                 print("apdu", apdu.hex())
+
             if (self.connection is not None) and (len(self.ATS) > 0):
                 try:
                     response, sw1, sw2 = self._transmit(apdu)
-
                     while sw1 == 0x9F or sw1 == 0x61:
                         lres, sw1, sw2 = self._transmit(b"\x00\xC0\x00\x00" + bytes([sw2]))
                         response += lres
@@ -155,7 +157,7 @@ else:
                     print("ERROR: " + str(e))
 
             if APDULogging:
-                print("response", response.hex())
+                print("response", "[" + hex((sw1 << 8) + sw2) + "]", response.hex())
             return response, sw1, sw2
 
         def LED(self, red=False, green=False, blink=0):
@@ -184,7 +186,7 @@ else:
                     res = self.connection.control(3500, list(b"\xff\x00\x48\x00\x00"))
                     print("res:", res)
 
-                    sw1,sw1 = 0,0
+                    sw1,sw2 = 0,0
                     print(f"sw1: {sw1}")
                     if len(res) > 0:
                         strres = res + bytes(sw1) + bytes(sw2)
