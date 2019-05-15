@@ -89,7 +89,6 @@ if not ('UseNFC' in globals()):
 else:
     from smartcard.Exceptions import NoCardException
     from smartcard.System import readers
-    from smartcard.CardConnection import CardConnection
 
     class PCSCDevice(_PCSCDevice):
         def __init__(self, reader):
@@ -118,12 +117,14 @@ else:
                 if self.connection is None:
                     self.connection = self.reader.createConnection()
                 self.connection.connect()  # protocol=CardConnection.T0_protocol
-                print("protocol", self.connection.getProtocol())
+                if APDULogging:
+                    print("protocol", self.connection.getProtocol())
                 self.state = STATUS.GOTATS
                 self.ATS = bytes(self.connection.getATR())
-                print("ats", self.reader, self.ATS.hex())
+                if APDULogging:
+                    print("ats", self.ATS.hex())
             except NoCardException:
-                print("ats", self.reader, 'no card inserted')
+                print("No card inserted")
                 self.ATS = b""
             return self.ATS
 
@@ -183,7 +184,7 @@ else:
             if self.connection is not None:
                 try:
                     print("start:", self.state, self.connection)
-                    res = self.connection.control(3500, list(b"\xff\x00\x48\x00\x00"))
+                    res = self.connection.control(3225264, list(b"\xff\x00\x48\x00\x00"))
                     print("res:", res)
 
                     sw1,sw2 = 0,0
