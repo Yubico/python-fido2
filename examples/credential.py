@@ -38,9 +38,19 @@ from fido2.attestation import Attestation
 from getpass import getpass
 import sys
 
+# True - via NFC, False - via USB
+UseNFC = True
 
 # Locate a device
-dev = next(CtapHidDevice.list_devices(), None)
+if UseNFC:
+    from fido2.nfc import CtapNFCDevice
+
+    dev = next(CtapNFCDevice.list_devices(), None)
+    print("Use NFC channel.")
+else:
+    dev = next(CtapHidDevice.list_devices(), None)
+    print("Use USB HID channel.")
+
 if not dev:
     print('No FIDO device found')
     sys.exit(1)
@@ -57,9 +67,12 @@ challenge = 'Y2hhbGxlbmdl'
 pin = None
 if client.info.options.get('clientPin'):
     pin = getpass('Please enter PIN:')
+else:
+    print("no pin")
 
 # Create a credential
-print('\nTouch your authenticator device now...\n')
+if not UseNFC:
+    print('\nTouch your authenticator device now...\n')
 attestation_object, client_data = client.make_credential(
     rp, user, challenge, pin=pin
 )
@@ -91,7 +104,8 @@ allow_list = [{
 }]
 
 # Authenticate the credential
-print('\nTouch your authenticator device now...\n')
+if not UseNFC:
+    print('\nTouch your authenticator device now...\n')
 
 assertions, client_data = client.get_assertion(
     rp['id'], challenge, allow_list, pin=pin
