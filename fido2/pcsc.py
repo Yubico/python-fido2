@@ -161,17 +161,20 @@ else:
                 print("response", "[" + hex((sw1 << 8) + sw2) + "]", response.hex())
             return response, sw1, sw2
 
-        def LED(self, red=False, green=False, blink=0):
+        def LED(self, red=False, green=False, blinkCount=0, redEndBlink=False, greenEndBlink=False):
             if self.state != STATUS.GOTATS:
                 self.GetATS()
 
             if self.connection is not None:
                 try:
-                    cbyte = 0b00001100 + 0b01 if red else 0b00 + 0b10 if green else 0b00
-                    if blink > 0:
-                        cbyte |= 0b00110000 | ((cbyte << 6) & 0xc0)
-                    apdu = b"\xff\x00\x40" + bytes(cbyte & 0xff) + b"\4" + b"\5\3" + bytes(blink) + b"\0"
-                    self._transmit(apdu)
+                    if blinkCount > 0:
+                        cbyte = 0b00001100 + (0b01 if redEndBlink else 0b00) + (0b10 if greenEndBlink else 0b00)
+                        cbyte |= (0b01000000 if red else 0b00000000) + (0b10000000 if green else 0b00000000)
+                    else:
+                        cbyte = 0b00001100 + (0b01 if red else 0b00) + (0b10 if green else 0b00)
+
+                    apdu = b"\xff\x00\x40" + bytes([cbyte & 0xff]) + b"\4" + b"\5\3" + bytes([blinkCount]) + b"\0"
+                    self.APDUExchange(apdu)
 
                 except:
                     pass
