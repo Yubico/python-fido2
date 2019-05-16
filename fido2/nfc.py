@@ -84,8 +84,8 @@ class CtapNFCDevice(CtapDevice):
         return
 
     @classmethod
-    def list_devices(cls, selector=""):  # selector="CL"
-        for v in PCSCDevice.list_devices(selector):
+    def list_devices(cls, selector="", pcscDevice = PCSCDevice):  # selector="CL"
+        for v in pcscDevice.list_devices(selector):
             print(v)
-            yield cls(v.name, PCSCDevice(v))
+            yield cls(v.name, pcscDevice(v))
         return
