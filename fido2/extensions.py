@@ -44,7 +44,7 @@ class Extension(abc.ABC):
         Get the parsed extension results from an AuthenticatorData object.
         """
         data = auth_data.extensions.get(self.NAME)
-        if auth_data.is_attested:
+        if auth_data.is_attested():
             return self.create_result(data)
         else:
             return self.get_result(data)
