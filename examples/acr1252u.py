@@ -42,4 +42,3 @@ if pcscdev is not None:
 
     time.sleep(1)
     pcscdev.LEDControl(False, False)
-
