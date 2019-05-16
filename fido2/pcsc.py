@@ -160,6 +160,23 @@ else:
                 print("response", "[" + hex((sw1 << 8) + sw2) + "]", response.hex())
             return response, sw1, sw2
 
+        def ControlExchange(self, controlData=b"", controlCode=3225264):
+            response = b""
+
+            if APDULogging:
+                print("control", controlData.hex())
+
+            if (self.connection is not None):
+                try:
+                    response = self.connection.control(controlCode, list(controlData))
+                    response = bytes(response)
+                except Exception as e:
+                    print("Control error: " + str(e))
+
+            if APDULogging:
+                print("response", response.hex())
+            return response
+
         def LED(self, red=False, green=False, blinkCount=0, redEndBlink=False, greenEndBlink=False):
             if self.state != STATUS.GOTATS:
                 self.GetATS()
