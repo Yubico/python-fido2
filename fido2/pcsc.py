@@ -219,18 +219,78 @@ else:
 
             if self.connection is not None:
                 try:
-                    print("start:", self.state, self.connection)
-                    res = self.connection.control(3500, list(b"\xe0\x00\x00\x18\x00"))
-                    print("res:", res)
+                    # control codes:
+                    # 3225264 - magic number!!!
+                    # 0x42000000 + 3500 - cross platform way
+                    res = self.ControlExchange(b"\xe0\x00\x00\x18\x00", 3225264)
 
-                    '''
-                    if len(res) > 0:
-                        strres = res + bytes(sw1) + bytes(sw2)
-                        strres = strres.decode("utf-8")
-                        print("version: " + strres)
-                        return strres
-                    '''
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == len(res) - 5:
+                            strres = res[5:5+reslen].decode("utf-8")
+                            return strres
                 except Exception as e:
                     print("Get version error:", e)
                     pass
             return "n/a"
+
+        def ReaderSerialNumber(self):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    res = self.ControlExchange(b"\xe0\x00\x00\x33\x00")
+
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == len(res) - 5:
+                            strres = res[5:5+reslen].decode("utf-8")
+                            return strres
+                except Exception as e:
+                    print("Get serial number error:", e)
+                    pass
+            return "n/a"
+
+        def LEDControl(self, red=False, green=False):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
+                    res = self.ControlExchange(b"\xe0\x00\x00\x29\x01" + bytes([cbyte]))
+                    print("res:", res)
+
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == 1:
+                            exRed = bool(res[5] & 0b01)
+                            exGreen = bool(res[5] & 0b10)
+                            return True, exRed, exGreen
+                except Exception as e:
+                    print("LED control error:", e)
+                    pass
+
+            return False, False, False
+
+        def LEDStatus(self):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    res = self.ControlExchange(b"\xe0\x00\x00\x29\x00")
+                    print("res:", res)
+
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == 1:
+                            exRed = bool(res[5] & 0b01)
+                            exGreen = bool(res[5] & 0b10)
+                            return True, exRed, exGreen
+                except Exception as e:
+                    print("LED status error:", e)
+                    pass
+
+            return False, False, False
