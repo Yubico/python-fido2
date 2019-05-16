@@ -260,7 +260,6 @@ else:
                 try:
                     cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
                     res = self.ControlExchange(b"\xe0\x00\x00\x29\x01" + bytes([cbyte]))
-                    print("res:", res)
 
                     if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
                         reslen = res[4]
@@ -281,7 +280,6 @@ else:
             if self.connection is not None:
                 try:
                     res = self.ControlExchange(b"\xe0\x00\x00\x29\x00")
-                    print("res:", res)
 
                     if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
                         reslen = res[4]
@@ -294,3 +292,76 @@ else:
                     pass
 
             return False, False, False
+
+
+        def ReadPollingSettings(self):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    res = self.ControlExchange(b"\xe0\x00\x00\x23\x00")
+
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == 1:
+                            return True, res[5]
+                except Exception as e:
+                    print("Read polling settings error:", e)
+                    pass
+
+            return False, 0
+
+        def WritePollingSettings(self, settings):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    res = self.ControlExchange(b"\xe0\x00\x00\x23\x01" + bytes([settings & 0xff]))
+
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == 1:
+                            return True, res[5]
+                except Exception as e:
+                    print("Write polling settings error:", e)
+                    pass
+
+            return False, 0
+
+        def ReadPICCOperationParameter(self):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    res = self.ControlExchange(b"\xe0\x00\x00\x20\x00")
+
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == 1:
+                            return True, res[5]
+                except Exception as e:
+                    print("Read PICC Operating Parameter error:", e)
+                    pass
+
+            return False, 0
+
+        def WritePICCOperationParameter(self, param):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
+                    res = self.ControlExchange(b"\xe0\x00\x00\x20\x01" + bytes([param]))
+
+                    if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
+                        reslen = res[4]
+                        if reslen == 1:
+                            return True, res[5]
+                except Exception as e:
+                    print("Write PICC Operating Parameter error:", e)
+                    pass
+
+            return False, 0
