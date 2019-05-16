@@ -6,11 +6,13 @@ from enum import IntEnum, unique
 UseNFC = False
 APDULogging = False
 
+
 @unique
 class STATUS(IntEnum):
     INIT = 1
     GOTATS = 2
     SELECTED = 3
+
 
 class _PCSCDevice:
     '''
@@ -150,14 +152,17 @@ else:
                 try:
                     response, sw1, sw2 = self._transmit(apdu)
                     while sw1 == 0x9F or sw1 == 0x61:
-                        lres, sw1, sw2 = self._transmit(b"\x00\xC0\x00\x00" + bytes([sw2]))
+                        lres, sw1, sw2 = self._transmit(b"\x00\xC0\x00\x00" +
+                                                        bytes([sw2]))
                         response += lres
 
                 except Exception as e:
                     print("ERROR: " + str(e))
 
             if APDULogging:
-                print("response", "[" + hex((sw1 << 8) + sw2) + "]", response.hex())
+                print("response",
+                      "[" + hex((sw1 << 8) + sw2) + "]",
+                      response.hex())
             return response, sw1, sw2
 
         def ControlExchange(self, controlData=b"", controlCode=3225264):
@@ -168,7 +173,8 @@ else:
 
             if (self.connection is not None):
                 try:
-                    response = self.connection.control(controlCode, list(controlData))
+                    response = self.connection.control(controlCode,
+                                                       list(controlData))
                     response = bytes(response)
                 except Exception as e:
                     print("Control error: " + str(e))
@@ -177,22 +183,34 @@ else:
                 print("response", response.hex())
             return response
 
-        def LED(self, red=False, green=False, blinkCount=0, redEndBlink=False, greenEndBlink=False):
+        def LED(self, red=False, green=False,
+                blinkCount=0, redEndBlink=False, greenEndBlink=False):
+
             if self.state != STATUS.GOTATS:
                 self.GetATS()
 
             if self.connection is not None:
                 try:
                     if blinkCount > 0:
-                        cbyte = 0b00001100 + (0b01 if redEndBlink else 0b00) + (0b10 if greenEndBlink else 0b00)
-                        cbyte |= (0b01000000 if red else 0b00000000) + (0b10000000 if green else 0b00000000)
+                        cbyte = 0b00001100 + \
+                                (0b01 if redEndBlink else 0b00) + \
+                                (0b10 if greenEndBlink else 0b00)
+                        cbyte |= (0b01000000 if red else 0b00000000) + \
+                                 (0b10000000 if green else 0b00000000)
                     else:
-                        cbyte = 0b00001100 + (0b01 if red else 0b00) + (0b10 if green else 0b00)
+                        cbyte = 0b00001100 + \
+                                (0b01 if red else 0b00) + \
+                                (0b10 if green else 0b00)
 
-                    apdu = b"\xff\x00\x40" + bytes([cbyte & 0xff]) + b"\4" + b"\5\3" + bytes([blinkCount]) + b"\0"
+                    apdu = b"\xff\x00\x40" + \
+                           bytes([cbyte & 0xff]) + \
+                           b"\4" + b"\5\3" + \
+                           bytes([blinkCount]) + \
+                           b"\0"
                     self.APDUExchange(apdu)
 
-                except:
+                except Exception as e:
+                    print("LED control error:", e)
                     pass
             return
 
@@ -259,7 +277,8 @@ else:
             if self.connection is not None:
                 try:
                     cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
-                    res = self.ControlExchange(b"\xe0\x00\x00\x29\x01" + bytes([cbyte]))
+                    res = self.ControlExchange(b"\xe0\x00\x00\x29\x01" +
+                                               bytes([cbyte]))
 
                     if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
                         reslen = res[4]
@@ -293,7 +312,6 @@ else:
 
             return False, False, False
 
-
         def ReadPollingSettings(self):
             if self.state != STATUS.GOTATS:
                 self.GetATS()
@@ -318,7 +336,8 @@ else:
 
             if self.connection is not None:
                 try:
-                    res = self.ControlExchange(b"\xe0\x00\x00\x23\x01" + bytes([settings & 0xff]))
+                    res = self.ControlExchange(b"\xe0\x00\x00\x23\x01" +
+                                               bytes([settings & 0xff]))
 
                     if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
                         reslen = res[4]
@@ -354,7 +373,8 @@ else:
 
             if self.connection is not None:
                 try:
-                    res = self.ControlExchange(b"\xe0\x00\x00\x20\x01" + bytes([param]))
+                    res = self.ControlExchange(b"\xe0\x00\x00\x20\x01" +
+                                               bytes([param]))
 
                     if len(res) > 0 and res.find(b"\xe1\x00\x00\x00") == 0:
                         reslen = res[4]
