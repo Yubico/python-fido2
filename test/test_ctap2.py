@@ -253,7 +253,7 @@ class TestPinProtocolV1(unittest.TestCase):
             }
         }
 
-        key_agreement, shared = prot._init_shared_secret()
+        key_agreement, shared = prot.get_shared_secret()
 
         self.assertEqual(shared, SHARED)
         self.assertEqual(key_agreement[-2], EC_PUB_X)
@@ -261,7 +261,7 @@ class TestPinProtocolV1(unittest.TestCase):
 
     def test_get_pin_token(self):
         prot = PinProtocolV1(mock.MagicMock())
-        prot._init_shared_secret = mock.Mock(return_value=({}, SHARED))
+        prot.get_shared_secret = mock.Mock(return_value=({}, SHARED))
         prot.ctap.client_pin.return_value = {
             2: TOKEN_ENC
         }
@@ -273,7 +273,7 @@ class TestPinProtocolV1(unittest.TestCase):
 
     def test_set_pin(self):
         prot = PinProtocolV1(mock.MagicMock())
-        prot._init_shared_secret = mock.Mock(return_value=({}, SHARED))
+        prot.get_shared_secret = mock.Mock(return_value=({}, SHARED))
 
         prot.set_pin('1234')
         prot.ctap.client_pin.assert_called_with(
@@ -286,7 +286,7 @@ class TestPinProtocolV1(unittest.TestCase):
 
     def test_change_pin(self):
         prot = PinProtocolV1(mock.MagicMock())
-        prot._init_shared_secret = mock.Mock(return_value=({}, SHARED))
+        prot.get_shared_secret = mock.Mock(return_value=({}, SHARED))
 
         prot.change_pin('1234', '4321')
         prot.ctap.client_pin.assert_called_with(

@@ -723,7 +723,7 @@ def _pad_pin(pin):
 
 
 class PinProtocolV1(object):
-    """Implementation of the CTAP1 PIN protocol v1.
+    """Implementation of the CTAP2 PIN protocol v1.
 
     :param ctap: An instance of a CTAP2 object.
     :cvar VERSION: The version number of the PIV protocol.
@@ -749,7 +749,7 @@ class PinProtocolV1(object):
     def __init__(self, ctap):
         self.ctap = ctap
 
-    def _init_shared_secret(self):
+    def get_shared_secret(self):
         be = default_backend()
         sk = ec.generate_private_key(ec.SECP256R1(), be)
         pn = sk.public_key().public_numbers()
@@ -769,17 +769,19 @@ class PinProtocolV1(object):
         shared_secret = sha256(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
         return key_agreement, shared_secret
 
+    def _get_cipher(self, secret):
+        be = default_backend()
+        return Cipher(algorithms.AES(secret), modes.CBC(PinProtocolV1.IV), be)
+
     def get_pin_token(self, pin):
         """Get a PIN token from the authenticator.
 
         :param pin: The PIN of the authenticator.
         :return: A PIN token.
         """
-        key_agreement, shared_secret = self._init_shared_secret()
+        key_agreement, shared_secret = self.get_shared_secret()
 
-        be = default_backend()
-        cipher = Cipher(algorithms.AES(shared_secret),
-                        modes.CBC(PinProtocolV1.IV), be)
+        cipher = self._get_cipher(shared_secret)
         pin_hash = sha256(pin.encode())[:16]
         enc = cipher.encryptor()
         pin_hash_enc = enc.update(pin_hash) + enc.finalize()
@@ -808,11 +810,9 @@ class PinProtocolV1(object):
         :param pin: A PIN to set.
         """
         pin = _pad_pin(pin)
-        key_agreement, shared_secret = self._init_shared_secret()
+        key_agreement, shared_secret = self.get_shared_secret()
 
-        be = default_backend()
-        cipher = Cipher(algorithms.AES(shared_secret),
-                        modes.CBC(PinProtocolV1.IV), be)
+        cipher = self._get_cipher(shared_secret)
         enc = cipher.encryptor()
         pin_enc = enc.update(pin) + enc.finalize()
         pin_auth = hmac_sha256(shared_secret, pin_enc)[:16]
@@ -830,11 +830,9 @@ class PinProtocolV1(object):
         :param new_pin: The new PIN to set.
         """
         new_pin = _pad_pin(new_pin)
-        key_agreement, shared_secret = self._init_shared_secret()
+        key_agreement, shared_secret = self.get_shared_secret()
 
-        be = default_backend()
-        cipher = Cipher(algorithms.AES(shared_secret),
-                        modes.CBC(PinProtocolV1.IV), be)
+        cipher = self._get_cipher(shared_secret)
         pin_hash = sha256(old_pin.encode())[:16]
         enc = cipher.encryptor()
         pin_hash_enc = enc.update(pin_hash) + enc.finalize()
