@@ -49,20 +49,20 @@ class Extension(abc.ABC):
         else:
             return self.get_result(data)
 
-    def create_dict(self, **params):
+    def create_dict(self, *args, **kwargs):
         """
         Return extension dict for use with calls to make_credential.
         """
-        return {self.NAME: self.create_data(**params)}
+        return {self.NAME: self.create_data(*args, **kwargs)}
 
-    def get_dict(self, **params):
+    def get_dict(self, *args, **kwargs):
         """
         Return extension dict for use with calls to get_assertion.
         """
-        return {self.NAME: self.get_data(**params)}
+        return {self.NAME: self.get_data(*args, **kwargs)}
 
     @abc.abstractmethod
-    def create_data(self, **params):
+    def create_data(self, *args, **kwargs):
         """
         Return extension data value for use with calls to make_credential.
         """
@@ -74,7 +74,7 @@ class Extension(abc.ABC):
         """
 
     @abc.abstractmethod
-    def get_data(self, **params):
+    def get_data(self, *args, **kwargs):
         """
         Return extension data value for use with calls to get_assertion.
         """
