@@ -70,7 +70,7 @@ class CtapNFCDevice(CtapDevice):
         if cmd == CTAPHID.WINK:
             return data
 
-        return b""
+        return b''
 
     def ping(self, msg=b'Hello FIDO'):
         """Sends data to the authenticator, which echoes it back.
@@ -83,8 +83,8 @@ class CtapNFCDevice(CtapDevice):
     def lock(self, lock_time=10):
         return
 
-    @classmethod  # selector="CL"
-    def list_devices(cls, selector="", pcscDevice=PCSCDevice):
+    @classmethod  # selector='CL'
+    def list_devices(cls, selector='', pcscDevice=PCSCDevice):
         for v in pcscDevice.list_devices(selector):
             print(v)
             yield cls(v.name, pcscDevice(v))

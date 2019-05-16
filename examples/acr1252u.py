@@ -23,7 +23,7 @@ if pcscdev is not None:
                [3, 'Activate the PICC when detected'],
                [7, 'Enforce ISO 14443-A Part 4']]
     for x in setdesc:
-        print(x[1], "on" if settings & (1 << x[0]) else "off")
+        print(x[1], 'on' if settings & (1 << x[0]) else 'off')
     intervaldesc = [250, 500, 1000, 2500]
     print('PICC Poll Interval for PICC',
           intervaldesc[(settings >> 4) & 0b11],
@@ -32,7 +32,7 @@ if pcscdev is not None:
 
     print('PICC operation parameter: %r 0x%x' %
           pcscdev.ReadPICCOperationParameter())
-    print("")
+    print('')
 
     result, red, green = pcscdev.LEDControl(True, False)
     print('led control result:', result, 'red:', red, 'green:', green)

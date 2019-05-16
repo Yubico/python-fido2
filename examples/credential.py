@@ -68,7 +68,7 @@ pin = None
 if client.info.options.get('clientPin'):
     pin = getpass('Please enter PIN:')
 else:
-    print("no pin")
+    print('no pin')
 
 # Create a credential
 if not UseNFC:
