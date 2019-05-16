@@ -39,7 +39,7 @@ from getpass import getpass
 import sys
 
 # True - via NFC, False - via USB
-UseNFC = True
+UseNFC = False
 
 # Locate a device
 if UseNFC:
