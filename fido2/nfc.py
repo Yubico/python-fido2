@@ -32,7 +32,7 @@ class CtapNFCDevice(CtapDevice):
     @property
     def device_version(self):
         """Device version number."""
-        return "ATS: " + self._dev.GetATS()
+        return 'ATS: ' + self._dev.GetATS()
 
     @property
     def capabilities(self):
@@ -46,20 +46,20 @@ class CtapNFCDevice(CtapDevice):
         if cmd == CTAPHID.MSG:
             apdu = data[7:]
             apdu = apdu[:-2]
-            if data.find(b"\x00\x01") == 0:
-                apdu = b"\x00\x01\x03\x00" + bytes([len(apdu)]) + apdu
+            if data.find(b'\x00\x01') == 0:
+                apdu = b'\x00\x01\x03\x00' + bytes([len(apdu)]) + apdu
             else:
                 apdu = data[0:4] + bytes([len(apdu)]) + apdu
 
-            apdu += b"\x00"
+            apdu += b'\x00'
 
             resp, sw1, sw2 = self._dev.APDUExchange(apdu)
             return resp + bytes([sw1, sw2])
 
         if cmd == CTAPHID.CBOR:
             apdu = data
-            apdu = b"\x80\x10\x00\x00" + bytes([len(apdu)]) + apdu
-            apdu += b"\x00"
+            apdu = b'\x80\x10\x00\x00' + bytes([len(apdu)]) + apdu
+            apdu += b'\x00'
 
             resp, sw1, sw2 = self._dev.APDUExchange(apdu)
             return resp
