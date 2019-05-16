@@ -186,8 +186,25 @@ else:
 
             if self.connection is not None:
                 try:
+                    res, sw1, sw2 = self.APDUExchange(b"\xff\x00\x48\x00\x00")
+                    if len(res) > 0:
+                        strres = res + bytes([sw1]) + bytes([sw2])
+                        strres = strres.decode("utf-8")
+                        return strres
+                except Exception as e:
+                    print("err:", e)
+                    pass
+            return "n/a"
+
+    class ACR1252UPCSCDevice(PCSCDevice):
+        def ReaderVersion(self):
+            if self.state != STATUS.GOTATS:
+                self.GetATS()
+
+            if self.connection is not None:
+                try:
                     print("start:", self.state, self.connection)
-                    res = self.connection.control(3225264, list(b"\xff\x00\x48\x00\x00"))
+                    res = self.connection.control(3500, list(b"\xe0\x00\x00\x18\x00"))
                     print("res:", res)
 
                     sw1,sw2 = 0,0
@@ -201,4 +218,3 @@ else:
                     print("err:", e)
                     pass
             return "n/a"
-
