@@ -71,7 +71,6 @@ if not ('UseNFC' in globals()):
     class PCSCDevice(_PCSCDevice):
         @classmethod
         def list_devices(cls, selector=""):
-            print("abstract!!!!.")
             raise StopIteration
 
         def GetATS(self):
@@ -107,7 +106,7 @@ else:
             print("No more devices found.")
             return
 
-        def _transmit(self, apdu, protocol=None):  #CardConnection.T1_protocol
+        def _transmit(self, apdu, protocol=None):
             res, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
             res = bytes(res)
             return res, sw1, sw2
@@ -192,7 +191,7 @@ else:
                         strres = strres.decode("utf-8")
                         return strres
                 except Exception as e:
-                    print("err:", e)
+                    print("Get version error:", e)
                     pass
             return "n/a"
 
@@ -207,14 +206,14 @@ else:
                     res = self.connection.control(3500, list(b"\xe0\x00\x00\x18\x00"))
                     print("res:", res)
 
-                    sw1,sw2 = 0,0
-                    print(f"sw1: {sw1}")
+                    '''
                     if len(res) > 0:
                         strres = res + bytes(sw1) + bytes(sw2)
                         strres = strres.decode("utf-8")
                         print("version: " + strres)
                         return strres
+                    '''
                 except Exception as e:
-                    print("err:", e)
+                    print("Get version error:", e)
                     pass
             return "n/a"
