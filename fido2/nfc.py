@@ -1,5 +1,5 @@
 
-from .ctap import CtapDevice, CtapError
+from .ctap import CtapDevice
 from .hid import CAPABILITY, CTAPHID
 from .pcsc import PCSCDevice, STATUS
 
@@ -83,8 +83,8 @@ class CtapNFCDevice(CtapDevice):
     def lock(self, lock_time=10):
         return
 
-    @classmethod
-    def list_devices(cls, selector="", pcscDevice = PCSCDevice):  # selector="CL"
+    @classmethod  # selector="CL"
+    def list_devices(cls, selector="", pcscDevice=PCSCDevice):
         for v in pcscDevice.list_devices(selector):
             print(v)
             yield cls(v.name, pcscDevice(v))
