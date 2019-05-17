@@ -5,7 +5,7 @@ import time
 dev = next(CtapNfcDevice.list_devices())
 
 print('CONNECT: %s' % dev)
-pcsc_device = dev.GetPCSC()
+pcsc_device = dev.get_pcsc_device()
 if pcsc_device is not None:
     pcsc_device.LED(False, True, 0)
     print('version: %s' % pcsc_device.ReaderVersion())

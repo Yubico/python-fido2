@@ -6,7 +6,7 @@ import time
 dev = next(CtapNfcDevice.list_devices(pcscDevice=Acr1252uPcscDevice))
 
 print('CONNECT: %s' % dev)
-pcsc_device = dev.GetPCSC()
+pcsc_device = dev.get_pcsc_device()
 if pcsc_device is not None:
     print('version: %s' % pcsc_device.ReaderVersion())
     print('serial number: %s' % pcsc_device.ReaderSerialNumber())

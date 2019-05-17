@@ -15,11 +15,11 @@ class CtapNfcDevice(CtapDevice):
         self.descriptor = descriptor
         self._dev = dev
 
-    def GetPCSC(self):
+    def get_pcsc_device(self):
         return self._dev
 
     def __repr__(self):
-        return 'CtapNFCDevice(%s)' % self.descriptor
+        return 'CtapNfcDevice(%s)' % self.descriptor
 
     @property
     def version(self):
