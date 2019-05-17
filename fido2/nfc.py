@@ -32,7 +32,7 @@ class CtapNfcDevice(CtapDevice):
     @property
     def device_version(self):
         """Device version number."""
-        return 'ATS: ' + self._dev.GetATS()
+        return 'ATS: ' + self._dev.get_ats()
 
     @property
     def capabilities(self):
@@ -41,7 +41,7 @@ class CtapNfcDevice(CtapDevice):
 
     def call(self, cmd, data=b'', event=None, on_keepalive=None):
         if self._dev.state != STATUS.SELECTED:
-            self._dev.SelectApplet()
+            self._dev.select_applet()
 
         if cmd == CTAPHID.MSG:
             apdu = data[7:]
@@ -53,7 +53,7 @@ class CtapNfcDevice(CtapDevice):
 
             apdu += b'\x00'
 
-            resp, sw1, sw2 = self._dev.APDUExchange(apdu)
+            resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
             return resp + bytes([sw1, sw2])
 
         if cmd == CTAPHID.CBOR:
@@ -61,7 +61,7 @@ class CtapNfcDevice(CtapDevice):
             apdu = b'\x80\x10\x00\x00' + bytes([len(apdu)]) + apdu
             apdu += b'\x00'
 
-            resp, sw1, sw2 = self._dev.APDUExchange(apdu)
+            resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
             return resp
 
         if cmd == CTAPHID.PING:

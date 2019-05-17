@@ -8,14 +8,14 @@ dev = next(CtapNfcDevice.list_devices(pcscDevice=Acr1252uPcscDevice))
 print('CONNECT: %s' % dev)
 pcsc_device = dev.get_pcsc_device()
 if pcsc_device is not None:
-    print('version: %s' % pcsc_device.ReaderVersion())
-    print('serial number: %s' % pcsc_device.ReaderSerialNumber())
+    print('version: %s' % pcsc_device.reader_version())
+    print('serial number: %s' % pcsc_device.reader_serial_number())
     print('')
 
-    result, settings = pcsc_device.WritePollingSettings(0x8B)
+    result, settings = pcsc_device.set_polling_settings(0x8B)
     print('write polling settings: %r 0x%x' % (result, settings))
 
-    result, settings = pcsc_device.ReadPollingSettings()
+    result, settings = pcsc_device.get_polling_settings()
     print('polling settings: %r 0x%x' % (result, settings))
     set_desc = [[0, 'Auto PICC Polling'],
                 [1, 'Turn off Antenna Field if no PICC is found'],
@@ -31,14 +31,14 @@ if pcsc_device is not None:
     print('')
 
     print('PICC operation parameter: %r 0x%x' %
-          pcsc_device.ReadPICCOperationParameter())
+          pcsc_device.get_picc_operation_parameter())
     print('')
 
-    result, red, green = pcsc_device.LEDControl(True, False)
+    result, red, green = pcsc_device.led_control(True, False)
     print('led control result:', result, 'red:', red, 'green:', green)
 
-    result, red, green = pcsc_device.LEDStatus()
+    result, red, green = pcsc_device.led_status()
     print('led state result:', result, 'red:', red, 'green:', green)
 
     time.sleep(1)
-    pcsc_device.LEDControl(False, False)
+    pcsc_device.led_control(False, False)

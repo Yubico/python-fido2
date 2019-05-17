@@ -26,7 +26,7 @@ class PCSCDevice:
         """
 
         self.state = STATUS.INIT
-        self.ATS = b''
+        self.ats = b''
         self.reader = reader
         self.connection = None
         return
@@ -46,11 +46,11 @@ class PCSCDevice:
         return
 
     def _transmit(self, apdu, protocol=None):
-        res, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
-        res = bytes(res)
-        return res, sw1, sw2
+        result, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
+        result = bytes(result)
+        return result, sw1, sw2
 
-    def GetATS(self):
+    def get_ats(self):
         """
         get Answer To Select (iso14443-4) of NFC device
         :return: byte string. ATS
@@ -63,15 +63,15 @@ class PCSCDevice:
             if APDULogging:
                 print('protocol', self.connection.getProtocol())
             self.state = STATUS.GOTATS
-            self.ATS = bytes(self.connection.getATR())
+            self.ats = bytes(self.connection.getATR())
             if APDULogging:
-                print('ats', self.ATS.hex())
+                print('ats', self.ats.hex())
         except NoCardException:
             print('No card inserted')
-            self.ATS = b''
-        return self.ATS
+            self.ats = b''
+        return self.ats
 
-    def SelectApplet(self, aid=binascii.unhexlify('A0000006472F0001')):
+    def select_applet(self, aid=binascii.unhexlify('A0000006472F0001')):
         """
         Select applet on smart card
         :param aid: byte string. applet id. u2f aid by default.
@@ -79,17 +79,17 @@ class PCSCDevice:
         """
 
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
-        res, sw1, sw2 = self.APDUExchangeEx(b'\x00\xA4\x04\x00', aid)
+        res, sw1, sw2 = self.apdu_exchange_ex(b'\x00\xA4\x04\x00', aid)
         if sw1 == 0x90:
             self.state = STATUS.SELECTED
         return res, sw1, sw2
 
-    def APDUExchangeEx(self, cmd, data):
-        return self.APDUExchange(cmd + bytes([len(data)]) + data + b'\0')
+    def apdu_exchange_ex(self, cmd, data):
+        return self.apdu_exchange(cmd + bytes([len(data)]) + data + b'\0')
 
-    def APDUExchange(self, apdu):
+    def apdu_exchange(self, apdu):
         """
         Exchange data with smart card
         :param apdu: byte string. data to exchange with card
@@ -102,7 +102,7 @@ class PCSCDevice:
         if APDULogging:
             print('apdu', apdu.hex())
 
-        if (self.connection is not None) and (len(self.ATS) > 0):
+        if (self.connection is not None) and (len(self.ats) > 0):
             try:
                 response, sw1, sw2 = self._transmit(apdu)
                 while sw1 == 0x9F or sw1 == 0x61:
@@ -119,22 +119,22 @@ class PCSCDevice:
                   response.hex())
         return response, sw1, sw2
 
-    def ControlExchange(self, controlData=b'', controlCode=3225264):
+    def control_exchange(self, control_data=b'', control_code=3225264):
         """
         Sends control sequence to reader's driver
-        :param controlData: byte string. data to send to driver
-        :param controlCode: int. code to send to reader driver.
+        :param control_data: byte string. data to send to driver
+        :param control_code: int. code to send to reader driver.
         :return: byte string. response
         """
         response = b''
 
         if APDULogging:
-            print('control', controlData.hex())
+            print('control', control_data.hex())
 
         if (self.connection is not None):
             try:
-                response = self.connection.control(controlCode,
-                                                   list(controlData))
+                response = self.connection.control(control_code,
+                                                   list(control_data))
                 response = bytes(response)
             except Exception as e:
                 print('Control error: ' + str(e))
@@ -143,27 +143,50 @@ class PCSCDevice:
             print('response', response.hex())
         return response
 
-    def LED(self, red=False, green=False,
-            blinkCount=0, redEndBlink=False, greenEndBlink=False):
+
+class Acr122uPcscDevice(PCSCDevice):
+    def reader_version(self):
+        """
+        Get reader's version from reader
+        :return: string. Reader's version
+        """
+
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                res, sw1, sw2 = self.apdu_exchange(b'\xff\x00\x48\x00\x00')
+                if len(res) > 0:
+                    strres = res + bytes([sw1]) + bytes([sw2])
+                    strres = strres.decode('utf-8')
+                    return strres
+            except Exception as e:
+                print('Get version error:', e)
+                pass
+        return 'n/a'
+
+    def led_control(self, red=False, green=False,
+                    blink_count=0, red_end_blink=False, green_end_blink=False):
         """
         Reader's led control
         :param red: boolean. red led on
         :param green: boolean. green let on
-        :param blinkCount: int. if needs to blink value > 0. blinks count
-        :param redEndBlink: boolean. state of red led at the end of blinking
-        :param greenEndBlink: boolean. state of green led at the end of blinking
+        :param blink_count: int. if needs to blink value > 0. blinks count
+        :param red_end_blink: boolean. state of red led at the end of blinking
+        :param green_end_blink: boolean. state of green led at the end of blinking
         :return:
         """
 
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
-                if blinkCount > 0:
+                if blink_count > 0:
                     cbyte = 0b00001100 + \
-                            (0b01 if redEndBlink else 0b00) + \
-                            (0b10 if greenEndBlink else 0b00)
+                            (0b01 if red_end_blink else 0b00) + \
+                            (0b10 if green_end_blink else 0b00)
                     cbyte |= (0b01000000 if red else 0b00000000) + \
                              (0b10000000 if green else 0b00000000)
                 else:
@@ -174,47 +197,27 @@ class PCSCDevice:
                 apdu = b'\xff\x00\x40' + \
                        bytes([cbyte & 0xff]) + \
                        b'\4' + b'\5\3' + \
-                       bytes([blinkCount]) + \
+                       bytes([blink_count]) + \
                        b'\0'
-                self.APDUExchange(apdu)
+                self.apdu_exchange(apdu)
 
             except Exception as e:
                 print('LED control error:', e)
                 pass
         return
 
-    def ReaderVersion(self):
-        """
-        Get reader's version from reader
-        :return: string. Reader's version
-        """
-
-        if self.state != STATUS.GOTATS:
-            self.GetATS()
-
-        if self.connection is not None:
-            try:
-                res, sw1, sw2 = self.APDUExchange(b'\xff\x00\x48\x00\x00')
-                if len(res) > 0:
-                    strres = res + bytes([sw1]) + bytes([sw2])
-                    strres = strres.decode('utf-8')
-                    return strres
-            except Exception as e:
-                print('Get version error:', e)
-                pass
-        return 'n/a'
 
 class Acr1252uPcscDevice(PCSCDevice):
-    def ReaderVersion(self):
+    def reader_version(self):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
                 # control codes:
                 # 3225264 - magic number!!!
                 # 0x42000000 + 3500 - cross platform way
-                res = self.ControlExchange(b'\xe0\x00\x00\x18\x00', 3225264)
+                res = self.control_exchange(b'\xe0\x00\x00\x18\x00', 3225264)
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -226,13 +229,13 @@ class Acr1252uPcscDevice(PCSCDevice):
                 pass
         return 'n/a'
 
-    def ReaderSerialNumber(self):
+    def reader_serial_number(self):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
-                res = self.ControlExchange(b'\xe0\x00\x00\x33\x00')
+                res = self.control_exchange(b'\xe0\x00\x00\x33\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -244,15 +247,15 @@ class Acr1252uPcscDevice(PCSCDevice):
                 pass
         return 'n/a'
 
-    def LEDControl(self, red=False, green=False):
+    def led_control(self, red=False, green=False):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
                 cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
-                res = self.ControlExchange(b'\xe0\x00\x00\x29\x01' +
-                                           bytes([cbyte]))
+                res = self.control_exchange(b'\xe0\x00\x00\x29\x01' +
+                                            bytes([cbyte]))
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -266,13 +269,13 @@ class Acr1252uPcscDevice(PCSCDevice):
 
         return False, False, False
 
-    def LEDStatus(self):
+    def led_status(self):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
-                res = self.ControlExchange(b'\xe0\x00\x00\x29\x00')
+                res = self.control_exchange(b'\xe0\x00\x00\x29\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -286,76 +289,76 @@ class Acr1252uPcscDevice(PCSCDevice):
 
         return False, False, False
 
-    def ReadPollingSettings(self):
+    def get_polling_settings(self):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
-                res = self.ControlExchange(b'\xe0\x00\x00\x23\x00')
+                res = self.control_exchange(b'\xe0\x00\x00\x23\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
                     if reslen == 1:
                         return True, res[5]
             except Exception as e:
-                print('Read polling settings error:', e)
+                print('Get polling settings error:', e)
                 pass
 
         return False, 0
 
-    def WritePollingSettings(self, settings):
+    def set_polling_settings(self, settings):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
-                res = self.ControlExchange(b'\xe0\x00\x00\x23\x01' +
-                                           bytes([settings & 0xff]))
+                res = self.control_exchange(b'\xe0\x00\x00\x23\x01' +
+                                            bytes([settings & 0xff]))
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
                     if reslen == 1:
                         return True, res[5]
             except Exception as e:
-                print('Write polling settings error:', e)
+                print('Set polling settings error:', e)
                 pass
 
         return False, 0
 
-    def ReadPICCOperationParameter(self):
+    def get_picc_operation_parameter(self):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
-                res = self.ControlExchange(b'\xe0\x00\x00\x20\x00')
+                res = self.control_exchange(b'\xe0\x00\x00\x20\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
                     if reslen == 1:
                         return True, res[5]
             except Exception as e:
-                print('Read PICC Operating Parameter error:', e)
+                print('Get PICC Operating Parameter error:', e)
                 pass
 
         return False, 0
 
-    def WritePICCOperationParameter(self, param):
+    def set_picc_operation_parameter(self, param):
         if self.state != STATUS.GOTATS:
-            self.GetATS()
+            self.get_ats()
 
         if self.connection is not None:
             try:
-                res = self.ControlExchange(b'\xe0\x00\x00\x20\x01' +
-                                           bytes([param]))
+                res = self.control_exchange(b'\xe0\x00\x00\x20\x01' +
+                                            bytes([param]))
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
                     if reslen == 1:
                         return True, res[5]
             except Exception as e:
-                print('Write PICC Operating Parameter error:', e)
+                print('Set PICC Operating Parameter error:', e)
                 pass
 
         return False, 0
