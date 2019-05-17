@@ -33,11 +33,11 @@ class PCSCDevice:
 
     @classmethod
     def list_devices(cls, selector=''):
-        '''
-
+        """
+        Returns list of pcsc readers connected to the system. Iterator.
         :param selector: text selector. select only readers that have it in name
         :return: iterator. next pcsc device.
-        '''
+        """
         for reader in readers():
             if reader.name.find(selector) >= 0:
                 yield reader
@@ -87,6 +87,12 @@ class PCSCDevice:
         return res, sw1, sw2
 
     def apdu_exchange_ex(self, cmd, data):
+        """
+        Exchange data with smart card. Calculates length of data and adds `Le`
+        :param cmd:  byte string. apdu command. usually have 4 bytes long
+        :param data:  byte string. apdu data. may be empty string
+        :return: byte string. response from card
+        """
         return self.apdu_exchange(cmd + bytes([len(data)]) + data + b'\0')
 
     def apdu_exchange(self, apdu):
@@ -131,7 +137,7 @@ class PCSCDevice:
         if APDULogging:
             print('control', control_data.hex())
 
-        if (self.connection is not None):
+        if self.connection is not None:
             try:
                 response = self.connection.control(control_code,
                                                    list(control_data))
@@ -156,11 +162,11 @@ class Acr122uPcscDevice(PCSCDevice):
 
         if self.connection is not None:
             try:
-                res, sw1, sw2 = self.apdu_exchange(b'\xff\x00\x48\x00\x00')
-                if len(res) > 0:
-                    strres = res + bytes([sw1]) + bytes([sw2])
-                    strres = strres.decode('utf-8')
-                    return strres
+                result, sw1, sw2 = self.apdu_exchange(b'\xff\x00\x48\x00\x00')
+                if len(result) > 0:
+                    str_result = result + bytes([sw1]) + bytes([sw2])
+                    str_result = str_result.decode('utf-8')
+                    return str_result
             except Exception as e:
                 print('Get version error:', e)
                 pass
@@ -254,15 +260,15 @@ class Acr1252uPcscDevice(PCSCDevice):
         if self.connection is not None:
             try:
                 cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
-                res = self.control_exchange(b'\xe0\x00\x00\x29\x01' +
-                                            bytes([cbyte]))
+                result = self.control_exchange(b'\xe0\x00\x00\x29\x01' +
+                                               bytes([cbyte]))
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == 1:
-                        exRed = bool(res[5] & 0b01)
-                        exGreen = bool(res[5] & 0b10)
-                        return True, exRed, exGreen
+                if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
+                    result_length = result[4]
+                    if result_length == 1:
+                        ex_red = bool(result[5] & 0b01)
+                        ex_green = bool(result[5] & 0b10)
+                        return True, ex_red, ex_green
             except Exception as e:
                 print('LED control error:', e)
                 pass
@@ -275,14 +281,14 @@ class Acr1252uPcscDevice(PCSCDevice):
 
         if self.connection is not None:
             try:
-                res = self.control_exchange(b'\xe0\x00\x00\x29\x00')
+                result = self.control_exchange(b'\xe0\x00\x00\x29\x00')
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == 1:
-                        exRed = bool(res[5] & 0b01)
-                        exGreen = bool(res[5] & 0b10)
-                        return True, exRed, exGreen
+                if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
+                    result_length = result[4]
+                    if result_length == 1:
+                        ex_red = bool(result[5] & 0b01)
+                        ex_green = bool(result[5] & 0b10)
+                        return True, ex_red, ex_green
             except Exception as e:
                 print('LED status error:', e)
                 pass

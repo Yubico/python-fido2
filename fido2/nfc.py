@@ -84,8 +84,14 @@ class CtapNfcDevice(CtapDevice):
         return
 
     @classmethod  # selector='CL'
-    def list_devices(cls, selector='', pcscDevice=PCSCDevice):
-        for v in pcscDevice.list_devices(selector):
+    def list_devices(cls, selector='', pcsc_device=PCSCDevice):
+        """
+        Returns list of readers in the system. Iterator.
+        :param selector:
+        :param pcsc_device: device to work with.  PCSCDevice by default.
+        :return: iterator. next reader
+        """
+        for v in pcsc_device.list_devices(selector):
             print(v)
-            yield cls(v.name, pcscDevice(v))
+            yield cls(v.name, pcsc_device(v))
         return

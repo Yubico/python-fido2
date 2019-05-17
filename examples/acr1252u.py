@@ -3,7 +3,7 @@ from fido2.nfc import CtapNfcDevice
 from fido2.pcsc import Acr1252uPcscDevice
 import time
 
-dev = next(CtapNfcDevice.list_devices(pcscDevice=Acr1252uPcscDevice))
+dev = next(CtapNfcDevice.list_devices(pcsc_device=Acr1252uPcscDevice))
 
 print('CONNECT: %s' % dev)
 pcsc_device = dev.get_pcsc_device()
