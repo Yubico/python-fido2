@@ -39,10 +39,10 @@ from getpass import getpass
 import sys
 
 # True - via NFC, False - via USB
-UseNFC = False
+use_nfc = False
 
 # Locate a device
-if UseNFC:
+if use_nfc:
     from fido2.nfc import CtapNfcDevice
 
     dev = next(CtapNfcDevice.list_devices(), None)
@@ -71,7 +71,7 @@ else:
     print('no pin')
 
 # Create a credential
-if not UseNFC:
+if not use_nfc:
     print('\nTouch your authenticator device now...\n')
 attestation_object, client_data = client.make_credential(
     rp, user, challenge, pin=pin
@@ -104,7 +104,7 @@ allow_list = [{
 }]
 
 # Authenticate the credential
-if not UseNFC:
+if not use_nfc:
     print('\nTouch your authenticator device now...\n')
 
 assertions, client_data = client.get_assertion(

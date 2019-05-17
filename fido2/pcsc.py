@@ -230,7 +230,7 @@ else:
                     pass
             return 'n/a'
 
-    class ACR1252UPCSCDevice(PCSCDevice):
+    class Acr1252uPcscDevice(PCSCDevice):
         def ReaderVersion(self):
             if self.state != STATUS.GOTATS:
                 self.GetATS()
