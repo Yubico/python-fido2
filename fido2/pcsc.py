@@ -179,8 +179,10 @@ class Acr122uPcscDevice(PCSCDevice):
         :param red: boolean. red led on
         :param green: boolean. green let on
         :param blink_count: int. if needs to blink value > 0. blinks count
-        :param red_end_blink: boolean. state of red led at the end of blinking
-        :param green_end_blink: boolean. state of green led at the end of blinking
+        :param red_end_blink: boolean.
+        state of red led at the end of blinking
+        :param green_end_blink: boolean.
+        state of green led at the end of blinking
         :return:
         """
 
