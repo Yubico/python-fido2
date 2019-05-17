@@ -1,10 +1,10 @@
-from fido2.nfc import CtapNFCDevice
+from fido2.nfc import CtapNfcDevice
 from fido2.utils import sha256
 from fido2.ctap1 import CTAP1
 import sys
 
 
-dev = next(CtapNFCDevice.list_devices(), None)
+dev = next(CtapNfcDevice.list_devices(), None)
 if not dev:
     print('No NFC u2f device found')
     sys.exit(1)

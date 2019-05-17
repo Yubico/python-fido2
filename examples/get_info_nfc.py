@@ -33,11 +33,11 @@ Connects to each present NFC FIDO device, and:
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CAPABILITY
-from fido2.nfc import CtapNFCDevice
+from fido2.nfc import CtapNfcDevice
 from fido2.ctap2 import CTAP2
 
 
-for dev in CtapNFCDevice.list_devices():
+for dev in CtapNfcDevice.list_devices():
     print('CONNECT: %s' % dev)
     print('version: %s' % dev.version)
 

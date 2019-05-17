@@ -4,7 +4,7 @@ from .hid import CAPABILITY, CTAPHID
 from .pcsc import PCSCDevice, STATUS
 
 
-class CtapNFCDevice(CtapDevice):
+class CtapNfcDevice(CtapDevice):
     """
     CtapDevice implementation using the pcsc NFC transport.
 

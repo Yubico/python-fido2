@@ -1,9 +1,9 @@
 
-from fido2.nfc import CtapNFCDevice
+from fido2.nfc import CtapNfcDevice
 from fido2.pcsc import ACR1252UPCSCDevice
 import time
 
-dev = next(CtapNFCDevice.list_devices(pcscDevice=ACR1252UPCSCDevice))
+dev = next(CtapNfcDevice.list_devices(pcscDevice=ACR1252UPCSCDevice))
 
 print('CONNECT: %s' % dev)
 pcscdev = dev.GetPCSC()

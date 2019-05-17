@@ -43,9 +43,9 @@ UseNFC = False
 
 # Locate a device
 if UseNFC:
-    from fido2.nfc import CtapNFCDevice
+    from fido2.nfc import CtapNfcDevice
 
-    dev = next(CtapNFCDevice.list_devices(), None)
+    dev = next(CtapNfcDevice.list_devices(), None)
     print('Use NFC channel.')
 else:
     dev = next(CtapHidDevice.list_devices(), None)
