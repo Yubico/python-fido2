@@ -1,7 +1,165 @@
 
 from fido2.nfc import CtapNfcDevice
-from fido2.pcsc import Acr1252uPcscDevice
+from fido2.pcsc import PCSCDevice, STATUS
 import time
+
+
+class Acr1252uPcscDevice(PCSCDevice):
+    def reader_version(self):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                # control codes:
+                # 3225264 - magic number!!!
+                # 0x42000000 + 3500 - cross platform way
+                res = self.control_exchange(b'\xe0\x00\x00\x18\x00', 3225264)
+
+                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                    reslen = res[4]
+                    if reslen == len(res) - 5:
+                        strres = res[5:5+reslen].decode('utf-8')
+                        return strres
+            except Exception as e:
+                print('Get version error:', e)
+                pass
+        return 'n/a'
+
+    def reader_serial_number(self):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                res = self.control_exchange(b'\xe0\x00\x00\x33\x00')
+
+                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                    reslen = res[4]
+                    if reslen == len(res) - 5:
+                        strres = res[5:5+reslen].decode('utf-8')
+                        return strres
+            except Exception as e:
+                print('Get serial number error:', e)
+                pass
+        return 'n/a'
+
+    def led_control(self, red=False, green=False):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
+                result = self.control_exchange(b'\xe0\x00\x00\x29\x01' +
+                                               bytes([cbyte]))
+
+                if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
+                    result_length = result[4]
+                    if result_length == 1:
+                        ex_red = bool(result[5] & 0b01)
+                        ex_green = bool(result[5] & 0b10)
+                        return True, ex_red, ex_green
+            except Exception as e:
+                print('LED control error:', e)
+                pass
+
+        return False, False, False
+
+    def led_status(self):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                result = self.control_exchange(b'\xe0\x00\x00\x29\x00')
+
+                if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
+                    result_length = result[4]
+                    if result_length == 1:
+                        ex_red = bool(result[5] & 0b01)
+                        ex_green = bool(result[5] & 0b10)
+                        return True, ex_red, ex_green
+            except Exception as e:
+                print('LED status error:', e)
+                pass
+
+        return False, False, False
+
+    def get_polling_settings(self):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                res = self.control_exchange(b'\xe0\x00\x00\x23\x00')
+
+                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                    reslen = res[4]
+                    if reslen == 1:
+                        return True, res[5]
+            except Exception as e:
+                print('Get polling settings error:', e)
+                pass
+
+        return False, 0
+
+    def set_polling_settings(self, settings):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                res = self.control_exchange(b'\xe0\x00\x00\x23\x01' +
+                                            bytes([settings & 0xff]))
+
+                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                    reslen = res[4]
+                    if reslen == 1:
+                        return True, res[5]
+            except Exception as e:
+                print('Set polling settings error:', e)
+                pass
+
+        return False, 0
+
+    def get_picc_operation_parameter(self):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                res = self.control_exchange(b'\xe0\x00\x00\x20\x00')
+
+                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                    reslen = res[4]
+                    if reslen == 1:
+                        return True, res[5]
+            except Exception as e:
+                print('Get PICC Operating Parameter error:', e)
+                pass
+
+        return False, 0
+
+    def set_picc_operation_parameter(self, param):
+        if self.state != STATUS.GOTATS:
+            self.get_ats()
+
+        if self.connection is not None:
+            try:
+                res = self.control_exchange(b'\xe0\x00\x00\x20\x01' +
+                                            bytes([param]))
+
+                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                    reslen = res[4]
+                    if reslen == 1:
+                        return True, res[5]
+            except Exception as e:
+                print('Set PICC Operating Parameter error:', e)
+                pass
+
+        return False, 0
+
 
 dev = next(CtapNfcDevice.list_devices(pcsc_device=Acr1252uPcscDevice))
 
