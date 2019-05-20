@@ -38,6 +38,7 @@ class PCSCDevice:
         :param selector: text selector. select only readers that have it in name
         :return: iterator. next pcsc device.
         """
+
         for reader in readers():
             if reader.name.find(selector) >= 0:
                 yield reader
@@ -50,10 +51,10 @@ class PCSCDevice:
         result = bytes(result)
         return result, sw1, sw2
 
-    def get_ats(self):
+    def connect(self):
         """
-        get Answer To Select (iso14443-4) of NFC device
-        :return: byte string. ATS
+        connect to reader
+        :return: True if OK
         """
 
         try:
@@ -62,7 +63,19 @@ class PCSCDevice:
             self.connection.connect()  # protocol=CardConnection.T0_protocol
             if APDULogging:
                 print('protocol', self.connection.getProtocol())
-            self.state = STATUS.GOTATS
+        except Exception as e:
+            print('Error reader connect:', e)
+            return False
+
+        return True
+
+    def get_ats(self):
+        """
+        get Answer To Select (iso14443-4) of NFC device
+        :return: byte string. ATS
+        """
+
+        try:
             self.ats = bytes(self.connection.getATR())
             if APDULogging:
                 print('ats', self.ats.hex())
@@ -77,9 +90,6 @@ class PCSCDevice:
         :param aid: byte string. applet id. u2f aid by default.
         :return: byte string. return value of select command
         """
-
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
 
         res, sw1, sw2 = self.apdu_exchange_ex(b'\x00\xA4\x04\x00', aid)
         if sw1 == 0x90:

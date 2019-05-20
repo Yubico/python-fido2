@@ -1,14 +1,11 @@
 
 from fido2.nfc import CtapNfcDevice
-from fido2.pcsc import PCSCDevice, STATUS
+from fido2.pcsc import PCSCDevice
 import time
 
 
 class Acr1252uPcscDevice(PCSCDevice):
     def reader_version(self):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 # control codes:
@@ -27,9 +24,6 @@ class Acr1252uPcscDevice(PCSCDevice):
         return 'n/a'
 
     def reader_serial_number(self):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 res = self.control_exchange(b'\xe0\x00\x00\x33\x00')
@@ -45,9 +39,6 @@ class Acr1252uPcscDevice(PCSCDevice):
         return 'n/a'
 
     def led_control(self, red=False, green=False):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
@@ -67,9 +58,6 @@ class Acr1252uPcscDevice(PCSCDevice):
         return False, False, False
 
     def led_status(self):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 result = self.control_exchange(b'\xe0\x00\x00\x29\x00')
@@ -87,9 +75,6 @@ class Acr1252uPcscDevice(PCSCDevice):
         return False, False, False
 
     def get_polling_settings(self):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 res = self.control_exchange(b'\xe0\x00\x00\x23\x00')
@@ -105,9 +90,6 @@ class Acr1252uPcscDevice(PCSCDevice):
         return False, 0
 
     def set_polling_settings(self, settings):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 res = self.control_exchange(b'\xe0\x00\x00\x23\x01' +
@@ -124,9 +106,6 @@ class Acr1252uPcscDevice(PCSCDevice):
         return False, 0
 
     def get_picc_operation_parameter(self):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 res = self.control_exchange(b'\xe0\x00\x00\x20\x00')
@@ -142,9 +121,6 @@ class Acr1252uPcscDevice(PCSCDevice):
         return False, 0
 
     def set_picc_operation_parameter(self, param):
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
-
         if self.connection is not None:
             try:
                 res = self.control_exchange(b'\xe0\x00\x00\x20\x01' +

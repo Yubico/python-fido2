@@ -15,6 +15,20 @@ class CtapNfcDevice(CtapDevice):
         self.descriptor = descriptor
         self._dev = dev
 
+        #init card
+        self._dev.connect()
+        self._ats = self._dev.get_ats()
+        if (self._ats is None) or (len(self._ats) == 0):
+            pass
+
+        self._app_select_result = self._dev.select_applet()
+        if (self._app_select_result is None) or \
+           (len(self._app_select_result) == 0):
+            pass
+
+        return
+
+
     def get_pcsc_device(self):
         return self._dev
 
@@ -32,7 +46,7 @@ class CtapNfcDevice(CtapDevice):
     @property
     def device_version(self):
         """Device version number."""
-        return 'ATS: ' + self._dev.get_ats()
+        return 'ATS: ' + self._ats
 
     @property
     def capabilities(self):

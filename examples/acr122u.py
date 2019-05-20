@@ -1,6 +1,6 @@
 
 from fido2.nfc import CtapNfcDevice
-from fido2.pcsc import PCSCDevice, STATUS
+from fido2.pcsc import PCSCDevice
 import time
 
 
@@ -10,9 +10,6 @@ class Acr122uPcscDevice(PCSCDevice):
         Get reader's version from reader
         :return: string. Reader's version
         """
-
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
 
         if self.connection is not None:
             try:
@@ -39,9 +36,6 @@ class Acr122uPcscDevice(PCSCDevice):
         state of green led at the end of blinking
         :return:
         """
-
-        if self.state != STATUS.GOTATS:
-            self.get_ats()
 
         if self.connection is not None:
             try:
