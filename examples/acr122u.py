@@ -79,4 +79,3 @@ if pcsc_device is not None:
     pcsc_device.led_control(True, False, 0)
     time.sleep(1)
     pcsc_device.led_control(False, True, 3)
-
