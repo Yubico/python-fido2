@@ -52,7 +52,6 @@ else:
         use_nfc = True
     except Exception as e:
         print("NFC channel search error:", e)
-        pass
 
 if not dev:
     print('No FIDO device found')
