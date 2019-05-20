@@ -7,13 +7,6 @@ from enum import IntEnum, unique
 APDULogging = False
 
 
-@unique
-class STATUS(IntEnum):
-    INIT = 1
-    GOTATS = 2
-    SELECTED = 3
-
-
 class PCSCDevice:
     """
     PCSC CTAP reader
@@ -25,7 +18,6 @@ class PCSCDevice:
         :param reader: link to pcsc reader
         """
 
-        self.state = STATUS.INIT
         self.ats = b''
         self.reader = reader
         self.connection = None
@@ -92,8 +84,6 @@ class PCSCDevice:
         """
 
         res, sw1, sw2 = self.apdu_exchange_ex(b'\x00\xA4\x04\x00', aid)
-        if sw1 == 0x90:
-            self.state = STATUS.SELECTED
         return res, sw1, sw2
 
     def apdu_exchange_ex(self, cmd, data):

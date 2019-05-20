@@ -1,7 +1,7 @@
 
 from .ctap import CtapDevice
 from .hid import CAPABILITY, CTAPHID
-from .pcsc import PCSCDevice, STATUS
+from .pcsc import PCSCDevice
 
 
 class CtapNfcDevice(CtapDevice):
@@ -19,12 +19,13 @@ class CtapNfcDevice(CtapDevice):
         self._dev.connect()
         self._ats = self._dev.get_ats()
         if (self._ats is None) or (len(self._ats) == 0):
-            pass
+            raise Exception('No ATS')
 
-        self._app_select_result = self._dev.select_applet()
+        self._app_select_result, sw1, sw2 = self._dev.select_applet()
         if (self._app_select_result is None) or \
-           (len(self._app_select_result) == 0):
-            pass
+           (len(self._app_select_result) == 0) or \
+           (sw1 != 0x90):
+            raise Exception('Select error')
 
         return
 
@@ -54,9 +55,6 @@ class CtapNfcDevice(CtapDevice):
         return CAPABILITY.CBOR
 
     def call(self, cmd, data=b'', event=None, on_keepalive=None):
-        if self._dev.state != STATUS.SELECTED:
-            self._dev.select_applet()
-
         if cmd == CTAPHID.MSG:
             apdu = data[7:]
             apdu = apdu[:-2]
@@ -107,5 +105,9 @@ class CtapNfcDevice(CtapDevice):
         """
         for v in pcsc_device.list_devices(selector):
             print(v)
-            yield cls(v.name, pcsc_device(v))
+            try:
+                pd = pcsc_device(v)
+                yield cls(v.name, pd)
+            except:
+                pass
         return
