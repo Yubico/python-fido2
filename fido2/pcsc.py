@@ -2,7 +2,6 @@
 from smartcard.Exceptions import NoCardException
 from smartcard.System import readers
 import binascii
-from enum import IntEnum, unique
 
 APDULogging = False
 

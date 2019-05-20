@@ -15,7 +15,7 @@ class CtapNfcDevice(CtapDevice):
         self.descriptor = descriptor
         self._dev = dev
 
-        #init card
+        # init card
         self._dev.connect()
         self._ats = self._dev.get_ats()
         if (self._ats is None) or (len(self._ats) == 0):
@@ -28,7 +28,6 @@ class CtapNfcDevice(CtapDevice):
             raise Exception('Select error')
 
         return
-
 
     def get_pcsc_device(self):
         return self._dev
@@ -108,6 +107,6 @@ class CtapNfcDevice(CtapDevice):
             try:
                 pd = pcsc_device(v)
                 yield cls(v.name, pd)
-            except:
+            except Exception as e:
                 pass
         return
