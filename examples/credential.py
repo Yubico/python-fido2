@@ -26,9 +26,9 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """
-Connects to the first FIDO device found, creates a new credential for it,
-and authenticates the credential. This works with both FIDO 2.0 devices as well
-as with U2F devices.
+Connects to the first FIDO device found (starts from USB, then looks into NFC),
+creates a new credential for it, and authenticates the credential.
+This works with both FIDO 2.0 devices as well as with U2F devices.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
@@ -38,18 +38,17 @@ from fido2.attestation import Attestation
 from getpass import getpass
 import sys
 
-# True - via NFC, False - via USB
-use_nfc = False
-
 # Locate a device
-if use_nfc:
+dev = next(CtapHidDevice.list_devices(), None)
+if dev is not None:
+    print('Use USB HID channel.')
+    use_nfc = False
+else:
     from fido2.nfc import CtapNfcDevice
 
     dev = next(CtapNfcDevice.list_devices(), None)
     print('Use NFC channel.')
-else:
-    dev = next(CtapHidDevice.list_devices(), None)
-    print('Use USB HID channel.')
+    use_nfc = True
 
 if not dev:
     print('No FIDO device found')
