@@ -2,6 +2,7 @@
 from .ctap import CtapDevice
 from .hid import CAPABILITY, CTAPHID
 from .pcsc import PCSCDevice
+from smartcard.Exceptions import CardConnectionException
 
 
 class CtapNfcDevice(CtapDevice):
@@ -107,6 +108,6 @@ class CtapNfcDevice(CtapDevice):
             try:
                 pd = pcsc_device(v)
                 yield cls(v.name, pd)
-            except Exception as e:
+            except CardConnectionException:
                 pass
         return

@@ -38,11 +38,12 @@ from fido2.attestation import Attestation
 from getpass import getpass
 import sys
 
+use_nfc = False
+
 # Locate a device
 dev = next(CtapHidDevice.list_devices(), None)
 if dev is not None:
     print('Use USB HID channel.')
-    use_nfc = False
 else:
     try:
         from fido2.nfc import CtapNfcDevice
@@ -51,7 +52,7 @@ else:
         print('Use NFC channel.')
         use_nfc = True
     except Exception as e:
-        print("NFC channel search error:", e)
+        print('NFC channel search error:', e)
 
 if not dev:
     print('No FIDO device found')
