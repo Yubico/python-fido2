@@ -44,11 +44,15 @@ if dev is not None:
     print('Use USB HID channel.')
     use_nfc = False
 else:
-    from fido2.nfc import CtapNfcDevice
+    try:
+        from fido2.nfc import CtapNfcDevice
 
-    dev = next(CtapNfcDevice.list_devices(), None)
-    print('Use NFC channel.')
-    use_nfc = True
+        dev = next(CtapNfcDevice.list_devices(), None)
+        print('Use NFC channel.')
+        use_nfc = True
+    except Exception as e:
+        print("NFC channel search error:", e)
+        pass
 
 if not dev:
     print('No FIDO device found')
