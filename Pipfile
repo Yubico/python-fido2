@@ -6,7 +6,6 @@ url = "https://pypi.org/simple"
 [dev-packages]
 "mock" = ">=1.0.1"
 "pyfakefs" = ">=3.4"
-"pyscard" = ">=1.9"
 
 [packages]
 "fido2" = {editable = true, path = "."}

@@ -27,11 +27,13 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido2.nfc import CtapNfcDevice
-from fido2.hid import CTAPHID
 import unittest
 import mock
-
+import sys
+sys.modules['smartcard.Exceptions'] = mock.Mock()
+sys.modules['smartcard.System'] = mock.Mock()
+from fido2.nfc import CtapNfcDevice
+from fido2.hid import CTAPHID
 
 class NfcTest(unittest.TestCase):
     def test_nfc_call_ping(self):
