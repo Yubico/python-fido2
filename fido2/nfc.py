@@ -107,7 +107,6 @@ class CtapNfcDevice(CtapDevice):
         :return: iterator. next reader
         """
         for v in pcsc_device.list_devices(selector):
-            print(v)
             try:
                 pd = pcsc_device(v)
                 yield cls(v.name, pd)
