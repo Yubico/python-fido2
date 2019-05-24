@@ -1,4 +1,5 @@
 
+import logging
 from smartcard.Exceptions import NoCardException
 from smartcard.System import readers
 import binascii
@@ -20,7 +21,22 @@ class PCSCDevice:
         self.ats = b''
         self.reader = reader
         self.connection = None
+        self.logger = PCSCDevice.get_logger()
         return
+
+    @classmethod
+    def get_logger(cls):
+        logger = logging.getLogger('_fido2.pcsc')
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        if APDULogging:
+            logger.setLevel(logging.DEBUG)
+        else:
+            logger.setLevel(logging.CRITICAL)
+        return logger
 
     @classmethod
     def list_devices(cls, selector=''):
@@ -34,7 +50,7 @@ class PCSCDevice:
             if reader.name.find(selector) >= 0:
                 yield reader
 
-        print('No more devices found.')
+        PCSCDevice.get_logger().debug('No more devices found.')
         return
 
     def _transmit(self, apdu, protocol=None):
@@ -53,9 +69,9 @@ class PCSCDevice:
                 self.connection = self.reader.createConnection()
             self.connection.connect()  # protocol=CardConnection.T0_protocol
             if APDULogging:
-                print('protocol', self.connection.getProtocol())
+                self.logger.debug('protocol %d', self.connection.getProtocol())
         except Exception as e:
-            print('Error reader connect:', e)
+            self.logger.error('Error reader connect: %s', e)
             return False
 
         return True
@@ -69,9 +85,9 @@ class PCSCDevice:
         try:
             self.ats = bytes(self.connection.getATR())
             if APDULogging:
-                print('ats', self.ats.hex())
+                self.logger.debug('ats %s', self.ats.hex())
         except NoCardException:
-            print('No card inserted')
+            self.logger.error('No card inserted')
             self.ats = b''
         return self.ats
 
@@ -105,7 +121,7 @@ class PCSCDevice:
         sw1, sw2 = 0, 0
 
         if APDULogging:
-            print('apdu', apdu.hex())
+            self.logger.debug('apdu %s', apdu.hex())
 
         if (self.connection is not None) and (len(self.ats) > 0):
             try:
@@ -116,12 +132,12 @@ class PCSCDevice:
                     response += lres
 
             except Exception as e:
-                print('ERROR: ' + str(e))
+                self.logger.error('apdu exchange error: %s', e)
 
         if APDULogging:
-            print('response',
-                  '[' + hex((sw1 << 8) + sw2) + ']',
-                  response.hex())
+            self.logger.debug('response %s %s',
+                              '[' + hex((sw1 << 8) + sw2) + ']',
+                              response.hex())
         return response, sw1, sw2
 
     def control_exchange(self, control_data=b'', control_code=3225264):
@@ -134,7 +150,7 @@ class PCSCDevice:
         response = b''
 
         if APDULogging:
-            print('control', control_data.hex())
+            self.logger.debug('control %s', control_data.hex())
 
         if self.connection is not None:
             try:
@@ -142,8 +158,8 @@ class PCSCDevice:
                                                    list(control_data))
                 response = bytes(response)
             except Exception as e:
-                print('Control error: ' + str(e))
+                self.logger.error('control error: ' + str(e))
 
         if APDULogging:
-            print('response', response.hex())
+            self.logger.debug('response %s', response.hex())
         return response
