@@ -50,7 +50,8 @@ class NfcTest(unittest.TestCase):
         nfc_dev = CtapNfcDevice(None, dev, no_card=True)
         res = nfc_dev.call(CTAPHID.CBOR, b'\x04')
 
-        dev.apdu_exchange.assert_called_once_with(b'\x80\x10\x00\x00\x01\x04\x00')
+        dev.apdu_exchange.assert_called_once_with(
+            b'\x80\x10\x00\x00\x01\x04\x00')
         assert res == b'version'
 
     def test_nfc_call_u2f(self):
@@ -58,9 +59,11 @@ class NfcTest(unittest.TestCase):
         dev.apdu_exchange.return_value = (b'version', 0x90, 0x00)
 
         nfc_dev = CtapNfcDevice(None, dev, no_card=True)
-        res = nfc_dev.call(CTAPHID.MSG, b'\x00\x01\x00\x00\x00\x00\x05' + b'\x01' * 5 + b'\x00\x00')
+        res = nfc_dev.call(CTAPHID.MSG,
+                           b'\x00\x01\x00\x00\x00\x00\x05' + b'\x01' * 5 + b'\x00\x00')
 
-        dev.apdu_exchange.assert_called_once_with(b'\x00\x01\x03\x00\x05\x01\x01\x01\x01\x01\x00')
+        dev.apdu_exchange.assert_called_once_with(
+            b'\x00\x01\x03\x00\x05\x01\x01\x01\x01\x01\x00')
         assert res == b'version\x90\x00'
 
     def test_nfc_call_version_2(self):
@@ -70,7 +73,8 @@ class NfcTest(unittest.TestCase):
         nfc_dev = CtapNfcDevice(None, dev, no_card=True)
         res = nfc_dev.version
 
-        dev.apdu_exchange.assert_called_once_with(b'\x80\x10\x00\x00\x01\x04\x00')
+        dev.apdu_exchange.assert_called_once_with(
+            b'\x80\x10\x00\x00\x01\x04\x00')
         assert res == 2
 
     def test_nfc_call_version_1(self):
@@ -80,5 +84,6 @@ class NfcTest(unittest.TestCase):
         nfc_dev = CtapNfcDevice(None, dev, no_card=True)
         res = nfc_dev.version
 
-        dev.apdu_exchange.assert_called_once_with(b'\x80\x10\x00\x00\x01\x04\x00')
+        dev.apdu_exchange.assert_called_once_with(
+            b'\x80\x10\x00\x00\x01\x04\x00')
         assert res == 1
