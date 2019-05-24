@@ -39,10 +39,13 @@ class CtapNfcDevice(CtapDevice):
     @property
     def version(self):
         """CTAP NFC protocol version.
-
-        :rtype: Tuple[int, int, int]
+        :rtype: int
         """
-        return [1, 0, 0]
+        ver = self.call(CTAPHID.CBOR, b"\x04")
+        if len(ver) > 0:
+            return 2
+        else:
+            return 1
 
     @property
     def device_version(self):

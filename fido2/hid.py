@@ -74,7 +74,7 @@ class CtapHidDevice(CtapDevice):
     def version(self):
         """CTAP HID protocol version.
 
-        :rtype: Tuple[int, int, int]
+        :rtype: int
         """
         return self._dev.u2fhid_version
 
