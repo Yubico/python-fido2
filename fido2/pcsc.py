@@ -126,7 +126,8 @@ class PCSCDevice:
         :param data:  byte string. apdu data. may be empty string
         :return: byte string. response from card
         """
-        return self.apdu_exchange(cmd + bytes_from_int(len(data)) + data + b'\0')
+        return self.apdu_exchange(cmd + bytes_from_int(len(data)) +
+                                  data + b'\0')
 
     def apdu_exchange(self, apdu):
         """
