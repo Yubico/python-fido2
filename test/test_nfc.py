@@ -37,6 +37,7 @@ if True:
     from fido2.nfc import CtapNfcDevice
     from fido2.hid import CTAPHID
 
+
 class NfcTest(unittest.TestCase):
     def test_nfc_call_ping(self):
         dev = mock.Mock()
