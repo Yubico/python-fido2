@@ -1,4 +1,4 @@
-# Copyright (c) 2013 Yubico AB
+# Copyright (c) 2019 Yubico AB
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -30,12 +30,12 @@ from __future__ import absolute_import, unicode_literals
 import unittest
 import mock
 import sys
+from fido2.hid import CTAPHID
 
 if True:
     sys.modules['smartcard.Exceptions'] = mock.Mock()
     sys.modules['smartcard.System'] = mock.Mock()
     from fido2.nfc import CtapNfcDevice
-    from fido2.hid import CTAPHID
 
 
 class NfcTest(unittest.TestCase):
@@ -46,7 +46,7 @@ class NfcTest(unittest.TestCase):
         res = nfc_dev.call(CTAPHID.PING, b'12345')
 
         dev.apdu_exchange.assert_not_called()
-        assert res == b'12345'
+        self.assertEqual(res, b'12345')
 
     def test_nfc_call_cbor(self):
         dev = mock.Mock()
@@ -57,7 +57,7 @@ class NfcTest(unittest.TestCase):
 
         dev.apdu_exchange.assert_called_once_with(
             b'\x80\x10\x00\x00\x01\x04\x00')
-        assert res == b'version'
+        self.assertEqual(res, b'version')
 
     def test_nfc_call_u2f(self):
         dev = mock.Mock()
@@ -71,7 +71,7 @@ class NfcTest(unittest.TestCase):
 
         dev.apdu_exchange.assert_called_once_with(
             b'\x00\x01\x03\x00\x05\x01\x01\x01\x01\x01\x00')
-        assert res == b'version\x90\x00'
+        self.assertEqual(res, b'version\x90\x00')
 
     def test_nfc_call_version_2(self):
         dev = mock.Mock()
@@ -82,7 +82,7 @@ class NfcTest(unittest.TestCase):
 
         dev.apdu_exchange.assert_called_once_with(
             b'\x80\x10\x00\x00\x01\x04\x00')
-        assert res == 2
+        self.assertEqual(res, 2)
 
     def test_nfc_call_version_1(self):
         dev = mock.Mock()
@@ -93,4 +93,4 @@ class NfcTest(unittest.TestCase):
 
         dev.apdu_exchange.assert_called_once_with(
             b'\x80\x10\x00\x00\x01\x04\x00')
-        assert res == 1
+        self.assertEqual(res, 1)
