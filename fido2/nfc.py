@@ -71,7 +71,7 @@ class CtapNfcDevice(CtapDevice):
             if data.find(b'\x00\x01') == 0:
                 apdu = b'\x00\x01\x03\x00' + bytes_from_int(len(apdu)) + apdu
             else:
-                apdu = data[0:4] + bytes([len(apdu)]) + apdu
+                apdu = data[0:4] + bytes_from_int(len(apdu)) + apdu
 
             apdu += b'\x00'
 

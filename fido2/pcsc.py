@@ -62,9 +62,19 @@ class PCSCDevice:
         return
 
     def _transmit(self, apdu, protocol=None):
-        result, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
-        result = bytes(result)
-        return result, sw1, sw2
+        if sys.version_info < (3,):
+            lapdu = list(apdu)
+            for i in range(len(lapdu)):
+                lapdu[i] = ord(lapdu[i])
+            lresult, sw1, sw2 = self.connection.transmit(lapdu, protocol)
+            result = b''
+            for i in range(len(lresult)):
+                result += bytes_from_int(lresult[i])
+            return result, sw1, sw2
+        else:
+            result, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
+            result = bytes(result)
+            return result, sw1, sw2
 
     def connect(self):
         """
@@ -116,7 +126,7 @@ class PCSCDevice:
         :param data:  byte string. apdu data. may be empty string
         :return: byte string. response from card
         """
-        return self.apdu_exchange(cmd + bytes_from_int(data) + data + b'\0')
+        return self.apdu_exchange(cmd + bytes_from_int(len(data)) + data + b'\0')
 
     def apdu_exchange(self, apdu):
         """
@@ -137,7 +147,7 @@ class PCSCDevice:
                 response, sw1, sw2 = self._transmit(apdu)
                 while sw1 == 0x9F or sw1 == 0x61:
                     lres, sw1, sw2 = self._transmit(b'\x00\xC0\x00\x00' +
-                                                    bytes([sw2]))
+                                                    bytes_from_int(sw2))
                     response += lres
 
             except SmartcardException as e:
