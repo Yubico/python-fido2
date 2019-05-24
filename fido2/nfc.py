@@ -1,7 +1,7 @@
 
 from .ctap import CtapDevice
 from .hid import CAPABILITY, CTAPHID
-from .pcsc import PCSCDevice
+from .pcsc import PCSCDevice, bytes_from_int
 from smartcard.Exceptions import CardConnectionException, NoCardException
 
 
@@ -69,18 +69,18 @@ class CtapNfcDevice(CtapDevice):
             apdu = data[7:]
             apdu = apdu[:-2]
             if data.find(b'\x00\x01') == 0:
-                apdu = b'\x00\x01\x03\x00' + bytes([len(apdu)]) + apdu
+                apdu = b'\x00\x01\x03\x00' + bytes_from_int(len(apdu)) + apdu
             else:
                 apdu = data[0:4] + bytes([len(apdu)]) + apdu
 
             apdu += b'\x00'
 
             resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
-            return resp + bytes([sw1, sw2])
+            return resp + bytes_from_int(sw1) + bytes_from_int(sw2)
 
         if cmd == CTAPHID.CBOR:
             apdu = data
-            apdu = b'\x80\x10\x00\x00' + bytes([len(apdu)]) + apdu
+            apdu = b'\x80\x10\x00\x00' + bytes_from_int(len(apdu)) + apdu
             apdu += b'\x00'
 
             resp, sw1, sw2 = self._dev.apdu_exchange(apdu)

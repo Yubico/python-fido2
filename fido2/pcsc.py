@@ -3,9 +3,16 @@ import logging
 from smartcard.Exceptions import SmartcardException, NoCardException
 from smartcard.System import readers
 import binascii
+import sys
 
 APDULogging = False
 
+
+def bytes_from_int(i):
+    if sys.version_info < (3,):
+        return chr(i)
+    else:
+        return bytes([i])
 
 class PCSCDevice:
     """
@@ -108,7 +115,7 @@ class PCSCDevice:
         :param data:  byte string. apdu data. may be empty string
         :return: byte string. response from card
         """
-        return self.apdu_exchange(cmd + bytes([len(data)]) + data + b'\0')
+        return self.apdu_exchange(cmd + bytes_from_int(data) + data + b'\0')
 
     def apdu_exchange(self, apdu):
         """
