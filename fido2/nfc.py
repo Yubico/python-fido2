@@ -41,7 +41,7 @@ class CtapNfcDevice(CtapDevice):
         """CTAP NFC protocol version.
         :rtype: int
         """
-        ver = self.call(CTAPHID.CBOR, b"\x04")
+        ver = self.call(CTAPHID.CBOR, b'\x04')
         if len(ver) > 0:
             return 2
         else:
