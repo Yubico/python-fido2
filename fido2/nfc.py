@@ -19,13 +19,14 @@ class CtapNfcDevice(CtapDevice):
         # init card
         self._dev.connect()
         self._ats = self._dev.get_ats()
-        if (self._ats is None) or (len(self._ats) == 0):
+        if self._ats is None or \
+           len(self._ats) == 0:
             raise Exception('No ATS')
 
         self._app_select_result, sw1, sw2 = self._dev.select_applet()
-        if (self._app_select_result is None) or \
-           (len(self._app_select_result) == 0) or \
-           (sw1 != 0x90):
+        if self._app_select_result is None or \
+           len(self._app_select_result) == 0 or \
+           sw1 != 0x90:
             raise Exception('Select error')
 
         return

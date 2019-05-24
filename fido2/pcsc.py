@@ -123,7 +123,8 @@ class PCSCDevice:
         if APDULogging:
             self.logger.debug('apdu %s', apdu.hex())
 
-        if (self.connection is not None) and (len(self.ats) > 0):
+        if self.connection is not None and \
+           len(self.ats) > 0:
             try:
                 response, sw1, sw2 = self._transmit(apdu)
                 while sw1 == 0x9F or sw1 == 0x61:
