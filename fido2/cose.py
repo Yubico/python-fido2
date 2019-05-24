@@ -29,8 +29,13 @@ from __future__ import absolute_import, unicode_literals
 
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
+
+try:
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+except ImportError:  # EdDSA requires Cryptography >= 2.6.
+    ed25519 = None
 
 
 class CoseKey(dict):
@@ -65,6 +70,9 @@ class CoseKey(dict):
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
+        if alg == EdDSA.ALGORITHM and ed25519 is None:
+            # EdDSA requires Cryptography >= 2.6.
+            return UnsupportedKey
         for cls in CoseKey.__subclasses__():
             if cls.ALGORITHM == alg:
                 return cls
@@ -90,6 +98,15 @@ class CoseKey(dict):
             raise ValueError('COSE alg identifier must be provided.')
         return CoseKey.for_alg(alg)(cose)
 
+    @staticmethod
+    def supported_algorithms():
+        """Get a list of all supported algorithm identifiers"""
+        if ed25519:
+            algs = (ES256, EdDSA, PS256, RS256)
+        else:
+            algs = (ES256, PS256, RS256)
+        return [cls.ALGORITHM for cls in algs]
+
 
 class UnsupportedKey(CoseKey):
     """A COSE key with an unsupported algorithm."""
@@ -99,6 +116,8 @@ class ES256(CoseKey):
     ALGORITHM = -7
 
     def verify(self, message, signature):
+        if self[-1] != 1:
+            raise ValueError('Unsupported elliptic curve')
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256R1()
         ).public_key(default_backend()).verify(
@@ -126,6 +145,7 @@ class ES256(CoseKey):
         return cls({
             1: 2,
             3: cls.ALGORITHM,
+            -1: 1,
             -2: data[1:33],
             -3: data[33:65]
         })
@@ -173,4 +193,27 @@ class PS256(CoseKey):
             3: cls.ALGORITHM,
             -1: int2bytes(pn.n),
             -2: int2bytes(pn.e)
+        })
+
+
+class EdDSA(CoseKey):
+    ALGORITHM = -8
+
+    def verify(self, message, signature):
+        if self[-1] != 6:
+            raise ValueError('Unsupported elliptic curve')
+        ed25519.Ed25519PublicKey.from_public_bytes(self[-2]).verify(
+            signature, message
+        )
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        return cls({
+            1: 1,
+            3: cls.ALGORITHM,
+            -1: 6,
+            -2: public_key.public_bytes(
+                serialization.Encoding.Raw,
+                serialization.PublicFormat.Raw
+            ),
         })

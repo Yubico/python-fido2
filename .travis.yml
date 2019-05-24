@@ -1,3 +1,4 @@
+dist: xenial
 language: python
 sudo: false
 
@@ -9,14 +10,9 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
-  # - "3.7"  # TODO: enable after https://github.com/travis-ci/travis-ci/issues/9815 will be fixed
-  - "pypy3.5-5.7.1-beta"
-
-jobs:
-  include:
-    - python: 3.7
-      dist: xenial
-      sudo: required
+  - "3.7"
+  - "pypy2.7-6.0"
+  - "pypy3.5-6.0"
 
 cache:
   directories:
@@ -35,17 +31,19 @@ install:
 
 script:
   - |
-    if [[ "$TRAVIS_PYTHON_VERSION" != "pypy3.5-5.7.1-beta" ]]
+    if [[ "$TRAVIS_PYTHON_VERSION" != pypy* ]]
     then
       pre-commit run --all-files
     fi
   - python setup.py test
+  - python setup.py sdist
 
 after_success:
   - mkdir deploy
   - |
     if [[ "$TRAVIS_PYTHON_VERSION" == "3.6" ]]
     then
+      cp dist/fido2-*.tar.gz deploy/python-fido2-$TRAVIS_BRANCH.tar.gz
       docker build -t xenial -f docker/xenial/Dockerfile .
       id=$(docker create xenial)
       docker cp $id:/python-fido2-debian-packages.tar.gz deploy/python-fido2-$TRAVIS_BRANCH-deb.tar.gz

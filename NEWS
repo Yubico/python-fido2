@@ -1,3 +1,10 @@
+* Version 0.6.0 (released 2019-05-10)
+ ** Don't fail if CTAP2 Info contains unknown fields.
+ ** Replace cbor loads/dumps functions with encode/decode/decode_from.
+ ** Server: Add support for AuthenticatorAttachment.
+ ** Server: Add support for more key algorithms.
+ ** Client: Expose CTAP2 Info object as Fido2Client.info.
+
 * Version 0.5.0 (released 2018-12-21)
  ** Changes to server classes, some backwards breaking.
  ** Add ability to authenticate U2F credentials by using the appid extension.

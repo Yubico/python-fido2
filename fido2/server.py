@@ -28,7 +28,7 @@
 from __future__ import absolute_import, unicode_literals
 
 from .rpid import verify_rp_id, verify_app_id
-from .cose import ES256
+from .cose import CoseKey
 from .client import WEBAUTHN_TYPE
 from .attestation import Attestation, FidoU2FAttestation, UnsupportedAttestation
 from .utils import sha256, websafe_encode, websafe_decode
@@ -114,7 +114,7 @@ class Fido2Server(object):
         self._verify = verify_origin or _verify_origin_for_rp(rp.ident)
         self.timeout = 30
         self.attestation = ATTESTATION(attestation)
-        self.allowed_algorithms = [ES256.ALGORITHM]
+        self.allowed_algorithms = CoseKey.supported_algorithms()
         self._attestation_types = attestation_types or _default_attestations()
 
     def register_begin(self, user, credentials=None, resident_key=False,
