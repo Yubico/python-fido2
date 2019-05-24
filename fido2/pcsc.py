@@ -14,6 +14,7 @@ def bytes_from_int(i):
     else:
         return bytes([i])
 
+
 class PCSCDevice:
     """
     PCSC CTAP reader
