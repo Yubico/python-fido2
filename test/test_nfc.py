@@ -60,7 +60,9 @@ class NfcTest(unittest.TestCase):
 
         nfc_dev = CtapNfcDevice(None, dev, no_card=True)
         res = nfc_dev.call(CTAPHID.MSG,
-                           b'\x00\x01\x00\x00\x00\x00\x05' + b'\x01' * 5 + b'\x00\x00')
+                           b'\x00\x01\x00\x00\x00\x00\x05' +
+                           b'\x01' * 5 +
+                           b'\x00\x00')
 
         dev.apdu_exchange.assert_called_once_with(
             b'\x00\x01\x03\x00\x05\x01\x01\x01\x01\x01\x00')
