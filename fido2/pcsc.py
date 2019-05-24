@@ -1,6 +1,6 @@
 
 import logging
-from smartcard.Exceptions import NoCardException
+from smartcard.Exceptions import SmartcardException, NoCardException
 from smartcard.System import readers
 import binascii
 
@@ -70,7 +70,7 @@ class PCSCDevice:
             self.connection.connect()  # protocol=CardConnection.T0_protocol
             if APDULogging:
                 self.logger.debug('protocol %d', self.connection.getProtocol())
-        except Exception as e:
+        except SmartcardException as e:
             self.logger.error('Error reader connect: %s', e)
             return False
 
@@ -132,7 +132,7 @@ class PCSCDevice:
                                                     bytes([sw2]))
                     response += lres
 
-            except Exception as e:
+            except SmartcardException as e:
                 self.logger.error('apdu exchange error: %s', e)
 
         if APDULogging:
@@ -158,7 +158,7 @@ class PCSCDevice:
                 response = self.connection.control(control_code,
                                                    list(control_data))
                 response = bytes(response)
-            except Exception as e:
+            except SmartcardException as e:
                 self.logger.error('control error: ' + str(e))
 
         if APDULogging:
