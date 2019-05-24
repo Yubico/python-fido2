@@ -2,7 +2,12 @@
 from .ctap import CtapDevice
 from .hid import CAPABILITY, CTAPHID
 from .pcsc import PCSCDevice
-from smartcard.Exceptions import CardConnectionException
+from smartcard.Exceptions import CardConnectionException, NoCardException
+
+
+class CardSelectException(Exception):
+    """can't select u2f/fido2 application on the card"""
+    pass
 
 
 class CtapNfcDevice(CtapDevice):
@@ -21,13 +26,13 @@ class CtapNfcDevice(CtapDevice):
         self._ats = self._dev.get_ats()
         if self._ats is None or \
            len(self._ats) == 0:
-            raise Exception('No ATS')
+            raise NoCardException('No ATS')
 
         self._app_select_result, sw1, sw2 = self._dev.select_applet()
         if self._app_select_result is None or \
            len(self._app_select_result) == 0 or \
            sw1 != 0x90:
-            raise Exception('Select error')
+            raise CardSelectException('Select error')
 
         return
 
