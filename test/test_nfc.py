@@ -35,7 +35,7 @@ from fido2.hid import CTAPHID
 if True:
     sys.modules['smartcard.Exceptions'] = mock.Mock()
     sys.modules['smartcard.System'] = mock.Mock()
-    sys.modules['fido2.pcsc'] = mock.Mock()
+    sys.modules['smartcard'] = mock.Mock()
     from fido2.nfc import CtapNfcDevice
 
 
