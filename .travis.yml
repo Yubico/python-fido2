@@ -31,7 +31,7 @@ addons:
     organization: "yubico"
 
 install:
-  - pip install pre-commit
+  - pip install pre-commit coverage
   - pip install -e .
 
 script:
@@ -40,7 +40,7 @@ script:
     then
       pre-commit run --all-files
     fi
-  - python setup.py test
+  - coverage run setup.py test
   - sonar-scanner
   - python setup.py sdist
 
