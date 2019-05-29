@@ -40,7 +40,9 @@ script:
     then
       pre-commit run --all-files
     fi
+  - coverage erase
   - coverage run setup.py test
+  - coverage xml -i
   - sonar-scanner
   - python setup.py sdist
 
