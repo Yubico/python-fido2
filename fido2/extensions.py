@@ -111,13 +111,11 @@ class HmacSecretExtension(Extension):
             raise ValueError('Wrong length for salt2')
 
         key_agreement, shared_secret = self._pin_protocol.get_shared_secret()
-        print(key_agreement, shared_secret)
         self._agreement = key_agreement
         self._secret = shared_secret
 
         enc = self._pin_protocol._get_cipher(shared_secret).encryptor()
         salt_enc = enc.update(salt1) + enc.update(salt2) + enc.finalize()
-        print('salt_enc', salt_enc)
 
         return {
             1: key_agreement,
