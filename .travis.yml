@@ -2,6 +2,9 @@ dist: xenial
 language: python
 sudo: false
 
+git:
+  depth: false
+
 services:
   - docker
 
@@ -24,6 +27,8 @@ addons:
       - libffi-dev
       - libssl-dev
       - swig
+  sonarcloud:
+    organization: "yubico"
 
 install:
   - pip install pre-commit
@@ -36,6 +41,7 @@ script:
       pre-commit run --all-files
     fi
   - python setup.py test
+  - sonar-scanner
   - python setup.py sdist
 
 after_success:
