@@ -553,7 +553,8 @@ class CTAP2(object):
         CLIENT_PIN = 0x06
         RESET = 0x07
         GET_NEXT_ASSERTION = 0x08
-        CREDENTIAL_MGMT = 0x0a
+        # 0x41 is the command byte for credmgmt preview
+        CREDENTIAL_MGMT = 0x41
 
     def __init__(self, device):
         if not device.capabilities & CAPABILITY.CBOR:
