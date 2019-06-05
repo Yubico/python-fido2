@@ -42,8 +42,10 @@ if True:
 class NfcTest(unittest.TestCase):
     def test_nfc_call_ping(self):
         dev = mock.Mock()
+        dev.get_ats.return_value = (b'here must be ats')
+        dev.select_applet.return_value = (b'U2F', 0x90, 0x00)
 
-        nfc_dev = CtapNfcDevice(None, dev, no_card=True)
+        nfc_dev = CtapNfcDevice(None, dev)
         res = nfc_dev.call(CTAPHID.PING, b'12345')
 
         dev.apdu_exchange.assert_not_called()
@@ -51,9 +53,11 @@ class NfcTest(unittest.TestCase):
 
     def test_nfc_call_cbor(self):
         dev = mock.Mock()
+        dev.get_ats.return_value = (b'here must be ats')
+        dev.select_applet.return_value = (b'U2F', 0x90, 0x00)
         dev.apdu_exchange.return_value = (b'version', 0x90, 0x00)
 
-        nfc_dev = CtapNfcDevice(None, dev, no_card=True)
+        nfc_dev = CtapNfcDevice(None, dev)
         res = nfc_dev.call(CTAPHID.CBOR, b'\x04')
 
         dev.apdu_exchange.assert_called_once_with(
@@ -62,9 +66,11 @@ class NfcTest(unittest.TestCase):
 
     def test_nfc_call_u2f(self):
         dev = mock.Mock()
+        dev.get_ats.return_value = (b'here must be ats')
+        dev.select_applet.return_value = (b'U2F', 0x90, 0x00)
         dev.apdu_exchange.return_value = (b'version', 0x90, 0x00)
 
-        nfc_dev = CtapNfcDevice(None, dev, no_card=True)
+        nfc_dev = CtapNfcDevice(None, dev)
         res = nfc_dev.call(CTAPHID.MSG,
                            b'\x00\x01\x00\x00\x00\x00\x05' +
                            b'\x01' * 5 +
@@ -76,9 +82,11 @@ class NfcTest(unittest.TestCase):
 
     def test_nfc_call_version_2(self):
         dev = mock.Mock()
+        dev.get_ats.return_value = (b'here must be ats')
+        dev.select_applet.return_value = (b'U2F', 0x90, 0x00)
         dev.apdu_exchange.return_value = (b'version', 0x90, 0x00)
 
-        nfc_dev = CtapNfcDevice(None, dev, no_card=True)
+        nfc_dev = CtapNfcDevice(None, dev)
         res = nfc_dev.version
 
         dev.apdu_exchange.assert_called_once_with(
@@ -87,9 +95,11 @@ class NfcTest(unittest.TestCase):
 
     def test_nfc_call_version_1(self):
         dev = mock.Mock()
+        dev.get_ats.return_value = (b'here must be ats')
+        dev.select_applet.return_value = (b'U2F', 0x90, 0x00)
         dev.apdu_exchange.return_value = (b'', 0x63, 0x85)
 
-        nfc_dev = CtapNfcDevice(None, dev, no_card=True)
+        nfc_dev = CtapNfcDevice(None, dev)
         res = nfc_dev.version
 
         dev.apdu_exchange.assert_called_once_with(
