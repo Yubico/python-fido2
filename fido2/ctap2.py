@@ -684,6 +684,14 @@ class CTAP2(object):
 
     def credential_mgmt(self, sub_cmd, sub_cmd_params=None, pin_protocol=None,
                         pin_auth=None):
+        """CTAP2 credentialManagement command, used to manage resident
+        credentials.
+
+        :param sub_cmd: A credentialManagement sub command.
+        :param sub_cmd_params: Sub command specific parameters.
+        :param pin_protocol: PIN protocol version used.
+        :pin_auth:
+        """
         return self.send_cbor(CTAP2.CMD.CREDENTIAL_MGMT, args(
             sub_cmd,
             sub_cmd_params,
@@ -805,6 +813,7 @@ class PinProtocolV1(object):
 
     def set_pin(self, pin):
         """Set the PIN of the autenticator.
+
         This only works when no PIN is set. To change the PIN when set, use
         change_pin.
 
@@ -824,6 +833,7 @@ class PinProtocolV1(object):
 
     def change_pin(self, old_pin, new_pin):
         """Change the PIN of the authenticator.
+
         This only works when a PIN is already set. If no PIN is set, use
         set_pin.
 
@@ -849,6 +859,12 @@ class PinProtocolV1(object):
 
 
 class CredentialManagement(object):
+    """Implementation of a draft specification of the Credential Management API.
+
+    :param ctap: An instance of a CTAP2 object.
+    :param pin_protocol: The PIN protocol version used.
+    :param pin_token: A valid pin_token for the current CTAP session.
+    """
 
     @unique
     class CMD(IntEnum):
@@ -861,7 +877,7 @@ class CredentialManagement(object):
 
     @unique
     class SUB_PARAMETER(IntEnum):
-        RPID_HASH = 0x01
+        RP_ID_HASH = 0x01
         CREDENTIAL_ID = 0x02
 
     @unique
@@ -869,7 +885,7 @@ class CredentialManagement(object):
         EXISTING_CRED_COUNT = 0x01
         MAX_REMAINING_COUNT = 0x02
         RP = 0x03
-        RPID_HASH = 0x04
+        RP_ID_HASH = 0x04
         TOTAL_RPS = 0x05
         USER = 0x06
         CREDENTIAL_ID = 0x07
@@ -882,62 +898,88 @@ class CredentialManagement(object):
         self.pin_protocol = pin_protocol
         self.pin_token = pin_token
 
+    def _call(self, sub_cmd, params=None, auth=True):
+        kwargs = {
+            'sub_cmd': sub_cmd,
+            'sub_cmd_params': params
+        }
+        if auth:
+            msg = struct.pack('>B', sub_cmd)
+            if params is not None:
+                msg += cbor.encode(params)
+            kwargs['pin_protocol'] = self.pin_protocol
+            kwargs['pin_auth'] = hmac_sha256(self.pin_token, msg)[:16]
+        return self.ctap.credential_mgmt(**kwargs)
+
     def get_metadata(self):
-        pin_auth = hmac_sha256(
-            self.pin_token,
-            struct.pack('>B', CredentialManagement.CMD.GET_CREDS_METADATA)
-        )[:16]
-        return self.ctap.credential_mgmt(
-            CredentialManagement.CMD.GET_CREDS_METADATA,
-            pin_protocol=self.pin_protocol,
-            pin_auth=pin_auth
-        )
+        """Get credentials metadata.
+
+        This returns the existing resident credentials count, and the max
+        possible number of remaining resident credentials (the actual number of
+        remaining credentials may depend on algorithm choice, etc).
+
+        :return: A dict containing EXISTING_CRED_COUNT, and MAX_REMAINING_COUNT.
+        """
+        return self._call(CredentialManagement.CMD.GET_CREDS_METADATA)
 
     def enumerate_rps_begin(self):
-        pin_auth = hmac_sha256(
-            self.pin_token,
-            struct.pack('>B', CredentialManagement.CMD.ENUMERATE_RPS_BEGIN)
-        )[:16]
-        return self.ctap.credential_mgmt(
-            CredentialManagement.CMD.ENUMERATE_RPS_BEGIN,
-            pin_protocol=self.pin_protocol,
-            pin_auth=pin_auth
-        )
+        """Start enumeration of RP entities of resident credentials.
+
+        This will begin enumeration of stored RP entities, returning the first
+        entity, as well as a count of the total number of entities stored.
+
+        :return: A dict containing RP, RP_ID_HASH, and TOTAL_RPs.
+        """
+        return self._call(CredentialManagement.CMD.ENUMERATE_RPS_BEGIN)
 
     def enumerate_rps_next(self):
-        return self.ctap.credential_mgmt(
-            CredentialManagement.CMD.ENUMERATE_RPS_NEXT
+        """Get the next RP entity stored.
+
+        This continues enumeration of stored RP entities, returning the next
+        entity.
+
+        :return: A dict containing RP, and RP_ID_HASH.
+        """
+        return self._call(
+            CredentialManagement.CMD.ENUMERATE_RPS_NEXT,
+            auth=False
         )
 
-    def enumerate_creds_begin(self, rpid_hash):
-        params = {CredentialManagement.SUB_PARAMETER.RPID_HASH: rpid_hash}
-        pin_auth = hmac_sha256(
-            self.pin_token,
-            struct.pack('>B', CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN) +
-            cbor.encode(params)
-        )
-        return self.ctap.credential_mgmt(
+    def enumerate_creds_begin(self, rp_id_hash):
+        """Start enumeration of resident credentials.
+
+        This will begin enumeration of resident credentials for a given RP,
+        returning the first credential, as well as a count of the total number
+        of resident credentials stored for the given RP.
+
+        :param rp_id_hash: SHA256 hash of the RP ID.
+        :return: A dict containing USER, CREDENTIAL_ID, PUBLIC_KEY, and
+            TOTAL_CREDENTIALS.
+        """
+        return self._call(
             CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN,
-            sub_cmd_params=params,
-            pin_protocol=self.pin_protocol,
-            pin_auth=pin_auth
+            {CredentialManagement.SUB_PARAMETER.RP_ID_HASH: rp_id_hash}
         )
 
     def enumerate_creds_next(self):
-        return self.ctap.credential_mgmt(
-            CredentialManagement.CMD.ENUMERATE_CREDS_NEXT
+        """Get the next resident credential stored.
+
+        This continues enumeration of resident credentials, returning the next
+        credential.
+
+        :return: A dict containing USER, CREDENTIAL_ID, and PUBLIC_KEY.
+        """
+        return self._call(
+            CredentialManagement.CMD.ENUMERATE_CREDS_NEXT,
+            auth=False
         )
 
     def delete_cred(self, cred_id):
-        params = {CredentialManagement.SUB_PARAMETER.CREDENTIAL_ID: cred_id}
-        pin_auth = hmac_sha256(
-            self.pin_token,
-            struct.pack('>B', CredentialManagement.CMD.DELETE_CREDENTIAL) +
-            cbor.encode(params)
-        )
-        return self.ctap.credential_mgmt(
+        """Delete a resident credential.
+
+        :param cred_id: The ID of the credential to delete.
+        """
+        return self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
-            sub_cmd_params=params,
-            pin_protocol=self.pin_protocol,
-            pin_auth=pin_auth
+            {CredentialManagement.SUB_PARAMETER.CREDENTIAL_ID: cred_id}
         )
