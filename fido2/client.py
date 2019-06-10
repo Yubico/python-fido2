@@ -403,13 +403,10 @@ class Fido2Client(object):
         if len(options) == 0:
             options = None
 
-        assertions = [self.ctap2.get_assertion(
+        return self.ctap2.get_assertions(
             rp_id, client_data.hash, allow_list, extensions, options, pin_auth,
             pin_protocol, timeout, on_keepalive
-        )]
-        for _ in range((assertions[0].number_of_credentials or 1) - 1):
-            assertions.append(self.ctap2.get_next_assertion())
-        return assertions
+        )
 
     def _ctap1_get_assertion(self, client_data, rp_id, allow_list, extensions,
                              up, uv, pin, timeout, on_keepalive):

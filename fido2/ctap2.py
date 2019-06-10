@@ -682,23 +682,6 @@ class CTAP2(object):
             pin_hash_enc
         ))
 
-    def credential_mgmt(self, sub_cmd, sub_cmd_params=None, pin_protocol=None,
-                        pin_auth=None):
-        """CTAP2 credentialManagement command, used to manage resident
-        credentials.
-
-        :param sub_cmd: A credentialManagement sub command.
-        :param sub_cmd_params: Sub command specific parameters.
-        :param pin_protocol: PIN protocol version used.
-        :pin_auth:
-        """
-        return self.send_cbor(CTAP2.CMD.CREDENTIAL_MGMT, args(
-            sub_cmd,
-            sub_cmd_params,
-            pin_protocol,
-            pin_auth
-        ))
-
     def reset(self, timeout=None, on_keepalive=None):
         """CTAP2 reset command, erases all credentials and PIN.
 
@@ -717,6 +700,33 @@ class CTAP2(object):
         """
         return self.send_cbor(CTAP2.CMD.GET_NEXT_ASSERTION,
                               parse=AssertionResponse)
+
+    def credential_mgmt(self, sub_cmd, sub_cmd_params=None, pin_protocol=None,
+                        pin_auth=None):
+        """CTAP2 credentialManagement command, used to manage resident
+        credentials.
+
+        :param sub_cmd: A credentialManagement sub command.
+        :param sub_cmd_params: Sub command specific parameters.
+        :param pin_protocol: PIN protocol version used.
+        :pin_auth:
+        """
+        return self.send_cbor(CTAP2.CMD.CREDENTIAL_MGMT, args(
+            sub_cmd,
+            sub_cmd_params,
+            pin_protocol,
+            pin_auth
+        ))
+
+    def get_assertions(self, *args, **kwargs):
+        """Convenience method to get list of assertions.
+
+        See get_assertion and get_assertion_next for details.
+        """
+        first = self.get_assertion(*args, **kwargs)
+        rest = [self.get_assertion_next()
+                for _ in range(1, first.number_of_credentials or 1)]
+        return [first] + rest
 
 
 def _pad_pin(pin):
@@ -928,7 +938,7 @@ class CredentialManagement(object):
         This will begin enumeration of stored RP entities, returning the first
         entity, as well as a count of the total number of entities stored.
 
-        :return: A dict containing RP, RP_ID_HASH, and TOTAL_RPs.
+        :return: A dict containing RP, RP_ID_HASH, and TOTAL_RPS.
         """
         return self._call(CredentialManagement.CMD.ENUMERATE_RPS_BEGIN)
 
@@ -944,6 +954,24 @@ class CredentialManagement(object):
             CredentialManagement.CMD.ENUMERATE_RPS_NEXT,
             auth=False
         )
+
+    def enumerate_rps(self):
+        """Convenience method to enumerate all RPs.
+
+        See enumerate_rps_begin and enumerate_rps_next for details.
+        """
+        try:
+            first = self.enumerate_rps_begin()
+        except CtapError as e:
+            if e.code == CtapError.ERR.OTHER:
+                return []
+            raise  # Other error
+        rest = [self.enumerate_rps_next()
+                for _ in range(
+                    1,
+                    first.get(CredentialManagement.RESULT.TOTAL_RPS, 1)
+                )]
+        return [first] + rest
 
     def enumerate_creds_begin(self, rp_id_hash):
         """Start enumeration of resident credentials.
@@ -973,6 +1001,24 @@ class CredentialManagement(object):
             CredentialManagement.CMD.ENUMERATE_CREDS_NEXT,
             auth=False
         )
+
+    def enumerate_creds(self, *args, **kwargs):
+        """Convenience method to enumerate all resident credentials for an RP.
+
+        See enumerate_creds_begin and enumerate_creds_next for details.
+        """
+        try:
+            first = self.enumerate_creds_begin(*args, **kwargs)
+        except CtapError as e:
+            if e.code == CtapError.ERR.NO_CREDENTIALS:
+                return []
+            raise  # Other error
+        rest = [self.enumerate_creds_next()
+                for _ in range(
+                    1,
+                    first.get(CredentialManagement.RESULT.TOTAL_CREDENTIALS, 1)
+                )]
+        return [first] + rest
 
     def delete_cred(self, cred_id):
         """Delete a resident credential.
