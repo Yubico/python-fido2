@@ -80,12 +80,16 @@ class Info(bytes):
 
     @unique
     class KEY(IntEnum):
-        VERSIONS = 1
-        EXTENSIONS = 2
-        AAGUID = 3
-        OPTIONS = 4
-        MAX_MSG_SIZE = 5
-        PIN_PROTOCOLS = 6
+        VERSIONS = 0x01
+        EXTENSIONS = 0x02
+        AAGUID = 0x03
+        OPTIONS = 0x04
+        MAX_MSG_SIZE = 0x05
+        PIN_PROTOCOLS = 0x06
+        MAX_CREDS_IN_LIST = 0x07
+        MAX_CRED_ID_LENGTH = 0x08
+        TRANSPORTS = 0x09
+        ALGORITHMS = 0x0a
 
         @classmethod
         def get(cls, key):
@@ -106,6 +110,10 @@ class Info(bytes):
         self.max_msg_size = data.get(Info.KEY.MAX_MSG_SIZE, 1024)
         self.pin_protocols = data.get(
             Info.KEY.PIN_PROTOCOLS, [])
+        self.max_creds_in_list = data.get(Info.KEY.MAX_CREDS_IN_LIST)
+        self.max_cred_id_length = data.get(Info.KEY.MAX_CRED_ID_LENGTH)
+        self.transports = data.get(Info.KEY.TRANSPORTS, [])
+        self.algorithms = data.get(Info.KEY.ALGORITHMS)
         self.data = data
 
     def __repr__(self):
@@ -118,6 +126,14 @@ class Info(bytes):
         r += ', max_message_size: %d' % self.max_msg_size
         if self.pin_protocols:
             r += ', pin_protocols: %r' % self.pin_protocols
+        if self.max_creds_in_list:
+            r += ', max_credential_count_in_list: %d' % self.max_creds_in_list
+        if self.max_cred_id_length:
+            r += ', max_credential_id_length: %d' % self.max_cred_id_length
+        if self.transports:
+            r += ', transports: %r' % self.transports
+        if self.algorithms:
+            r += ', algorithms: %r' % self.algorithms
         return r + ')'
 
     def __str__(self):
@@ -870,6 +886,7 @@ class PinProtocolV1(object):
 
 class CredentialManagement(object):
     """Implementation of a draft specification of the Credential Management API.
+    WARNING: This specification is not final and this class is likely to change.
 
     :param ctap: An instance of a CTAP2 object.
     :param pin_protocol: The PIN protocol version used.
