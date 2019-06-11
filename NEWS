@@ -1,3 +1,5 @@
+* Version 0.7.0 (unreleased)
+
 * Version 0.6.0 (released 2019-05-10)
  ** Don't fail if CTAP2 Info contains unknown fields.
  ** Replace cbor loads/dumps functions with encode/decode/decode_from.
