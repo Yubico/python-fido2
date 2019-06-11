@@ -26,17 +26,18 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """
-Connects to each attached FIDO device, and:
+Connects to each present NFC FIDO device, and:
     1. If the device supports CBOR commands, perform a getInfo command.
     2. If the device supports WINK, perform the wink command.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
-from fido2.hid import CtapHidDevice, CAPABILITY
+from fido2.hid import CAPABILITY
+from fido2.nfc import CtapNfcDevice
 from fido2.ctap2 import CTAP2
 
 
-for dev in CtapHidDevice.list_devices():
+for dev in CtapNfcDevice.list_devices():
     print('CONNECT: %s' % dev)
     print('CTAP version: %d' % dev.version)
 
