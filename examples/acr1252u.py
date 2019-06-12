@@ -140,7 +140,7 @@ class Acr1252uPcscDevice(PCSCDevice):
 dev = next(CtapNfcDevice.list_devices(pcsc_device=Acr1252uPcscDevice))
 
 print('CONNECT: %s' % dev)
-pcsc_device = dev.get_pcsc_device()
+pcsc_device = dev.pcsc_device
 if pcsc_device is not None:
     print('version: %s' % pcsc_device.reader_version())
     print('serial number: %s' % pcsc_device.reader_serial_number())

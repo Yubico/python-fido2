@@ -1,7 +1,7 @@
 
 from __future__ import absolute_import
 
-from .ctap import CtapDevice, CtapError
+from .ctap import CtapDevice, CtapError, STATUS
 from ._pyu2f import hidtransport
 
 from enum import IntEnum, unique
@@ -23,12 +23,6 @@ class CTAPHID(IntEnum):
     KEEPALIVE = 0x3b
 
     VENDOR_FIRST = 0x40
-
-
-@unique
-class STATUS(IntEnum):
-    PROCESSING = 1
-    UPNEEDED = 2
 
 
 @unique

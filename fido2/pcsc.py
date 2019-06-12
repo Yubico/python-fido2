@@ -1,21 +1,44 @@
+# Copyright (c) 2019 Yubico AB
+# Copyright (c) 2019 Oleg Moiseenko
+# All rights reserved.
+#
+#   Redistribution and use in source and binary forms, with or
+#   without modification, are permitted provided that the following
+#   conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#    2. Redistributions in binary form must reproduce the above
+#       copyright notice, this list of conditions and the following
+#       disclaimer in the documentation and/or other materials provided
+#       with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+from __future__ import absolute_import, unicode_literals
 
 import logging
-from smartcard.Exceptions import SmartcardException, NoCardException
+from smartcard.Exceptions import SmartcardException
 from smartcard.System import readers
-import binascii
-import sys
+from binascii import b2a_hex
+import struct
+import six
 
-APDULogging = False
-
-
-def bytes_from_int(i):
-    if sys.version_info < (3,):
-        return chr(i)
-    else:
-        return bytes([i])
+APDULogging = True
 
 
-class PCSCDevice:
+class PCSCDevice(object):
     """
     PCSC CTAP reader
     """
@@ -26,11 +49,9 @@ class PCSCDevice:
         :param reader: link to pcsc reader
         """
 
-        self.ats = b''
         self.reader = reader
-        self.connection = None
+        self.connection = self.reader.createConnection()
         self.logger = PCSCDevice.get_logger()
-        return
 
     @classmethod
     def get_logger(cls):
@@ -59,22 +80,10 @@ class PCSCDevice:
                 yield reader
 
         PCSCDevice.get_logger().debug('No more devices found.')
-        return
 
     def _transmit(self, apdu, protocol=None):
-        if sys.version_info < (3,):
-            lapdu = list(apdu)
-            for i in range(len(lapdu)):
-                lapdu[i] = ord(lapdu[i])
-            lresult, sw1, sw2 = self.connection.transmit(lapdu, protocol)
-            result = b''
-            for i in range(len(lresult)):
-                result += bytes_from_int(lresult[i])
-            return result, sw1, sw2
-        else:
-            result, sw1, sw2 = self.connection.transmit(list(apdu), protocol)
-            result = bytes(result)
-            return result, sw1, sw2
+        resp, sw1, sw2 = self.connection.transmit(list(six.iterbytes(apdu)))
+        return bytes(bytearray(resp)), sw1, sw2
 
     def connect(self):
         """
@@ -83,8 +92,6 @@ class PCSCDevice:
         """
 
         try:
-            if self.connection is None:
-                self.connection = self.reader.createConnection()
             self.connection.connect()  # protocol=CardConnection.T0_protocol
             if APDULogging:
                 self.logger.debug('protocol %d', self.connection.getProtocol())
@@ -94,40 +101,15 @@ class PCSCDevice:
 
         return True
 
-    def get_ats(self):
-        """
-        get Answer To Select (iso14443-4) of NFC device
-        :return: byte string. ATS
-        """
-
-        try:
-            self.ats = bytes(self.connection.getATR())
-            if APDULogging:
-                self.logger.debug('ats %s', self.ats.hex())
-        except NoCardException:
-            self.logger.error('No card inserted')
-            self.ats = b''
-        return self.ats
-
-    def select_applet(self, aid=binascii.unhexlify('A0000006472F0001')):
+    def select_applet(self, aid):
         """
         Select applet on smart card
-        :param aid: byte string. applet id. u2f aid by default.
+        :param aid: byte string. applet id.
         :return: byte string. return value of select command
         """
 
-        res, sw1, sw2 = self.apdu_exchange_ex(b'\x00\xA4\x04\x00', aid)
-        return res, sw1, sw2
-
-    def apdu_exchange_ex(self, cmd, data):
-        """
-        Exchange data with smart card. Calculates length of data and adds `Le`
-        :param cmd:  byte string. apdu command. usually have 4 bytes long
-        :param data:  byte string. apdu data. may be empty string
-        :return: byte string. response from card
-        """
-        return self.apdu_exchange(cmd + bytes_from_int(len(data)) +
-                                  data + b'\0')
+        apdu = b'\x00\xa4\x04\x00' + struct.pack('!B', len(aid)) + aid + b'\x00'
+        return self.apdu_exchange(apdu)
 
     def apdu_exchange(self, apdu):
         """
@@ -136,28 +118,36 @@ class PCSCDevice:
         :return: byte string. response from card
         """
 
+        # Re-encode extended APDUs as short:
+        if len(apdu) >= 7 and six.indexbytes(apdu, 4) == 0:
+            data_len = struct.unpack('!H', apdu[5:7])[0]
+            if data_len:  # apdu case 4
+                apdu = apdu[:4] + struct.pack('!B', data_len) + \
+                    apdu[7:7 + data_len] + b'\x00'
+            else:  # apdu case 2
+                apdu = apdu[:4] + b'\x00'
+
         response = b''
         sw1, sw2 = 0, 0
 
         if APDULogging:
-            self.logger.debug('apdu %s', apdu.hex())
+            self.logger.debug('apdu %s', b2a_hex(apdu))
 
-        if self.connection is not None and \
-           len(self.ats) > 0:
-            try:
-                response, sw1, sw2 = self._transmit(apdu)
-                while sw1 == 0x9F or sw1 == 0x61:
-                    lres, sw1, sw2 = self._transmit(b'\x00\xC0\x00\x00' +
-                                                    bytes_from_int(sw2))
-                    response += lres
-
-            except SmartcardException as e:
-                self.logger.error('apdu exchange error: %s', e)
+        try:
+            response, sw1, sw2 = self._transmit(apdu)
+            while sw1 == 0x61:
+                lres, sw1, sw2 = self._transmit(
+                    b'\x00\xc0\x00\x00' + struct.pack('!B', sw2)  # sw2 == le
+                )
+                response += lres
+        except SmartcardException as e:
+            self.logger.error('apdu exchange error: %s', e)
 
         if APDULogging:
             self.logger.debug('response %s %s',
                               '[' + hex((sw1 << 8) + sw2) + ']',
-                              response.hex())
+                              b2a_hex(response))
+
         return response, sw1, sw2
 
     def control_exchange(self, control_data=b'', control_code=3225264):
@@ -170,16 +160,18 @@ class PCSCDevice:
         response = b''
 
         if APDULogging:
-            self.logger.debug('control %s', control_data.hex())
+            self.logger.debug('control %s', b2a_hex(control_data))
 
-        if self.connection is not None:
-            try:
-                response = self.connection.control(control_code,
-                                                   list(control_data))
-                response = bytes(response)
-            except SmartcardException as e:
-                self.logger.error('control error: ' + str(e))
+        try:
+            response = self.connection.control(
+                control_code,
+                list(six.iterbytes(control_data))
+            )
+            response = bytes(bytearray(response))
+        except SmartcardException as e:
+            self.logger.error('control error: ' + str(e))
 
         if APDULogging:
-            self.logger.debug('response %s', response.hex())
+            self.logger.debug('response %s', b2a_hex(response))
+
         return response

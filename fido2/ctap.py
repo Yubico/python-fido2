@@ -31,6 +31,12 @@ from enum import IntEnum, unique
 import abc
 
 
+@unique
+class STATUS(IntEnum):
+    PROCESSING = 1
+    UPNEEDED = 2
+
+
 class CtapDevice(abc.ABC):
     """
     CTAP-capable device. Subclasses of this should implement call, as well as

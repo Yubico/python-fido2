@@ -1,8 +1,45 @@
+# Copyright (c) 2019 Yubico AB
+# Copyright (c) 2019 Oleg Moiseenko
+# All rights reserved.
+#
+#   Redistribution and use in source and binary forms, with or
+#   without modification, are permitted provided that the following
+#   conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#    2. Redistributions in binary form must reproduce the above
+#       copyright notice, this list of conditions and the following
+#       disclaimer in the documentation and/or other materials provided
+#       with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
 
-from .ctap import CtapDevice
+from __future__ import absolute_import, unicode_literals
+
+from .ctap import CtapDevice, CtapError, STATUS
 from .hid import CAPABILITY, CTAPHID
-from .pcsc import PCSCDevice, bytes_from_int
-from smartcard.Exceptions import CardConnectionException, NoCardException
+from .pcsc import PCSCDevice
+from smartcard.Exceptions import CardConnectionException
+from threading import Event
+import struct
+import six
+
+
+AID_FIDO = b'\xa0\x00\x00\x06\x47\x2f\x00\x01'
+SW_SUCCESS = (0x90, 0x00)
+SW_UPDATE = (0x91, 0x00)
 
 
 class CardSelectException(Exception):
@@ -13,96 +50,85 @@ class CardSelectException(Exception):
 class CtapNfcDevice(CtapDevice):
     """
     CtapDevice implementation using the pcsc NFC transport.
-
-    :cvar descriptor: Device descriptor.
     """
 
-    def __init__(self, descriptor, dev):
-        self.descriptor = descriptor
+    def __init__(self, dev):
         self._dev = dev
-
-        # init card
         self._dev.connect()
-        self._ats = self._dev.get_ats()
-        if self._ats is None or \
-           self._ats == b'':
-            raise NoCardException('No ATS')
+        self._capabilities = 0
 
-        self._app_select_result, sw1, sw2 = self._dev.select_applet()
-        if self._app_select_result is None or \
-           len(self._app_select_result) == 0 or \
-           sw1 != 0x90:
+        result, sw1, sw2 = self._dev.select_applet(AID_FIDO)
+        if (sw1, sw2) != SW_SUCCESS:
             raise CardSelectException('Select error')
 
-        return
+        if result == b'U2F_V2':
+            self._capabilities |= CAPABILITY.NMSG
+        try:  # Probe for CTAP2 by calling GET_INFO
+            self.call(CTAPHID.CBOR, b'\x04')
+            self._capabilities |= CAPABILITY.CBOR
+        except CtapError:
+            pass
 
-    def get_pcsc_device(self):
+    @property
+    def pcsc_device(self):
         return self._dev
 
     def __repr__(self):
-        return 'CtapNfcDevice(%s)' % self.descriptor
+        return 'CtapNfcDevice(%s)' % self._dev.reader.name
 
     @property
     def version(self):
         """CTAP NFC protocol version.
         :rtype: int
         """
-        ver = self.call(CTAPHID.CBOR, b'\x04')
-        if len(ver) > 0:
-            return 2
-        else:
-            return 1
-
-    @property
-    def device_version(self):
-        """Device version number."""
-        return 'ATS: ' + self._ats
+        return 2 if self._capabilities & CAPABILITY.CBOR else 1
 
     @property
     def capabilities(self):
         """Capabilities supported by the device."""
-        return CAPABILITY.CBOR
+        return self._capabilities
+
+    def _call_apdu(self, apdu):
+        resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
+        return resp + struct.pack('!BB', sw1, sw2)
+
+    def _call_cbor(self, data=b'', event=None, on_keepalive=None):
+        event = event or Event()
+        # NFCCTAP_MSG
+        apdu = b'\x80\x10\x80\x00' + six.int2byte(len(data)) + data + b'\x00'
+        resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
+        last_ka = None
+
+        while not event.is_set():
+            while (sw1, sw2) == SW_UPDATE:
+                ka_status = six.indexbytes(resp, 0)
+                if on_keepalive and last_ka != ka_status:
+                    try:
+                        ka_status = STATUS(ka_status)
+                    except ValueError:
+                        pass  # Unknown status value
+                    last_ka = ka_status
+                    on_keepalive(ka_status)
+
+                # NFCCTAP_GETRESPONSE
+                resp, sw1, sw2 = self._dev.apdu_exchange(
+                    b'\x80\x11\x00\x00\x00'
+                )
+
+            if (sw1, sw2) != SW_SUCCESS:
+                raise CtapError(CtapError.ERR.OTHER)  # TODO: Map from SW error
+
+            return resp
+
+        raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
 
     def call(self, cmd, data=b'', event=None, on_keepalive=None):
         if cmd == CTAPHID.MSG:
-            apdu = data[7:]
-            apdu = apdu[:-2]
-            if data.find(b'\x00\x01') == 0:
-                apdu = b'\x00\x01\x03\x00' + bytes_from_int(len(apdu)) + apdu
-            else:
-                apdu = data[0:4] + bytes_from_int(len(apdu)) + apdu
-
-            apdu += b'\x00'
-
-            resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
-            return resp + bytes_from_int(sw1) + bytes_from_int(sw2)
-
-        if cmd == CTAPHID.CBOR:
-            apdu = data
-            apdu = b'\x80\x10\x00\x00' + bytes_from_int(len(apdu)) + apdu
-            apdu += b'\x00'
-
-            resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
-            return resp
-
-        if cmd == CTAPHID.PING:
-            return data
-
-        if cmd == CTAPHID.WINK:
-            return data
-
-        return b''
-
-    def ping(self, msg=b'Hello FIDO'):
-        """Sends data to the authenticator, which echoes it back.
-
-        :param msg: The data to send.
-        :return: The response from the authenticator.
-        """
-        return self.call(CTAPHID.PING, msg)
-
-    def lock(self, lock_time=10):
-        return
+            return self._call_apdu(data)
+        elif cmd == CTAPHID.CBOR:
+            return self._call_cbor(data, event, on_keepalive)
+        else:
+            raise CtapError(CtapError.ERR.INVALID_COMMAND)
 
     @classmethod  # selector='CL'
     def list_devices(cls, selector='', pcsc_device=PCSCDevice):
@@ -115,7 +141,6 @@ class CtapNfcDevice(CtapDevice):
         for v in pcsc_device.list_devices(selector):
             try:
                 pd = pcsc_device(v)
-                yield cls(v.name, pd)
+                yield cls(pd)
             except CardConnectionException:
                 pass
-        return

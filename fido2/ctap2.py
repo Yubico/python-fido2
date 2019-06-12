@@ -579,7 +579,6 @@ class CTAP2(object):
 
     def send_cbor(self, cmd, data=None, timeout=None, parse=cbor.decode,
                   on_keepalive=None):
-
         """Sends a CBOR message to the device, and waits for a response.
 
         The optional parameter 'timeout' can either be a numeric time in seconds
@@ -613,7 +612,7 @@ class CTAP2(object):
                         exclude_list=None, extensions=None, options=None,
                         pin_auth=None, pin_protocol=None, timeout=None,
                         on_keepalive=None):
-        """CTAP2 makeCredential operation,
+        """CTAP2 makeCredential operation.
 
         :param client_data_hash: SHA256 hash of the ClientData.
         :param rp: PublicKeyCredentialRpEntity parameters.
