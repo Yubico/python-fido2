@@ -40,6 +40,7 @@ import six
 AID_FIDO = b'\xa0\x00\x00\x06\x47\x2f\x00\x01'
 SW_SUCCESS = (0x90, 0x00)
 SW_UPDATE = (0x91, 0x00)
+SW1_MORE_DATA = 0x61
 
 
 class CardSelectException(Exception):
@@ -88,15 +89,41 @@ class CtapNfcDevice(CtapDevice):
         """Capabilities supported by the device."""
         return self._capabilities
 
+    def _chain_apdus(self, cla, ins, p1, p2, data=b''):
+        while len(data) > 250:
+            to_send, data = data[:250], data[250:]
+            header = struct.pack('!BBBBB', 0x90, ins, p1, p2, len(to_send))
+            resp, sw1, sw2 = self._dev.apdu_exchange(header + to_send)
+            if (sw1, sw2) != SW_SUCCESS:
+                return resp, sw1, sw2
+        apdu = struct.pack('!BBBB', cla, ins, p1, p2)
+        if data:
+            apdu += struct.pack('!B', len(data)) + data
+        resp, sw1, sw2 = self._dev.apdu_exchange(apdu + b'\x00')
+        while sw1 == SW1_MORE_DATA:
+            apdu = b'\x00\xc0\x00\x00' + struct.pack('!B', sw2)  # sw2 == le
+            lres, sw1, sw2 = self._dev.apdu_exchange(apdu)
+            resp += lres
+        return resp, sw1, sw2
+
     def _call_apdu(self, apdu):
-        resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
+        if len(apdu) >= 7 and six.indexbytes(apdu, 4) == 0:
+            # Extended APDU
+            data_len = struct.unpack('!H', apdu[5:7])[0]
+            data = apdu[7:7+data_len]
+        else:
+            # Short APDU
+            data_len = six.indexbytes(apdu, 4)
+            data = apdu[5:5+data_len]
+        (cla, ins, p1, p2) = six.iterbytes(apdu[:4])
+
+        resp, sw1, sw2 = self._chain_apdus(cla, ins, p1, p2, data)
         return resp + struct.pack('!BB', sw1, sw2)
 
     def _call_cbor(self, data=b'', event=None, on_keepalive=None):
         event = event or Event()
         # NFCCTAP_MSG
-        apdu = b'\x80\x10\x80\x00' + six.int2byte(len(data)) + data + b'\x00'
-        resp, sw1, sw2 = self._dev.apdu_exchange(apdu)
+        resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, 0x80, 0x00, data)
         last_ka = None
 
         while not event.is_set():
@@ -111,9 +138,7 @@ class CtapNfcDevice(CtapDevice):
                     on_keepalive(ka_status)
 
                 # NFCCTAP_GETRESPONSE
-                resp, sw1, sw2 = self._dev.apdu_exchange(
-                    b'\x80\x11\x00\x00\x00'
-                )
+                resp, sw1, sw2 = self._chain_apdus(0x80, 0x11, 0x00, 0x00, b'')
 
             if (sw1, sw2) != SW_SUCCESS:
                 raise CtapError(CtapError.ERR.OTHER)  # TODO: Map from SW error

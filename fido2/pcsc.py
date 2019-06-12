@@ -118,15 +118,6 @@ class PCSCDevice(object):
         :return: byte string. response from card
         """
 
-        # Re-encode extended APDUs as short:
-        if len(apdu) >= 7 and six.indexbytes(apdu, 4) == 0:
-            data_len = struct.unpack('!H', apdu[5:7])[0]
-            if data_len:  # apdu case 4
-                apdu = apdu[:4] + struct.pack('!B', data_len) + \
-                    apdu[7:7 + data_len] + b'\x00'
-            else:  # apdu case 2
-                apdu = apdu[:4] + b'\x00'
-
         response = b''
         sw1, sw2 = 0, 0
 
@@ -135,11 +126,6 @@ class PCSCDevice(object):
 
         try:
             response, sw1, sw2 = self._transmit(apdu)
-            while sw1 == 0x61:
-                lres, sw1, sw2 = self._transmit(
-                    b'\x00\xc0\x00\x00' + struct.pack('!B', sw2)  # sw2 == le
-                )
-                response += lres
         except SmartcardException as e:
             self.logger.error('apdu exchange error: %s', e)
 
