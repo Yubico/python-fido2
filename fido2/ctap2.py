@@ -977,16 +977,14 @@ class CredentialManagement(object):
 
         See enumerate_rps_begin and enumerate_rps_next for details.
         """
-        try:
-            first = self.enumerate_rps_begin()
-        except CtapError as e:
-            if e.code == CtapError.ERR.OTHER:
-                return []
-            raise  # Other error
+        first = self.enumerate_rps_begin()
+        n_rps = first[CredentialManagement.RESULT.TOTAL_RPS]
+        if n_rps == 0:
+            return []
         rest = [self.enumerate_rps_next()
                 for _ in range(
                     1,
-                    first.get(CredentialManagement.RESULT.TOTAL_RPS, 1)
+                    n_rps
                 )]
         return [first] + rest
 
