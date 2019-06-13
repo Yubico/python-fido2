@@ -105,7 +105,7 @@ class PCSCDevice(object):
 
         return response, sw1, sw2
 
-    def control_exchange(self, control_data=b'', control_code=3225264):
+    def control_exchange(self, control_code, control_data=b''):
         """
         Sends control sequence to reader's driver
         :param control_data: byte string. data to send to driver

@@ -4,14 +4,17 @@ from fido2.pcsc import PCSCDevice
 import time
 
 
+# control codes:
+# 3225264 - magic number!!!
+# 0x42000000 + 3500 - cross platform way
+C_CODE = 3225264
+
+
 class Acr1252uPcscDevice(PCSCDevice):
     def reader_version(self):
         if self.connection is not None:
             try:
-                # control codes:
-                # 3225264 - magic number!!!
-                # 0x42000000 + 3500 - cross platform way
-                res = self.control_exchange(b'\xe0\x00\x00\x18\x00', 3225264)
+                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x18\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -26,7 +29,7 @@ class Acr1252uPcscDevice(PCSCDevice):
     def reader_serial_number(self):
         if self.connection is not None:
             try:
-                res = self.control_exchange(b'\xe0\x00\x00\x33\x00')
+                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x33\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -42,7 +45,7 @@ class Acr1252uPcscDevice(PCSCDevice):
         if self.connection is not None:
             try:
                 cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
-                result = self.control_exchange(b'\xe0\x00\x00\x29\x01' +
+                result = self.control_exchange(C_CODE, b'\xe0\x00\x00\x29\x01' +
                                                bytes([cbyte]))
 
                 if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
@@ -60,7 +63,7 @@ class Acr1252uPcscDevice(PCSCDevice):
     def led_status(self):
         if self.connection is not None:
             try:
-                result = self.control_exchange(b'\xe0\x00\x00\x29\x00')
+                result = self.control_exchange(C_CODE, b'\xe0\x00\x00\x29\x00')
 
                 if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
                     result_length = result[4]
@@ -77,7 +80,7 @@ class Acr1252uPcscDevice(PCSCDevice):
     def get_polling_settings(self):
         if self.connection is not None:
             try:
-                res = self.control_exchange(b'\xe0\x00\x00\x23\x00')
+                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x23\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -92,7 +95,7 @@ class Acr1252uPcscDevice(PCSCDevice):
     def set_polling_settings(self, settings):
         if self.connection is not None:
             try:
-                res = self.control_exchange(b'\xe0\x00\x00\x23\x01' +
+                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x23\x01' +
                                             bytes([settings & 0xff]))
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
@@ -108,7 +111,7 @@ class Acr1252uPcscDevice(PCSCDevice):
     def get_picc_operation_parameter(self):
         if self.connection is not None:
             try:
-                res = self.control_exchange(b'\xe0\x00\x00\x20\x00')
+                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x20\x00')
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
                     reslen = res[4]
@@ -123,7 +126,7 @@ class Acr1252uPcscDevice(PCSCDevice):
     def set_picc_operation_parameter(self, param):
         if self.connection is not None:
             try:
-                res = self.control_exchange(b'\xe0\x00\x00\x20\x01' +
+                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x20\x01' +
                                             bytes([param]))
 
                 if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
