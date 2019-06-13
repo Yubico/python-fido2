@@ -163,9 +163,8 @@ class CtapNfcDevice(CtapDevice):
         :param pcsc_device: device to work with.  PCSCDevice by default.
         :return: iterator. next reader
         """
-        for v in pcsc_device.list_devices(selector):
+        for d in pcsc_device.list_devices(selector):
             try:
-                pd = pcsc_device(v)
-                yield cls(pd)
+                yield cls(d)
             except CardConnectionException:
                 pass

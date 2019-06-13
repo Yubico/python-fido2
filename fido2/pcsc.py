@@ -29,13 +29,12 @@
 from __future__ import absolute_import, unicode_literals
 
 import logging
-from smartcard.Exceptions import SmartcardException
 from smartcard.System import readers
 from binascii import b2a_hex
 import struct
 import six
 
-APDULogging = True
+logger = logging.getLogger(__name__)
 
 
 class PCSCDevice(object):
@@ -51,21 +50,6 @@ class PCSCDevice(object):
 
         self.reader = reader
         self.connection = self.reader.createConnection()
-        self.logger = PCSCDevice.get_logger()
-
-    @classmethod
-    def get_logger(cls):
-        logger = logging.getLogger('_fido2.pcsc')
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        if APDULogging:
-            logger.setLevel(logging.DEBUG)
-        else:
-            logger.setLevel(logging.CRITICAL)
-        return logger
 
     @classmethod
     def list_devices(cls, selector=''):
@@ -77,29 +61,19 @@ class PCSCDevice(object):
 
         for reader in readers():
             if reader.name.find(selector) >= 0:
-                yield reader
+                yield cls(reader)
 
-        PCSCDevice.get_logger().debug('No more devices found.')
+        logger.debug('No more devices found.')
 
     def _transmit(self, apdu, protocol=None):
         resp, sw1, sw2 = self.connection.transmit(list(six.iterbytes(apdu)))
         return bytes(bytearray(resp)), sw1, sw2
 
     def connect(self):
-        """
-        connect to reader
-        :return: True if OK
-        """
+        """Connect to the reader."""
 
-        try:
-            self.connection.connect()  # protocol=CardConnection.T0_protocol
-            if APDULogging:
-                self.logger.debug('protocol %d', self.connection.getProtocol())
-        except SmartcardException as e:
-            self.logger.error('Error reader connect: %s', e)
-            return False
-
-        return True
+        self.connection.connect()  # protocol=CardConnection.T0_protocol
+        logger.debug('protocol %d', self.connection.getProtocol())
 
     def select_applet(self, aid):
         """
@@ -121,18 +95,13 @@ class PCSCDevice(object):
         response = b''
         sw1, sw2 = 0, 0
 
-        if APDULogging:
-            self.logger.debug('apdu %s', b2a_hex(apdu))
+        logger.debug('apdu %s', b2a_hex(apdu))
 
-        try:
-            response, sw1, sw2 = self._transmit(apdu)
-        except SmartcardException as e:
-            self.logger.error('apdu exchange error: %s', e)
+        response, sw1, sw2 = self._transmit(apdu)
 
-        if APDULogging:
-            self.logger.debug('response %s %s',
-                              '[' + hex((sw1 << 8) + sw2) + ']',
-                              b2a_hex(response))
+        logger.debug('response %s %s',
+                     '[' + hex((sw1 << 8) + sw2) + ']',
+                     b2a_hex(response))
 
         return response, sw1, sw2
 
@@ -145,19 +114,14 @@ class PCSCDevice(object):
         """
         response = b''
 
-        if APDULogging:
-            self.logger.debug('control %s', b2a_hex(control_data))
+        logger.debug('control %s', b2a_hex(control_data))
 
-        try:
-            response = self.connection.control(
-                control_code,
-                list(six.iterbytes(control_data))
-            )
-            response = bytes(bytearray(response))
-        except SmartcardException as e:
-            self.logger.error('control error: ' + str(e))
+        response = self.connection.control(
+            control_code,
+            list(six.iterbytes(control_data))
+        )
+        response = bytes(bytearray(response))
 
-        if APDULogging:
-            self.logger.debug('response %s', b2a_hex(response))
+        logger.debug('response %s', b2a_hex(response))
 
         return response
