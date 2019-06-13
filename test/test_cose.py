@@ -30,15 +30,10 @@ from __future__ import absolute_import, unicode_literals
 
 from fido2 import cbor
 from fido2.cose import CoseKey, ES256, RS256, EdDSA, UnsupportedKey
+from cryptography.exceptions import UnsupportedAlgorithm
 from binascii import a2b_hex
 
 import unittest
-
-try:
-    import __pypy__  # noqa
-    PYPY = True
-except ImportError:
-    PYPY = False
 
 
 _ES256_KEY = a2b_hex(b'A5010203262001215820A5FD5CE1B1C458C530A54FA61B31BF6B04BE8B97AFDE54DD8CBB69275A8A1BE1225820FA3A3231DD9DEED9D1897BE5A6228C59501E4BCD12975D3DFF730F01278EA61C')  # noqa
@@ -78,7 +73,6 @@ class TestCoseKey(unittest.TestCase):
             a2b_hex(b'071B707D11F0E7F62861DFACA89C4E674321AD8A6E329FDD40C7D6971348FBB0514E7B2B0EFE215BAAC0365C4124A808F8180D6575B710E7C01DAE8F052D0C5A2CE82F487C656E7AD824F3D699BE389ADDDE2CBF39E87A8955E93202BAE8830AB4139A7688DFDAD849F1BB689F3852BA05BED70897553CC44704F6941FD1467AD6A46B4DAB503716D386FE7B398E78E0A5A8C4040539D2C9BFA37E4D94F96091FFD1D194DE2CA58E9124A39757F013801421E09BD261ADA31992A8B0386A80AF51A87BD0CEE8FDAB0D4651477670D4C7B245489BED30A57B83964DB79418D5A4F5F2E5ABCA274426C9F90B007A962AE15DFF7343AF9E110746E2DB9226D785C6')  # noqa
         )
 
-    @unittest.skipIf(PYPY, 'EdDSA not supported under pypy')
     def test_EdDSA_parse_verify(self):
         key = CoseKey.parse(cbor.decode(_EdDSA_KEY))
         self.assertIsInstance(key, EdDSA)
@@ -88,10 +82,13 @@ class TestCoseKey(unittest.TestCase):
             -1: 6,
             -2: a2b_hex('EE9B21803405D3CF45601E58B6F4C06EA93862DE87D3AF903C5870A5016E86F5')  # noqa
         })
-        key.verify(
-            a2b_hex(b'a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce1947010000000500a11a323057d1103784ddff99a354ddd42348c2f00e88d8977b916cabf92268'),  # noqa
-            a2b_hex(b'e8c927ef1a57c738ff4ba8d6f90e06d837a5219eee47991f96b126b0685d512520c9c2eedebe4b88ff2de2b19cb5f8686efc7c4261e9ed1cb3ac5de50869be0a')  # noqa
-        )
+        try:
+            key.verify(
+                a2b_hex(b'a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce1947010000000500a11a323057d1103784ddff99a354ddd42348c2f00e88d8977b916cabf92268'),  # noqa
+                a2b_hex(b'e8c927ef1a57c738ff4ba8d6f90e06d837a5219eee47991f96b126b0685d512520c9c2eedebe4b88ff2de2b19cb5f8686efc7c4261e9ed1cb3ac5de50869be0a')  # noqa
+            )
+        except UnsupportedAlgorithm:
+            self.skipTest('EdDSA support missing')
 
     def test_unsupported_key(self):
         key = CoseKey.parse({1: 4711, 3: 4712, -1: b'123', -2: b'456'})
