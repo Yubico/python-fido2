@@ -1,6 +1,5 @@
 
-from fido2.nfc import CtapNfcDevice
-from fido2.pcsc import PCSCDevice
+from fido2.pcsc import CtapPcscDevice
 import time
 
 
@@ -10,140 +9,128 @@ import time
 C_CODE = 3225264
 
 
-class Acr1252uPcscDevice(PCSCDevice):
-    def reader_version(self):
-        if self.connection is not None:
-            try:
-                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x18\x00')
+class Acr1252uPcscDevice(object):
+    def __init__(self, pcsc_device):
+        self.pcsc = pcsc_device
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == len(res) - 5:
-                        strres = res[5:5+reslen].decode('utf-8')
-                        return strres
-            except Exception as e:
-                print('Get version error:', e)
-                pass
+    def reader_version(self):
+        try:
+            res = self.pcsc.control_exchange(C_CODE, b'\xe0\x00\x00\x18\x00')
+
+            if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                reslen = res[4]
+                if reslen == len(res) - 5:
+                    strres = res[5:5+reslen].decode('utf-8')
+                    return strres
+        except Exception as e:
+            print('Get version error:', e)
         return 'n/a'
 
     def reader_serial_number(self):
-        if self.connection is not None:
-            try:
-                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x33\x00')
+        try:
+            res = self.pcsc.control_exchange(C_CODE, b'\xe0\x00\x00\x33\x00')
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == len(res) - 5:
-                        strres = res[5:5+reslen].decode('utf-8')
-                        return strres
-            except Exception as e:
-                print('Get serial number error:', e)
-                pass
+            if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                reslen = res[4]
+                if reslen == len(res) - 5:
+                    strres = res[5:5+reslen].decode('utf-8')
+                    return strres
+        except Exception as e:
+            print('Get serial number error:', e)
         return 'n/a'
 
     def led_control(self, red=False, green=False):
-        if self.connection is not None:
-            try:
-                cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
-                result = self.control_exchange(C_CODE, b'\xe0\x00\x00\x29\x01' +
-                                               bytes([cbyte]))
+        try:
+            cbyte = (0b01 if red else 0b00) + (0b10 if green else 0b00)
+            result = self.pcsc.control_exchange(C_CODE,
+                                                b'\xe0\x00\x00\x29\x01' +
+                                                bytes([cbyte]))
 
-                if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
-                    result_length = result[4]
-                    if result_length == 1:
-                        ex_red = bool(result[5] & 0b01)
-                        ex_green = bool(result[5] & 0b10)
-                        return True, ex_red, ex_green
-            except Exception as e:
-                print('LED control error:', e)
-                pass
+            if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
+                result_length = result[4]
+                if result_length == 1:
+                    ex_red = bool(result[5] & 0b01)
+                    ex_green = bool(result[5] & 0b10)
+                    return True, ex_red, ex_green
+        except Exception as e:
+            print('LED control error:', e)
 
         return False, False, False
 
     def led_status(self):
-        if self.connection is not None:
-            try:
-                result = self.control_exchange(C_CODE, b'\xe0\x00\x00\x29\x00')
+        try:
+            result = self.pcsc.control_exchange(C_CODE, b'\xe0\x00\x00\x29\x00')
 
-                if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
-                    result_length = result[4]
-                    if result_length == 1:
-                        ex_red = bool(result[5] & 0b01)
-                        ex_green = bool(result[5] & 0b10)
-                        return True, ex_red, ex_green
-            except Exception as e:
-                print('LED status error:', e)
-                pass
+            if len(result) > 0 and result.find(b'\xe1\x00\x00\x00') == 0:
+                result_length = result[4]
+                if result_length == 1:
+                    ex_red = bool(result[5] & 0b01)
+                    ex_green = bool(result[5] & 0b10)
+                    return True, ex_red, ex_green
+        except Exception as e:
+            print('LED status error:', e)
 
         return False, False, False
 
     def get_polling_settings(self):
-        if self.connection is not None:
-            try:
-                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x23\x00')
+        try:
+            res = self.pcsc.control_exchange(C_CODE, b'\xe0\x00\x00\x23\x00')
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == 1:
-                        return True, res[5]
-            except Exception as e:
-                print('Get polling settings error:', e)
-                pass
+            if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                reslen = res[4]
+                if reslen == 1:
+                    return True, res[5]
+        except Exception as e:
+            print('Get polling settings error:', e)
 
         return False, 0
 
     def set_polling_settings(self, settings):
-        if self.connection is not None:
-            try:
-                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x23\x01' +
-                                            bytes([settings & 0xff]))
+        try:
+            res = self.pcsc.control_exchange(C_CODE, b'\xe0\x00\x00\x23\x01' +
+                                             bytes([settings & 0xff]))
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == 1:
-                        return True, res[5]
-            except Exception as e:
-                print('Set polling settings error:', e)
-                pass
+            if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                reslen = res[4]
+                if reslen == 1:
+                    return True, res[5]
+        except Exception as e:
+            print('Set polling settings error:', e)
 
         return False, 0
 
     def get_picc_operation_parameter(self):
-        if self.connection is not None:
-            try:
-                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x20\x00')
+        try:
+            res = self.pcsc.control_exchange(C_CODE, b'\xe0\x00\x00\x20\x00')
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == 1:
-                        return True, res[5]
-            except Exception as e:
-                print('Get PICC Operating Parameter error:', e)
-                pass
+            if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                reslen = res[4]
+                if reslen == 1:
+                    return True, res[5]
+        except Exception as e:
+            print('Get PICC Operating Parameter error:', e)
 
         return False, 0
 
     def set_picc_operation_parameter(self, param):
-        if self.connection is not None:
-            try:
-                res = self.control_exchange(C_CODE, b'\xe0\x00\x00\x20\x01' +
-                                            bytes([param]))
+        try:
+            res = self.pcsc.control_exchange(C_CODE, b'\xe0\x00\x00\x20\x01' +
+                                             bytes([param]))
 
-                if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
-                    reslen = res[4]
-                    if reslen == 1:
-                        return True, res[5]
-            except Exception as e:
-                print('Set PICC Operating Parameter error:', e)
-                pass
+            if len(res) > 0 and res.find(b'\xe1\x00\x00\x00') == 0:
+                reslen = res[4]
+                if reslen == 1:
+                    return True, res[5]
+        except Exception as e:
+            print('Set PICC Operating Parameter error:', e)
 
         return False, 0
 
 
-dev = next(CtapNfcDevice.list_devices(pcsc_device=Acr1252uPcscDevice))
+dev = next(CtapPcscDevice.list_devices())
 
 print('CONNECT: %s' % dev)
-pcsc_device = dev.pcsc_device
+pcsc_device = Acr1252uPcscDevice(dev)
 if pcsc_device is not None:
     print('version: %s' % pcsc_device.reader_version())
     print('serial number: %s' % pcsc_device.reader_serial_number())

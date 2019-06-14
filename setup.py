@@ -51,7 +51,7 @@ setup(
     ],
     extras_require={
         ':python_version < "3.4"': ['enum34'],
-        'nfc': ['pyscard']
+        'pcsc': ['pyscard']
     },
     test_suite='test',
     tests_require=['mock>=1.0.1', 'pyfakefs>=3.4'],

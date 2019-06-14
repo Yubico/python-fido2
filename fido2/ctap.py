@@ -57,6 +57,9 @@ class CtapDevice(abc.ABC):
         :return: The response from the authenticator.
         """
 
+    def close(self):
+        """Close the device, releasing any held resources."""
+
     @classmethod
     @abc.abstractmethod
     def list_devices(cls):

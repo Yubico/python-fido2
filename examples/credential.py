@@ -46,9 +46,9 @@ if dev is not None:
     print('Use USB HID channel.')
 else:
     try:
-        from fido2.nfc import CtapNfcDevice
+        from fido2.pcsc import CtapPcscDevice
 
-        dev = next(CtapNfcDevice.list_devices(), None)
+        dev = next(CtapPcscDevice.list_devices(), None)
         print('Use NFC channel.')
         use_nfc = True
     except Exception as e:
