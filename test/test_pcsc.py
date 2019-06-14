@@ -32,16 +32,17 @@ import mock
 import sys
 from fido2.hid import CTAPHID
 
-if True:
-    sys.modules['smartcard.Exceptions'] = mock.Mock()
-    sys.modules['smartcard.pcsc.PCSCExceptions'] = mock.Mock()
-    sys.modules['smartcard.pcsc.PCSCContext'] = mock.Mock()
-    sys.modules['smartcard.System'] = mock.Mock()
-    sys.modules['smartcard'] = mock.Mock()
-    from fido2.pcsc import CtapPcscDevice
+sys.modules['smartcard'] = mock.Mock()
+sys.modules['smartcard.Exceptions'] = mock.Mock()
+sys.modules['smartcard.System'] = mock.Mock()
+sys.modules['smartcard.pcsc'] = mock.Mock()
+sys.modules['smartcard.pcsc.PCSCExceptions'] = mock.Mock()
+sys.modules['smartcard.pcsc.PCSCContext'] = mock.Mock()
+from fido2.pcsc import CtapPcscDevice  # noqa
 
 
 class PcscTest(unittest.TestCase):
+
     def test_pcsc_call_cbor(self):
         connection = mock.Mock()
         connection.transmit.side_effect = [
