@@ -1,4 +1,8 @@
-* Version 0.7.0 (unreleased)
+* Version 0.7.0 (released 2019-06-17)
+ ** Add support for NFC devices using PCSC.
+ ** Add support for the hmac-secret Authenticator extension.
+ ** Honor max credential ID length and number of credentials to Authenticator.
+ ** Add close() method to CTAP devices to explicitly release their resources.
 
 * Version 0.6.0 (released 2019-05-10)
  ** Don't fail if CTAP2 Info contains unknown fields.

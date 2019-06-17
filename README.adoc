@@ -49,6 +49,11 @@ fido2 is installable by running the following command:
 
   # pip install fido2
 
+To install the dependencies required for communication with NFC Authenticators,
+instead use:
+
+  # pip install fido2[pcsc]
+
 Under Linux you will need to add a Udev rule to be able to access the FIDO
 device, or run as root. For example, the Udev rule may contain the following:
 
@@ -66,6 +71,10 @@ on Windows, MacOS, and Linux.
 
 This project depends on Cryptography. For instructions on installing this
 dependency, see https://cryptography.io/en/latest/installation/.
+
+NFC support is optionally available via PCSC, using the pyscard library. For
+instructions on installing this dependency, see
+https://github.com/LudovicRousseau/pyscard/blob/master/INSTALL.md.
 
 
 === Development

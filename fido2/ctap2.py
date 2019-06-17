@@ -646,7 +646,7 @@ class CTAP2(object):
                       pin_protocol=None, timeout=None, on_keepalive=None):
         """CTAP2 getAssertion command.
 
-        :param rp_id: SHA256 hash of the RP ID of the credential.
+        :param rp_id: The RP ID of the credential.
         :param client_data_hash: SHA256 hash of the ClientData used.
         :param allow_list: Optional list of PublicKeyCredentialDescriptors.
         :param extensions: Optional dict of extensions.
