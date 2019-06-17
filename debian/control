@@ -28,8 +28,9 @@ Depends: ${misc:Depends},
          python-setuptools,
          python-six,
 Recommends: libu2f-udev,
+            python-pyscard,
 Description: Python library for implementing FIDO 2.0
- A Python library for communicating with a FIDO device over USB HID as 
+ A Python library for communicating with a FIDO device over USB HID as
  well as verifying attestation and assertion signatures.
  Supports FIDO U2F and FIDO 2.0.
  This is the Python 2 version of the package.
@@ -44,7 +45,8 @@ Depends: ${misc:Depends},
          python3-setuptools,
          python3-six,
 Recommends: libu2f-udev,
+            python3-pyscard,
 Description: Python library for implementing FIDO 2.0
- A Python library for communicating with a FIDO device over USB HID as 
+ A Python library for communicating with a FIDO device over USB HID as
  well as verifying attestation and assertion signatures.
  This is the Python 3 version of the package.
