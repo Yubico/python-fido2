@@ -125,6 +125,10 @@ class CtapHidDevice(CtapDevice):
         """Locks the channel."""
         self.call(CTAPHID.LOCK, struct.pack('>B', lock_time))
 
+    def close(self):
+        del self._dev
+        del self.descriptor
+
     @classmethod
     def list_devices(cls, selector=hidtransport.HidUsageSelector):
         for d in hidtransport.hid.Enumerate():
