@@ -6,9 +6,10 @@ url = "https://pypi.org/simple"
 [dev-packages]
 "mock" = ">=1.0.1"
 "pyfakefs" = ">=3.4"
+pyscard = "*"
 
 [packages]
-"fido2" = {editable = true, path = "."}
+fido2 = {editable = true,path = "."}
 
 [scripts]
 test = "python setup.py test"
