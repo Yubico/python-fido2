@@ -559,6 +559,8 @@ class CTAP2(object):
     """Implementation of the CTAP2 specification.
 
     :param device: A CtapHidDevice handle supporting CTAP2.
+    :param strict_cbor: Validate that CBOR returned from the Authenticator is
+        canonical, defaults to True.
     """
 
     @unique
@@ -572,10 +574,11 @@ class CTAP2(object):
         # 0x41 is the command byte for credmgmt preview
         CREDENTIAL_MGMT = 0x41
 
-    def __init__(self, device):
+    def __init__(self, device, strict_cbor=True):
         if not device.capabilities & CAPABILITY.CBOR:
             raise ValueError('Device does not support CTAP2.')
         self.device = device
+        self._strict_cbor = strict_cbor
 
     def send_cbor(self, cmd, data=None, timeout=None, parse=cbor.decode,
                   on_keepalive=None):
@@ -606,7 +609,16 @@ class CTAP2(object):
             raise CtapError(status)
         if len(response) == 1:
             return None
-        return parse(response[1:])
+        enc = response[1:]
+        if self._strict_cbor:
+            expected = cbor.encode(cbor.decode(enc))
+            if expected != enc:
+                enc_h = b2a_hex(enc)
+                exp_h = b2a_hex(expected)
+                raise ValueError('Non-canonical CBOR from Authenticator.\n'
+                                 'Got: {}\n'.format(enc_h) +
+                                 'Expected: {}'.format(exp_h))
+        return parse(enc)
 
     def make_credential(self, client_data_hash, rp, user, key_params,
                         exclude_list=None, extensions=None, options=None,
