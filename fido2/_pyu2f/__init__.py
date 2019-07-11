@@ -50,6 +50,9 @@ def InternalPlatformSwitch(funcname, *args, **kwargs):
   elif sys.platform.startswith('freebsd'):
     from . import freebsd
     clz = freebsd.FreeBSDHidDevice
+  elif sys.platform.startswith('openbsd'):
+    from . import openbsd
+    clz = openbsd.OpenBSDHidDevice
 
   if not clz:
     raise Exception('Unsupported platform: ' + sys.platform)
