@@ -325,6 +325,7 @@ class U2FFido2Server(Fido2Server):
 
     def authenticate_complete(self, *args, **kwargs):
         try:
-            super(U2FFido2Server, self).authenticate_complete(*args, **kwargs)
+            return super(U2FFido2Server, self)\
+                .authenticate_complete(*args, **kwargs)
         except ValueError:
-            self._app_id_server.authenticate_complete(*args, **kwargs)
+            return self._app_id_server.authenticate_complete(*args, **kwargs)
