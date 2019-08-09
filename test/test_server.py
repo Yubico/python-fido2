@@ -7,9 +7,11 @@ import six
 
 from fido2.client import WEBAUTHN_TYPE, ClientData
 from fido2.ctap2 import AttestedCredentialData, AuthenticatorData
-from fido2.server import USER_VERIFICATION, Fido2Server, RelyingParty
+from fido2.server import USER_VERIFICATION, Fido2Server, RelyingParty,\
+    U2FFido2Server
 
 from .test_ctap2 import _ATT_CRED_DATA, _CRED_ID
+from .utils import U2FDevice
 
 
 class TestRelyingParty(unittest.TestCase):
@@ -58,3 +60,53 @@ class TestFido2Server(unittest.TestCase):
             server.authenticate_complete(
                 state, [AttestedCredentialData(_ATT_CRED_DATA)], _CRED_ID,
                 client_data, AuthenticatorData(_AUTH_DATA), b'INVALID')
+
+
+class TestU2FFido2Server(unittest.TestCase):
+    def test_u2f(self):
+        rp = RelyingParty('example.com', 'Example',
+                          'http://example.com/icon.svg')
+        app_id = b'https://example.com'
+        server = U2FFido2Server(app_id=app_id.decode('ascii'), rp=rp)
+
+        state = {'challenge': 'GAZPACHO!',
+                 'user_verification': USER_VERIFICATION.PREFERRED}
+        client_data_dict = {'challenge': 'GAZPACHO!',
+                            'origin': 'https://example.com',
+                            'type': WEBAUTHN_TYPE.GET_ASSERTION}
+        client_data = ClientData(json.dumps(client_data_dict).encode('utf-8'))
+
+        param = b'TOMATO GIVES '
+
+        device = U2FDevice(param, app_id)
+        auth_data = AttestedCredentialData.from_ctap1(
+            param, device.public_key_bytes)
+        authenticator_data, signature = device.sign(client_data)
+
+        server.authenticate_complete(
+            state, [auth_data], device.credential_id,
+            client_data, authenticator_data, signature)
+
+    def test_u2f_facets(self):
+        rp = RelyingParty('example.com', 'Example',
+                          'http://example.com/icon.svg')
+        app_id = b'https://www.example.com/facets.json'
+        server = U2FFido2Server(app_id=app_id.decode('ascii'), rp=rp)
+
+        state = {'challenge': 'GAZPACHO!',
+                 'user_verification': USER_VERIFICATION.PREFERRED}
+        client_data_dict = {'challenge': 'GAZPACHO!',
+                            'origin': 'https://oauth.example.com',
+                            'type': WEBAUTHN_TYPE.GET_ASSERTION}
+        client_data = ClientData(json.dumps(client_data_dict).encode('utf-8'))
+
+        param = b'TOMATO GIVES '
+
+        device = U2FDevice(param, app_id)
+        auth_data = AttestedCredentialData.from_ctap1(
+            param, device.public_key_bytes)
+        authenticator_data, signature = device.sign(client_data)
+
+        server.authenticate_complete(
+            state, [auth_data], device.credential_id,
+            client_data, authenticator_data, signature)
