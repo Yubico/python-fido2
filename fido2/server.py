@@ -315,6 +315,15 @@ class U2FFido2Server(Fido2Server):
         self._app_id = app_id
         self._app_id_server = Fido2Server(RelyingParty(app_id), *args, **kwargs)
 
+    def register_begin(self, *args, **kwargs):
+        req, state = super(U2FFido2Server, self).register_begin(
+            *args,
+            **kwargs
+        )
+        req['publicKey'].setdefault('extensions', {})['appidExclude'] = \
+            self._app_id
+        return req, state
+
     def authenticate_begin(self, *args, **kwargs):
         req, state = super(U2FFido2Server, self).authenticate_begin(
             *args,
