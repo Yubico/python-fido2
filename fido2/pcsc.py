@@ -136,7 +136,7 @@ class CtapPcscDevice(CtapDevice):
     def _chain_apdus(self, cla, ins, p1, p2, data=b''):
         while len(data) > 250:
             to_send, data = data[:250], data[250:]
-            header = struct.pack('!BBBBB', 0x90, ins, p1, p2, len(to_send))
+            header = struct.pack('!BBBBB', 0x10 | cla, ins, p1, p2, len(to_send))
             resp, sw1, sw2 = self.apdu_exchange(header + to_send)
             if (sw1, sw2) != SW_SUCCESS:
                 return resp, sw1, sw2
