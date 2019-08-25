@@ -59,6 +59,7 @@ class CtapPcscDevice(CtapDevice):
 
     def __init__(self, connection, name):
         self._capabilities = 0
+        self.work_via_ext_apdu = False
         self._conn = connection
         self._conn.connect()
         self._name = name
@@ -134,21 +135,29 @@ class CtapPcscDevice(CtapDevice):
             self._capabilities |= 0x08
 
     def _chain_apdus(self, cla, ins, p1, p2, data=b''):
-        while len(data) > 250:
-            to_send, data = data[:250], data[250:]
-            header = struct.pack('!BBBBB', 0x90, ins, p1, p2, len(to_send))
-            resp, sw1, sw2 = self.apdu_exchange(header + to_send)
-            if (sw1, sw2) != SW_SUCCESS:
-                return resp, sw1, sw2
-        apdu = struct.pack('!BBBB', cla, ins, p1, p2)
-        if data:
-            apdu += struct.pack('!B', len(data)) + data
-        resp, sw1, sw2 = self.apdu_exchange(apdu + b'\x00')
-        while sw1 == SW1_MORE_DATA:
-            apdu = b'\x00\xc0\x00\x00' + struct.pack('!B', sw2)  # sw2 == le
-            lres, sw1, sw2 = self.apdu_exchange(apdu)
-            resp += lres
-        return resp, sw1, sw2
+        if self.work_via_ext_apdu:
+            header = struct.pack(
+                '!BBBBBH', cla, ins, p1, p2, 0x00, len(data))
+            resp, sw1, sw2 = self.apdu_exchange(
+                header + data)
+            print("resp len", len(resp))
+            return resp, sw1, sw2
+        else:
+            while len(data) > 250:
+                to_send, data = data[:250], data[250:]
+                header = struct.pack('!BBBBB', 0x90, ins, p1, p2, len(to_send))
+                resp, sw1, sw2 = self.apdu_exchange(header + to_send)
+                if (sw1, sw2) != SW_SUCCESS:
+                    return resp, sw1, sw2
+            apdu = struct.pack('!BBBB', cla, ins, p1, p2)
+            if data:
+                apdu += struct.pack('!B', len(data)) + data
+            resp, sw1, sw2 = self.apdu_exchange(apdu)
+            while sw1 == SW1_MORE_DATA:
+                apdu = b'\x00\xc0\x00\x00' + struct.pack('!B', sw2)  # sw2 == le
+                lres, sw1, sw2 = self.apdu_exchange(apdu)
+                resp += lres
+            return resp, sw1, sw2
 
     def _call_apdu(self, apdu):
         if len(apdu) >= 7 and six.indexbytes(apdu, 4) == 0:
