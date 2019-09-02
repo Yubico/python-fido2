@@ -140,7 +140,6 @@ class CtapPcscDevice(CtapDevice):
                 '!BBBBBH', cla, ins, p1, p2, 0x00, len(data))
             resp, sw1, sw2 = self.apdu_exchange(
                 header + data)
-            print("resp len", len(resp))
             return resp, sw1, sw2
         else:
             while len(data) > 250:
