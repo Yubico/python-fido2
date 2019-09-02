@@ -59,7 +59,7 @@ class CtapPcscDevice(CtapDevice):
 
     def __init__(self, connection, name):
         self._capabilities = 0
-        self.work_via_ext_apdu = False
+        self.use_ext_apdu = False
         self._conn = connection
         self._conn.connect()
         self._name = name
@@ -135,7 +135,7 @@ class CtapPcscDevice(CtapDevice):
             self._capabilities |= 0x08
 
     def _chain_apdus(self, cla, ins, p1, p2, data=b''):
-        if self.work_via_ext_apdu:
+        if self.use_ext_apdu:
             header = struct.pack(
                 '!BBBBBH', cla, ins, p1, p2, 0x00, len(data))
             resp, sw1, sw2 = self.apdu_exchange(
