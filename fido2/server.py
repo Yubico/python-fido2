@@ -197,11 +197,13 @@ class Fido2Server(object):
         if not constant_time.bytes_eq(self.rp.id_hash,
                                       attestation_object.auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
+        if not attestation_object.auth_data.is_user_present():
+            raise ValueError('User Present flag not set.')
 
         if state['user_verification'] is USER_VERIFICATION.REQUIRED and \
                 not attestation_object.auth_data.is_user_verified():
             raise ValueError(
-                'User verification required, but User verified flag not set.')
+                'User verification required, but User Verified flag not set.')
 
         if self.attestation != ATTESTATION.NONE:
             att_verifier = UnsupportedAttestation()
@@ -273,6 +275,8 @@ class Fido2Server(object):
             raise ValueError('Wrong challenge in response.')
         if not constant_time.bytes_eq(self.rp.id_hash, auth_data.rp_id_hash):
             raise ValueError('Wrong RP ID hash in response.')
+        if not auth_data.is_user_present():
+            raise ValueError('User Present flag not set.')
 
         if state['user_verification'] is USER_VERIFICATION.REQUIRED and \
                 not auth_data.is_user_verified():
