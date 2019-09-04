@@ -91,7 +91,14 @@ class TestU2FFido2Server(unittest.TestCase):
         rp = RelyingParty('example.com', 'Example',
                           'http://example.com/icon.svg')
         app_id = b'https://www.example.com/facets.json'
-        server = U2FFido2Server(app_id=app_id.decode('ascii'), rp=rp)
+
+        def verify_u2f_origin(origin):
+            return origin in (
+                'https://oauth.example.com',
+                'https://admin.example.com'
+            )
+        server = U2FFido2Server(app_id=app_id.decode('ascii'), rp=rp,
+                                verify_u2f_origin=verify_u2f_origin)
 
         state = {'challenge': 'GAZPACHO!',
                  'user_verification': USER_VERIFICATION.PREFERRED}
@@ -110,3 +117,17 @@ class TestU2FFido2Server(unittest.TestCase):
         server.authenticate_complete(
             state, [auth_data], device.credential_id,
             client_data, authenticator_data, signature)
+
+        # Now with something not whitelisted
+        client_data_dict = {'challenge': 'GAZPACHO!',
+                            'origin': 'https://publicthingy.example.com',
+                            'type': WEBAUTHN_TYPE.GET_ASSERTION}
+        client_data = ClientData(json.dumps(client_data_dict).encode('utf-8'))
+
+        authenticator_data, signature = device.sign(client_data)
+
+        with six.assertRaisesRegex(self, ValueError, 'Invalid origin in '
+                                   'ClientData.'):
+            server.authenticate_complete(
+                state, [auth_data], device.credential_id,
+                client_data, authenticator_data, signature)

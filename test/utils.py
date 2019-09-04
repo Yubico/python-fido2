@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.kdf.concatkdf import ConcatKDFHash
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 
-from fido2.utils import sha256
+from fido2.utils import sha256, bytes2int
 from fido2.ctap2 import AuthenticatorData
 
 
@@ -28,7 +28,7 @@ class U2FDevice(object):
         self.app_id = app_id
 
         self.priv_key = ec.derive_private_key(
-            int.from_bytes(priv_key_params, 'big'), ec.SECP256R1(),
+            bytes2int(priv_key_params), ec.SECP256R1(),
             default_backend())
         self.pub_key = self.priv_key.public_key()
         self.public_key_bytes = self.pub_key.public_bytes(
@@ -40,7 +40,7 @@ class U2FDevice(object):
     def sign(self, client_data):
         authenticator_data = AuthenticatorData.create(
             sha256(self.app_id),
-            flags=0, counter=0)
+            flags=AuthenticatorData.FLAG.USER_PRESENT, counter=0)
 
         signature = self.priv_key.sign(
             authenticator_data + client_data.hash,
