@@ -309,13 +309,19 @@ class U2FFido2Server(Fido2Server):
     See https://www.w3.org/TR/webauthn/#sctn-appid-extension for details.
 
     :param app_id: The appId which was used for U2F registration.
+    :param verify_u2f_origin: (optional) Alternative function to validate an
+        origin for U2F credentials..
     For other parameters, see Fido2Server.
     """
 
-    def __init__(self, app_id, rp, *args, **kwargs):
+    def __init__(self, app_id, rp, verify_u2f_origin=None, *args,
+                 **kwargs):
         super(U2FFido2Server, self).__init__(rp, *args, **kwargs)
-        kwargs['verify_origin'] = lambda o: verify_app_id(app_id, o)
         kwargs['attestation_types'] = [FidoU2FAttestation()]
+        if verify_u2f_origin:
+            kwargs['verify_origin'] = verify_u2f_origin
+        else:
+            kwargs['verify_origin'] = lambda o: verify_app_id(app_id, o)
         self._app_id = app_id
         self._app_id_server = Fido2Server(RelyingParty(app_id), *args, **kwargs)
 
