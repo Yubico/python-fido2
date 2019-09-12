@@ -27,7 +27,11 @@ from fido2._pyu2f import linux
 try:
   from pyfakefs import fake_filesystem  # pylint: disable=g-import-not-at-top
 except ImportError:
-  from fakefs import fake_filesystem  # pylint: disable=g-import-not-at-top
+  try:
+    from fakefs import fake_filesystem  # pylint: disable=g-import-not-at-top
+  except ImportError:
+    if sys.platform.startswith('linux'):
+      raise
 
 if sys.version_info[:2] < (2, 7):
   import unittest2 as unittest  # pylint: disable=g-import-not-at-top
@@ -71,6 +75,8 @@ class FakeDeviceOsModule(object):
     return self.data_to_return
 
 
+@unittest.skipIf(not sys.platform.startswith('linux'),
+                 'Linux specific test case')
 class LinuxTest(unittest.TestCase):
   def setUp(self):
     self.fs = fake_filesystem.FakeFilesystem()

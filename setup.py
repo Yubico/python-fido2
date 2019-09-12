@@ -48,13 +48,14 @@ setup(
     install_requires=[
         'six',
         'cryptography>=1.5',
+        'uhid-freebsd>=1.2.1;platform_system=="FreeBSD"',
     ],
     extras_require={
         ':python_version < "3.4"': ['enum34'],
         'pcsc': ['pyscard']
     },
     test_suite='test',
-    tests_require=['mock>=1.0.1', 'pyfakefs>=3.4'],
+    tests_require=['mock>=1.0.1', 'pyfakefs>=3.4;platform_system=="Linux"'],
     classifiers=[
         'License :: OSI Approved :: BSD License',
         'License :: OSI Approved :: Apache Software License',

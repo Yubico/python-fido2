@@ -47,6 +47,9 @@ def InternalPlatformSwitch(funcname, *args, **kwargs):
   elif sys.platform.startswith('darwin'):
     from . import macos
     clz = macos.MacOsHidDevice
+  elif sys.platform.startswith('freebsd'):
+    from . import freebsd
+    clz = freebsd.FreeBSDHidDevice
 
   if not clz:
     raise Exception('Unsupported platform: ' + sys.platform)
