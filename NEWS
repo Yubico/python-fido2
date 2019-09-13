@@ -1,3 +1,12 @@
+* Version 0.7.1 (unreleased)
+ ** Support for FreeBSD.
+ ** Enforce canonical CBOR on Authenticator responses by default.
+ ** PCSC: Support extended APDUs.
+ ** Server: Verify that UP flag is set.
+ ** U2FFido2Server: Implement AppID exclusion extension.
+ ** U2FFido2Server: Allow custom U2F facet verification.
+ ** Bugfix: U2FFido2Server.authenticate_complete now returns the result.
+
 * Version 0.7.0 (released 2019-06-17)
  ** Add support for NFC devices using PCSC.
  ** Add support for the hmac-secret Authenticator extension.
