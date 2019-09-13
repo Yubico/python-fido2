@@ -64,10 +64,15 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", \
   MODE="0664", GROUP="plugdev", ATTRS{idVendor}=="1050"
 ----
 
+Under FreeBSD you will either need to run as root or add rules for your device
+to /etc/devd.conf, which can be automated by installing security/u2f-devd:
+
+  # pkg install u2f-devd
+
 
 === Dependencies
 fido2 is compatible with CPython 2.7 (2.7.6 and up), 3.4 onwards, and is tested
-on Windows, MacOS, and Linux.
+on Windows, MacOS, FreeBSD, and Linux.
 
 This project depends on Cryptography. For instructions on installing this
 dependency, see https://cryptography.io/en/latest/installation/.

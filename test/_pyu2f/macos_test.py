@@ -44,6 +44,8 @@ def init_mock_get_int_property(mock_get_int_property):
   mock_get_int_property.return_value = 64
 
 
+@unittest.skipIf(not sys.platform.startswith('darwin'),
+                 'MacOS specific test case')
 class MacOsTest(unittest.TestCase):
 
   @classmethod
