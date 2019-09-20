@@ -1,0 +1,48 @@
+== Release instructions
+* Create a release branch:
+
+  $ git checkout -b release/x.y.z
+
+* Update the version in fido/__init__.py and make sure the NEWS file has an
+  entry for it, and the correct release date.
+* Commit the changes, and push the new branch.
+
+  $ git push -u origin release/x.y.z
+
+* Wait for CI to complete, and make sure nothing fails.
+
+* Create a signed tag using the version number as name:
+
+  $ git tag -s -m x.y.z x.y.z
+
+* Build the release:
+
+  $ python setup.py sdist
+
+* Sign the release, creating both binary and ascii signatures:
+
+  $ gpg --detach-sign -a dist/fido2-x.y.z.tar.gz
+  $ gpg --output dist/fido2-x.y.z.tar.gz.sig --dearmor dist/fido2-x.y.z.tar.gz.asc
+
+* Upload the release to PyPI:
+
+  $ twine upload dist/fido2-x.y.z.tar.gz dist/fido2-x.y.z.tar.gz.asc
+
+* Add the .tar.gz and .sig files to yubico-binaries and to a new Github release.
+
+* Merge (using --ff) and delete the release branch, and push the tag:
+
+  $ git checkout master
+  $ git merge --ff release/x.y.z
+  $ git branch -d release/x.y.z
+  $ git push && git push --tags
+  $ git push :release/x.y.z
+
+* Bump the version number by incrementing the PATCH version and appending -dev0
+  in fido2/__init_.py and add a new entry (unreleased) to the NEWS file.
+
+  __version__ = 'x.y.q-dev0'
+
+* Commit and push the change:
+
+  $ git commit -a -m "Bump version." && git push
