@@ -28,7 +28,8 @@
 
   $ twine upload dist/fido2-x.y.z.tar.gz dist/fido2-x.y.z.tar.gz.asc
 
-* Add the .tar.gz and .sig files to yubico-binaries and to a new Github release.
+* Add the .tar.gz and .sig files to a new Github release, using the latest NEWS
+  entry as description.
 
 * Merge (using --ff) and delete the release branch, and push the tag:
 
