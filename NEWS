@@ -1,4 +1,4 @@
-* Version 0.7.1 (unreleased)
+* Version 0.7.1 (released 2019-09-20)
  ** Support for FreeBSD.
  ** Enforce canonical CBOR on Authenticator responses by default.
  ** PCSC: Support extended APDUs.

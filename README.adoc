@@ -86,7 +86,7 @@ https://github.com/LudovicRousseau/pyscard/blob/master/INSTALL.md.
 For development of the library, we recommend using `pipenv`. To set up the dev
 environment, run this command in the root directory of the repository:
 
- pipenv install --dev
+  pipenv install --dev
 
 
 ==== Running tests
