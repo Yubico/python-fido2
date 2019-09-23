@@ -25,8 +25,14 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from setuptools import setup, find_packages
+from distutils.version import StrictVersion
+from setuptools import setup, find_packages, __version__
 import re
+import sys
+
+if StrictVersion(__version__) < StrictVersion('20.2'):
+    sys.exit('Your setuptools version does not support PEP 508.\n'
+             'Please install setuptools 20.2 or later.')
 
 
 def get_version():
