@@ -40,7 +40,7 @@
   $ git push :release/x.y.z
 
 * Bump the version number by incrementing the PATCH version and appending -dev0
-  in fido2/__init_.py and add a new entry (unreleased) to the NEWS file.
+  in fido2/__init__.py and add a new entry (unreleased) to the NEWS file.
 
   __version__ = 'x.y.q-dev0'
 
