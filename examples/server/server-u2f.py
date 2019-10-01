@@ -46,92 +46,91 @@ from flask import Flask, session, request, redirect, abort
 import os
 
 
-app = Flask(__name__, static_url_path='')
+app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
 
-rp = RelyingParty('localhost', 'Demo server')
+rp = RelyingParty("localhost", "Demo server")
 # By using the U2FFido2Server class, we can support existing credentials
 # registered by the legacy u2f.register API for an appId.
-server = U2FFido2Server('https://localhost:5000', rp)
+server = U2FFido2Server("https://localhost:5000", rp)
 
 # Registered credentials are stored globally, in memory only. Single user
 # support, state is lost when the server terminates.
 credentials = []
 
 
-@app.route('/')
+@app.route("/")
 def index():
-    return redirect('/index-u2f.html')
+    return redirect("/index-u2f.html")
 
 
-@app.route('/api/register/begin', methods=['POST'])
+@app.route("/api/register/begin", methods=["POST"])
 def register_begin():
-    registration_data, state = server.register_begin({
-        'id': b'user_id',
-        'name': 'a_user',
-        'displayName': 'A. User',
-        'icon': 'https://example.com/image.png'
-    }, credentials)
+    registration_data, state = server.register_begin(
+        {
+            "id": b"user_id",
+            "name": "a_user",
+            "displayName": "A. User",
+            "icon": "https://example.com/image.png",
+        },
+        credentials,
+    )
 
-    session['state'] = state
-    print('\n\n\n\n')
+    session["state"] = state
+    print("\n\n\n\n")
     print(registration_data)
-    print('\n\n\n\n')
+    print("\n\n\n\n")
     return cbor.encode(registration_data)
 
 
-@app.route('/api/register/complete', methods=['POST'])
+@app.route("/api/register/complete", methods=["POST"])
 def register_complete():
     data = cbor.decode(request.get_data())
-    client_data = ClientData(data['clientDataJSON'])
-    att_obj = AttestationObject(data['attestationObject'])
-    print('clientData', client_data)
-    print('AttestationObject:', att_obj)
+    client_data = ClientData(data["clientDataJSON"])
+    att_obj = AttestationObject(data["attestationObject"])
+    print("clientData", client_data)
+    print("AttestationObject:", att_obj)
 
-    auth_data = server.register_complete(
-        session['state'],
-        client_data,
-        att_obj
-    )
+    auth_data = server.register_complete(session["state"], client_data, att_obj)
 
     credentials.append(auth_data.credential_data)
-    print('REGISTERED CREDENTIAL:', auth_data.credential_data)
-    return cbor.encode({'status': 'OK'})
+    print("REGISTERED CREDENTIAL:", auth_data.credential_data)
+    return cbor.encode({"status": "OK"})
 
 
-@app.route('/api/authenticate/begin', methods=['POST'])
+@app.route("/api/authenticate/begin", methods=["POST"])
 def authenticate_begin():
     if not credentials:
         abort(404)
 
     auth_data, state = server.authenticate_begin(credentials)
-    session['state'] = state
+    session["state"] = state
     return cbor.encode(auth_data)
 
 
-@app.route('/api/authenticate/complete', methods=['POST'])
+@app.route("/api/authenticate/complete", methods=["POST"])
 def authenticate_complete():
     if not credentials:
         abort(404)
 
     data = cbor.decode(request.get_data())
-    credential_id = data['credentialId']
-    client_data = ClientData(data['clientDataJSON'])
-    auth_data = AuthenticatorData(data['authenticatorData'])
-    signature = data['signature']
-    print('clientData', client_data)
-    print('AuthenticatorData', auth_data)
+    credential_id = data["credentialId"]
+    client_data = ClientData(data["clientDataJSON"])
+    auth_data = AuthenticatorData(data["authenticatorData"])
+    signature = data["signature"]
+    print("clientData", client_data)
+    print("AuthenticatorData", auth_data)
 
     server.authenticate_complete(
-        session.pop('state'),
+        session.pop("state"),
         credentials,
         credential_id,
         client_data,
         auth_data,
-        signature
+        signature,
     )
-    print('ASSERTION OK')
-    return cbor.encode({'status': 'OK'})
+    print("ASSERTION OK")
+    return cbor.encode({"status": "OK"})
 
 
 ###############################################################################
@@ -142,42 +141,43 @@ def authenticate_complete():
 # registered using the WebAuthn APIs.
 ###############################################################################
 
-@app.route('/api/u2f/begin', methods=['POST'])
-def u2f_begin():
-    registration_data, state = server.register_begin({
-        'id': b'user_id',
-        'name': 'a_user',
-        'displayName': 'A. User',
-        'icon': 'https://example.com/image.png'
-    }, credentials)
 
-    session['state'] = state
-    print('\n\n\n\n')
-    print(registration_data)
-    print('\n\n\n\n')
-    return cbor.encode(
-        websafe_encode(registration_data['publicKey']['challenge'])
+@app.route("/api/u2f/begin", methods=["POST"])
+def u2f_begin():
+    registration_data, state = server.register_begin(
+        {
+            "id": b"user_id",
+            "name": "a_user",
+            "displayName": "A. User",
+            "icon": "https://example.com/image.png",
+        },
+        credentials,
     )
 
+    session["state"] = state
+    print("\n\n\n\n")
+    print(registration_data)
+    print("\n\n\n\n")
+    return cbor.encode(websafe_encode(registration_data["publicKey"]["challenge"]))
 
-@app.route('/api/u2f/complete', methods=['POST'])
+
+@app.route("/api/u2f/complete", methods=["POST"])
 def u2f_complete():
     data = cbor.decode(request.get_data())
-    client_data = ClientData.from_b64(data['clientData'])
-    reg_data = RegistrationData.from_b64(data['registrationData'])
-    print('clientData', client_data)
-    print('U2F RegistrationData:', reg_data)
-    att_obj = AttestationObject.from_ctap1(
-        sha256(b'https://localhost:5000'), reg_data)
-    print('AttestationObject:', att_obj)
+    client_data = ClientData.from_b64(data["clientData"])
+    reg_data = RegistrationData.from_b64(data["registrationData"])
+    print("clientData", client_data)
+    print("U2F RegistrationData:", reg_data)
+    att_obj = AttestationObject.from_ctap1(sha256(b"https://localhost:5000"), reg_data)
+    print("AttestationObject:", att_obj)
 
     auth_data = att_obj.auth_data
 
     credentials.append(auth_data.credential_data)
-    print('REGISTERED U2F CREDENTIAL:', auth_data.credential_data)
-    return cbor.encode({'status': 'OK'})
+    print("REGISTERED U2F CREDENTIAL:", auth_data.credential_data)
+    return cbor.encode({"status": "OK"})
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print(__doc__)
-    app.run(ssl_context='adhoc', debug=True)
+    app.run(ssl_context="adhoc", debug=True)

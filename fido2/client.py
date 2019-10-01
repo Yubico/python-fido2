@@ -30,8 +30,7 @@ from __future__ import absolute_import, unicode_literals
 from .hid import STATUS
 from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
-from .ctap2 import (CTAP2, PinProtocolV1, AttestationObject, AssertionResponse,
-                    Info)
+from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
 from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
@@ -50,7 +49,7 @@ class ClientData(bytes):
 
     @property
     def challenge(self):
-        return websafe_decode(self.get('challenge'))
+        return websafe_decode(self.get("challenge"))
 
     @property
     def b64(self):
@@ -92,40 +91,45 @@ class ClientError(Exception):
         self.cause = cause
 
     def __repr__(self):
-        r = 'Client error: {0} - {0.name}'.format(self.code)
+        r = "Client error: {0} - {0.name}".format(self.code)
         if self.cause:
-            r += '. Caused by {}'.format(self.cause)
+            r += ". Caused by {}".format(self.cause)
         return r
 
 
 def _ctap2client_err(e):
-    if e.code in [CtapError.ERR.CREDENTIAL_EXCLUDED,
-                  CtapError.ERR.NO_CREDENTIALS]:
+    if e.code in [CtapError.ERR.CREDENTIAL_EXCLUDED, CtapError.ERR.NO_CREDENTIALS]:
         ce = ClientError.ERR.DEVICE_INELIGIBLE
-    elif e.code in [CtapError.ERR.KEEPALIVE_CANCEL,
-                    CtapError.ERR.ACTION_TIMEOUT,
-                    CtapError.ERR.USER_ACTION_TIMEOUT]:
+    elif e.code in [
+        CtapError.ERR.KEEPALIVE_CANCEL,
+        CtapError.ERR.ACTION_TIMEOUT,
+        CtapError.ERR.USER_ACTION_TIMEOUT,
+    ]:
         ce = ClientError.ERR.TIMEOUT
-    elif e.code in [CtapError.ERR.UNSUPPORTED_ALGORITHM,
-                    CtapError.ERR.UNSUPPORTED_OPTION,
-                    CtapError.ERR.UNSUPPORTED_EXTENSION,
-                    CtapError.ERR.KEY_STORE_FULL]:
+    elif e.code in [
+        CtapError.ERR.UNSUPPORTED_ALGORITHM,
+        CtapError.ERR.UNSUPPORTED_OPTION,
+        CtapError.ERR.UNSUPPORTED_EXTENSION,
+        CtapError.ERR.KEY_STORE_FULL,
+    ]:
         ce = ClientError.ERR.CONFIGURATION_UNSUPPORTED
-    elif e.code in [CtapError.ERR.INVALID_COMMAND,
-                    CtapError.ERR.CBOR_UNEXPECTED_TYPE,
-                    CtapError.ERR.INVALID_CBOR,
-                    CtapError.ERR.MISSING_PARAMETER,
-                    CtapError.ERR.INVALID_OPTION,
-                    CtapError.ERR.PIN_REQUIRED,
-                    CtapError.ERR.PIN_INVALID,
-                    CtapError.ERR.PIN_BLOCKED,
-                    CtapError.ERR.PIN_NOT_SET,
-                    CtapError.ERR.PIN_POLICY_VIOLATION,
-                    CtapError.ERR.PIN_TOKEN_EXPIRED,
-                    CtapError.ERR.PIN_AUTH_INVALID,
-                    CtapError.ERR.PIN_AUTH_BLOCKED,
-                    CtapError.ERR.REQUEST_TOO_LARGE,
-                    CtapError.ERR.OPERATION_DENIED]:
+    elif e.code in [
+        CtapError.ERR.INVALID_COMMAND,
+        CtapError.ERR.CBOR_UNEXPECTED_TYPE,
+        CtapError.ERR.INVALID_CBOR,
+        CtapError.ERR.MISSING_PARAMETER,
+        CtapError.ERR.INVALID_OPTION,
+        CtapError.ERR.PIN_REQUIRED,
+        CtapError.ERR.PIN_INVALID,
+        CtapError.ERR.PIN_BLOCKED,
+        CtapError.ERR.PIN_NOT_SET,
+        CtapError.ERR.PIN_POLICY_VIOLATION,
+        CtapError.ERR.PIN_TOKEN_EXPIRED,
+        CtapError.ERR.PIN_AUTH_INVALID,
+        CtapError.ERR.PIN_AUTH_BLOCKED,
+        CtapError.ERR.REQUEST_TOO_LARGE,
+        CtapError.ERR.OPERATION_DENIED,
+    ]:
         ce = ClientError.ERR.BAD_REQUEST
     else:
         ce = ClientError.ERR.OTHER_ERROR
@@ -153,8 +157,8 @@ def _call_polling(poll_delay, timeout, on_keepalive, func, *args, **kwargs):
 
 @unique
 class U2F_TYPE(six.text_type, Enum):
-    REGISTER = 'navigator.id.finishEnrollment'
-    SIGN = 'navigator.id.getAssertion'
+    REGISTER = "navigator.id.finishEnrollment"
+    SIGN = "navigator.id.getAssertion"
 
 
 class U2fClient(object):
@@ -172,19 +176,25 @@ class U2fClient(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def register(self, app_id, register_requests, registered_keys, timeout=None,
-                 on_keepalive=None):
+    def register(
+        self,
+        app_id,
+        register_requests,
+        registered_keys,
+        timeout=None,
+        on_keepalive=None,
+    ):
         self._verify_app_id(app_id)
 
         version = self.ctap.get_version()
-        dummy_param = b'\0' * 32
+        dummy_param = b"\0" * 32
         for key in registered_keys:
-            if key['version'] != version:
+            if key["version"] != version:
                 continue
-            key_app_id = key.get('appId', app_id)
+            key_app_id = key.get("appId", app_id)
             app_param = sha256(key_app_id.encode())
             self._verify_app_id(key_app_id)
-            key_handle = websafe_decode(key['keyHandle'])
+            key_handle = websafe_decode(key["keyHandle"])
             try:
                 self.ctap.authenticate(dummy_param, app_param, key_handle, True)
                 raise ClientError.ERR.DEVICE_INELIGIBLE()  # Bad response
@@ -195,49 +205,49 @@ class U2fClient(object):
                 raise _ctap2client_err(e)
 
         for request in register_requests:
-            if request['version'] == version:
-                challenge = request['challenge']
+            if request["version"] == version:
+                challenge = request["challenge"]
                 break
         else:
             raise ClientError.ERR.DEVICE_INELIGIBLE()
 
         client_data = ClientData.build(
-            typ=U2F_TYPE.REGISTER,
-            challenge=challenge,
-            origin=self.origin
+            typ=U2F_TYPE.REGISTER, challenge=challenge, origin=self.origin
         )
         app_param = sha256(app_id.encode())
 
         reg_data = _call_polling(
-            self.poll_delay, timeout, on_keepalive, self.ctap.register,
-            client_data.hash, app_param
+            self.poll_delay,
+            timeout,
+            on_keepalive,
+            self.ctap.register,
+            client_data.hash,
+            app_param,
         )
 
-        return {
-            'registrationData': reg_data.b64,
-            'clientData': client_data.b64
-        }
+        return {"registrationData": reg_data.b64, "clientData": client_data.b64}
 
-    def sign(self, app_id, challenge, registered_keys, timeout=None,
-             on_keepalive=None):
+    def sign(self, app_id, challenge, registered_keys, timeout=None, on_keepalive=None):
         client_data = ClientData.build(
-            typ=U2F_TYPE.SIGN,
-            challenge=challenge,
-            origin=self.origin
+            typ=U2F_TYPE.SIGN, challenge=challenge, origin=self.origin
         )
 
         version = self.ctap.get_version()
         for key in registered_keys:
-            if key['version'] == version:
-                key_app_id = key.get('appId', app_id)
+            if key["version"] == version:
+                key_app_id = key.get("appId", app_id)
                 self._verify_app_id(key_app_id)
-                key_handle = websafe_decode(key['keyHandle'])
+                key_handle = websafe_decode(key["keyHandle"])
                 app_param = sha256(key_app_id.encode())
                 try:
                     signature_data = _call_polling(
-                        self.poll_delay, timeout, on_keepalive,
-                        self.ctap.authenticate, client_data.hash, app_param,
-                        key_handle
+                        self.poll_delay,
+                        timeout,
+                        on_keepalive,
+                        self.ctap.authenticate,
+                        client_data.hash,
+                        app_param,
+                        key_handle,
                     )
                     break
                 except ClientError:
@@ -246,19 +256,19 @@ class U2fClient(object):
             raise ClientError.ERR.DEVICE_INELIGIBLE()
 
         return {
-            'clientData': client_data.b64,
-            'signatureData': signature_data.b64,
-            'keyHandle': key['keyHandle']
+            "clientData": client_data.b64,
+            "signatureData": signature_data.b64,
+            "keyHandle": key["keyHandle"],
         }
 
 
 @unique
 class WEBAUTHN_TYPE(six.text_type, Enum):
-    MAKE_CREDENTIAL = 'webauthn.create'
-    GET_ASSERTION = 'webauthn.get'
+    MAKE_CREDENTIAL = "webauthn.create"
+    GET_ASSERTION = "webauthn.get"
 
 
-_CTAP1_INFO = b'\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50' + b'\0' * 16
+_CTAP1_INFO = b"\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50" + b"\0" * 16
 
 
 class Fido2Client(object):
@@ -289,30 +299,65 @@ class Fido2Client(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def make_credential(self, rp, user, challenge, algos=[ES256.ALGORITHM],
-                        exclude_list=None, extensions=None, rk=False, uv=False,
-                        pin=None, timeout=None, on_keepalive=None):
+    def make_credential(
+        self,
+        rp,
+        user,
+        challenge,
+        algos=[ES256.ALGORITHM],
+        exclude_list=None,
+        extensions=None,
+        rk=False,
+        uv=False,
+        pin=None,
+        timeout=None,
+        on_keepalive=None,
+    ):
 
-        self._verify_rp_id(rp['id'])
+        self._verify_rp_id(rp["id"])
 
         client_data = ClientData.build(
             type=WEBAUTHN_TYPE.MAKE_CREDENTIAL,
             clientExtensions={},
             challenge=challenge,
-            origin=self.origin
+            origin=self.origin,
         )
 
         try:
-            return self._do_make_credential(
-                client_data, rp, user, algos, exclude_list, extensions, rk, uv,
-                pin, timeout, on_keepalive
-            ), client_data
+            return (
+                self._do_make_credential(
+                    client_data,
+                    rp,
+                    user,
+                    algos,
+                    exclude_list,
+                    extensions,
+                    rk,
+                    uv,
+                    pin,
+                    timeout,
+                    on_keepalive,
+                ),
+                client_data,
+            )
         except CtapError as e:
             raise _ctap2client_err(e)
 
-    def _ctap2_make_credential(self, client_data, rp, user, algos, exclude_list,
-                               extensions, rk, uv, pin, timeout, on_keepalive):
-        key_params = [{'type': 'public-key', 'alg': alg} for alg in algos]
+    def _ctap2_make_credential(
+        self,
+        client_data,
+        rp,
+        user,
+        algos,
+        exclude_list,
+        extensions,
+        rk,
+        uv,
+        pin,
+        timeout,
+        on_keepalive,
+    ):
+        key_params = [{"type": "public-key", "alg": alg} for alg in algos]
 
         pin_auth = None
         pin_protocol = None
@@ -320,17 +365,17 @@ class Fido2Client(object):
             pin_protocol = self.pin_protocol.VERSION
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
-        elif self.info.options.get('clientPin'):
-            raise ValueError('PIN required!')
+        elif self.info.options.get("clientPin"):
+            raise ValueError("PIN required!")
 
         if not (rk or uv):
             options = None
         else:
             options = {}
             if rk:
-                options['rk'] = True
+                options["rk"] = True
             if uv:
-                options['uv'] = True
+                options["uv"] = True
 
         # Filter out credential IDs which are too long
         max_len = self.info.max_cred_id_length
@@ -340,42 +385,83 @@ class Fido2Client(object):
         # Reject the request if too many credentials remain.
         max_creds = self.info.max_creds_in_list
         if max_creds and len(exclude_list or ()) > max_creds:
-            raise ClientError.ERR.BAD_REQUEST('exclude_list too long')
+            raise ClientError.ERR.BAD_REQUEST("exclude_list too long")
 
-        return self.ctap2.make_credential(client_data.hash, rp, user,
-                                          key_params, exclude_list,
-                                          extensions, options, pin_auth,
-                                          pin_protocol, timeout, on_keepalive)
+        return self.ctap2.make_credential(
+            client_data.hash,
+            rp,
+            user,
+            key_params,
+            exclude_list,
+            extensions,
+            options,
+            pin_auth,
+            pin_protocol,
+            timeout,
+            on_keepalive,
+        )
 
-    def _ctap1_make_credential(self, client_data, rp, user, algos, exclude_list,
-                               extensions, rk, uv, pin, timeout, on_keepalive):
+    def _ctap1_make_credential(
+        self,
+        client_data,
+        rp,
+        user,
+        algos,
+        exclude_list,
+        extensions,
+        rk,
+        uv,
+        pin,
+        timeout,
+        on_keepalive,
+    ):
         if rk or uv or ES256.ALGORITHM not in algos:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
-        app_param = sha256(rp['id'].encode())
+        app_param = sha256(rp["id"].encode())
 
-        dummy_param = b'\0' * 32
+        dummy_param = b"\0" * 32
         for cred in exclude_list or []:
-            key_handle = cred['id']
+            key_handle = cred["id"]
             try:
-                self.ctap1.authenticate(
-                    dummy_param, app_param, key_handle, True)
+                self.ctap1.authenticate(dummy_param, app_param, key_handle, True)
                 raise ClientError.ERR.OTHER_ERROR()  # Shouldn't happen
             except ApduError as e:
                 if e.code == APDU.USE_NOT_SATISFIED:
-                    _call_polling(self.ctap1_poll_delay, timeout, on_keepalive,
-                                  self.ctap1.register, dummy_param, dummy_param)
+                    _call_polling(
+                        self.ctap1_poll_delay,
+                        timeout,
+                        on_keepalive,
+                        self.ctap1.register,
+                        dummy_param,
+                        dummy_param,
+                    )
                     raise ClientError.ERR.DEVICE_INELIGIBLE()
 
         return AttestationObject.from_ctap1(
             app_param,
-            _call_polling(self.ctap1_poll_delay, timeout, on_keepalive,
-                          self.ctap1.register, client_data.hash, app_param)
+            _call_polling(
+                self.ctap1_poll_delay,
+                timeout,
+                on_keepalive,
+                self.ctap1.register,
+                client_data.hash,
+                app_param,
+            ),
         )
 
-    def get_assertion(self, rp_id, challenge, allow_list=None, extensions=None,
-                      up=True, uv=False, pin=None, timeout=None,
-                      on_keepalive=None):
+    def get_assertion(
+        self,
+        rp_id,
+        challenge,
+        allow_list=None,
+        extensions=None,
+        up=True,
+        uv=False,
+        pin=None,
+        timeout=None,
+        on_keepalive=None,
+    ):
 
         self._verify_rp_id(rp_id)
 
@@ -383,33 +469,53 @@ class Fido2Client(object):
             type=WEBAUTHN_TYPE.GET_ASSERTION,
             clientExtensions={},
             challenge=challenge,
-            origin=self.origin
+            origin=self.origin,
         )
 
         try:
-            return self._do_get_assertion(
-                client_data, rp_id, allow_list, extensions, up, uv, pin,
-                timeout, on_keepalive
-            ), client_data
+            return (
+                self._do_get_assertion(
+                    client_data,
+                    rp_id,
+                    allow_list,
+                    extensions,
+                    up,
+                    uv,
+                    pin,
+                    timeout,
+                    on_keepalive,
+                ),
+                client_data,
+            )
         except CtapError as e:
             raise _ctap2client_err(e)
 
-    def _ctap2_get_assertion(self, client_data, rp_id, allow_list, extensions,
-                             up, uv, pin, timeout, on_keepalive):
+    def _ctap2_get_assertion(
+        self,
+        client_data,
+        rp_id,
+        allow_list,
+        extensions,
+        up,
+        uv,
+        pin,
+        timeout,
+        on_keepalive,
+    ):
         pin_auth = None
         pin_protocol = None
         if pin:
             pin_protocol = self.pin_protocol.VERSION
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
-        elif self.info.options.get('clientPin'):
-            raise ValueError('PIN required!')
+        elif self.info.options.get("clientPin"):
+            raise ValueError("PIN required!")
 
         options = {}
         if not up:
-            options['up'] = False
+            options["up"] = False
         if uv:
-            options['uv'] = True
+            options["uv"] = True
         if len(options) == 0:
             options = None
 
@@ -423,15 +529,32 @@ class Fido2Client(object):
         # Reject the request if too many credentials remain.
         max_creds = self.info.max_creds_in_list
         if max_creds and len(allow_list) > max_creds:
-            raise ClientError.ERR.BAD_REQUEST('allow_list too long')
+            raise ClientError.ERR.BAD_REQUEST("allow_list too long")
 
         return self.ctap2.get_assertions(
-            rp_id, client_data.hash, allow_list, extensions, options, pin_auth,
-            pin_protocol, timeout, on_keepalive
+            rp_id,
+            client_data.hash,
+            allow_list,
+            extensions,
+            options,
+            pin_auth,
+            pin_protocol,
+            timeout,
+            on_keepalive,
         )
 
-    def _ctap1_get_assertion(self, client_data, rp_id, allow_list, extensions,
-                             up, uv, pin, timeout, on_keepalive):
+    def _ctap1_get_assertion(
+        self,
+        client_data,
+        rp_id,
+        allow_list,
+        extensions,
+        up,
+        uv,
+        pin,
+        timeout,
+        on_keepalive,
+    ):
         if (not up) or uv or not allow_list:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
@@ -440,12 +563,15 @@ class Fido2Client(object):
         for cred in allow_list:
             try:
                 auth_resp = _call_polling(
-                    self.ctap1_poll_delay, timeout, on_keepalive,
-                    self.ctap1.authenticate, client_param, app_param, cred['id']
+                    self.ctap1_poll_delay,
+                    timeout,
+                    on_keepalive,
+                    self.ctap1.authenticate,
+                    client_param,
+                    app_param,
+                    cred["id"],
                 )
-                return [
-                    AssertionResponse.from_ctap1(app_param, cred, auth_resp)
-                ]
+                return [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
             except ClientError as e:
                 if e.code == ClientError.ERR.TIMEOUT:
                     raise  # Other errors are ignored so we move to the next.

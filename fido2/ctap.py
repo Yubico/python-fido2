@@ -44,7 +44,7 @@ class CtapDevice(abc.ABC):
     """
 
     @abc.abstractmethod
-    def call(self, cmd, data=b'', event=None, on_keepalive=None):
+    def call(self, cmd, data=b"", event=None, on_keepalive=None):
         """Sends a command to the authenticator, and reads the response.
 
         :param cmd: The integer value of the command.
@@ -119,13 +119,13 @@ class CtapError(Exception):
         VENDOR_LAST = 0xFF
 
         def __str__(self):
-            return '0x%02X - %s' % (self.value, self.name)
+            return "0x%02X - %s" % (self.value, self.name)
 
     def __init__(self, code):
         try:
             code = CtapError.ERR(code)
-            message = 'CTAP error: %s' % code
+            message = "CTAP error: %s" % code
         except ValueError:
-            message = 'CTAP error: 0x%02X' % code
+            message = "CTAP error: 0x%02X" % code
         self.code = code
         super(CtapError, self).__init__(message)

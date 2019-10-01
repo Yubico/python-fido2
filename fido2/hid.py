@@ -1,4 +1,3 @@
-
 from __future__ import absolute_import
 
 from .ctap import CtapDevice, CtapError, STATUS
@@ -19,8 +18,8 @@ class CTAPHID(IntEnum):
     CBOR = 0x10
     CANCEL = 0x11
 
-    ERROR = 0x3f
-    KEEPALIVE = 0x3b
+    ERROR = 0x3F
+    KEEPALIVE = 0x3B
 
     VENDOR_FIRST = 0x40
 
@@ -62,7 +61,7 @@ class CtapHidDevice(CtapDevice):
         self._dev = dev
 
     def __repr__(self):
-        return 'CtapHidDevice(%s)' % self.descriptor['path']
+        return "CtapHidDevice(%s)" % self.descriptor["path"]
 
     @property
     def version(self):
@@ -82,7 +81,7 @@ class CtapHidDevice(CtapDevice):
         """Capabilities supported by the device."""
         return self._dev.capabilities
 
-    def call(self, cmd, data=b'', event=None, on_keepalive=None):
+    def call(self, cmd, data=b"", event=None, on_keepalive=None):
         event = event or Event()
         self._dev.InternalSend(TYPE_INIT | cmd, bytearray(data))
         last_ka = None
@@ -106,14 +105,14 @@ class CtapHidDevice(CtapDevice):
             else:
                 raise CtapError(CtapError.ERR.INVALID_COMMAND)
 
-        self.call(CTAPHID.CANCEL, b'', _SingleEvent())
+        self.call(CTAPHID.CANCEL, b"", _SingleEvent())
         raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
 
     def wink(self):
         """Causes the authenticator to blink."""
         self.call(CTAPHID.WINK)
 
-    def ping(self, msg=b'Hello FIDO'):
+    def ping(self, msg=b"Hello FIDO"):
         """Sends data to the authenticator, which echoes it back.
 
         :param msg: The data to send.
@@ -123,7 +122,7 @@ class CtapHidDevice(CtapDevice):
 
     def lock(self, lock_time=10):
         """Locks the channel."""
-        self.call(CTAPHID.LOCK, struct.pack('>B', lock_time))
+        self.call(CTAPHID.LOCK, struct.pack(">B", lock_time))
 
     def close(self):
         del self._dev
@@ -134,7 +133,7 @@ class CtapHidDevice(CtapDevice):
         for d in hidtransport.hid.Enumerate():
             if selector(d):
                 try:
-                    dev = hidtransport.hid.Open(d['path'])
+                    dev = hidtransport.hid.Open(d["path"])
                     yield cls(d, hidtransport.UsbHidTransport(dev))
                 except OSError:
                     # Insufficient permissions to access device

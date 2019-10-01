@@ -40,9 +40,10 @@ import six
 @unique
 class APDU(IntEnum):
     """APDU response codes."""
+
     OK = 0x9000
     USE_NOT_SATISFIED = 0x6985
-    WRONG_DATA = 0x6a80
+    WRONG_DATA = 0x6A80
 
 
 class ApduError(Exception):
@@ -53,13 +54,15 @@ class ApduError(Exception):
     :param data: APDU response body.
 
     """
-    def __init__(self, code, data=b''):
+
+    def __init__(self, code, data=b""):
         self.code = code
         self.data = data
 
     def __repr__(self):
-        return 'APDU error: 0x{:04X} {:d} bytes of data'.format(
-            self.code, len(self.data))
+        return "APDU error: 0x{:04X} {:d} bytes of data".format(
+            self.code, len(self.data)
+        )
 
 
 class RegistrationData(bytes):
@@ -72,25 +75,27 @@ class RegistrationData(bytes):
         encoded.
     :ivar signature: Attestation signature.
     """
+
     def __init__(self, _):
         super(RegistrationData, self).__init__()
 
         if six.indexbytes(self, 0) != 0x05:
-            raise ValueError('Reserved byte != 0x05')
+            raise ValueError("Reserved byte != 0x05")
 
         self.public_key = self[1:66]
         kh_len = six.indexbytes(self, 66)
-        self.key_handle = self[67:67+kh_len]
+        self.key_handle = self[67 : 67 + kh_len]
 
         cert_offs = 67 + kh_len
         cert_len = six.indexbytes(self, cert_offs + 1)
         if cert_len > 0x80:
             n_bytes = cert_len - 0x80
-            cert_len = bytes2int(self[cert_offs+2:cert_offs+2+n_bytes]) \
-                + n_bytes
+            cert_len = (
+                bytes2int(self[cert_offs + 2 : cert_offs + 2 + n_bytes]) + n_bytes
+            )
         cert_len += 2
-        self.certificate = self[cert_offs:cert_offs+cert_len]
-        self.signature = self[cert_offs+cert_len:]
+        self.certificate = self[cert_offs : cert_offs + cert_len]
+        self.signature = self[cert_offs + cert_len :]
 
     @property
     def b64(self):
@@ -105,22 +110,30 @@ class RegistrationData(bytes):
         :param client_param: SHA256 hash of the ClientData used for the request.
         """
         FidoU2FAttestation.verify_signature(
-            app_param, client_param, self.key_handle, self.public_key,
-            self.certificate, self.signature)
+            app_param,
+            client_param,
+            self.key_handle,
+            self.public_key,
+            self.certificate,
+            self.signature,
+        )
 
     def __repr__(self):
-        return ("RegistrationData(public_key: h'%s', key_handle: h'%s', "
-                "certificate: h'%s', signature: h'%s')") % tuple(
-                    b2a_hex(x).decode() for x in (
-                        self.public_key,
-                        self.key_handle,
-                        self.certificate,
-                        self.signature
-                    )
-                )
+        return (
+            "RegistrationData(public_key: h'%s', key_handle: h'%s', "
+            "certificate: h'%s', signature: h'%s')"
+        ) % tuple(
+            b2a_hex(x).decode()
+            for x in (
+                self.public_key,
+                self.key_handle,
+                self.certificate,
+                self.signature,
+            )
+        )
 
     def __str__(self):
-        return '%r' % self
+        return "%r" % self
 
     @classmethod
     def from_b64(cls, data):
@@ -140,11 +153,12 @@ class SignatureData(bytes):
     :ivar counter: Signature counter.
     :ivar signature: Cryptographic signature.
     """
+
     def __init__(self, _):
         super(SignatureData, self).__init__()
 
         self.user_presence = six.indexbytes(self, 0)
-        self.counter = struct.unpack('>I', self[1:5])[0]
+        self.counter = struct.unpack(">I", self[1:5])[0]
         self.signature = self[5:]
 
     @property
@@ -164,12 +178,12 @@ class SignatureData(bytes):
         ES256.from_ctap1(public_key).verify(m, self.signature)
 
     def __repr__(self):
-        return ('SignatureData(user_presence: 0x%02x, counter: %d, '
-                "signature: h'%s'") % (self.user_presence, self.counter,
-                                       b2a_hex(self.signature))
+        return (
+            "SignatureData(user_presence: 0x%02x, counter: %d, " "signature: h'%s'"
+        ) % (self.user_presence, self.counter, b2a_hex(self.signature))
 
     def __str__(self):
-        return '%r' % self
+        return "%r" % self
 
     @classmethod
     def from_b64(cls, data):
@@ -186,6 +200,7 @@ class CTAP1(object):
 
     :param device: A CtapHidDevice handle supporting CTAP1.
     """
+
     @unique
     class INS(IntEnum):
         REGISTER = 0x01
@@ -196,7 +211,7 @@ class CTAP1(object):
 
         self.device = device
 
-    def send_apdu(self, cla=0, ins=0, p1=0, p2=0, data=b''):
+    def send_apdu(self, cla=0, ins=0, p1=0, p2=0, data=b""):
         """Packs and sends an APDU for use in CTAP1 commands.
         This is a low-level method mainly used internally. Avoid calling it
         directly if possible, and use the get_version, register, and
@@ -211,13 +226,12 @@ class CTAP1(object):
         :raise: ApduError
         """
         size = len(data)
-        size_h = size >> 16 & 0xff
-        size_l = size & 0xffff
-        apdu = struct.pack('>BBBBBH', cla, ins, p1, p2, size_h, size_l) \
-            + data + b'\0\0'
+        size_h = size >> 16 & 0xFF
+        size_l = size & 0xFFFF
+        apdu = struct.pack(">BBBBBH", cla, ins, p1, p2, size_h, size_l) + data + b"\0\0"
 
         response = self.device.call(CTAPHID.MSG, apdu)
-        status = struct.unpack('>H', response[-2:])[0]
+        status = struct.unpack(">H", response[-2:])[0]
         data = response[:-2]
         if status != APDU.OK:
             raise ApduError(status, data)
@@ -242,8 +256,7 @@ class CTAP1(object):
         response = self.send_apdu(ins=CTAP1.INS.REGISTER, data=data)
         return RegistrationData(response)
 
-    def authenticate(self, client_param, app_param, key_handle,
-                     check_only=False):
+    def authenticate(self, client_param, app_param, key_handle, check_only=False):
         """Authenticate a previously registered credential.
 
         :param client_param: SHA256 hash of the ClientData used for the request.
@@ -253,8 +266,9 @@ class CTAP1(object):
             determine if a key handle is known.
         :return: The authentication response from the authenticator.
         """
-        data = client_param + app_param \
-            + struct.pack('>B', len(key_handle)) + key_handle
+        data = (
+            client_param + app_param + struct.pack(">B", len(key_handle)) + key_handle
+        )
         p1 = 0x07 if check_only else 0x03
         response = self.send_apdu(ins=CTAP1.INS.AUTHENTICATE, p1=p1, data=data)
         return SignatureData(response)

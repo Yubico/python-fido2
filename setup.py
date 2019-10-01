@@ -30,57 +30,56 @@ from setuptools import setup, find_packages, __version__
 import re
 import sys
 
-if StrictVersion(__version__) < StrictVersion('20.2'):
-    sys.exit('Your setuptools version does not support PEP 508.\n'
-             'Please install setuptools 20.2 or later.')
+if StrictVersion(__version__) < StrictVersion("20.2"):
+    sys.exit(
+        "Your setuptools version does not support PEP 508.\n"
+        "Please install setuptools 20.2 or later."
+    )
 
 
 def get_version():
-    with open('fido2/__init__.py', 'r') as f:
+    with open("fido2/__init__.py", "r") as f:
         match = re.search(r"(?m)^__version__\s*=\s*['\"](.+)['\"]$", f.read())
         return match.group(1)
 
 
 setup(
-    name='fido2',
+    name="fido2",
     version=get_version(),
-    packages=find_packages(exclude=['test', 'test.*']),
+    packages=find_packages(exclude=["test", "test.*"]),
     include_package_data=True,
-    author='Dain Nilsson',
-    author_email='dain@yubico.com',
-    description='Python based FIDO 2.0 library',
-    url='https://github.com/Yubico/python-fido2',
-    python_requires='>=2.7.6,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    author="Dain Nilsson",
+    author_email="dain@yubico.com",
+    description="Python based FIDO 2.0 library",
+    url="https://github.com/Yubico/python-fido2",
+    python_requires=">=2.7.6,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*",
     install_requires=[
-        'six',
-        'cryptography>=1.5',
+        "six",
+        "cryptography>=1.5",
         'uhid-freebsd>=1.2.1;platform_system=="FreeBSD"',
     ],
-    extras_require={
-        ':python_version < "3.4"': ['enum34'],
-        'pcsc': ['pyscard']
-    },
-    test_suite='test',
-    tests_require=['mock>=1.0.1', 'pyfakefs>=3.4;platform_system=="Linux"'],
+    extras_require={':python_version < "3.4"': ["enum34"], "pcsc": ["pyscard"]},
+    test_suite="test",
+    tests_require=["mock>=1.0.1", 'pyfakefs>=3.4;platform_system=="Linux"'],
     classifiers=[
-        'License :: OSI Approved :: BSD License',
-        'License :: OSI Approved :: Apache Software License',
-        'License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)',
-        'Operating System :: MacOS',
-        'Operating System :: Microsoft :: Windows',
-        'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'Intended Audience :: System Administrators',
-        'Topic :: Internet',
-        'Topic :: Security :: Cryptography',
-        'Topic :: Software Development :: Libraries :: Python Modules',
-    ]
+        "License :: OSI Approved :: BSD License",
+        "License :: OSI Approved :: Apache Software License",
+        "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+        "Operating System :: MacOS",
+        "Operating System :: Microsoft :: Windows",
+        "Operating System :: POSIX :: Linux",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Intended Audience :: System Administrators",
+        "Topic :: Internet",
+        "Topic :: Security :: Cryptography",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+    ],
 )

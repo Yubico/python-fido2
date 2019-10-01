@@ -42,11 +42,13 @@ import six
 from six.moves.urllib.parse import urlparse
 
 
-tld_fname = os.path.join(os.path.dirname(__file__), 'public_suffix_list.dat')
-with open(tld_fname, 'rb') as f:
-    suffixes = [entry for entry in (line.decode('utf8').strip()
-                                    for line in f.readlines())
-                if entry and not entry.startswith('//')]
+tld_fname = os.path.join(os.path.dirname(__file__), "public_suffix_list.dat")
+with open(tld_fname, "rb") as f:
+    suffixes = [
+        entry
+        for entry in (line.decode("utf8").strip() for line in f.readlines())
+        if entry and not entry.startswith("//")
+    ]
 
 
 def verify_rp_id(rp_id, origin):
@@ -64,12 +66,12 @@ def verify_rp_id(rp_id, origin):
         origin = origin.decode()
 
     url = urlparse(origin)
-    if url.scheme != 'https':
+    if url.scheme != "https":
         return False
     host = url.hostname
     if host == rp_id:
         return True
-    if host.endswith('.' + rp_id) and rp_id not in suffixes:
+    if host.endswith("." + rp_id) and rp_id not in suffixes:
         return True
     return False
 
@@ -84,6 +86,6 @@ def verify_app_id(app_id, origin):
     if isinstance(app_id, six.binary_type):
         app_id = app_id.decode()
     url = urlparse(app_id)
-    if url.scheme != 'https':
+    if url.scheme != "https":
         return False
     return verify_rp_id(url.hostname, origin)

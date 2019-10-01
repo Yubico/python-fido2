@@ -6,15 +6,15 @@ import sys
 
 dev = next(CtapPcscDevice.list_devices(), None)
 if not dev:
-    print('No NFC u2f device found')
+    print("No NFC u2f device found")
     sys.exit(1)
 
-chal = sha256(b'AAA')
-appid = sha256(b'BBB')
+chal = sha256(b"AAA")
+appid = sha256(b"BBB")
 
 ctap1 = CTAP1(dev)
 
-print('version:', ctap1.get_version())
+print("version:", ctap1.get_version())
 
 # True - make extended APDU and send it to key
 # ISO 7816-3:2006. page 33, 12.1.3 Decoding conventions for command APDUs
@@ -24,15 +24,15 @@ print('version:', ctap1.get_version())
 dev.use_ext_apdu = False
 
 reg = ctap1.register(chal, appid)
-print('register:', reg)
+print("register:", reg)
 
 
 reg.verify(appid, chal)
-print('Register message verify OK')
+print("Register message verify OK")
 
 
 auth = ctap1.authenticate(chal, appid, reg.key_handle)
-print('authenticate result: ', auth)
+print("authenticate result: ", auth)
 
 res = auth.verify(appid, chal, reg.public_key)
-print('Authenticate message verify OK')
+print("Authenticate message verify OK")

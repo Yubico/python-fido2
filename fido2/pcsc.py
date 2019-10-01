@@ -41,7 +41,7 @@ import six
 import logging
 
 
-AID_FIDO = b'\xa0\x00\x00\x06\x47\x2f\x00\x01'
+AID_FIDO = b"\xa0\x00\x00\x06\x47\x2f\x00\x01"
 SW_SUCCESS = (0x90, 0x00)
 SW_UPDATE = (0x91, 0x00)
 SW1_MORE_DATA = 0x61
@@ -66,14 +66,14 @@ class CtapPcscDevice(CtapDevice):
         self._select()
 
         try:  # Probe for CTAP2 by calling GET_INFO
-            self.call(CTAPHID.CBOR, b'\x04')
+            self.call(CTAPHID.CBOR, b"\x04")
             self._capabilities |= CAPABILITY.CBOR
         except CtapError:
             if self._capabilities == 0:
-                raise ValueError('Unsupported device')
+                raise ValueError("Unsupported device")
 
     def __repr__(self):
-        return 'CtapPcscDevice(%s)' % self._name
+        return "CtapPcscDevice(%s)" % self._name
 
     @property
     def version(self):
@@ -98,17 +98,14 @@ class CtapPcscDevice(CtapDevice):
         :return: byte string. response from card
         """
 
-        logger.debug('apdu %s', b2a_hex(apdu))
-        resp, sw1, sw2 = self._conn.transmit(
-            list(six.iterbytes(apdu)),
-            protocol
-        )
+        logger.debug("apdu %s", b2a_hex(apdu))
+        resp, sw1, sw2 = self._conn.transmit(list(six.iterbytes(apdu)), protocol)
         response = bytes(bytearray(resp))
-        logger.debug('response [0x%04X] %s', sw1 << 8 + sw2, b2a_hex(response))
+        logger.debug("response [0x%04X] %s", sw1 << 8 + sw2, b2a_hex(response))
 
         return response, sw1, sw2
 
-    def control_exchange(self, control_code, control_data=b''):
+    def control_exchange(self, control_code, control_data=b""):
         """Sends control sequence to reader's driver.
 
         :param control_code: int. code to send to reader driver.
@@ -116,45 +113,39 @@ class CtapPcscDevice(CtapDevice):
         :return: byte string. response
         """
 
-        logger.debug('control %s', b2a_hex(control_data))
-        response = self._conn.control(
-            control_code,
-            list(six.iterbytes(control_data))
-        )
+        logger.debug("control %s", b2a_hex(control_data))
+        response = self._conn.control(control_code, list(six.iterbytes(control_data)))
         response = bytes(bytearray(response))
-        logger.debug('response %s', b2a_hex(response))
+        logger.debug("response %s", b2a_hex(response))
 
         return response
 
     def _select(self):
-        apdu = b'\x00\xa4\x04\x00' + struct.pack('!B', len(AID_FIDO)) + AID_FIDO
+        apdu = b"\x00\xa4\x04\x00" + struct.pack("!B", len(AID_FIDO)) + AID_FIDO
         resp, sw1, sw2 = self.apdu_exchange(apdu)
         if (sw1, sw2) != SW_SUCCESS:
-            raise ValueError('FIDO applet selection failure.')
-        if resp == b'U2F_V2':
+            raise ValueError("FIDO applet selection failure.")
+        if resp == b"U2F_V2":
             self._capabilities |= 0x08
 
-    def _chain_apdus(self, cla, ins, p1, p2, data=b''):
+    def _chain_apdus(self, cla, ins, p1, p2, data=b""):
         if self.use_ext_apdu:
-            header = struct.pack(
-                '!BBBBBH', cla, ins, p1, p2, 0x00, len(data))
-            resp, sw1, sw2 = self.apdu_exchange(
-                header + data)
+            header = struct.pack("!BBBBBH", cla, ins, p1, p2, 0x00, len(data))
+            resp, sw1, sw2 = self.apdu_exchange(header + data)
             return resp, sw1, sw2
         else:
             while len(data) > 250:
                 to_send, data = data[:250], data[250:]
-                header = struct.pack('!BBBBB',
-                                     0x10 | cla, ins, p1, p2, len(to_send))
+                header = struct.pack("!BBBBB", 0x10 | cla, ins, p1, p2, len(to_send))
                 resp, sw1, sw2 = self.apdu_exchange(header + to_send)
                 if (sw1, sw2) != SW_SUCCESS:
                     return resp, sw1, sw2
-            apdu = struct.pack('!BBBB', cla, ins, p1, p2)
+            apdu = struct.pack("!BBBB", cla, ins, p1, p2)
             if data:
-                apdu += struct.pack('!B', len(data)) + data
-            resp, sw1, sw2 = self.apdu_exchange(apdu + b'\x00')
+                apdu += struct.pack("!B", len(data)) + data
+            resp, sw1, sw2 = self.apdu_exchange(apdu + b"\x00")
             while sw1 == SW1_MORE_DATA:
-                apdu = b'\x00\xc0\x00\x00' + struct.pack('!B', sw2)  # sw2 == le
+                apdu = b"\x00\xc0\x00\x00" + struct.pack("!B", sw2)  # sw2 == le
                 lres, sw1, sw2 = self.apdu_exchange(apdu)
                 resp += lres
             return resp, sw1, sw2
@@ -162,18 +153,18 @@ class CtapPcscDevice(CtapDevice):
     def _call_apdu(self, apdu):
         if len(apdu) >= 7 and six.indexbytes(apdu, 4) == 0:
             # Extended APDU
-            data_len = struct.unpack('!H', apdu[5:7])[0]
-            data = apdu[7:7+data_len]
+            data_len = struct.unpack("!H", apdu[5:7])[0]
+            data = apdu[7 : 7 + data_len]
         else:
             # Short APDU
             data_len = six.indexbytes(apdu, 4)
-            data = apdu[5:5+data_len]
+            data = apdu[5 : 5 + data_len]
         (cla, ins, p1, p2) = six.iterbytes(apdu[:4])
 
         resp, sw1, sw2 = self._chain_apdus(cla, ins, p1, p2, data)
-        return resp + struct.pack('!BB', sw1, sw2)
+        return resp + struct.pack("!BB", sw1, sw2)
 
-    def _call_cbor(self, data=b'', event=None, on_keepalive=None):
+    def _call_cbor(self, data=b"", event=None, on_keepalive=None):
         event = event or Event()
         # NFCCTAP_MSG
         resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, 0x80, 0x00, data)
@@ -200,7 +191,7 @@ class CtapPcscDevice(CtapDevice):
 
         raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
 
-    def call(self, cmd, data=b'', event=None, on_keepalive=None):
+    def call(self, cmd, data=b"", event=None, on_keepalive=None):
         if cmd == CTAPHID.CBOR:
             return self._call_cbor(data, event, on_keepalive)
         elif cmd == CTAPHID.MSG:
@@ -212,13 +203,13 @@ class CtapPcscDevice(CtapDevice):
         self._conn.disconnect()
 
     @classmethod
-    def list_devices(cls, name=''):
+    def list_devices(cls, name=""):
         for reader in _list_readers():
             if name in reader.name:
                 try:
                     yield cls(reader.createConnection(), reader.name)
                 except Exception as e:
-                    logger.debug('Error %r', e)
+                    logger.debug("Error %r", e)
 
 
 def _list_readers():

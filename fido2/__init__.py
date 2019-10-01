@@ -30,10 +30,12 @@ import six
 
 
 if six.PY2:
+
     @six.add_metaclass(abc.ABCMeta)
     class ABC(object):
         pass
+
     abc.ABC = ABC
 
 
-__version__ = '0.7.2-dev0'
+__version__ = "0.7.2-dev0"

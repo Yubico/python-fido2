@@ -91,7 +91,7 @@ class HmacSecretExtension(Extension):
     Implements the hmac-secret CTAP2 extension.
     """
 
-    NAME = 'hmac-secret'
+    NAME = "hmac-secret"
     SALT_LEN = 32
 
     def __init__(self, ctap):
@@ -102,13 +102,13 @@ class HmacSecretExtension(Extension):
 
     def create_result(self, data):
         if data is not True:
-            raise ValueError('hmac-secret extension not supported')
+            raise ValueError("hmac-secret extension not supported")
 
-    def get_data(self, salt1, salt2=b''):
+    def get_data(self, salt1, salt2=b""):
         if len(salt1) != self.SALT_LEN:
-            raise ValueError('Wrong length for salt1')
+            raise ValueError("Wrong length for salt1")
         if salt2 and len(salt2) != self.SALT_LEN:
-            raise ValueError('Wrong length for salt2')
+            raise ValueError("Wrong length for salt2")
 
         key_agreement, shared_secret = self._pin_protocol.get_shared_secret()
         self._agreement = key_agreement
@@ -120,13 +120,13 @@ class HmacSecretExtension(Extension):
         return {
             1: key_agreement,
             2: salt_enc,
-            3: hmac_sha256(shared_secret, salt_enc)[:16]
+            3: hmac_sha256(shared_secret, salt_enc)[:16],
         }
 
     def get_result(self, data):
         dec = self._pin_protocol._get_cipher(self._secret).decryptor()
         salt = dec.update(data) + dec.finalize()
         return (
-            salt[:HmacSecretExtension.SALT_LEN],
-            salt[HmacSecretExtension.SALT_LEN:]
+            salt[: HmacSecretExtension.SALT_LEN],
+            salt[HmacSecretExtension.SALT_LEN :],
         )

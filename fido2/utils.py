@@ -39,13 +39,13 @@ from numbers import Number
 import six
 
 __all__ = [
-    'Timeout',
-    'websafe_encode',
-    'websafe_decode',
-    'sha256',
-    'hmac_sha256',
-    'bytes2int',
-    'int2bytes'
+    "Timeout",
+    "websafe_encode",
+    "websafe_decode",
+    "sha256",
+    "hmac_sha256",
+    "bytes2int",
+    "int2bytes",
 ]
 
 
@@ -89,8 +89,8 @@ def int2bytes(value, minlen=-1):
     :return: The value encoded as a big endian byte string.
     """
     ba = []
-    while value > 0xff:
-        ba.append(0xff & value)
+    while value > 0xFF:
+        ba.append(0xFF & value)
         value >>= 8
     ba.append(value)
     ba.extend([0] * (minlen - len(ba)))
@@ -106,8 +106,8 @@ def websafe_decode(data):
     :return: The decoded bytes.
     """
     if isinstance(data, six.text_type):
-        data = data.encode('ascii')
-    data += b'=' * (-len(data) % 4)
+        data = data.encode("ascii")
+    data += b"=" * (-len(data) % 4)
     return urlsafe_b64decode(data)
 
 
@@ -117,7 +117,7 @@ def websafe_encode(data):
     :param data: The input to encode.
     :return: The encoded string.
     """
-    return urlsafe_b64encode(data).replace(b'=', b'').decode('ascii')
+    return urlsafe_b64encode(data).replace(b"=", b"").decode("ascii")
 
 
 class Timeout(object):
@@ -132,8 +132,7 @@ class Timeout(object):
 
         if isinstance(time_or_event, Number):
             self.event = Event()
-            self.timer = Timer(time_or_event,
-                               self.event.set)
+            self.timer = Timer(time_or_event, self.event.set)
         else:
             self.event = time_or_event
             self.timer = None

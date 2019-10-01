@@ -43,85 +43,76 @@ use_nfc = False
 # Locate a device
 dev = next(CtapHidDevice.list_devices(), None)
 if dev is not None:
-    print('Use USB HID channel.')
+    print("Use USB HID channel.")
 else:
     try:
         from fido2.pcsc import CtapPcscDevice
 
         dev = next(CtapPcscDevice.list_devices(), None)
-        print('Use NFC channel.')
+        print("Use NFC channel.")
         use_nfc = True
     except Exception as e:
-        print('NFC channel search error:', e)
+        print("NFC channel search error:", e)
 
 if not dev:
-    print('No FIDO device found')
+    print("No FIDO device found")
     sys.exit(1)
 
 # Set up a FIDO 2 client using the origin https://example.com
-client = Fido2Client(dev, 'https://example.com')
+client = Fido2Client(dev, "https://example.com")
 
 # Prepare parameters for makeCredential
-rp = {'id': 'example.com', 'name': 'Example RP'}
-user = {'id': b'user_id', 'name': 'A. User'}
-challenge = 'Y2hhbGxlbmdl'
+rp = {"id": "example.com", "name": "Example RP"}
+user = {"id": b"user_id", "name": "A. User"}
+challenge = "Y2hhbGxlbmdl"
 
 # Prompt for PIN if needed
 pin = None
-if client.info.options.get('clientPin'):
-    pin = getpass('Please enter PIN:')
+if client.info.options.get("clientPin"):
+    pin = getpass("Please enter PIN:")
 else:
-    print('no pin')
+    print("no pin")
 
 # Create a credential
 if not use_nfc:
-    print('\nTouch your authenticator device now...\n')
-attestation_object, client_data = client.make_credential(
-    rp, user, challenge, pin=pin
-)
+    print("\nTouch your authenticator device now...\n")
+attestation_object, client_data = client.make_credential(rp, user, challenge, pin=pin)
 
 
-print('New credential created!')
+print("New credential created!")
 
-print('CLIENT DATA:', client_data)
-print('ATTESTATION OBJECT:', attestation_object)
+print("CLIENT DATA:", client_data)
+print("ATTESTATION OBJECT:", attestation_object)
 print()
-print('CREDENTIAL DATA:', attestation_object.auth_data.credential_data)
+print("CREDENTIAL DATA:", attestation_object.auth_data.credential_data)
 
 # Verify signature
 verifier = Attestation.for_type(attestation_object.fmt)
 verifier().verify(
-    attestation_object.att_statement,
-    attestation_object.auth_data,
-    client_data.hash
+    attestation_object.att_statement, attestation_object.auth_data, client_data.hash
 )
-print('Attestation signature verified!')
+print("Attestation signature verified!")
 
 credential = attestation_object.auth_data.credential_data
 
 # Prepare parameters for getAssertion
-challenge = 'Q0hBTExFTkdF'  # Use a new challenge for each call.
-allow_list = [{
-    'type': 'public-key',
-    'id': credential.credential_id
-}]
+challenge = "Q0hBTExFTkdF"  # Use a new challenge for each call.
+allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Authenticate the credential
 if not use_nfc:
-    print('\nTouch your authenticator device now...\n')
+    print("\nTouch your authenticator device now...\n")
 
-assertions, client_data = client.get_assertion(
-    rp['id'], challenge, allow_list, pin=pin
-)
+assertions, client_data = client.get_assertion(rp["id"], challenge, allow_list, pin=pin)
 
-print('Credential authenticated!')
+print("Credential authenticated!")
 
 assertion = assertions[0]  # Only one cred in allowList, only one response.
 
-print('CLIENT DATA:', client_data)
+print("CLIENT DATA:", client_data)
 print()
-print('ASSERTION DATA:', assertion)
+print("ASSERTION DATA:", assertion)
 
 # Verify signature
 assertion.verify(client_data.hash, credential.public_key)
-print('Assertion signature verified!')
+print("Assertion signature verified!")

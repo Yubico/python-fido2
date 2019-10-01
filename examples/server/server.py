@@ -44,10 +44,10 @@ from flask import Flask, session, request, redirect, abort
 import os
 
 
-app = Flask(__name__, static_url_path='')
+app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
 
-rp = RelyingParty('localhost', 'Demo server')
+rp = RelyingParty("localhost", "Demo server")
 server = Fido2Server(rp)
 
 
@@ -56,81 +56,81 @@ server = Fido2Server(rp)
 credentials = []
 
 
-@app.route('/')
+@app.route("/")
 def index():
-    return redirect('/index.html')
+    return redirect("/index.html")
 
 
-@app.route('/api/register/begin', methods=['POST'])
+@app.route("/api/register/begin", methods=["POST"])
 def register_begin():
-    registration_data, state = server.register_begin({
-        'id': b'user_id',
-        'name': 'a_user',
-        'displayName': 'A. User',
-        'icon': 'https://example.com/image.png'
-    }, credentials, user_verification='discouraged')
+    registration_data, state = server.register_begin(
+        {
+            "id": b"user_id",
+            "name": "a_user",
+            "displayName": "A. User",
+            "icon": "https://example.com/image.png",
+        },
+        credentials,
+        user_verification="discouraged",
+    )
 
-    session['state'] = state
-    print('\n\n\n\n')
+    session["state"] = state
+    print("\n\n\n\n")
     print(registration_data)
-    print('\n\n\n\n')
+    print("\n\n\n\n")
     return cbor.encode(registration_data)
 
 
-@app.route('/api/register/complete', methods=['POST'])
+@app.route("/api/register/complete", methods=["POST"])
 def register_complete():
     data = cbor.decode(request.get_data())
-    client_data = ClientData(data['clientDataJSON'])
-    att_obj = AttestationObject(data['attestationObject'])
-    print('clientData', client_data)
-    print('AttestationObject:', att_obj)
+    client_data = ClientData(data["clientDataJSON"])
+    att_obj = AttestationObject(data["attestationObject"])
+    print("clientData", client_data)
+    print("AttestationObject:", att_obj)
 
-    auth_data = server.register_complete(
-        session['state'],
-        client_data,
-        att_obj
-    )
+    auth_data = server.register_complete(session["state"], client_data, att_obj)
 
     credentials.append(auth_data.credential_data)
-    print('REGISTERED CREDENTIAL:', auth_data.credential_data)
-    return cbor.encode({'status': 'OK'})
+    print("REGISTERED CREDENTIAL:", auth_data.credential_data)
+    return cbor.encode({"status": "OK"})
 
 
-@app.route('/api/authenticate/begin', methods=['POST'])
+@app.route("/api/authenticate/begin", methods=["POST"])
 def authenticate_begin():
     if not credentials:
         abort(404)
 
     auth_data, state = server.authenticate_begin(credentials)
-    session['state'] = state
+    session["state"] = state
     return cbor.encode(auth_data)
 
 
-@app.route('/api/authenticate/complete', methods=['POST'])
+@app.route("/api/authenticate/complete", methods=["POST"])
 def authenticate_complete():
     if not credentials:
         abort(404)
 
     data = cbor.decode(request.get_data())
-    credential_id = data['credentialId']
-    client_data = ClientData(data['clientDataJSON'])
-    auth_data = AuthenticatorData(data['authenticatorData'])
-    signature = data['signature']
-    print('clientData', client_data)
-    print('AuthenticatorData', auth_data)
+    credential_id = data["credentialId"]
+    client_data = ClientData(data["clientDataJSON"])
+    auth_data = AuthenticatorData(data["authenticatorData"])
+    signature = data["signature"]
+    print("clientData", client_data)
+    print("AuthenticatorData", auth_data)
 
     server.authenticate_complete(
-        session.pop('state'),
+        session.pop("state"),
         credentials,
         credential_id,
         client_data,
         auth_data,
-        signature
+        signature,
     )
-    print('ASSERTION OK')
-    return cbor.encode({'status': 'OK'})
+    print("ASSERTION OK")
+    return cbor.encode({"status": "OK"})
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print(__doc__)
-    app.run(ssl_context='adhoc', debug=True)
+    app.run(ssl_context="adhoc", debug=True)

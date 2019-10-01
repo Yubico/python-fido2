@@ -42,24 +42,24 @@ def dump_int(data, mt=0):
 
     mt = mt << 5
     if data <= 23:
-        args = ('>B', mt | data)
-    elif data <= 0xff:
-        args = ('>BB', mt | 24, data)
-    elif data <= 0xffff:
-        args = ('>BH', mt | 25, data)
-    elif data <= 0xffffffff:
-        args = ('>BI', mt | 26, data)
+        args = (">B", mt | data)
+    elif data <= 0xFF:
+        args = (">BB", mt | 24, data)
+    elif data <= 0xFFFF:
+        args = (">BH", mt | 25, data)
+    elif data <= 0xFFFFFFFF:
+        args = (">BI", mt | 26, data)
     else:
-        args = ('>BQ', mt | 27, data)
+        args = (">BQ", mt | 27, data)
     return struct.pack(*args)
 
 
 def dump_bool(data):
-    return b'\xf5' if data else b'\xf4'
+    return b"\xf5" if data else b"\xf4"
 
 
 def dump_list(data):
-    return dump_int(len(data), mt=4) + b''.join([encode(x) for x in data])
+    return dump_int(len(data), mt=4) + b"".join([encode(x) for x in data])
 
 
 def _sort_keys(entry):
@@ -70,7 +70,7 @@ def _sort_keys(entry):
 def dump_dict(data):
     items = [(encode(k), encode(v)) for k, v in data.items()]
     items.sort(key=_sort_keys)
-    return dump_int(len(items), mt=5) + b''.join([k+v for (k, v) in items])
+    return dump_int(len(items), mt=5) + b"".join([k + v for (k, v) in items])
 
 
 def dump_bytes(data):
@@ -78,7 +78,7 @@ def dump_bytes(data):
 
 
 def dump_text(data):
-    data_bytes = data.encode('utf8')
+    data_bytes = data.encode("utf8")
     return dump_int(len(data_bytes), mt=3) + data_bytes
 
 
@@ -88,7 +88,7 @@ _SERIALIZERS = [
     (dict, dump_dict),
     (list, dump_list),
     (six.text_type, dump_text),
-    (six.binary_type, dump_bytes)
+    (six.binary_type, dump_bytes),
 ]
 
 
@@ -96,7 +96,7 @@ def encode(data):
     for k, v in _SERIALIZERS:
         if isinstance(data, k):
             return v(data)
-    raise ValueError('Unsupported value: {}'.format(data))
+    raise ValueError("Unsupported value: {}".format(data))
 
 
 def load_int(ai, data):
@@ -105,12 +105,12 @@ def load_int(ai, data):
     elif ai == 24:
         return six.indexbytes(data, 0), data[1:]
     elif ai == 25:
-        return struct.unpack_from('>H', data)[0], data[2:]
+        return struct.unpack_from(">H", data)[0], data[2:]
     elif ai == 26:
-        return struct.unpack_from('>I', data)[0], data[4:]
+        return struct.unpack_from(">I", data)[0], data[4:]
     elif ai == 27:
-        return struct.unpack_from('>Q', data)[0], data[8:]
-    raise ValueError('Invalid additional information')
+        return struct.unpack_from(">Q", data)[0], data[8:]
+    raise ValueError("Invalid additional information")
 
 
 def load_nint(ai, data):
@@ -129,7 +129,7 @@ def load_bytes(ai, data):
 
 def load_text(ai, data):
     enc, rest = load_bytes(ai, data)
-    return enc.decode('utf8'), rest
+    return enc.decode("utf8"), rest
 
 
 def load_array(ai, data):
@@ -158,7 +158,7 @@ _DESERIALIZERS = {
     3: load_text,
     4: load_array,
     5: load_map,
-    7: load_bool
+    7: load_bool,
 }
 
 
@@ -169,6 +169,6 @@ def decode_from(data):
 
 def decode(data):
     value, rest = decode_from(data)
-    if rest != b'':
-        raise ValueError('Extraneous data')
+    if rest != b"":
+        raise ValueError("Extraneous data")
     return value

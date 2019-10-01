@@ -40,12 +40,12 @@ class HidTest(unittest.TestCase):
             assert len(devs) == 1
             return devs[0]
         except Exception:
-            self.skipTest('Tests require a single FIDO HID device')
+            self.skipTest("Tests require a single FIDO HID device")
 
     def test_ping(self):
-        msg1 = b'hello world!'
-        msg2 = b'            '
-        msg3 = b''
+        msg1 = b"hello world!"
+        msg2 = b"            "
+        msg3 = b""
         dev = self.get_device()
         self.assertEqual(dev.ping(msg1), msg1)
         self.assertEqual(dev.ping(msg2), msg2)
@@ -54,10 +54,10 @@ class HidTest(unittest.TestCase):
     def test_call_error(self):
         dev = mock.Mock()
         hid_dev = CtapHidDevice(None, dev)
-        dev.InternalRecv = mock.Mock(return_value=(0xbf, bytearray([7])))
+        dev.InternalRecv = mock.Mock(return_value=(0xBF, bytearray([7])))
         try:
             hid_dev.call(0x01)
-            self.fail('call did not raise exception')
+            self.fail("call did not raise exception")
         except CtapError as e:
             self.assertEqual(e.code, 7)
 
@@ -66,31 +66,33 @@ class HidTest(unittest.TestCase):
         hid_dev = CtapHidDevice(None, dev)
         on_keepalive = mock.MagicMock()
 
-        dev.InternalRecv = mock.Mock(side_effect=[
-            (0xbb, bytearray([0])),
-            (0xbb, bytearray([0])),
-            (0xbb, bytearray([0])),
-            (0xbb, bytearray([0])),
-            (0x81, bytearray(b'done'))
-        ])
+        dev.InternalRecv = mock.Mock(
+            side_effect=[
+                (0xBB, bytearray([0])),
+                (0xBB, bytearray([0])),
+                (0xBB, bytearray([0])),
+                (0xBB, bytearray([0])),
+                (0x81, bytearray(b"done")),
+            ]
+        )
 
-        self.assertEqual(hid_dev.call(0x01, on_keepalive=on_keepalive), b'done')
+        self.assertEqual(hid_dev.call(0x01, on_keepalive=on_keepalive), b"done")
         on_keepalive.assert_called_once_with(0)
 
         dev.InternalRecv.side_effect = [
-            (0xbb, bytearray([1])),
-            (0xbb, bytearray([0])),
-            (0xbb, bytearray([0])),
-            (0xbb, bytearray([1])),
-            (0xbb, bytearray([1])),
-            (0xbb, bytearray([1])),
-            (0xbb, bytearray([1])),
-            (0xbb, bytearray([0])),
-            (0x81, bytearray(b'done'))
+            (0xBB, bytearray([1])),
+            (0xBB, bytearray([0])),
+            (0xBB, bytearray([0])),
+            (0xBB, bytearray([1])),
+            (0xBB, bytearray([1])),
+            (0xBB, bytearray([1])),
+            (0xBB, bytearray([1])),
+            (0xBB, bytearray([0])),
+            (0x81, bytearray(b"done")),
         ]
         on_keepalive.reset_mock()
-        self.assertEqual(hid_dev.call(0x01, on_keepalive=on_keepalive), b'done')
+        self.assertEqual(hid_dev.call(0x01, on_keepalive=on_keepalive), b"done")
         self.assertEqual(
             on_keepalive.call_args_list,
-            [mock.call(1), mock.call(0), mock.call(1), mock.call(0)]
+            [mock.call(1), mock.call(0), mock.call(1), mock.call(0)],
         )

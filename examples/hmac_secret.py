@@ -56,32 +56,32 @@ def enumerate_devices():
 
 # Locate a device
 for dev in enumerate_devices():
-    client = Fido2Client(dev, 'https://example.com')
+    client = Fido2Client(dev, "https://example.com")
     if HmacSecretExtension.NAME in client.info.extensions:
         break
 else:
-    print('No Authenticator with the HmacSecret extension found!')
+    print("No Authenticator with the HmacSecret extension found!")
     sys.exit(1)
 
 use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
 
 # Prepare parameters for makeCredential
-rp = {'id': 'example.com', 'name': 'Example RP'}
-user = {'id': b'user_id', 'name': 'A. User'}
-challenge = 'Y2hhbGxlbmdl'
+rp = {"id": "example.com", "name": "Example RP"}
+user = {"id": b"user_id", "name": "A. User"}
+challenge = "Y2hhbGxlbmdl"
 
 # Prompt for PIN if needed
 pin = None
-if client.info.options.get('clientPin'):
-    pin = getpass('Please enter PIN:')
+if client.info.options.get("clientPin"):
+    pin = getpass("Please enter PIN:")
 else:
-    print('no pin')
+    print("no pin")
 
 hmac_ext = HmacSecretExtension(client.ctap2)
 
 # Create a credential
 if not use_nfc:
-    print('\nTouch your authenticator device now...\n')
+    print("\nTouch your authenticator device now...\n")
 attestation_object, client_data = client.make_credential(
     rp, user, challenge, extensions=hmac_ext.create_dict(), pin=pin
 )
@@ -90,47 +90,43 @@ attestation_object, client_data = client.make_credential(
 hmac_result = hmac_ext.results_for(attestation_object.auth_data)
 
 credential = attestation_object.auth_data.credential_data
-print('New credential created, with the HmacSecret extension.')
+print("New credential created, with the HmacSecret extension.")
 
 # Prepare parameters for getAssertion
-challenge = 'Q0hBTExFTkdF'  # Use a new challenge for each call.
-allow_list = [{
-    'type': 'public-key',
-    'id': credential.credential_id
-}]
+challenge = "Q0hBTExFTkdF"  # Use a new challenge for each call.
+allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Generate a salt for HmacSecret:
 salt = os.urandom(32)
-print('Authenticate with salt:', b2a_hex(salt))
+print("Authenticate with salt:", b2a_hex(salt))
 
 # Authenticate the credential
 if not use_nfc:
-    print('\nTouch your authenticator device now...\n')
+    print("\nTouch your authenticator device now...\n")
 
 assertions, client_data = client.get_assertion(
-    rp['id'], challenge, allow_list, extensions=hmac_ext.get_dict(salt), pin=pin
+    rp["id"], challenge, allow_list, extensions=hmac_ext.get_dict(salt), pin=pin
 )
 
 assertion = assertions[0]  # Only one cred in allowList, only one response.
 hmac_res = hmac_ext.results_for(assertion.auth_data)
-print('Authenticated, secret:', b2a_hex(hmac_res[0]))
+print("Authenticated, secret:", b2a_hex(hmac_res[0]))
 
 # Authenticate again, using two salts to generate two secrets:
 
 # Generate a second salt for HmacSecret:
 salt2 = os.urandom(32)
-print('Authenticate with second salt:', b2a_hex(salt2))
+print("Authenticate with second salt:", b2a_hex(salt2))
 
 if not use_nfc:
-    print('\nTouch your authenticator device now...\n')
+    print("\nTouch your authenticator device now...\n")
 
 # The first salt is reused, which should result in the same secret.
 assertions, client_data = client.get_assertion(
-    rp['id'], challenge, allow_list, extensions=hmac_ext.get_dict(salt, salt2),
-    pin=pin
+    rp["id"], challenge, allow_list, extensions=hmac_ext.get_dict(salt, salt2), pin=pin
 )
 
 assertion = assertions[0]  # Only one cred in allowList, only one response.
 hmac_res = hmac_ext.results_for(assertion.auth_data)
-print('Old secret:', b2a_hex(hmac_res[0]))
-print('New secret:', b2a_hex(hmac_res[1]))
+print("Old secret:", b2a_hex(hmac_res[0]))
+print("New secret:", b2a_hex(hmac_res[1]))
