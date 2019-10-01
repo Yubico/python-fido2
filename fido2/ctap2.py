@@ -843,7 +843,13 @@ class PinProtocolV1(object):
         be = default_backend()
         sk = ec.generate_private_key(ec.SECP256R1(), be)
         pn = sk.public_key().public_numbers()
-        key_agreement = {1: 2, -1: 1, -2: int2bytes(pn.x, 32), -3: int2bytes(pn.y, 32)}
+        key_agreement = {
+            1: 2,
+            3: -25,  # Per the spec, "although this is NOT the algorithm actually used"
+            -1: 1,
+            -2: int2bytes(pn.x, 32),
+            -3: int2bytes(pn.y, 32),
+        }
 
         resp = self.ctap.client_pin(
             PinProtocolV1.VERSION, PinProtocolV1.CMD.GET_KEY_AGREEMENT
