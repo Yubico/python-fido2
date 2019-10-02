@@ -789,7 +789,7 @@ class CTAP2(object):
     def get_assertions(self, *args, **kwargs):
         """Convenience method to get list of assertions.
 
-        See get_assertion and get_assertion_next for details.
+        See get_assertion and get_next_assertion for details.
         """
         first = self.get_assertion(*args, **kwargs)
         rest = [
