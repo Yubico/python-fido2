@@ -793,7 +793,7 @@ class CTAP2(object):
         """
         first = self.get_assertion(*args, **kwargs)
         rest = [
-            self.get_assertion_next()
+            self.get_next_assertion()
             for _ in range(1, first.number_of_credentials or 1)
         ]
         return [first] + rest
