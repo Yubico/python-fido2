@@ -235,7 +235,10 @@ class Fido2Server(object):
         return attestation_object.auth_data
 
     def authenticate_begin(
-        self, credentials, user_verification=USER_VERIFICATION.PREFERRED
+        self,
+        credentials,
+        user_verification=USER_VERIFICATION.PREFERRED,
+        challenge=None,
     ):
         """Return a PublicKeyCredentialRequestOptions assertion object and
         the internal state dictionary that needs to be passed as is to the
@@ -243,9 +246,16 @@ class Fido2Server(object):
 
         :param credentials: The list of previously registered credentials.
         :param user_verification: The desired USER_VERIFICATION level.
+        :param challenge: A custom challenge to sign and verify or None to use
+            OS-specific random bytes.
         :return: Assertion data, internal state."""
         uv = USER_VERIFICATION(user_verification)
-        challenge = os.urandom(32)
+
+        if challenge is None:
+            challenge = os.urandom(32)
+        else:
+            if not isinstance(challenge, bytes):
+                raise TypeError("Custom challenge must be bytes.")
 
         data = {
             "publicKey": {
