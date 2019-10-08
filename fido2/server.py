@@ -235,10 +235,7 @@ class Fido2Server(object):
         return attestation_object.auth_data
 
     def authenticate_begin(
-        self,
-        credentials,
-        user_verification=USER_VERIFICATION.PREFERRED,
-        challenge=None,
+        self, credentials, user_verification=USER_VERIFICATION.PREFERRED, challenge=None
     ):
         """Return a PublicKeyCredentialRequestOptions assertion object and
         the internal state dictionary that needs to be passed as is to the
