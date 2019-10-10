@@ -216,7 +216,7 @@ class Fido2Server(object):
             )
 
         if self.attestation != ATTESTATION.NONE:
-            att_verifier = UnsupportedAttestation()
+            att_verifier = UnsupportedAttestation(attestation_object.fmt)
             for at in self._attestation_types:
                 if getattr(at, "FORMAT", None) == attestation_object.fmt:
                     att_verifier = at

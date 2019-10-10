@@ -49,8 +49,9 @@ class TestAttestationObject(unittest.TestCase):
     def test_unsupported_attestation(self):
         attestation = Attestation.for_type("__unsupported__")()
         self.assertIsInstance(attestation, UnsupportedAttestation)
-        with self.assertRaises(UnsupportedType):
+        with self.assertRaises(UnsupportedType) as ctx:
             attestation.verify({}, 0, b"")
+        self.assertEqual(ctx.exception.fmt, "__unsupported__")
 
     def test_none_attestation(self):
         attestation = Attestation.for_type("none")()

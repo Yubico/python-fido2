@@ -52,11 +52,14 @@ class InvalidSignature(InvalidAttestation):
 
 
 class UnsupportedType(InvalidAttestation):
-    def __init__(self, auth_data):
+    def __init__(self, auth_data, fmt=None):
         super(UnsupportedType, self).__init__(
-            "This attestation format is not supported!"
+            'Attestation format "{}" is not supported'.format(fmt)
+            if fmt
+            else "This attestation format is not supported!"
         )
         self.auth_data = auth_data
+        self.fmt = fmt
 
 
 class Attestation(abc.ABC):
@@ -69,12 +72,20 @@ class Attestation(abc.ABC):
         for cls in Attestation.__subclasses__():
             if getattr(cls, "FORMAT", None) == fmt:
                 return cls
-        return UnsupportedAttestation
+
+        class TypedUnsupportedAttestation(UnsupportedAttestation):
+            def __init__(self):
+                super(TypedUnsupportedAttestation, self).__init__(fmt)
+
+        return TypedUnsupportedAttestation
 
 
 class UnsupportedAttestation(Attestation):
+    def __init__(self, fmt=None):
+        self.fmt = fmt
+
     def verify(self, statement, auth_data, client_data_hash):
-        raise UnsupportedType(auth_data)
+        raise UnsupportedType(auth_data, self.fmt)
 
 
 class NoneAttestation(Attestation):
