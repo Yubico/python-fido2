@@ -377,15 +377,16 @@ class Fido2Client(object):
             if uv:
                 options["uv"] = True
 
-        # Filter out credential IDs which are too long
-        max_len = self.info.max_cred_id_length
-        if max_len and exclude_list:
-            exclude_list = [e for e in exclude_list if len(e) <= max_len]
+        if exclude_list:
+            # Filter out credential IDs which are too long
+            max_len = self.info.max_cred_id_length
+            if max_len:
+                exclude_list = [e for e in exclude_list if len(e) <= max_len]
 
-        # Reject the request if too many credentials remain.
-        max_creds = self.info.max_creds_in_list
-        if max_creds and len(exclude_list or ()) > max_creds:
-            raise ClientError.ERR.BAD_REQUEST("exclude_list too long")
+            # Reject the request if too many credentials remain.
+            max_creds = self.info.max_creds_in_list
+            if max_creds and len(exclude_list) > max_creds:
+                raise ClientError.ERR.BAD_REQUEST("exclude_list too long")
 
         return self.ctap2.make_credential(
             client_data.hash,
@@ -519,17 +520,18 @@ class Fido2Client(object):
         if len(options) == 0:
             options = None
 
-        # Filter out credential IDs which are too long
-        max_len = self.info.max_cred_id_length
-        if max_len:
-            allow_list = [e for e in allow_list if len(e) <= max_len]
-        if not allow_list:
-            raise CtapError(CtapError.ERR.NO_CREDENTIALS)
+        if allow_list:
+            # Filter out credential IDs which are too long
+            max_len = self.info.max_cred_id_length
+            if max_len:
+                allow_list = [e for e in allow_list if len(e) <= max_len]
+            if not allow_list:
+                raise CtapError(CtapError.ERR.NO_CREDENTIALS)
 
-        # Reject the request if too many credentials remain.
-        max_creds = self.info.max_creds_in_list
-        if max_creds and len(allow_list) > max_creds:
-            raise ClientError.ERR.BAD_REQUEST("allow_list too long")
+            # Reject the request if too many credentials remain.
+            max_creds = self.info.max_creds_in_list
+            if max_creds and len(allow_list) > max_creds:
+                raise ClientError.ERR.BAD_REQUEST("allow_list too long")
 
         return self.ctap2.get_assertions(
             rp_id,
