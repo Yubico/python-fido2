@@ -28,6 +28,7 @@
 from __future__ import absolute_import, unicode_literals
 
 from .cose import CoseKey, ES256
+from .tpm import TpmAttestationFormat
 from .utils import sha256, websafe_decode
 from binascii import a2b_hex
 from cryptography import x509
@@ -35,6 +36,7 @@ from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.hazmat.primitives.constant_time import bytes_eq
+from cryptography.hazmat.primitives import hashes
 import abc
 import json
 
@@ -184,25 +186,26 @@ class AndroidSafetynetAttestation(Attestation):
 OID_AAGUID = x509.ObjectIdentifier("1.3.6.1.4.1.45724.1.1.4")
 
 
-def _validate_attestation_certificate(cert, aaguid):
+def _validate_attestation_certificate(cert, aaguid, check_subject=True):
     if cert.version != x509.Version.v3:
         raise InvalidData("Attestation certificate must use version 3!")
-    c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
-    if not c:
-        raise InvalidData("Subject must have C set!")
-    o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
-    if not o:
-        raise InvalidData("Subject must have O set!")
-    ous = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATIONAL_UNIT_NAME)
-    if not ous:
-        raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
+    if check_subject:
+        c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
+        if not c:
+            raise InvalidData("Subject must have C set!")
+        o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
+        if not o:
+            raise InvalidData("Subject must have O set!")
+        ous = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATIONAL_UNIT_NAME)
+        if not ous:
+            raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
 
-    ou = ous[0]
-    if ou.value != "Authenticator Attestation":
-        raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
-    cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
-    if not cn:
-        raise InvalidData("Subject must have CN set!")
+        ou = ous[0]
+        if ou.value != "Authenticator Attestation":
+            raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
+        cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
+        if not cn:
+            raise InvalidData("Subject must have CN set!")
 
     bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
     if bc.value.ca:
@@ -240,5 +243,40 @@ class PackedAttestation(Attestation):
                 raise InvalidData("Wrong algorithm of public key!")
         try:
             pub_key.verify(auth_data + client_data_hash, statement["sig"])
+        except _InvalidSignature:
+            raise InvalidSignature()
+
+
+class TpmAttestation(Attestation):
+    FORMAT = "tpm"
+
+    def verify(self, statement, auth_data, client_data_hash):
+        if "ecdaaKeyId" in statement:
+            raise NotImplementedError("ECDAA not implemented")
+        alg = statement["alg"]
+        x5c = statement.get("x5c")
+        cert_info = statement["certInfo"]
+        if x5c:
+            cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+            _validate_attestation_certificate(
+                cert, auth_data.credential_data.aaguid, check_subject=False
+            )
+
+            pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
+        else:
+            pub_key = CoseKey.parse(auth_data.credential_data.public_key)
+            if pub_key.ALGORITHM != alg:
+                raise InvalidData("Wrong algorithm of public key!")
+        try:
+            att_to_be_signed = auth_data + client_data_hash
+            digest = hashes.Hash(pub_key.HASH_ALG, backend=default_backend())
+            digest.update(att_to_be_signed)
+            data = digest.finalize()
+
+            tpm = TpmAttestationFormat.parse(cert_info)
+            if tpm.data != data:
+                raise InvalidSignature()
+
+            pub_key.verify(cert_info, statement["sig"])
         except _InvalidSignature:
             raise InvalidSignature()

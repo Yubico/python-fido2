@@ -115,6 +115,7 @@ class UnsupportedKey(CoseKey):
 
 class ES256(CoseKey):
     ALGORITHM = -7
+    HASH_ALG = hashes.SHA256()
 
     def verify(self, message, signature):
         if self[-1] != 1:
@@ -122,7 +123,7 @@ class ES256(CoseKey):
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256R1()
         ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(hashes.SHA256())
+            signature, message, ec.ECDSA(self.HASH_ALG)
         )
 
     @classmethod
@@ -150,11 +151,12 @@ class ES256(CoseKey):
 
 class RS256(CoseKey):
     ALGORITHM = -257
+    HASH_ALG = hashes.SHA256()
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
             default_backend()
-        ).verify(signature, message, padding.PKCS1v15(), hashes.SHA256())
+        ).verify(signature, message, padding.PKCS1v15(), self.HASH_ALG)
 
     @classmethod
     def from_cryptography_key(cls, public_key):
@@ -164,6 +166,7 @@ class RS256(CoseKey):
 
 class PS256(CoseKey):
     ALGORITHM = -37
+    HASH_ALG = hashes.SHA256()
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
@@ -172,9 +175,9 @@ class PS256(CoseKey):
             signature,
             message,
             padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
+                mgf=padding.MGF1(self.HASH_ALG), salt_length=padding.PSS.MAX_LENGTH
             ),
-            hashes.SHA256(),
+            self.HASH_ALG,
         )
 
     @classmethod
@@ -203,3 +206,18 @@ class EdDSA(CoseKey):
                 ),
             }
         )
+
+
+class RS1(CoseKey):
+    ALGORITHM = -65535
+    HASH_ALG = hashes.SHA1()
+
+    def verify(self, message, signature):
+        rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
+            default_backend()
+        ).verify(signature, message, padding.PKCS1v15(), self.HASH_ALG)
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        pn = public_key.public_numbers()
+        return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
