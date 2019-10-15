@@ -94,6 +94,17 @@ def _default_attestations():
     ]
 
 
+def _validata_challenge(challenge):
+    if challenge is None:
+        challenge = os.urandom(32)
+    else:
+        if not isinstance(challenge, bytes):
+            raise TypeError("Custom challenge must be of type 'bytes'.")
+        if len(challenge) < 16:
+            raise ValueError("Custom challenge length must be >= 16.")
+    return challenge
+
+
 class Fido2Server(object):
     """FIDO2 server
 
@@ -127,6 +138,7 @@ class Fido2Server(object):
         resident_key=False,
         user_verification=USER_VERIFICATION.PREFERRED,
         authenticator_attachment=None,
+        challenge=None,
     ):
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
@@ -138,12 +150,14 @@ class Fido2Server(object):
         :param user_verification: The desired USER_VERIFICATION level.
         :param authenticator_attachment: The desired AUTHENTICATOR_ATTACHMENT
             or None to not provide a preference (and get both types).
+        :param challenge: A custom challenge to sign and verify or None to use
+            OS-specific random bytes.
         :return: Registration data, internal state."""
         if not self.allowed_algorithms:
             raise ValueError("Server has no allowed algorithms.")
 
         uv = USER_VERIFICATION(user_verification)
-        challenge = os.urandom(32)
+        challenge = _validata_challenge(challenge)
 
         # Serialize RP
         rp_data = {"id": self.rp.ident, "name": self.rp.name}
@@ -235,17 +249,19 @@ class Fido2Server(object):
         return attestation_object.auth_data
 
     def authenticate_begin(
-        self, credentials, user_verification=USER_VERIFICATION.PREFERRED
+        self, credentials, user_verification=USER_VERIFICATION.PREFERRED, challenge=None
     ):
-        """Return a PublicKeyCredentialRequestOptions assertion object and
-        the internal state dictionary that needs to be passed as is to the
-        corresponding `authenticate_complete` call.
+        """Return a PublicKeyCredentialRequestOptions assertion object and the internal
+        state dictionary that needs to be passed as is to the corresponding
+        `authenticate_complete` call.
 
         :param credentials: The list of previously registered credentials.
         :param user_verification: The desired USER_VERIFICATION level.
+        :param challenge: A custom challenge to sign and verify or None to use
+            OS-specific random bytes.
         :return: Assertion data, internal state."""
         uv = USER_VERIFICATION(user_verification)
-        challenge = os.urandom(32)
+        challenge = _validata_challenge(challenge)
 
         data = {
             "publicKey": {
