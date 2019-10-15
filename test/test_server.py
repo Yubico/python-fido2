@@ -47,6 +47,23 @@ class TestFido2Server(unittest.TestCase):
         }
         self.assertEqual(request["publicKey"]["rp"], data)
 
+    def test_register_begin_custom_challenge(self):
+        rp = RelyingParty("example.com", "Example")
+        server = Fido2Server(rp)
+
+        challenge = b"1234567890123456"
+        request, state = server.register_begin({}, challenge=challenge)
+
+        self.assertEqual(request["publicKey"]["challenge"], challenge)
+
+    def test_register_begin_custom_challenge_too_short(self):
+        rp = RelyingParty("example.com", "Example")
+        server = Fido2Server(rp)
+
+        challenge = b"123456789012345"
+        with self.assertRaises(ValueError):
+            request, state = server.register_begin({}, challenge=challenge)
+
     def test_authenticate_complete_invalid_signature(self):
         rp = RelyingParty("example.com", "Example")
         server = Fido2Server(rp)
