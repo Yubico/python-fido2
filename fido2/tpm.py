@@ -27,7 +27,27 @@
 
 import struct
 from io import BytesIO
-from binascii import b2a_hex
+
+from enum import IntEnum
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa
+
+from .utils import bytes2int
+
+
+TPM_ALG_NULL = 0x0010
+
+
+class TpmAlgAsym(IntEnum):
+    RSA = 0x0001
+    ECC = 0x0023
+
+
+class TpmAlgHash(IntEnum):
+    SHA1 = 0x0004
+    SHA256 = 0x000B
+    SHA384 = 0x000C
+    SHA512 = 0x000D
 
 
 class TpmAttestationFormat(object):
@@ -133,4 +153,158 @@ class TpmAttestationFormat(object):
             " firmware_version=0x{self.firmware_version:x}"
             " attested={self.attested}"
             ">".format(self=self)
+        )
+
+
+class TpmsRsaParms(object):
+    @classmethod
+    def parse(cls, reader):
+        symmetric = struct.unpack("!H", reader.read(2))[0]
+        scheme = struct.unpack("!H", reader.read(2))[0]
+        # TODO(baloo): move those assert to an actual check, this is disabled
+        #              in production
+        assert symmetric == TPM_ALG_NULL
+        assert scheme == TPM_ALG_NULL
+        key_bits = struct.unpack("!H", reader.read(2))[0]
+        exponent = reader.read(4)
+        exponent = struct.unpack("!L", exponent)[0]
+        if exponent == 0:
+            # When  zero,  indicates  that  the  exponent  is  the  default  of 2^16 + 1
+            exponent = (2 ** 16) + 1
+
+        return cls(symmetric, scheme, key_bits, exponent)
+
+    def __init__(self, symmetric, scheme, key_bits, exponent):
+        self.symmetric = symmetric
+        self.scheme = scheme
+        self.key_bits = key_bits
+        self.exponent = exponent
+
+    def __repr__(self):
+        return (
+            "<TpmsRsaParms"
+            " symmetric=0x{self.symmetric:x}"
+            " scheme=0x{self.scheme:x}"
+            " key_bits={self.key_bits}"
+            " exponent={self.exponent}"
+            ">".format(self=self)
+        )
+
+
+class Tpm2bPublicKeyRsa(bytes):
+    @classmethod
+    def parse(cls, reader):
+        size = struct.unpack("!H", reader.read(2))[0]
+        buffer = reader.read(size)
+        if len(buffer) != size:
+            raise ValueError("buffer has not expected length")
+
+        return cls(buffer)
+
+
+class TpmPublicFormat(object):
+    """the public area structure is defined by [TPMv2-Part2] Section 12.2.4 (TPMT_PUBLIC)
+    as:
+      TPMI_ALG_PUBLIC - type
+      TPMI_ALG_HASH - nameAlg
+        or + to indicate TPM_ALG_NULL
+      TPMA_OBJECT - objectAttributes
+      TPM2B_DIGEST - authPolicy
+      TPMU_PUBLIC_PARMS - type parameters
+      TPMU_PUBLIC_ID - uniq
+    See:
+      https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+    """
+
+    class ATTRIBUTES(IntEnum):
+        """Object attributes
+        see section 8.3
+          https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+        """
+
+        FIXED_TPM = 1 << 1
+        ST_CLEAR = 1 << 2
+        FIXED_PARENT = 1 << 4
+        SENSITIVE_DATA_ORIGIN = 1 << 5
+        USER_WITH_AUTH = 1 << 6
+        ADMIN_WITH_POLICY = 1 << 7
+        NO_DA = 1 << 10
+        ENCRYPTED_DUPLICATION = 1 << 11
+        RESTRICTED = 1 << 16
+        DECRYPT = 1 << 17
+        SIGN_ENCRYPT = 1 << 18
+
+        SHALL_BE_ZERO = (
+            (1 << 0)  # 0 Reserved
+            | (1 << 3)  # 3 Reserved
+            | (0x3 << 8)  # 9:8 Reserved
+            | (0xF << 12)  # 15:12 Reserved
+            | ((0xFFFFFFFF << 19) & (2 ** 32 - 1))  # 31:19 Reserved
+        )
+
+    @classmethod
+    def parse(cls, data):
+        reader = BytesIO(data)
+        sign_alg = struct.unpack("!H", reader.read(2))[0]
+        sign_alg = TpmAlgAsym(sign_alg)
+        hash_alg = struct.unpack("!H", reader.read(2))[0]
+        hash_alg = TpmAlgHash(hash_alg)
+
+        attributes = struct.unpack("!L", reader.read(4))[0]
+        if attributes & TpmPublicFormat.ATTRIBUTES.SHALL_BE_ZERO != 0:
+            raise ValueError(
+                "attributes is not formated correctly: " "0x{:x}".format(attributes)
+            )
+
+        auth_policy_len = struct.unpack("!H", reader.read(2))[0]
+        auth_policy = reader.read(auth_policy_len)
+        if auth_policy_len != len(auth_policy):
+            raise ValueError("auth policy is too short")
+
+        if sign_alg == TpmAlgAsym.RSA:
+            parameters = TpmsRsaParms.parse(reader)
+            unique = Tpm2bPublicKeyRsa.parse(reader)
+        # TODO(baloo): implement ECC
+        # elif sign_alg == TpmAlgAsym.ECC:
+        #     parameters = TpmsEccParms.parse(reader)
+        #     unique = TpmsEccPoint.parse(reader)
+        else:
+            raise NotImplementedError(
+                "sign alg {:x} is not " "supported".format(sign_alg)
+            )
+
+        rest = reader.read(1)
+        if len(rest) != 0:
+            raise ValueError("there should not be any data left in buffer")
+
+        return cls(sign_alg, hash_alg, attributes, auth_policy, parameters, unique)
+
+    def __init__(self, sign_alg, hash_alg, attributes, auth_policy, parameters, unique):
+        self.sign_alg = sign_alg
+        self.hash_alg = hash_alg
+        self.attributes = attributes
+        self.auth_policy = auth_policy
+        self.parameters = parameters
+        self.unique = unique
+
+    def __repr__(self):
+        return (
+            "<TpmPublicFormat"
+            " sign_alg=0x{self.sign_alg:x}"
+            " hash_alg=0x{self.hash_alg:x}"
+            " attributes=0x{self.attributes:x}({self.attributes!r})"
+            " auth_policy={self.auth_policy}"
+            " parameters={self.parameters}"
+            " unique={self.unique}"
+            ">".format(self=self)
+        )
+
+    def public_key(self):
+        if self.sign_alg == TpmAlgAsym.RSA:
+            exponent = self.parameters.exponent
+            modulus = bytes2int(self.unique)
+            return rsa.RSAPublicNumbers(exponent, modulus).public_key(default_backend())
+
+        raise NotImplementedError(
+            "public_key not implemented for {0!r}".format(self.sign_alg)
         )

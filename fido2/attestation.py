@@ -28,7 +28,7 @@
 from __future__ import absolute_import, unicode_literals
 
 from .cose import CoseKey, ES256
-from .tpm import TpmAttestationFormat
+from .tpm import TpmAttestationFormat, TpmPublicFormat
 from .utils import sha256, websafe_decode
 from binascii import a2b_hex
 from cryptography import x509
@@ -184,12 +184,19 @@ class AndroidSafetynetAttestation(Attestation):
 
 
 OID_AAGUID = x509.ObjectIdentifier("1.3.6.1.4.1.45724.1.1.4")
+OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
 
 
-def _validate_attestation_certificate(cert, aaguid, check_subject=True):
+def _validate_attestation_certificate(
+    cert,
+    aaguid,
+    empty_subject=False,
+    has_subject_alternative_name=False,
+    has_aik_certificate=False,
+):
     if cert.version != x509.Version.v3:
         raise InvalidData("Attestation certificate must use version 3!")
-    if check_subject:
+    if not empty_subject:
         c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
         if not c:
             raise InvalidData("Subject must have C set!")
@@ -206,6 +213,24 @@ def _validate_attestation_certificate(cert, aaguid, check_subject=True):
         cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
         if not cn:
             raise InvalidData("Subject must have CN set!")
+    else:
+        s = cert.subject.get_attributes_for_oid(x509.NameOID)
+        if s:
+            raise InvalidData("Certificate should not have Subject")
+
+    if has_subject_alternative_name:
+        s = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        if not s:
+            raise InvalidData("Certificate should have SubjectAlternativeName")
+    if has_aik_certificate:
+        ext = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
+        has_aik = [x == OID_AIK_CERTIFICATE for x in ext.value]
+        if True not in has_aik:
+            raise InvalidData(
+                'Extended key usage MUST contain the "joint-iso-itu-t(2) '
+                "internationalorganizations(23) 133 tcg-kp(8) "
+                'tcg-kp-AIKCertificate(3)" OID.'
+            )
 
     bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
     if bc.value.ca:
@@ -258,8 +283,13 @@ class TpmAttestation(Attestation):
         cert_info = statement["certInfo"]
         if x5c:
             cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+
             _validate_attestation_certificate(
-                cert, auth_data.credential_data.aaguid, check_subject=False
+                cert,
+                auth_data.credential_data.aaguid,
+                empty_subject=True,
+                has_subject_alternative_name=True,
+                has_aik_certificate=True,
             )
 
             pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
@@ -267,6 +297,25 @@ class TpmAttestation(Attestation):
             pub_key = CoseKey.parse(auth_data.credential_data.public_key)
             if pub_key.ALGORITHM != alg:
                 raise InvalidData("Wrong algorithm of public key!")
+
+        try:
+            pub_area = TpmPublicFormat.parse(statement["pubArea"])
+        except Exception as e:
+            raise InvalidData("unable to parse pubArea", e)
+
+        # Verify that the public key specified by the parameters and unique
+        # fields of pubArea is identical to the credentialPublicKey in the
+        # attestedCredentialData in authenticatorData.
+        if (
+            auth_data.credential_data.public_key.from_cryptography_key(
+                pub_area.public_key()
+            )
+            != auth_data.credential_data.public_key
+        ):
+            raise InvalidSignature(
+                "attestation pubArea does not match attestedCredentialData"
+            )
+
         try:
             att_to_be_signed = auth_data + client_data_hash
             digest = hashes.Hash(pub_key.HASH_ALG, backend=default_backend())
