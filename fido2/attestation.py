@@ -190,13 +190,14 @@ OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
 def _validate_attestation_certificate(
     cert,
     aaguid,
-    empty_subject=False,
+    check_subject=True,
+    enforce_empty_subject=False,
     has_subject_alternative_name=False,
     has_aik_certificate=False,
 ):
     if cert.version != x509.Version.v3:
         raise InvalidData("Attestation certificate must use version 3!")
-    if not empty_subject:
+    if check_subject:
         c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
         if not c:
             raise InvalidData("Subject must have C set!")
@@ -213,7 +214,8 @@ def _validate_attestation_certificate(
         cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
         if not cn:
             raise InvalidData("Subject must have CN set!")
-    else:
+
+    if enforce_empty_subject:
         s = cert.subject.get_attributes_for_oid(x509.NameOID)
         if s:
             raise InvalidData("Certificate should not have Subject")
@@ -287,7 +289,8 @@ class TpmAttestation(Attestation):
             _validate_attestation_certificate(
                 cert,
                 auth_data.credential_data.aaguid,
-                empty_subject=True,
+                check_subject=False,
+                enforce_empty_subject=True,
                 has_subject_alternative_name=True,
                 has_aik_certificate=True,
             )
