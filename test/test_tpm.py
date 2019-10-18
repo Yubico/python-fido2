@@ -51,4 +51,6 @@ class TestTpmObject(unittest.TestCase):
                 "ff54434780170022000b68cec627cc6411099a1f809fde4379f649aa170c7072d1adf230de439efc80810014f7c8b0cdeb31328648"  # noqa
             )
             TpmAttestationFormat.parse(data)
-        self.assertEqual(e.exception.args[0], "data is too short")
+        self.assertEqual(
+            e.exception.args[0], "Not enough data to read (need: 20, had: 9)."
+        )

@@ -26,13 +26,12 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import struct
-from io import BytesIO
 
 from enum import IntEnum
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from .utils import bytes2int
+from .utils import bytes2int, ByteBuffer
 
 
 TPM_ALG_NULL = 0x0010
@@ -82,7 +81,7 @@ class TpmAttestationFormat(object):
 
     @classmethod
     def parse(cls, data):
-        reader = BytesIO(data)
+        reader = ByteBuffer(data)
         generated_value = reader.read(4)
 
         if generated_value != cls.TPM_GENERATED_VALUE:
@@ -93,39 +92,21 @@ class TpmAttestationFormat(object):
             raise ValueError("tpmi_st_attest field is invalid")
 
         try:
-            name_len = struct.unpack("!H", reader.read(2))[0]
-            name = reader.read(name_len)
-            if name_len != len(name):
-                raise ValueError("name is too short")
+            name = reader.read(reader.unpack("!H"))
+            data = reader.read(reader.unpack("!H"))
 
-            data_len = struct.unpack("!H", reader.read(2))[0]
-            data = reader.read(data_len)
-            if data_len != len(data):
-                raise ValueError("data is too short")
+            clock = reader.unpack("!Q")
+            reset_count = reader.unpack("!L")
+            restart_count = reader.unpack("!L")
+            safe_value = reader.unpack("B")
+            if safe_value not in (0, 1):
+                raise ValueError("invalid value 0x{0:x} for boolean".format(safe_value))
+            safe = safe_value == 1
 
-            clock = struct.unpack("!Q", reader.read(8))[0]
-            reset_count = struct.unpack("!L", reader.read(4))[0]
-            restart_count = struct.unpack("!L", reader.read(4))[0]
-            safe_value = reader.read(1)
-            if safe_value not in (b"\x00", b"\x01"):
-                raise ValueError(
-                    "invalid value 0x{} for boolean".format(
-                        b2a_hex(safe_value).decode("ascii")
-                    )
-                )
-            safe = safe_value == b"\x01"
+            firmware_version = reader.unpack("!Q")
 
-            firmware_version = struct.unpack("!Q", reader.read(8))[0]
-
-            attested_name_len = struct.unpack("!H", reader.read(2))[0]
-            attested_name = reader.read(attested_name_len)
-            if attested_name_len != len(attested_name):
-                raise ValueError("attested_name is too short")
-
-            attested_qualified_name_len = struct.unpack("!H", reader.read(2))[0]
-            attested_qualified_name = reader.read(attested_qualified_name_len)
-            if attested_qualified_name_len != len(attested_qualified_name):
-                raise ValueError("attested_qualified_name is too short")
+            attested_name = reader.read(reader.unpack("!H"))
+            attested_qualified_name = reader.read(reader.unpack("!H"))
         except struct.error as e:
             raise ValueError(e)
 
@@ -159,15 +140,14 @@ class TpmAttestationFormat(object):
 class TpmsRsaParms(object):
     @classmethod
     def parse(cls, reader):
-        symmetric = struct.unpack("!H", reader.read(2))[0]
-        scheme = struct.unpack("!H", reader.read(2))[0]
+        symmetric = reader.unpack("!H")
+        scheme = reader.unpack("!H")
         # TODO(baloo): move those assert to an actual check, this is disabled
         #              in production
         assert symmetric == TPM_ALG_NULL
         assert scheme == TPM_ALG_NULL
-        key_bits = struct.unpack("!H", reader.read(2))[0]
-        exponent = reader.read(4)
-        exponent = struct.unpack("!L", exponent)[0]
+        key_bits = reader.unpack("!H")
+        exponent = reader.unpack("!L")
         if exponent == 0:
             # When  zero,  indicates  that  the  exponent  is  the  default  of 2^16 + 1
             exponent = (2 ** 16) + 1
@@ -194,10 +174,7 @@ class TpmsRsaParms(object):
 class Tpm2bPublicKeyRsa(bytes):
     @classmethod
     def parse(cls, reader):
-        size = struct.unpack("!H", reader.read(2))[0]
-        buffer = reader.read(size)
-        if len(buffer) != size:
-            raise ValueError("buffer has not expected length")
+        buffer = reader.read(reader.unpack("!H"))
 
         return cls(buffer)
 
@@ -244,22 +221,17 @@ class TpmPublicFormat(object):
 
     @classmethod
     def parse(cls, data):
-        reader = BytesIO(data)
-        sign_alg = struct.unpack("!H", reader.read(2))[0]
-        sign_alg = TpmAlgAsym(sign_alg)
-        hash_alg = struct.unpack("!H", reader.read(2))[0]
-        hash_alg = TpmAlgHash(hash_alg)
+        reader = ByteBuffer(data)
+        sign_alg = TpmAlgAsym(reader.unpack("!H"))
+        hash_alg = TpmAlgHash(reader.unpack("!H"))
 
-        attributes = struct.unpack("!L", reader.read(4))[0]
+        attributes = reader.unpack("!L")
         if attributes & TpmPublicFormat.ATTRIBUTES.SHALL_BE_ZERO != 0:
             raise ValueError(
-                "attributes is not formated correctly: " "0x{:x}".format(attributes)
+                "attributes is not formated correctly: 0x{:x}".format(attributes)
             )
 
-        auth_policy_len = struct.unpack("!H", reader.read(2))[0]
-        auth_policy = reader.read(auth_policy_len)
-        if auth_policy_len != len(auth_policy):
-            raise ValueError("auth policy is too short")
+        auth_policy = reader.read(reader.unpack("!H"))
 
         if sign_alg == TpmAlgAsym.RSA:
             parameters = TpmsRsaParms.parse(reader)
@@ -273,7 +245,7 @@ class TpmPublicFormat(object):
                 "sign alg {:x} is not " "supported".format(sign_alg)
             )
 
-        rest = reader.read(1)
+        rest = reader.read()
         if len(rest) != 0:
             raise ValueError("there should not be any data left in buffer")
 

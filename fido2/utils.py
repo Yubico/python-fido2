@@ -36,7 +36,9 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from binascii import b2a_hex
 from numbers import Number
+from io import BytesIO
 import six
+import struct
 
 __all__ = [
     "Timeout",
@@ -146,3 +148,27 @@ class Timeout(object):
         if self.timer:
             self.timer.cancel()
             self.timer.join()
+
+
+class ByteBuffer(BytesIO):
+    """BytesIO-like object with the ability to unpack values."""
+
+    def unpack(self, fmt):
+        """Reads and unpacks a value from the buffer.
+
+        :param fmt: A struct format string yielding a single value.
+        :return: The unpacked value.
+        """
+        s = struct.Struct(fmt)
+        return s.unpack(self.read(s.size))[0]
+
+    def read(self, size=-1):
+        """Like BytesIO.read(), but checks the number of bytes read and raises an error
+        if fewer bytes were read than expected.
+        """
+        data = super(ByteBuffer, self).read(size)
+        if size > 0 and len(data) != size:
+            raise ValueError(
+                "Not enough data to read (need: %d, had: %d)." % (size, len(data))
+            )
+        return data
