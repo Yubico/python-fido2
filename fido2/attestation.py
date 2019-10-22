@@ -321,7 +321,7 @@ class TpmAttestation(Attestation):
 
         try:
             att_to_be_signed = auth_data + client_data_hash
-            digest = hashes.Hash(pub_key.HASH_ALG, backend=default_backend())
+            digest = hashes.Hash(pub_key._HASH_ALG, backend=default_backend())
             digest.update(att_to_be_signed)
             data = digest.finalize()
 
