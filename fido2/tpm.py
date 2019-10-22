@@ -37,6 +37,13 @@ from .utils import bytes2int, ByteBuffer
 TPM_ALG_NULL = 0x0010
 
 
+class TpmRsaScheme(IntEnum):
+    RSASSA = 0x0014
+    RSAPSS = 0x0016
+    OAEP = 0x0017
+    RSAES = 0x0015
+
+
 class TpmAlgAsym(IntEnum):
     RSA = 0x0001
     ECC = 0x0023
@@ -138,14 +145,76 @@ class TpmAttestationFormat(object):
 
 
 class TpmsRsaParms(object):
+    """ Parse TPMS_RSA_PARMS struct
+
+    See:
+    https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+    section 12.2.3.5
+    """
+
     @classmethod
-    def parse(cls, reader):
+    def parse(cls, reader, attributes):
+        ATTRIBUTES = TpmPublicFormat.ATTRIBUTES
+
         symmetric = reader.unpack("!H")
-        scheme = reader.unpack("!H")
-        if symmetric != TPM_ALG_NULL:
+
+        restricted_decryption = attributes & (
+            ATTRIBUTES.RESTRICTED | ATTRIBUTES.DECRYPT
+        )
+        is_restricted_decryption_key = restricted_decryption == (
+            ATTRIBUTES.DECRYPT | ATTRIBUTES.RESTRICTED
+        )
+        if not is_restricted_decryption_key and symmetric != TPM_ALG_NULL:
+            # if the key is not a restricted decryption key, this field
+            # shall be set to TPM_ALG_NULL.
             raise ValueError("symmetric is expected to be NULL")
-        if scheme != TPM_ALG_NULL:
-            raise ValueError("scheme is expected to be NULL")
+        # Otherwise should be set to a supported symmetric algorithm, keysize and mode
+        # TODO(baloo): Should we have non-null value here, do we expect more data?
+
+        scheme = reader.unpack("!H")
+
+        restricted_sign = attributes & (ATTRIBUTES.RESTRICTED | ATTRIBUTES.SIGN_ENCRYPT)
+        is_unrestricted_signing_key = restricted_sign == ATTRIBUTES.SIGN_ENCRYPT
+        if is_unrestricted_signing_key and scheme not in (
+            TPM_ALG_NULL,
+            TpmRsaScheme.RSASSA,
+            TpmRsaScheme.RSAPSS,
+        ):
+            raise ValueError(
+                "key is an unrestricted signing key, scheme is "
+                "expected to be TPM_ALG_RSAPSS, TPM_ALG_RSASSA, "
+                "or TPM_ALG_NULL"
+            )
+
+        is_restricted_signing_key = restricted_sign == (
+            ATTRIBUTES.RESTRICTED | ATTRIBUTES.SIGN_ENCRYPT
+        )
+        if is_restricted_signing_key and scheme not in (
+            TpmRsaScheme.RSASSA,
+            TpmRsaScheme.RSAPSS,
+        ):
+            raise ValueError(
+                "key is a restricted signing key, scheme is "
+                "expected to be TPM_ALG_RSAPSS, or TPM_ALG_RSASSA"
+            )
+
+        is_unrestricted_decryption_key = restricted_decryption == ATTRIBUTES.DECRYPT
+        if is_unrestricted_decryption_key and scheme not in (
+            TpmRsaScheme.OAEP,
+            TpmRsaScheme.RSAES,
+            TPM_ALG_NULL,
+        ):
+            raise ValueError(
+                "key is an unrestricted decryption key, scheme is "
+                "expected to be TPM_ALG_RSAES, TPM_ALG_OAEP, or "
+                "TPM_ALG_NULL"
+            )
+
+        if is_restricted_decryption_key and scheme not in (TPM_ALG_NULL,):
+            raise ValueError(
+                "key is an restricted decryption key, scheme is "
+                "expected to be TPM_ALG_NULL"
+            )
 
         key_bits = reader.unpack("!H")
         exponent = reader.unpack("!L")
@@ -235,7 +304,7 @@ class TpmPublicFormat(object):
         auth_policy = reader.read(reader.unpack("!H"))
 
         if sign_alg == TpmAlgAsym.RSA:
-            parameters = TpmsRsaParms.parse(reader)
+            parameters = TpmsRsaParms.parse(reader, attributes)
             unique = Tpm2bPublicKeyRsa.parse(reader)
         # TODO(baloo): implement ECC
         # elif sign_alg == TpmAlgAsym.ECC:
