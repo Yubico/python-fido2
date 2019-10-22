@@ -29,7 +29,7 @@ import struct
 
 from enum import IntEnum
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, ec
 
 from .utils import bytes2int, ByteBuffer
 
@@ -249,6 +249,103 @@ class Tpm2bPublicKeyRsa(bytes):
         return cls(buffer)
 
 
+class TpmEccCurve(IntEnum):
+    """TPM_ECC_CURVE
+    https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+    section 6.4
+    """
+
+    NONE = 0x0000
+    NIST_P192 = 0x0001
+    NIST_P224 = 0x0002
+    NIST_P256 = 0x0003
+    NIST_P384 = 0x0004
+    NIST_P521 = 0x0005
+    BN_P256 = 0x0010
+    BN_P638 = 0x0011
+    SM2_P256 = 0x0020
+
+    def to_curve(self):
+        if self == TpmEccCurve.NONE:
+            raise ValueError("No such curve")
+        elif self == TpmEccCurve.NIST_P192:
+            return ec.SECP192R1()
+        elif self == TpmEccCurve.NIST_P224:
+            return ec.SECP224R1()
+        elif self == TpmEccCurve.NIST_P256:
+            return ec.SECP256R1()
+        elif self == TpmEccCurve.NIST_P384:
+            return ec.SECP384R1()
+        elif self == TpmEccCurve.NIST_P521:
+            return ec.SECP521R1()
+
+        raise ValueError("curve is not supported", self)
+
+
+class TpmiAlgKdf(IntEnum):
+    """TPMI_ALG_KDF
+    https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+    section 9.28
+    """
+
+    KDF1_SP800_56A = 0x0020
+    KDF2 = 0x0021
+    KDF1_SP800_108 = 0x0022
+
+
+class TpmsEccParms(object):
+    @classmethod
+    def parse(cls, reader):
+        symmetric = reader.unpack("!H")
+        scheme = reader.unpack("!H")
+        if symmetric != TPM_ALG_NULL:
+            raise ValueError("symmetric is expected to be NULL")
+        if scheme != TPM_ALG_NULL:
+            raise ValueError("scheme is expected to be NULL")
+
+        curve_id = TpmEccCurve(reader.unpack("!H"))
+        kdf_scheme = TpmiAlgKdf(reader.unpack("!H"))
+
+        return cls(symmetric, scheme, curve_id, kdf_scheme)
+
+    def __init__(self, symmetric, scheme, curve_id, kdf):
+        self.symmetric = symmetric
+        self.scheme = scheme
+        self.curve_id = curve_id
+        self.kdf = kdf
+
+    def __repr__(self):
+        return (
+            "<TpmsEccParms"
+            " symmetric=0x{self.symmetric:x}"
+            " scheme=0x{self.scheme:x}"
+            " curve_id={self.curve_id!r}"
+            " kdf={self.kdf!r}"
+            ">".format(self=self)
+        )
+
+
+class TpmsEccPoint(object):
+    """TPMS_ECC_POINT
+    https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+    Section 11.2.5.2
+    """
+
+    @classmethod
+    def parse(cls, reader):
+        x = reader.read(reader.unpack("!H"))
+        y = reader.read(reader.unpack("!H"))
+
+        return cls(x, y)
+
+    def __init__(self, x, y):
+        self.x = y
+        self.y = y
+
+    def __repr__(self):
+        return "<TpmsEccPoint" " x={self.x}" " y={self.y}" ">".format(self=self)
+
+
 class TpmPublicFormat(object):
     """the public area structure is defined by [TPMv2-Part2] Section 12.2.4 (TPMT_PUBLIC)
     as:
@@ -306,10 +403,9 @@ class TpmPublicFormat(object):
         if sign_alg == TpmAlgAsym.RSA:
             parameters = TpmsRsaParms.parse(reader, attributes)
             unique = Tpm2bPublicKeyRsa.parse(reader)
-        # TODO(baloo): implement ECC
-        # elif sign_alg == TpmAlgAsym.ECC:
-        #     parameters = TpmsEccParms.parse(reader)
-        #     unique = TpmsEccPoint.parse(reader)
+        elif sign_alg == TpmAlgAsym.ECC:
+            parameters = TpmsEccParms.parse(reader)
+            unique = TpmsEccPoint.parse(reader)
         else:
             raise NotImplementedError(
                 "sign alg {:x} is not " "supported".format(sign_alg)
@@ -346,6 +442,12 @@ class TpmPublicFormat(object):
             exponent = self.parameters.exponent
             modulus = bytes2int(self.unique)
             return rsa.RSAPublicNumbers(exponent, modulus).public_key(default_backend())
+        elif self.sign_alg == TpmAlgAsym.ECC:
+            return ec.EllipticCurvePublicNumbers(
+                bytes2int(self.unique.x),
+                bytes2int(self.unique.y),
+                self.parameters.to_curve(),
+            ).public_key(default_backend())
 
         raise NotImplementedError(
             "public_key not implemented for {0!r}".format(self.sign_alg)
