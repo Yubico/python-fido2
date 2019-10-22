@@ -142,10 +142,11 @@ class TpmsRsaParms(object):
     def parse(cls, reader):
         symmetric = reader.unpack("!H")
         scheme = reader.unpack("!H")
-        # TODO(baloo): move those assert to an actual check, this is disabled
-        #              in production
-        assert symmetric == TPM_ALG_NULL
-        assert scheme == TPM_ALG_NULL
+        if symmetric != TPM_ALG_NULL:
+            raise ValueError("symmetric is expected to be NULL")
+        if scheme != TPM_ALG_NULL:
+            raise ValueError("scheme is expected to be NULL")
+
         key_bits = reader.unpack("!H")
         exponent = reader.unpack("!L")
         if exponent == 0:
