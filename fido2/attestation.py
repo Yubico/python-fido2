@@ -184,59 +184,38 @@ class AndroidSafetynetAttestation(Attestation):
 
 
 OID_AAGUID = x509.ObjectIdentifier("1.3.6.1.4.1.45724.1.1.4")
-OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
 
 
-def _validate_attestation_certificate(
-    cert,
-    aaguid,
-    check_subject=True,
-    enforce_empty_subject=False,
-    has_subject_alternative_name=False,
-    has_aik_certificate=False,
-):
+def _validate_cert_common(cert):
     if cert.version != x509.Version.v3:
         raise InvalidData("Attestation certificate must use version 3!")
-    if check_subject:
-        c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
-        if not c:
-            raise InvalidData("Subject must have C set!")
-        o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
-        if not o:
-            raise InvalidData("Subject must have O set!")
-        ous = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATIONAL_UNIT_NAME)
-        if not ous:
-            raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
-
-        ou = ous[0]
-        if ou.value != "Authenticator Attestation":
-            raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
-        cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
-        if not cn:
-            raise InvalidData("Subject must have CN set!")
-
-    if enforce_empty_subject:
-        s = cert.subject.get_attributes_for_oid(x509.NameOID)
-        if s:
-            raise InvalidData("Certificate should not have Subject")
-
-    if has_subject_alternative_name:
-        s = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-        if not s:
-            raise InvalidData("Certificate should have SubjectAlternativeName")
-    if has_aik_certificate:
-        ext = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
-        has_aik = [x == OID_AIK_CERTIFICATE for x in ext.value]
-        if True not in has_aik:
-            raise InvalidData(
-                'Extended key usage MUST contain the "joint-iso-itu-t(2) '
-                "internationalorganizations(23) 133 tcg-kp(8) "
-                'tcg-kp-AIKCertificate(3)" OID.'
-            )
 
     bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
     if bc.value.ca:
         raise InvalidData("Attestation certificate must have CA=false!")
+
+
+def _validate_packed_cert(cert, aaguid):
+    # https://www.w3.org/TR/webauthn/#packed-attestation-cert-requirements
+    _validate_cert_common(cert)
+
+    c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
+    if not c:
+        raise InvalidData("Subject must have C set!")
+    o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
+    if not o:
+        raise InvalidData("Subject must have O set!")
+    ous = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATIONAL_UNIT_NAME)
+    if not ous:
+        raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
+
+    ou = ous[0]
+    if ou.value != "Authenticator Attestation":
+        raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
+    cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
+    if not cn:
+        raise InvalidData("Subject must have CN set!")
+
     try:
         ext = cert.extensions.get_extension_for_oid(OID_AAGUID)
         if ext.critical:
@@ -261,7 +240,7 @@ class PackedAttestation(Attestation):
         x5c = statement.get("x5c")
         if x5c:
             cert = x509.load_der_x509_certificate(x5c[0], default_backend())
-            _validate_attestation_certificate(cert, auth_data.credential_data.aaguid)
+            _validate_packed_cert(cert, auth_data.credential_data.aaguid)
 
             pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
         else:
@@ -272,6 +251,30 @@ class PackedAttestation(Attestation):
             pub_key.verify(auth_data + client_data_hash, statement["sig"])
         except _InvalidSignature:
             raise InvalidSignature()
+
+
+OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
+
+
+def _validate_tpm_cert(cert):
+    # https://www.w3.org/TR/webauthn/#tpm-cert-requirements
+    _validate_cert_common(cert)
+
+    s = cert.subject.get_attributes_for_oid(x509.NameOID)
+    if s:
+        raise InvalidData("Certificate should not have Subject")
+
+    s = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+    if not s:
+        raise InvalidData("Certificate should have SubjectAlternativeName")
+    ext = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
+    has_aik = [x == OID_AIK_CERTIFICATE for x in ext.value]
+    if True not in has_aik:
+        raise InvalidData(
+            'Extended key usage MUST contain the "joint-iso-itu-t(2) '
+            "internationalorganizations(23) 133 tcg-kp(8) "
+            'tcg-kp-AIKCertificate(3)" OID.'
+        )
 
 
 class TpmAttestation(Attestation):
@@ -286,14 +289,7 @@ class TpmAttestation(Attestation):
         if x5c:
             cert = x509.load_der_x509_certificate(x5c[0], default_backend())
 
-            _validate_attestation_certificate(
-                cert,
-                auth_data.credential_data.aaguid,
-                check_subject=False,
-                enforce_empty_subject=True,
-                has_subject_alternative_name=True,
-                has_aik_certificate=True,
-            )
+            _validate_tpm_cert(cert)
 
             pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
         else:
