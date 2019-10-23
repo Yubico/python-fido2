@@ -105,7 +105,9 @@ class CtapHidDevice(CtapDevice):
             else:
                 raise CtapError(CtapError.ERR.INVALID_COMMAND)
 
-        self.call(CTAPHID.CANCEL, b"", _SingleEvent())
+        # Cancel the request.
+        self._dev.InternalSend(TYPE_INIT | CTAPHID.CANCEL, bytearray())
+        self._dev.InternalRecv()
         raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
 
     def wink(self):
