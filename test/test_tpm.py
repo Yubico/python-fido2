@@ -28,7 +28,7 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido2._tpm import TpmAttestationFormat
+from fido2._tpm import TpmAttestationFormat, TpmPublicFormat
 from binascii import a2b_hex
 
 import unittest
@@ -54,3 +54,9 @@ class TestTpmObject(unittest.TestCase):
         self.assertEqual(
             e.exception.args[0], "Not enough data to read (need: 20, had: 9)."
         )
+
+    def test_parse_public_ecc(self):
+        data = a2b_hex(
+            "0023000b00060472000000100010000300100020b9174cd199f77552afcffe6b1f069c032ffdc4f56068dec4e189e7967b3bf6b0002037bf8aa7d93fddb9507319141c6fa31c8e48a1c6da013603a9f6e3913d157c66"  # noqa
+        )
+        TpmPublicFormat.parse(data)

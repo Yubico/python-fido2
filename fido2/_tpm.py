@@ -318,6 +318,7 @@ class TpmiAlgKdf(IntEnum):
     section 9.28
     """
 
+    NULL = TPM_ALG_NULL
     KDF1_SP800_56A = 0x0020
     KDF2 = 0x0021
     KDF1_SP800_108 = 0x0022
