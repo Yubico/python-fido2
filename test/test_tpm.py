@@ -28,7 +28,7 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido2.tpm import TpmAttestationFormat
+from fido2._tpm import TpmAttestationFormat
 from binascii import a2b_hex
 
 import unittest

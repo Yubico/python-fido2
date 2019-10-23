@@ -28,7 +28,7 @@
 from __future__ import absolute_import, unicode_literals
 
 from .cose import CoseKey, ES256
-from .tpm import TpmAttestationFormat, TpmPublicFormat
+from ._tpm import TpmAttestationFormat, TpmPublicFormat
 from .utils import sha256, websafe_decode
 from binascii import a2b_hex
 from cryptography import x509
