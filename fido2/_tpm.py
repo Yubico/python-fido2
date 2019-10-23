@@ -464,7 +464,7 @@ class TpmPublicFormat(object):
         return (
             "<TpmPublicFormat"
             " sign_alg=0x{self.sign_alg:x}"
-            " hash_alg=0x{self.hash_alg:x}"
+            " name_alg=0x{self.name_alg:x}"
             " attributes=0x{self.attributes:x}({self.attributes!r})"
             " auth_policy={self.auth_policy}"
             " parameters={self.parameters}"
