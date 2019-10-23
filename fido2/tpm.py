@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Copyright (c) 2019 Yubico AB
 # All rights reserved.
 #
@@ -28,8 +30,10 @@
 import struct
 
 from enum import IntEnum
+from collections import namedtuple
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
+from cryptography.hazmat.primitives import hashes
 
 from .utils import bytes2int, ByteBuffer
 
@@ -54,6 +58,23 @@ class TpmAlgHash(IntEnum):
     SHA256 = 0x000B
     SHA384 = 0x000C
     SHA512 = 0x000D
+
+    def _hash_alg(self):
+        if self == TpmAlgHash.SHA1:
+            return hashes.SHA1()
+        elif self == TpmAlgHash.SHA256:
+            return hashes.SHA256()
+        elif self == TpmAlgHash.SHA384:
+            return hashes.SHA384()
+        elif self == TpmAlgHash.SHA512:
+            return hashes.SHA512()
+
+        return NotImplementedError(
+            "_hash_alg is not implemented for {0!r}".format(self)
+        )
+
+
+TpmsCertifyInfo = namedtuple("TpmsCertifyInfo", "name qualified_name")
 
 
 class TpmAttestationFormat(object):
@@ -91,9 +112,15 @@ class TpmAttestationFormat(object):
         reader = ByteBuffer(data)
         generated_value = reader.read(4)
 
+        # Verify that magic is set to TPM_GENERATED_VALUE.
+        # see https://w3c.github.io/webauthn/#sctn-tpm-attestation
+        #     verification procedure
         if generated_value != cls.TPM_GENERATED_VALUE:
             raise ValueError("generated value field is invalid")
 
+        # Verify that type is set to TPM_ST_ATTEST_CERTIFY.
+        # see https://w3c.github.io/webauthn/#sctn-tpm-attestation
+        #     verification procedure
         tpmi_st_attest = reader.read(2)
         if tpmi_st_attest != cls.TPM_ST_ATTEST_CERTIFY:
             raise ValueError("tpmi_st_attest field is invalid")
@@ -122,7 +149,9 @@ class TpmAttestationFormat(object):
             data=data,
             clock_info=(clock, reset_count, restart_count, safe),
             firmware_version=firmware_version,
-            attested=(attested_name, attested_qualified_name),
+            attested=TpmsCertifyInfo(
+                name=attested_name, qualified_name=attested_qualified_name
+            ),
         )
 
     def __init__(self, name, data, clock_info, firmware_version, attested):
@@ -130,6 +159,7 @@ class TpmAttestationFormat(object):
         self.data = data
         self.clock_info = clock_info
         self.firmware_version = firmware_version
+        assert attested.__class__ == TpmsCertifyInfo
         self.attested = attested
 
     def __repr__(self):
@@ -390,7 +420,7 @@ class TpmPublicFormat(object):
     def parse(cls, data):
         reader = ByteBuffer(data)
         sign_alg = TpmAlgAsym(reader.unpack("!H"))
-        hash_alg = TpmAlgHash(reader.unpack("!H"))
+        name_alg = TpmAlgHash(reader.unpack("!H"))
 
         attributes = reader.unpack("!L")
         if attributes & TpmPublicFormat.ATTRIBUTES.SHALL_BE_ZERO != 0:
@@ -415,15 +445,20 @@ class TpmPublicFormat(object):
         if len(rest) != 0:
             raise ValueError("there should not be any data left in buffer")
 
-        return cls(sign_alg, hash_alg, attributes, auth_policy, parameters, unique)
+        return cls(
+            sign_alg, name_alg, attributes, auth_policy, parameters, unique, data
+        )
 
-    def __init__(self, sign_alg, hash_alg, attributes, auth_policy, parameters, unique):
+    def __init__(
+        self, sign_alg, name_alg, attributes, auth_policy, parameters, unique, data
+    ):
         self.sign_alg = sign_alg
-        self.hash_alg = hash_alg
+        self.name_alg = name_alg
         self.attributes = attributes
         self.auth_policy = auth_policy
         self.parameters = parameters
         self.unique = unique
+        self.data = data
 
     def __repr__(self):
         return (
@@ -452,3 +487,26 @@ class TpmPublicFormat(object):
         raise NotImplementedError(
             "public_key not implemented for {0!r}".format(self.sign_alg)
         )
+
+    def name(self):
+        """
+        Computing Entity Names
+
+        see:
+          https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
+        section 16 Names
+
+        Name ≔ nameAlg || HnameAlg (handle→nvPublicArea)
+          where
+            nameAlg algorithm used to compute Name
+            HnameAlg hash using the nameAlg parameter in the NV Index location
+                     associated with handle
+            nvPublicArea contents of the TPMS_NV_PUBLIC associated with handle
+        """
+        output = struct.pack("!H", self.name_alg)
+
+        digest = hashes.Hash(self.name_alg._hash_alg(), backend=default_backend())
+        digest.update(self.data)
+        output += digest.finalize()
+
+        return output

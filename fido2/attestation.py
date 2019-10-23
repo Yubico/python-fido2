@@ -320,15 +320,37 @@ class TpmAttestation(Attestation):
             )
 
         try:
+            # TpmAttestationFormat.parse is reponsible for:
+            #   Verify that magic is set to TPM_GENERATED_VALUE.
+            #   Verify that type is set to TPM_ST_ATTEST_CERTIFY.
+            tpm = TpmAttestationFormat.parse(cert_info)
+
+            # Verify that extraData is set to the hash of attToBeSigned
+            # using the hash algorithm employed in "alg".
             att_to_be_signed = auth_data + client_data_hash
             digest = hashes.Hash(pub_key._HASH_ALG, backend=default_backend())
             digest.update(att_to_be_signed)
             data = digest.finalize()
 
-            tpm = TpmAttestationFormat.parse(cert_info)
             if tpm.data != data:
-                raise InvalidSignature()
+                raise InvalidSignature(
+                    "attestation does not sign for authData and ClientData"
+                )
+
+            # Verify that attested contains a TPMS_CERTIFY_INFO structure as
+            # specified in [TPMv2-Part2] section 10.12.3, whose name field
+            # contains a valid Name for pubArea, as computed using the
+            # algorithm in the nameAlg field of pubArea using the procedure
+            # specified in [TPMv2-Part1] section 16.
+            # [TPMv2-Part2]:
+            # https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+            # [TPMv2-Part1]:
+            # https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
+            if tpm.attested.name != pub_area.name():
+                raise InvalidData(
+                    "TPMS_CERTIFY_INFO does not include a valid name for pubArea"
+                )
 
             pub_key.verify(cert_info, statement["sig"])
         except _InvalidSignature:
-            raise InvalidSignature()
+            raise InvalidSignature("signature of certInfo does not match")
