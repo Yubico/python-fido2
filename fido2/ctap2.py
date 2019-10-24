@@ -253,7 +253,7 @@ class AuthenticatorData(bytes):
 
         reader = ByteBuffer(self)
         self.rp_id_hash = reader.read(32)
-        self.flags = reader.unpack(">B")
+        self.flags = reader.unpack("B")
         self.counter = reader.unpack(">I")
         rest = reader.read()
 

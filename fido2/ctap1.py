@@ -158,7 +158,7 @@ class SignatureData(bytes):
         super(SignatureData, self).__init__()
 
         reader = ByteBuffer(self)
-        self.user_presence = reader.unpack(">B")
+        self.user_presence = reader.unpack("B")
         self.counter = reader.unpack(">I")
         self.signature = reader.read()
 
