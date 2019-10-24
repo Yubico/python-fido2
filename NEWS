@@ -1,4 +1,9 @@
-* Version 0.7.2 (unreleased)
+* Version 0.7.2 (released 2019-10-24)
+ ** Support for the TPM attestation format.
+ ** Allow passing custom challenges to register/authenticate in Fido2Server.
+ ** Bugfix: CTAP2 CANCEL command response handling fixed.
+ ** Bugfix: Fido2Client fix handling of empty allow_list.
+ ** Bugfix: Fix typo in CTAP2.get_assertions() causing it to fail.
 
 * Version 0.7.1 (released 2019-09-20)
  ** Support for FreeBSD.
