@@ -1,3 +1,6 @@
+* Version 0.7.3 (released 2019-10-24)
+ ** Bugfix: Workaround for size of int on Python 2 on Windows.
+
 * Version 0.7.2 (released 2019-10-24)
  ** Support for the TPM attestation format.
  ** Allow passing custom challenges to register/authenticate in Fido2Server.

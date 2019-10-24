@@ -28,6 +28,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import struct
+import six
 
 from enum import IntEnum
 from collections import namedtuple
@@ -36,6 +37,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives import hashes
 
 from .utils import bytes2int, ByteBuffer
+
+
+if six.PY2:
+    # Workaround for int max size on Python 2.
+    from enum import Enum
+
+    class _LongEnum(long, Enum):  # noqa F821
+        """Like IntEnum, but supports larger values"""
+
+    IntEnum = _LongEnum  # Use instead of IntEnum  # noqa F811
 
 
 TPM_ALG_NULL = 0x0010
