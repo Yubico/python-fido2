@@ -28,7 +28,7 @@
 from __future__ import absolute_import, unicode_literals
 
 from .hid import CTAPHID
-from .utils import websafe_encode, websafe_decode, bytes2int
+from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
 from .cose import ES256
 from .attestation import FidoU2FAttestation
 from enum import IntEnum, unique
@@ -157,9 +157,10 @@ class SignatureData(bytes):
     def __init__(self, _):
         super(SignatureData, self).__init__()
 
-        self.user_presence = six.indexbytes(self, 0)
-        self.counter = struct.unpack(">I", self[1:5])[0]
-        self.signature = self[5:]
+        reader = ByteBuffer(self)
+        self.user_presence = reader.unpack(">B")
+        self.counter = reader.unpack(">I")
+        self.signature = reader.read()
 
     @property
     def b64(self):
@@ -208,7 +209,6 @@ class CTAP1(object):
         VERSION = 0x03
 
     def __init__(self, device):
-
         self.device = device
 
     def send_apdu(self, cla=0, ins=0, p1=0, p2=0, data=b""):

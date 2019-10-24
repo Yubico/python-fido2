@@ -31,7 +31,7 @@ from . import cbor
 from .ctap import CtapError
 from .cose import CoseKey, ES256
 from .hid import CTAPHID, CAPABILITY
-from .utils import Timeout, sha256, hmac_sha256, bytes2int, int2bytes
+from .utils import Timeout, ByteBuffer, sha256, hmac_sha256, bytes2int, int2bytes
 from .attestation import FidoU2FAttestation
 
 from cryptography.hazmat.backends import default_backend
@@ -173,10 +173,10 @@ class AttestedCredentialData(bytes):
         :param data: A binary string containing an attested credential data.
         :return: AAGUID, credential ID, public key, and remaining data.
         """
-        aaguid = data[:16]
-        c_len = struct.unpack(">H", data[16:18])[0]
-        cred_id = data[18 : 18 + c_len]
-        pub_key, rest = cbor.decode_from(data[18 + c_len :])
+        reader = ByteBuffer(data)
+        aaguid = reader.read(16)
+        cred_id = reader.read(reader.unpack(">H"))
+        pub_key, rest = cbor.decode_from(reader.read())
         return aaguid, cred_id, CoseKey.parse(pub_key), rest
 
     @classmethod
@@ -251,13 +251,14 @@ class AuthenticatorData(bytes):
     def __init__(self, _):
         super(AuthenticatorData, self).__init__()
 
-        self.rp_id_hash = self[:32]
-        self.flags = six.indexbytes(self, 32)
-        self.counter = struct.unpack(">I", self[33 : 33 + 4])[0]
-        rest = self[37:]
+        reader = ByteBuffer(self)
+        self.rp_id_hash = reader.read(32)
+        self.flags = reader.unpack(">B")
+        self.counter = reader.unpack(">I")
+        rest = reader.read()
 
         if self.flags & AuthenticatorData.FLAG.ATTESTED:
-            self.credential_data, rest = AttestedCredentialData.unpack_from(self[37:])
+            self.credential_data, rest = AttestedCredentialData.unpack_from(rest)
         else:
             self.credential_data = None
 
