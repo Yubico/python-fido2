@@ -32,6 +32,7 @@ from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
 from .cose import ES256
+from .webauthn import make_credential
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
@@ -271,20 +272,47 @@ class WEBAUTHN_TYPE(six.text_type, Enum):
 _CTAP1_INFO = b"\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50" + b"\0" * 16
 
 
+def running_windows_non_admin():
+    """
+    Determine if running on Windows with version >= 1903 
+    and not as an administrator, which would require the use of
+    the built in WebAuthN API in Windows.
+    """
+    import platform
+    if platform.system().lower() == 'windows':
+        import sys
+        import ctypes
+        shell = ctypes.WinDLL('shell32')
+        build = sys.getwindowsversion().build
+
+        # Corresponds to the breaking 1903 update
+        # https://en.wikipedia.org/wiki/Windows_10_version_history#Rings
+        if not shell.IsUserAnAdmin() and build >= 18362:
+            return True
+
+    return False
+
 class Fido2Client(object):
     def __init__(self, device, origin, verify=verify_rp_id):
         self.ctap1_poll_delay = 0.25
         self.origin = origin
         self._verify = verify
         try:
+            if running_windows_non_admin:
+                self._do_make_credential = self._webauthn_make_credential
+                self._do_get_assertion = self._webauthn_get_assertion
+            else:
+                self._do_make_credential = self._ctap2_make_credential
+                self._do_get_assertion = self._ctap2_get_assertion
+            
             self.ctap2 = CTAP2(device)
             self.info = self.ctap2.get_info()
+            
             if PinProtocolV1.VERSION in self.info.pin_protocols:
                 self.pin_protocol = PinProtocolV1(self.ctap2)
             else:
                 self.pin_protocol = None
-            self._do_make_credential = self._ctap2_make_credential
-            self._do_get_assertion = self._ctap2_get_assertion
+
         except ValueError:
             self.ctap1 = CTAP1(device)
             self.info = Info(_CTAP1_INFO)
@@ -342,6 +370,42 @@ class Fido2Client(object):
             )
         except CtapError as e:
             raise _ctap2client_err(e)
+
+    def _webauthn_make_credential(
+        self,
+        client_data,
+        rp,
+        user,
+        algos,
+        exclude_list,
+        extensions,
+        rk,
+        uv,
+        pin,
+        timeout,
+        on_keepalive,
+    ):
+        key_params = [{"type": "public-key", "alg": alg} for alg in algos]
+
+        if not (rk or uv):
+            options = None
+        else:
+            options = {}
+            if rk:
+                options["rk"] = True
+            if uv:
+                options["uv"] = True
+
+        return webauthn.make_credential(
+            client_data,
+            rp,
+            user,
+            key_params,
+            exclude_list,
+            extensions,
+            options,
+            timeout
+        )        
 
     def _ctap2_make_credential(
         self,
@@ -490,6 +554,36 @@ class Fido2Client(object):
             )
         except CtapError as e:
             raise _ctap2client_err(e)
+
+    def _webauthn_get_assertion(
+        self,
+        client_data,
+        rp_id,
+        allow_list,
+        extensions,
+        up,
+        uv,
+        pin,
+        timeout,
+        on_keepalive,
+    ):
+
+        options = {}
+        if not up:
+            options["up"] = False
+        if uv:
+            options["uv"] = True
+        if len(options) == 0:
+            options = None
+        
+        return webauthn.get_assertion(
+            client_data,
+            rp_id,
+            allow_list,
+            extensions,
+            options,
+            timeout
+        )
 
     def _ctap2_get_assertion(
         self,
