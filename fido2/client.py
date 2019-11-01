@@ -32,7 +32,7 @@ from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
 from .cose import ES256
-from .webauthn import make_credential
+from .webauthn import make_credential, get_assertion
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
