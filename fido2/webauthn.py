@@ -432,7 +432,10 @@ class WebAuthNAssertion(ctypes.Structure):
     def credential(self):
         # type: () -> List[ctypes.c_byte]
         """Get credential_id from Credential."""
-        return to_byte_array(self.Credential.pbId, self.Credential.cbId)
+        return {
+            'id': to_byte_array(self.Credential.pbId, self.Credential.cbId),
+            'type': self.Credential.pwszCredentialType
+        }
 
 
 class WebAuthNMakeCredentialOptions(ctypes.Structure):  # pylint: disable=too-many-instance-attributes
