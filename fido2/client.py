@@ -32,7 +32,7 @@ from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
 from .cose import ES256
-from .webauthn import make_credential, get_assertion
+from .webauthn import WebAuthN, WEBAUTHN_TYPE
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
@@ -263,12 +263,6 @@ class U2fClient(object):
         }
 
 
-@unique
-class WEBAUTHN_TYPE(six.text_type, Enum):
-    MAKE_CREDENTIAL = "webauthn.create"
-    GET_ASSERTION = "webauthn.get"
-
-
 _CTAP1_INFO = b"\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50" + b"\0" * 16
 
 
@@ -301,12 +295,13 @@ class Fido2Client(object):
             if running_windows_non_admin:
                 self._do_make_credential = self._webauthn_make_credential
                 self._do_get_assertion = self._webauthn_get_assertion
+                self.ctap2 = WebAuthN()
+                self.info = self.ctap2.get_info()
             else:
                 self._do_make_credential = self._ctap2_make_credential
                 self._do_get_assertion = self._ctap2_get_assertion
-            
-            self.ctap2 = CTAP2(device)
-            self.info = self.ctap2.get_info()
+                self.ctap2 = CTAP2(device)
+                self.info = self.ctap2.get_info()
             
             if PinProtocolV1.VERSION in self.info.pin_protocols:
                 self.pin_protocol = PinProtocolV1(self.ctap2)
@@ -396,7 +391,7 @@ class Fido2Client(object):
             if uv:
                 options["uv"] = True
 
-        return webauthn.make_credential(
+        return self.ctap2.make_credential(
             client_data,
             rp,
             user,
@@ -576,7 +571,7 @@ class Fido2Client(object):
         if len(options) == 0:
             options = None
         
-        return webauthn.get_assertion(
+        return self.ctap2.get_assertion(
             client_data,
             rp_id,
             allow_list,

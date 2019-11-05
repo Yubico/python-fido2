@@ -37,11 +37,15 @@ https://github.com/microsoft/webauthn
 # pylint: disable=invalid-name, super-init-not-called, too-few-public-methods
 
 import ctypes
+import sys
+import six
+
+from win32gui import GetForegroundWindow
 from enum import Enum, unique
 from typing import Dict, Union, List, Tuple, Optional
-from fido2.ctap2 import AttestationObject, AuthenticatorData
-from fido2.client import ClientData, WEBAUTHN_TYPE
-from fido2.utils import websafe_encode
+
+from .ctap2 import AttestationObject, AuthenticatorData
+from .utils import websafe_encode
 
 WEBAUTHN = ctypes.windll.webauthn
 
@@ -138,11 +142,6 @@ class WebAuthNClientData(ctypes.Structure):
         self.cbClientDataJSON = ctypes.wintypes.DWORD(len(client_data))
         self.pbClientDataJSON = ctypes.cast(client_data, ctypes.POINTER(ctypes.c_byte))
         self.pwszHashAlgId = ctypes.wintypes.LPCWSTR('SHA-256')
-
-    def to_client_data_object(self):
-        # type: () -> ClientData
-        """Convert struct to ClientData from Yubico."""
-        return ClientData(to_byte_array(self.pbClientDataJSON, self.cbClientDataJSON))
 
 
 class WebAuthNRpEntityInformation(ctypes.Structure):
@@ -385,14 +384,18 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         self.dwUserVerificationRequirement = ctypes.wintypes.DWORD(
             user_verification_requirement.value)
 
-        if self.dwVersion >= 4 and isinstance(credentials, WebAuthNCredentialList):
-            self.pAllowCredentialList = (ctypes.pointer(credentials))
-        elif isinstance(credentials, WebAuthNCredentials):
-            self.CredentialList = credentials
-        elif credentials is not None:
-            raise ValueError('"credentials" must be of type "WebAuthNCredentials"'
-                             'when API version is less than 4')
-
+        # When credentials are specified in as either a struct of 
+        # WebAuthNCredentialList or WebAuthNCredentials
+        # the call to WebAuthNAuthenticatorGetAssertion fails. When the are omitted,
+        # the call succeeds.
+        # ----------------------------------------------------------------------------
+        # if self.dwVersion >= 4:
+        #     self.pAllowCredentialList = (ctypes.pointer(
+        #         WebAuthNCredentialList(credentials)
+        #     ))
+        # else:
+        #     self.CredentialList = WebAuthNCredentials(credentials)
+        # ----------------------------------------------------------------------------
 
 class WebAuthNAssertion(ctypes.Structure):
     """Maps to WEBAUTHN_ASSERTION Struct.
@@ -412,7 +415,7 @@ class WebAuthNAssertion(ctypes.Structure):
     ]
 
     @property
-    def authenticator_data(self):
+    def auth_data(self):
         # type: () -> AuthenticatorData
         """Convert pbAuthenticatorData to AuthenticatorData."""
         return AuthenticatorData(
@@ -426,7 +429,7 @@ class WebAuthNAssertion(ctypes.Structure):
         return to_byte_array(self.pbSignature, self.cbSignature)
 
     @property
-    def credential_id(self):
+    def credential(self):
         # type: () -> List[ctypes.c_byte]
         """Get credential_id from Credential."""
         return to_byte_array(self.Credential.pbId, self.Credential.cbId)
@@ -477,7 +480,7 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):  # pylint: disable=too-ma
             credentials (WebAuthNCredentials, WebAuthNCredentialList): Credentials used
                 for exclusion.
         """
-        self.dwVersion = self.version
+        self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = int(timeout)
         self.bRequireResidentKey = ctypes.wintypes.BOOL(require_resident_key)
         self.dwAuthenticatorAttachment = ctypes.wintypes.DWORD(attachment.value)
@@ -485,18 +488,18 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):  # pylint: disable=too-ma
             user_verification_requirement.value)
         self.dwAttestationConveyancePreference = ctypes.wintypes.DWORD(attestation_convoyence.value)
 
-        if self.dwVersion >= 3 and isinstance(credentials, WebAuthNCredentialList):
-            self.pExcludeCredentialList = (ctypes.pointer(credentials))
-        elif isinstance(credentials, WebAuthNCredentials):
-            self.CredentialList = credentials
-        elif credentials is not None:
-            raise ValueError('"credentials" must be of type "WebAuthNCredentials" '
-                             'when API version is less than 4 (Version %s).' % self.dwVersion)
-    
-    @property
-    def version(self):
-        """Get version of WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS."""
-        return get_version(self.__class__.__name__)
+        # Whether or not these excluded credentials are specified in
+        # WebAuthNMakeCredentialOptions
+        # as a struct of WebAuthNCredentialList or WebAuthNCredentials
+        # either way, the call to WebAuthNAuthenticatorMakeCredential stills succeeds
+        #----------------------------------------------------------------------------
+        if self.dwVersion >= 3:
+            self.pExcludeCredentialList = ctypes.pointer(
+                WebAuthNCredentialList(credentials)
+            )
+        else:
+            self.CredentialList = WebAuthNCredentials(credentials)
+        #----------------------------------------------------------------------------
 
 class WebAuthNCredentialAttestation(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL_ATTESTATION Struct.
@@ -583,20 +586,10 @@ class WebAuthNCTAPTransport(Enum):
     FLAGS_MASK = 0x0000001F
 
 
-def get_clients(origin, challenge, webauthn_type):
-    # type: (str, str, WEBAUTHN_TYPE) -> Tuple[ClientData, WebAuthNClientData]
-    """Create FIDO clients."""
-    client_data = ClientData.build(
-        type=webauthn_type,
-        clientExtensions={},
-        challenge=websafe_encode(challenge),
-        origin=origin
-    )
-
-    webauthn_client_data = WebAuthNClientData(client_data)
-    return client_data, webauthn_client_data
-
-
+@unique
+class WEBAUTHN_TYPE(six.text_type, Enum):
+    MAKE_CREDENTIAL = "webauthn.create"
+    GET_ASSERTION = "webauthn.get"
 
 
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
@@ -620,12 +613,12 @@ WEBAUTHN_STRUCT_VERSIONS = {
 
 
 def get_version(class_name):
-    # type: (str) -> ctypes.wintypes.DWORD
+    # type: (str) -> int
     """Get version of struct."""
     if class_name in WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION]:
         return WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION][class_name]
 
-    return ctypes.wintypes.DWORD(WEBAUTHN_STRUCT_VERSIONS[1][class_name])
+    return WEBAUTHN_STRUCT_VERSIONS[1][class_name]
 
 
 def to_unicode_buffer(value):
@@ -640,132 +633,142 @@ def to_byte_array(pbyte, dword):
     return ctypes.cast(pbyte, ctypes.POINTER(ctypes.c_byte * dword)).contents
 
 
+class Info(object):
+    """Empty class derived from CTAP Info class."""
 
-def make_credential(
-    client_data,
-    rp,
-    user,
-    key_params,
-    exclude_list=None,
-    extensions=None,
-    options=None,
-    timeout=None
-):
-    """Make credential using Windows WebAuthN API"""
-    rp_info = WebAuthNRpEntityInformation(rp['id'], rp['name'])
-    user_info = WebAuthNUserEntityInformation(user['id'], user['name'])
-    cose_cred_params = WebAuthNCoseCredentialParameters(key_params)
-    webauthn_client_data = WebAuthNClientData(client_data)
+    def __init__(self):
+        super(Info, self).__init__()
 
-    # Whether or not these excluded credentials are specified in
-    # WebAuthNMakeCredentialOptions
-    # as a struct of WebAuthNCredentialList or WebAuthNCredentials
-    # either way, the call to WebAuthNAuthenticatorMakeCredential stills succeeds
-    if WebAuthNMakeCredentialOptions.version >= 3:
-        excluded_credentials = WebAuthNCredentialList(exclude_list)
-    else:
-        excluded_credentials = WebAuthNCredentials(exclude_list)
-    
-    # TODO: add support for extensions
-    make_cred_options = WebAuthNMakeCredentialOptions(
-        timeout,
-        options.get('rk', True),
-        WebAuthNAuthenticatorAttachment.cross_platform,
-        WebAuthNUserVerificationRequirement.any,
-        WebAuthNAttestationConvoyancePreference[key_data.get('attestation', 'any')],
-        excluded_credentials  # - see notes above
-    )
+        self.versions = None
+        self.extensions = []
+        self.aaguid = None
+        self.options = {}
+        self.max_msg_size = 1024
+        self.pin_protocols = []
+        self.max_creds_in_list = -1
+        self.max_cred_id_length = -1
+        self.transports = []
+        self.algorithms = None
+        self.data = None
 
-    WEBAUTHN.WebAuthNAuthenticatorMakeCredential.argtypes = [
-        ctypes.wintypes.HWND,
-        ctypes.POINTER(WebAuthNRpEntityInformation),
-        ctypes.POINTER(WebAuthNUserEntityInformation),
-        ctypes.POINTER(WebAuthNCoseCredentialParameters),
-        ctypes.POINTER(WebAuthNClientData),
-        ctypes.POINTER(WebAuthNMakeCredentialOptions),
-        ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialAttestation))
-    ]
-    WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = ctypes.c_int
 
-    from win32gui import GetForegroundWindow
-    handle = GetForegroundWindow()
+class WebAuthN(object):
+    """Implementation of Microsoft's WebAuthN APIs."""
 
-    attestation_data = ctypes.POINTER(WebAuthNCredentialAttestation)()
-    result = WEBAUTHN.WebAuthNAuthenticatorMakeCredential(
-        handle,
-        ctypes.byref(rp_info),
-        ctypes.byref(user_info),
-        ctypes.byref(cose_cred_params),
-        ctypes.byref(webauthn_client_data),
-        ctypes.byref(make_cred_options),
-        ctypes.byref(attestation_data))
+    def get_info(self):
+        """Empty info."""
+        return Info()
 
-    if result != 0:
-        WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
-        WEBAUTHN.WebAuthNGetErrorName.restype = ctypes.c_wchar_p
-        error = WEBAUTHN.WebAuthNGetErrorName(result)
-
-        print('Failed to make credential using WebAuthN API: %s' % error)
-        return sys.exit(1)
-    
-    return attestation_data.contents
-
-def get_assertion(
-    client_data,
-    rp_id,
-    allow_list,
-    extensions,
-    up,
-    uv,
-    timeout
-):
-    """Get assertion using Windows WebAuthN API."""
-
-    webauthn_client_data = WebAuthNClientData(client_data)
-
-    # When these allowed credentials are specified in
-    # WebAuthNMakeCredentialOptions as either a struct of 
-    # WebAuthNCredentialList or WebAuthNCredentials
-    # the call to WebAuthNAuthenticatorMakeCredential fails. When the are omitted,
-    # the call succeeds.
-    # -------------------------------------------------------------------------------
-    # allow_credentials = WebAuthNCredentialList(allow_list)
-    # allow_credentials = WebAuthNCredentials(allow_list)
-    # -------------------------------------------------------------------------------
-    
-    assertion_options = WebAuthNGetAssertionOptions(
-        timeout,
-        WebAuthNAuthenticatorAttachment.cross_platform,  # TODO: is this correct?
-        WebAuthNUserVerificationRequirement.required if uv else 
+    def make_credential(
+        self,
+        client_data,
+        rp,
+        user,
+        key_params,
+        exclude_list=None,
+        extensions=None,
+        options=None,
+        timeout=None
+    ):
+        """Make credential using Windows WebAuthN API"""
+        rp_info = WebAuthNRpEntityInformation(rp['id'], rp['name'])
+        user_info = WebAuthNUserEntityInformation(user['id'], user['name'])
+        cose_cred_params = WebAuthNCoseCredentialParameters(key_params)
+        webauthn_client_data = WebAuthNClientData(client_data)
+        
+        # TODO: add support for extensions
+        make_cred_options = WebAuthNMakeCredentialOptions(
+            timeout,
+            options.get('rk', True),
+            WebAuthNAuthenticatorAttachment.cross_platform,
             WebAuthNUserVerificationRequirement.any,
-        # allow_credentials  # - see notes aboves
-    )
+            WebAuthNAttestationConvoyancePreference.direct,
+            exclude_list
+        )
 
-    WEBAUTHN.WebAuthNAuthenticatorGetAssertion.argtypes = [
-        ctypes.wintypes.HWND,
-        ctypes.wintypes.LPCWSTR,
-        ctypes.POINTER(WebAuthNClientData),
-        ctypes.POINTER(WebAuthNGetAssertionOptions),
-        ctypes.POINTER(ctypes.POINTER(WebAuthNAssertion))
-    ]
-    WEBAUTHN.WebAuthNAuthenticatorGetAssertion.restype = ctypes.c_int
+        WEBAUTHN.WebAuthNAuthenticatorMakeCredential.argtypes = [
+            ctypes.wintypes.HWND,
+            ctypes.POINTER(WebAuthNRpEntityInformation),
+            ctypes.POINTER(WebAuthNUserEntityInformation),
+            ctypes.POINTER(WebAuthNCoseCredentialParameters),
+            ctypes.POINTER(WebAuthNClientData),
+            ctypes.POINTER(WebAuthNMakeCredentialOptions),
+            ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialAttestation))
+        ]
+        WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = ctypes.c_int
+        
+        handle = GetForegroundWindow()
 
-    from win32gui import GetForegroundWindow
-    handle = GetForegroundWindow()
-    assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
-    result = WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
-        handle,
+        attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
+        result = WEBAUTHN.WebAuthNAuthenticatorMakeCredential(
+            handle,
+            ctypes.byref(rp_info),
+            ctypes.byref(user_info),
+            ctypes.byref(cose_cred_params),
+            ctypes.byref(webauthn_client_data),
+            ctypes.byref(make_cred_options),
+            ctypes.byref(attestation_pointer))
+
+        if result != 0:
+            WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
+            WEBAUTHN.WebAuthNGetErrorName.restype = ctypes.c_wchar_p
+            error = WEBAUTHN.WebAuthNGetErrorName(result)
+
+            print('Failed to make credential using WebAuthN API: %s' % error)
+            return sys.exit(1)
+        
+        return attestation_pointer.contents.to_attestation_object()
+
+
+    def get_assertion(
+        self,
+        client_data,
         rp_id,
-        ctypes.pointer(webauthn_client_data),
-        ctypes.pointer(assertion_options),
-        ctypes.pointer(assertion_pointer))
+        allow_list,
+        extensions,
+        options,
+        timeout
+    ):
+        """Get assertion using Windows WebAuthN API."""
 
-    if result != 0:
-        WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
-        WEBAUTHN.WebAuthNGetErrorName.restype = ctypes.c_wchar_p
-        error = WEBAUTHN.WebAuthNGetErrorName(result)
-
-        print('Failed to make credential using WebAuthN API: %s' % error)
-        return sys.exit(1)
+        if options:
+            uv = options.get('uv', False)
+        else:
+            uv = False
     
-    return assertion_pointer.contents
+        webauthn_client_data = WebAuthNClientData(client_data)
+        assertion_options = WebAuthNGetAssertionOptions(
+            timeout,
+            WebAuthNAuthenticatorAttachment.cross_platform,  # TODO: is this correct?
+            WebAuthNUserVerificationRequirement.required if uv else 
+                WebAuthNUserVerificationRequirement.any,
+            allow_list
+        )
+
+        WEBAUTHN.WebAuthNAuthenticatorGetAssertion.argtypes = [
+            ctypes.wintypes.HWND,
+            ctypes.wintypes.LPCWSTR,
+            ctypes.POINTER(WebAuthNClientData),
+            ctypes.POINTER(WebAuthNGetAssertionOptions),
+            ctypes.POINTER(ctypes.POINTER(WebAuthNAssertion))
+        ]
+        WEBAUTHN.WebAuthNAuthenticatorGetAssertion.restype = ctypes.c_int
+
+        handle = GetForegroundWindow()
+        assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
+        result = WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
+            handle,
+            rp_id,
+            ctypes.pointer(webauthn_client_data),
+            ctypes.pointer(assertion_options),
+            ctypes.pointer(assertion_pointer))
+
+        if result != 0:
+            WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
+            WEBAUTHN.WebAuthNGetErrorName.restype = ctypes.c_wchar_p
+            error = WEBAUTHN.WebAuthNGetErrorName(result)
+
+            print('Failed to make credential using WebAuthN API: %s' % error)
+            return sys.exit(1)
+        
+        return [assertion_pointer.contents]
