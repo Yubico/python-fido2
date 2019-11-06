@@ -57,6 +57,8 @@ setup(
         "six",
         "cryptography>=1.5",
         'uhid-freebsd>=1.2.1;platform_system=="FreeBSD"',
+        'typing;python_version<"3.5";platform_system=="Windows"',
+        'win32gui;platform_system=="Windows"'
     ],
     extras_require={':python_version < "3.4"': ["enum34"], "pcsc": ["pyscard"]},
     test_suite="test",

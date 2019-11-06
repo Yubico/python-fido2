@@ -38,6 +38,7 @@ from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
 import json
 import six
+import platform
 
 
 class ClientData(bytes):
@@ -278,7 +279,6 @@ def running_windows_non_admin():
     and not as an administrator, which would require the use of
     the built in WebAuthN API in Windows.
     """
-    import platform
     if platform.system().lower() == 'windows':
         import sys
         import ctypes
@@ -387,7 +387,20 @@ class Fido2Client(object):
         timeout,
         on_keepalive,
     ):
-        """Create credentials using Windows WebAuhtN APIs."""
+        """Create credentials using Windows WebAuhtN APIs.
+        
+        Args:
+            client_data: ClientData
+            rp: Relying Party information
+            user: Information about the user
+            algos: Algorithms used
+            exclude_list: List of credentials to exclude
+            extensions: Any credential extensions
+            rk: Whether the Resident Key is required
+            uv: Whether or not User Verification is required
+            timeout: Timeout while creating credential
+            on_keepalive:
+        """
         key_params = [{"type": "public-key", "alg": alg} for alg in algos]
 
         if not (rk or uv):
@@ -570,7 +583,7 @@ class Fido2Client(object):
         timeout,
         on_keepalive,
     ):
-
+        """Get assertion using Windows WebAuthN APIs."""
         options = {}
         if not up:
             options["up"] = False
