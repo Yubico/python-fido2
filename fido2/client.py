@@ -32,7 +32,6 @@ from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
 from .cose import ES256
-from .win_api import WinAPI
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
@@ -300,6 +299,7 @@ class Fido2Client(object):
         self._verify = verify
         try:
             if running_windows_non_admin:
+                from .win_api import WinAPI
                 self.ctap2 = WinAPI()
                 self.info = self.ctap2.get_info()
                 self._do_make_credential = self._webauthn_make_credential
@@ -388,7 +388,7 @@ class Fido2Client(object):
         on_keepalive,
     ):
         """Create credentials using Windows WebAuhtN APIs.
-        
+
         Args:
             client_data: ClientData
             rp: Relying Party information
@@ -399,7 +399,7 @@ class Fido2Client(object):
             rk: Whether the Resident Key is required
             uv: Whether or not User Verification is required
             timeout: Timeout while creating credential
-            on_keepalive:
+            on_keepalive: Unused
         """
         key_params = [{"type": "public-key", "alg": alg} for alg in algos]
 
@@ -583,7 +583,19 @@ class Fido2Client(object):
         timeout,
         on_keepalive,
     ):
-        """Get assertion using Windows WebAuthN APIs."""
+        """Get assertion using Windows WebAuthN APIs.
+
+        Args:
+            client_data: ClientData
+            rp_id: Relying Party ID
+            allow_list: List of credentials to allow
+            extensions: Any credential extensions
+            up: Unused
+            uv: Whether or not User Verification is required
+            pin: Unused
+            timeout: Timeout while creating credential
+            on_keepalive: Unused
+        """
         options = {}
         if not up:
             options["up"] = False
