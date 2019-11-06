@@ -37,9 +37,9 @@ https://github.com/microsoft/webauthn
 # pylint: disable=invalid-name, super-init-not-called, too-few-public-methods
 
 import ctypes
+from ctypes import wintypes
 import sys
 
-from win32gui import GetForegroundWindow
 from enum import Enum, unique
 from typing import Dict, Union, List
 
@@ -77,16 +77,16 @@ class WebAuthNCoseCredentialParameter(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("pwszCredentialType", ctypes.wintypes.LPCWSTR),
-        ("lAlg", ctypes.wintypes.LONG)
+        ("dwVersion", wintypes.DWORD),
+        ("pwszCredentialType", wintypes.LPCWSTR),
+        ("lAlg", wintypes.LONG)
     ]
 
     def __init__(self, cred_type, alg):
         # type: (str, Union[str,int]) -> None
         """Init struct."""
         self.dwVersion = get_version(self.__class__.__name__)
-        self.pwszCredentialType = ctypes.wintypes.LPCWSTR(cred_type)
+        self.pwszCredentialType = wintypes.LPCWSTR(cred_type)
         self.lAlg = ctypes.c_long(int(alg))
 
 
@@ -97,7 +97,7 @@ class WebAuthNCoseCredentialParameters(ctypes.Structure):
     """
 
     _fields_ = [
-        ("cCredentialParameters", ctypes.wintypes.DWORD),
+        ("cCredentialParameters", wintypes.DWORD),
         ("pCredentialParameters", ctypes.POINTER(WebAuthNCoseCredentialParameter))
     ]
 
@@ -127,18 +127,18 @@ class WebAuthNClientData(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("cbClientDataJSON", ctypes.wintypes.DWORD),
-        ("pbClientDataJSON", ctypes.wintypes.PBYTE),
-        ("pwszHashAlgId", ctypes.wintypes.LPCWSTR)
+        ("dwVersion", wintypes.DWORD),
+        ("cbClientDataJSON", wintypes.DWORD),
+        ("pbClientDataJSON", wintypes.PBYTE),
+        ("pwszHashAlgId", wintypes.LPCWSTR)
     ]
 
     def __init__(self, client_data):
         """Init struct."""
         self.dwVersion = get_version(self.__class__.__name__)
-        self.cbClientDataJSON = ctypes.wintypes.DWORD(len(client_data))
+        self.cbClientDataJSON = wintypes.DWORD(len(client_data))
         self.pbClientDataJSON = ctypes.cast(client_data, ctypes.POINTER(ctypes.c_byte))
-        self.pwszHashAlgId = ctypes.wintypes.LPCWSTR('SHA-256')
+        self.pwszHashAlgId = wintypes.LPCWSTR('SHA-256')
 
 
 class WebAuthNRpEntityInformation(ctypes.Structure):
@@ -148,7 +148,7 @@ class WebAuthNRpEntityInformation(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
+        ("dwVersion", wintypes.DWORD),
         ("pwszId", ctypes.POINTER(ctypes.c_wchar)),
         ("pwszName", ctypes.POINTER(ctypes.c_wchar)),
         ("pwszIcon", ctypes.POINTER(ctypes.c_wchar))
@@ -172,9 +172,9 @@ class WebAuthNUserEntityInformation(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("cbId", ctypes.wintypes.DWORD),
-        ("pbId", ctypes.wintypes.PBYTE),
+        ("dwVersion", wintypes.DWORD),
+        ("cbId", wintypes.DWORD),
+        ("pbId", wintypes.PBYTE),
         ("pwszName", ctypes.POINTER(ctypes.c_wchar)),
         ("pwszIcon", ctypes.POINTER(ctypes.c_wchar)),
         ("pwszDisplayName", ctypes.POINTER(ctypes.c_wchar))
@@ -186,7 +186,7 @@ class WebAuthNUserEntityInformation(ctypes.Structure):
         user = to_unicode_buffer(user_id)
 
         self.dwVersion = get_version(self.__class__.__name__)
-        self.cbId = ctypes.wintypes.DWORD(len(user_id))
+        self.cbId = wintypes.DWORD(len(user_id))
         self.pbId = ctypes.cast(user, ctypes.POINTER(ctypes.c_byte))
         self.pwszName = to_unicode_buffer(user_name)
 
@@ -204,11 +204,11 @@ class WebAuthNCredentialEx(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("cbId", ctypes.wintypes.DWORD),
-        ("pbId", ctypes.wintypes.PBYTE),
-        ("pwszCredentialType", ctypes.wintypes.LPCWSTR),
-        ("dwTransports", ctypes.wintypes.DWORD)
+        ("dwVersion", wintypes.DWORD),
+        ("cbId", wintypes.DWORD),
+        ("pbId", wintypes.PBYTE),
+        ("pwszCredentialType", wintypes.LPCWSTR),
+        ("dwTransports", wintypes.DWORD)
     ]
 
     def __init__(self, cred_id, cred_type, transport):
@@ -225,11 +225,11 @@ class WebAuthNCredentialEx(ctypes.Structure):
                 restrictions.
         """
         self.dwVersion = get_version(self.__class__.__name__)
-        self.cbId = ctypes.wintypes.DWORD(len(cred_id))
+        self.cbId = wintypes.DWORD(len(cred_id))
         self.pbId = ctypes.cast(to_unicode_buffer(cred_id), ctypes.POINTER(
             ctypes.c_byte))
-        self.pwszCredentialType = ctypes.wintypes.LPCWSTR(cred_type)
-        self.dwTransports = ctypes.wintypes.DWORD(transport.value)
+        self.pwszCredentialType = wintypes.LPCWSTR(cred_type)
+        self.dwTransports = wintypes.DWORD(transport.value)
 
 
 class WebAuthNCredentialList(ctypes.Structure):
@@ -239,29 +239,30 @@ class WebAuthNCredentialList(ctypes.Structure):
     """
 
     _fields_ = [
-        ("cCredentials", ctypes.wintypes.DWORD),
+        ("cCredentials", wintypes.DWORD),
         ("ppCredentials", ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialEx)))
     ]
 
     def __init__(self, credentials):
         # type: (List[Dict[str,str]]) -> None
         """Create pointer to array of structs."""
-        num_of_creds = len(credentials)
-        elems = (ctypes.POINTER(WebAuthNCredentialEx) * num_of_creds)()
+        if credentials:
+            num_of_creds = len(credentials)
+            elems = (ctypes.POINTER(WebAuthNCredentialEx) * num_of_creds)()
 
-        for num in range(num_of_creds):
-            transport = WebAuthNCTAPTransport[credentials[num].get('transport', 'USB')]
-            elems[num].contents = WebAuthNCredentialEx(
-                credentials[num]['id'],
-                credentials[num]['type'],
-                transport
+            for num in range(num_of_creds):
+                transport = WebAuthNCTAPTransport[credentials[num].get('transport', 'USB')]
+                elems[num].contents = WebAuthNCredentialEx(
+                    credentials[num]['id'],
+                    credentials[num]['type'],
+                    transport
+                )
+
+            self.ppCredentials = ctypes.cast(
+                elems,
+                ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialEx))
             )
-
-        self.ppCredentials = ctypes.cast(
-            elems,
-            ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialEx))
-        )
-        self.cCredentials = num_of_creds
+            self.cCredentials = num_of_creds
 
 
 class WebAuthNExtension(ctypes.Structure):
@@ -271,8 +272,8 @@ class WebAuthNExtension(ctypes.Structure):
     """
 
     _fields_ = [
-        ("pwszExtensionIdentifier", ctypes.wintypes.LPCWSTR),
-        ("cbExtension", ctypes.wintypes.DWORD),
+        ("pwszExtensionIdentifier", wintypes.LPCWSTR),
+        ("cbExtension", wintypes.DWORD),
         ("pvExtension", ctypes.POINTER(ctypes.c_ubyte))
     ]
 
@@ -284,7 +285,7 @@ class WebAuthNExtensions(ctypes.Structure):
     """
 
     _fields_ = [
-        ("cExtensions", ctypes.wintypes.DWORD),
+        ("cExtensions", wintypes.DWORD),
         ("pExtensions", ctypes.POINTER(WebAuthNExtension))
     ]
 
@@ -296,19 +297,19 @@ class WebAuthNCredential(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("cbId", ctypes.wintypes.DWORD),
-        ("pbId", ctypes.wintypes.PBYTE),
-        ("pwszCredentialType", ctypes.wintypes.LPCWSTR)
+        ("dwVersion", wintypes.DWORD),
+        ("cbId", wintypes.DWORD),
+        ("pbId", wintypes.PBYTE),
+        ("pwszCredentialType", wintypes.LPCWSTR)
     ]
 
     def __init__(self, cred_id, cred_type):
         # type: (str, str) -> None
         """Init information about credential."""
-        self.cbId = ctypes.wintypes.DWORD(len(cred_id))
+        self.cbId = wintypes.DWORD(len(cred_id))
         self.pbId = ctypes.cast(to_unicode_buffer(cred_id), ctypes.POINTER(
             ctypes.c_byte))
-        self.pwszCredentialType = ctypes.wintypes.LPCWSTR(cred_type)
+        self.pwszCredentialType = wintypes.LPCWSTR(cred_type)
 
 
 class WebAuthNCredentials(ctypes.Structure):
@@ -318,27 +319,28 @@ class WebAuthNCredentials(ctypes.Structure):
     """
 
     _fields_ = [
-        ("cCredentials", ctypes.wintypes.DWORD),
+        ("cCredentials", wintypes.DWORD),
         ("pCredentials", ctypes.POINTER(WebAuthNCredential))
     ]
 
     def __init__(self, credentials):
         # type: (List[Dict[str,str]]) -> None
         """Create pointer to array of structs."""
-        num_of_creds = len(credentials)
-        elems = (WebAuthNCredential * num_of_creds)()
+        if credentials:
+            num_of_creds = len(credentials)
+            elems = (WebAuthNCredential * num_of_creds)()
 
-        for num in range(num_of_creds):
-            elems[num] = WebAuthNCredential(
-                credentials[num]['id'],
-                credentials[num]['type']
+            for num in range(num_of_creds):
+                elems[num] = WebAuthNCredential(
+                    credentials[num]['id'],
+                    credentials[num]['type']
+                )
+
+            self.pCredentials = ctypes.cast(
+                elems,
+                ctypes.POINTER(WebAuthNCredential)
             )
-
-        self.pCredentials = ctypes.cast(
-            elems,
-            ctypes.POINTER(WebAuthNCredential)
-        )
-        self.cCredentials = num_of_creds
+            self.cCredentials = num_of_creds
 
 
 class WebAuthNGetAssertionOptions(ctypes.Structure):
@@ -348,15 +350,15 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("dwTimeoutMilliseconds", ctypes.wintypes.DWORD),
+        ("dwVersion", wintypes.DWORD),
+        ("dwTimeoutMilliseconds", wintypes.DWORD),
         ("CredentialList", WebAuthNCredentials),
         ("Extensions", WebAuthNExtensions),
-        ("dwAuthenticatorAttachment", ctypes.wintypes.DWORD),
-        ("dwUserVerificationRequirement", ctypes.wintypes.DWORD),
-        ("dwFlags", ctypes.wintypes.DWORD),
+        ("dwAuthenticatorAttachment", wintypes.DWORD),
+        ("dwUserVerificationRequirement", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
         ("pwszU2fAppId", ctypes.POINTER(ctypes.c_wchar)),  # PCWSTR type
-        ("pbU2fAppId", ctypes.wintypes.BOOL),
+        ("pbU2fAppId", wintypes.BOOL),
         ("pCancellationId", ctypes.POINTER(GUID)),
         ("pAllowCredentialList", ctypes.POINTER(WebAuthNCredentialList))
     ]
@@ -382,8 +384,8 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         """
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = int(timeout)
-        self.dwAuthenticatorAttachment = ctypes.wintypes.DWORD(attachment.value)
-        self.dwUserVerificationRequirement = ctypes.wintypes.DWORD(
+        self.dwAuthenticatorAttachment = wintypes.DWORD(attachment.value)
+        self.dwUserVerificationRequirement = wintypes.DWORD(
             user_verification_requirement.value)
 
         # When credentials are specified in as either a struct of
@@ -407,14 +409,14 @@ class WebAuthNAssertion(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("cbAuthenticatorData", ctypes.wintypes.DWORD),
-        ("pbAuthenticatorData", ctypes.wintypes.PBYTE),
-        ("cbSignature", ctypes.wintypes.DWORD),
-        ("pbSignature", ctypes.wintypes.PBYTE),
+        ("dwVersion", wintypes.DWORD),
+        ("cbAuthenticatorData", wintypes.DWORD),
+        ("pbAuthenticatorData", wintypes.PBYTE),
+        ("cbSignature", wintypes.DWORD),
+        ("pbSignature", wintypes.PBYTE),
         ("Credential", WebAuthNCredential),
-        ("cbUserId", ctypes.wintypes.DWORD),
-        ("pbUserId", ctypes.wintypes.PBYTE)
+        ("cbUserId", wintypes.DWORD),
+        ("pbUserId", wintypes.PBYTE)
     ]
 
     @property
@@ -448,15 +450,15 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("dwTimeoutMilliseconds", ctypes.wintypes.DWORD),
+        ("dwVersion", wintypes.DWORD),
+        ("dwTimeoutMilliseconds", wintypes.DWORD),
         ("CredentialList", WebAuthNCredentials),
         ("Extensions", WebAuthNExtensions),
-        ("dwAuthenticatorAttachment", ctypes.wintypes.DWORD),
-        ("bRequireResidentKey", ctypes.wintypes.BOOL),
-        ("dwUserVerificationRequirement", ctypes.wintypes.DWORD),
-        ("dwAttestationConveyancePreference", ctypes.wintypes.DWORD),
-        ("dwFlags", ctypes.wintypes.DWORD),
+        ("dwAuthenticatorAttachment", wintypes.DWORD),
+        ("bRequireResidentKey", wintypes.BOOL),
+        ("dwUserVerificationRequirement", wintypes.DWORD),
+        ("dwAttestationConveyancePreference", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
         ("pCancellationId", ctypes.POINTER(GUID)),
         ("pExcludeCredentialList", ctypes.POINTER(WebAuthNCredentialList))
     ]
@@ -487,11 +489,11 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         """
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = int(timeout)
-        self.bRequireResidentKey = ctypes.wintypes.BOOL(require_resident_key)
-        self.dwAuthenticatorAttachment = ctypes.wintypes.DWORD(attachment.value)
-        self.dwUserVerificationRequirement = ctypes.wintypes.DWORD(
+        self.bRequireResidentKey = wintypes.BOOL(require_resident_key)
+        self.dwAuthenticatorAttachment = wintypes.DWORD(attachment.value)
+        self.dwUserVerificationRequirement = wintypes.DWORD(
             user_verification_requirement.value)
-        self.dwAttestationConveyancePreference = ctypes.wintypes.DWORD(
+        self.dwAttestationConveyancePreference = wintypes.DWORD(
             attestation_convoyence.value)
 
         # Whether or not these excluded credentials are specified in
@@ -515,20 +517,20 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
     """
 
     _fields_ = [
-        ("dwVersion", ctypes.wintypes.DWORD),
-        ("pwszFormatType", ctypes.wintypes.LPCWSTR),
-        ("cbAuthenticatorData", ctypes.wintypes.DWORD),
-        ("pbAuthenticatorData", ctypes.wintypes.PBYTE),
-        ("cbAttestation", ctypes.wintypes.DWORD),
-        ("pbAttestation", ctypes.wintypes.PBYTE),
-        ("dwAttestationDecodeType", ctypes.wintypes.DWORD),
+        ("dwVersion", wintypes.DWORD),
+        ("pwszFormatType", wintypes.LPCWSTR),
+        ("cbAuthenticatorData", wintypes.DWORD),
+        ("pbAuthenticatorData", wintypes.PBYTE),
+        ("cbAttestation", wintypes.DWORD),
+        ("pbAttestation", wintypes.PBYTE),
+        ("dwAttestationDecodeType", wintypes.DWORD),
         ("pvAttestationDecode", ctypes.POINTER(ctypes.c_ubyte)),
-        ("cbAttestationObject", ctypes.wintypes.DWORD),
-        ("pbAttestationObject", ctypes.wintypes.PBYTE),
-        ("cbCredentialId", ctypes.wintypes.DWORD),
-        ("pbCredentialId", ctypes.wintypes.PBYTE),
+        ("cbAttestationObject", wintypes.DWORD),
+        ("pbAttestationObject", wintypes.PBYTE),
+        ("cbCredentialId", wintypes.DWORD),
+        ("pbCredentialId", wintypes.PBYTE),
         ("Extensions", WebAuthNExtensions),
-        ("dwUsedTransport", ctypes.wintypes.DWORD)
+        ("dwUsedTransport", wintypes.DWORD)
     ]
 
     def to_attestation_object(self):
@@ -629,7 +631,7 @@ def to_unicode_buffer(value):
 
 
 def to_byte_array(pbyte, dword):
-    # type: (ctypes.wintypes.PBYTE, ctypes.wintypes.DWORD) -> List[ctypes.c_byte]
+    # type: (wintypes.PBYTE, wintypes.DWORD) -> List[ctypes.c_byte]
     """Convert pbytes to something usable in python."""
     return ctypes.cast(pbyte, ctypes.POINTER(ctypes.c_byte * dword)).contents
 
@@ -677,10 +679,15 @@ class WinAPI(object):
         cose_cred_params = WebAuthNCoseCredentialParameters(key_params)
         webauthn_client_data = WebAuthNClientData(client_data)
 
+        if options:
+            rk = options.get('rk', True)
+        else:
+            rk = False
+
         # TODO: add support for extensions
         make_cred_options = WebAuthNMakeCredentialOptions(
             timeout,
-            options.get('rk', True),
+            rk,
             WebAuthNAuthenticatorAttachment.cross_platform,
             WebAuthNUserVerificationRequirement.any,
             WebAuthNAttestationConvoyancePreference.direct,
@@ -688,7 +695,7 @@ class WinAPI(object):
         )
 
         WEBAUTHN.WebAuthNAuthenticatorMakeCredential.argtypes = [
-            ctypes.wintypes.HWND,
+            wintypes.HWND,
             ctypes.POINTER(WebAuthNRpEntityInformation),
             ctypes.POINTER(WebAuthNUserEntityInformation),
             ctypes.POINTER(WebAuthNCoseCredentialParameters),
@@ -698,7 +705,7 @@ class WinAPI(object):
         ]
         WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = ctypes.c_int
 
-        handle = GetForegroundWindow()
+        handle = ctypes.windll.user32.GetForegroundWindow()
 
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
         result = WEBAUTHN.WebAuthNAuthenticatorMakeCredential(
@@ -746,15 +753,15 @@ class WinAPI(object):
         )
 
         WEBAUTHN.WebAuthNAuthenticatorGetAssertion.argtypes = [
-            ctypes.wintypes.HWND,
-            ctypes.wintypes.LPCWSTR,
+            wintypes.HWND,
+            wintypes.LPCWSTR,
             ctypes.POINTER(WebAuthNClientData),
             ctypes.POINTER(WebAuthNGetAssertionOptions),
             ctypes.POINTER(ctypes.POINTER(WebAuthNAssertion))
         ]
         WEBAUTHN.WebAuthNAuthenticatorGetAssertion.restype = ctypes.c_int
 
-        handle = GetForegroundWindow()
+        handle = ctypes.windll.user32.GetForegroundWindow()
         assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
         result = WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
             handle,
