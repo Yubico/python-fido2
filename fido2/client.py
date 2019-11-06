@@ -32,7 +32,7 @@ from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
 from .cose import ES256
-from .webauthn import WebAuthN, WEBAUTHN_TYPE
+from .win_api import WinAPI, WEBAUTHN_TYPE
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
@@ -268,7 +268,7 @@ _CTAP1_INFO = b"\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50" + b"\0" * 16
 
 def running_windows_non_admin():
     """
-    Determine if running on Windows with version >= 1903 
+    Determine if running on Windows with version >= 1903
     and not as an administrator, which would require the use of
     the built in WebAuthN API in Windows.
     """
@@ -286,6 +286,7 @@ def running_windows_non_admin():
 
     return False
 
+
 class Fido2Client(object):
     def __init__(self, device, origin, verify=verify_rp_id):
         self.ctap1_poll_delay = 0.25
@@ -293,16 +294,16 @@ class Fido2Client(object):
         self._verify = verify
         try:
             if running_windows_non_admin:
+                self.ctap2 = WinAPI()
+                self.info = self.ctap2.get_info()
                 self._do_make_credential = self._webauthn_make_credential
                 self._do_get_assertion = self._webauthn_get_assertion
-                self.ctap2 = WebAuthN()
-                self.info = self.ctap2.get_info()
             else:
-                self._do_make_credential = self._ctap2_make_credential
-                self._do_get_assertion = self._ctap2_get_assertion
                 self.ctap2 = CTAP2(device)
                 self.info = self.ctap2.get_info()
-            
+                self._do_make_credential = self._ctap2_make_credential
+                self._do_get_assertion = self._ctap2_get_assertion
+
             if PinProtocolV1.VERSION in self.info.pin_protocols:
                 self.pin_protocol = PinProtocolV1(self.ctap2)
             else:
@@ -380,6 +381,7 @@ class Fido2Client(object):
         timeout,
         on_keepalive,
     ):
+        """Create credentials using Windows WebAuhtN APIs."""
         key_params = [{"type": "public-key", "alg": alg} for alg in algos]
 
         if not (rk or uv):
@@ -400,7 +402,7 @@ class Fido2Client(object):
             extensions,
             options,
             timeout
-        )        
+        )
 
     def _ctap2_make_credential(
         self,
@@ -570,7 +572,7 @@ class Fido2Client(object):
             options["uv"] = True
         if len(options) == 0:
             options = None
-        
+
         return self.ctap2.get_assertion(
             client_data,
             rp_id,

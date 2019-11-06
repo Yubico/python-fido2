@@ -42,10 +42,9 @@ import six
 
 from win32gui import GetForegroundWindow
 from enum import Enum, unique
-from typing import Dict, Union, List, Tuple, Optional
+from typing import Dict, Union, List
 
 from .ctap2 import AttestationObject, AuthenticatorData
-from .utils import websafe_encode
 
 WEBAUTHN = ctypes.windll.webauthn
 
@@ -64,12 +63,12 @@ class GUID(ctypes.Structure):
         return '{%08X-%04X-%04X-%04X-%012X}' % (
             self.Data1, self.Data2, self.Data3,
             self.Data4[0] * 256 + self.Data4[1],
-            self.Data4[2] * (256 ** 5) +
-            self.Data4[3] * (256 ** 4) +
-            self.Data4[4] * (256 ** 3) +
-            self.Data4[5] * (256 ** 2) +
-            self.Data4[6] * 256 +
-            self.Data4[7])
+            self.Data4[2] * (256 ** 5)
+            + self.Data4[3] * (256 ** 4)
+            + self.Data4[4] * (256 ** 3)
+            + self.Data4[5] * (256 ** 2)
+            + self.Data4[6] * 256
+            + self.Data4[7])
 
 
 class WebAuthNCoseCredentialParameter(ctypes.Structure):
@@ -136,7 +135,6 @@ class WebAuthNClientData(ctypes.Structure):
     ]
 
     def __init__(self, client_data):
-        # type: (ClientData) -> None
         """Init struct."""
         self.dwVersion = get_version(self.__class__.__name__)
         self.cbClientDataJSON = ctypes.wintypes.DWORD(len(client_data))
@@ -217,17 +215,20 @@ class WebAuthNCredentialEx(ctypes.Structure):
     def __init__(self, cred_id, cred_type, transport):
         # type: (str, str, WebAuthNCTAPTransport) -> None
         """
-        Initialize struct about credential with extra information, such as, dwTransports.
+        Initialize struct about credential with extra information, such as,
+        dwTransports.
 
         Args:
             cred_id (str): Unique ID for this particular credential.
             cred_type (str): Well-known credential type specifying what
                 this particular credential is.
-            transport (WebAuthNCTAPTransport): Transports. 0 implies no transport restrictions.
+            transport (WebAuthNCTAPTransport): Transports. 0 implies no transport
+                restrictions.
         """
         self.dwVersion = get_version(self.__class__.__name__)
         self.cbId = ctypes.wintypes.DWORD(len(cred_id))
-        self.pbId = ctypes.cast(to_unicode_buffer(cred_id), ctypes.POINTER(ctypes.c_byte))
+        self.pbId = ctypes.cast(to_unicode_buffer(cred_id), ctypes.POINTER(
+            ctypes.c_byte))
         self.pwszCredentialType = ctypes.wintypes.LPCWSTR(cred_type)
         self.dwTransports = ctypes.wintypes.DWORD(transport.value)
 
@@ -306,7 +307,8 @@ class WebAuthNCredential(ctypes.Structure):
         # type: (str, str) -> None
         """Init information about credential."""
         self.cbId = ctypes.wintypes.DWORD(len(cred_id))
-        self.pbId = ctypes.cast(to_unicode_buffer(cred_id), ctypes.POINTER(ctypes.c_byte))
+        self.pbId = ctypes.cast(to_unicode_buffer(cred_id), ctypes.POINTER(
+            ctypes.c_byte))
         self.pwszCredentialType = ctypes.wintypes.LPCWSTR(cred_type)
 
 
@@ -361,11 +363,10 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
     ]
 
     def __init__(self,
-                 timeout,                        # type: int
-                 attachment,                     # type: WebAuthNAuthenticatorAttachment
-                 user_verification_requirement,  # type: WebAuthNUserVerificationRequirement
-                 credentials=(
-                     None)  # type: Optional[Union[WebAuthNCredentials, WebAuthNCredentialList]]
+                 timeout,
+                 attachment,
+                 user_verification_requirement,
+                 credentials=None
                  ):
         # type: (...) -> None
         """Get Assertion options.
@@ -373,10 +374,12 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         Args:
             timeout (int): Time that the operation is expected to complete within.This
                 is used as guidance, and can be overridden by the platform.
-            attachment (WebAuthNAuthenticatorAttachment): Platform vs Cross-Platform Authenticators.
+            attachment (WebAuthNAuthenticatorAttachment): Platform vs Cross-Platform
+                Authenticators.
             user_verification_requirement (WebAuthNUserVerificationRequirement): User
                 Verification Requirement.
-            credentials (WebAuthNCredentials, WebAuthNCredentialList): Allowed Credentials List.
+            credentials (WebAuthNCredentials, WebAuthNCredentialList): Allowed
+                Credentials List.
         """
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = int(timeout)
@@ -384,7 +387,7 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         self.dwUserVerificationRequirement = ctypes.wintypes.DWORD(
             user_verification_requirement.value)
 
-        # When credentials are specified in as either a struct of 
+        # When credentials are specified in as either a struct of
         # WebAuthNCredentialList or WebAuthNCredentials
         # the call to WebAuthNAuthenticatorGetAssertion fails. When the are omitted,
         # the call succeeds.
@@ -396,6 +399,7 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         # else:
         #     self.CredentialList = WebAuthNCredentials(credentials)
         # ----------------------------------------------------------------------------
+
 
 class WebAuthNAssertion(ctypes.Structure):
     """Maps to WEBAUTHN_ASSERTION Struct.
@@ -438,7 +442,7 @@ class WebAuthNAssertion(ctypes.Structure):
         }
 
 
-class WebAuthNMakeCredentialOptions(ctypes.Structure):  # pylint: disable=too-many-instance-attributes
+class WebAuthNMakeCredentialOptions(ctypes.Structure):
     """maps to WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L394
@@ -458,28 +462,27 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):  # pylint: disable=too-ma
         ("pExcludeCredentialList", ctypes.POINTER(WebAuthNCredentialList))
     ]
 
-    # pylint: disable=too-many-arguments
     def __init__(self,
-                 timeout,                        # type: int
-                 require_resident_key,           # type: bool
-                 attachment,                     # type: WebAuthNAuthenticatorAttachment
-                 user_verification_requirement,  # type: WebAuthNUserVerificationRequirement
-                 attestation_convoyence,         # type: WebAuthNAttestationConvoyancePreference
-                 credentials=(
-                     None)  # type: Optional[Union[WebAuthNCredentials, WebAuthNCredentialList]]
+                 timeout,
+                 require_resident_key,
+                 attachment,
+                 user_verification_requirement,
+                 attestation_convoyence,
+                 credentials=(None)
                  ):
-        # type: (...) -> None
         """Make Credential Options.
 
         Args:
             timeout (int): Time that the operation is expected to complete within.This
                 is used as guidance, and can be overridden by the platform.
-            require_resident_key (bool): Require key to be resident or not. Defaulting to FALSE.
-            attachment (WebAuthNAuthenticatorAttachment): Platform vs Cross-Platform Authenticators.
+            require_resident_key (bool): Require key to be resident or not.
+                                         Defaulting to FALSE.
+            attachment (WebAuthNAuthenticatorAttachment): Platform vs Cross-Platform
+                                                          Authenticators.
             user_verification_requirement (WebAuthNUserVerificationRequirement): User
                 Verification Requirement.
-            attestation_convoyence (WebAuthNAttestationConvoyancePreference): Attestation
-                Conveyance Preference.
+            attestation_convoyence (WebAuthNAttestationConvoyancePreference):
+                Attestation Conveyance Preference.
             credentials (WebAuthNCredentials, WebAuthNCredentialList): Credentials used
                 for exclusion.
         """
@@ -489,20 +492,22 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):  # pylint: disable=too-ma
         self.dwAuthenticatorAttachment = ctypes.wintypes.DWORD(attachment.value)
         self.dwUserVerificationRequirement = ctypes.wintypes.DWORD(
             user_verification_requirement.value)
-        self.dwAttestationConveyancePreference = ctypes.wintypes.DWORD(attestation_convoyence.value)
+        self.dwAttestationConveyancePreference = ctypes.wintypes.DWORD(
+            attestation_convoyence.value)
 
         # Whether or not these excluded credentials are specified in
         # WebAuthNMakeCredentialOptions
         # as a struct of WebAuthNCredentialList or WebAuthNCredentials
         # either way, the call to WebAuthNAuthenticatorMakeCredential stills succeeds
-        #----------------------------------------------------------------------------
+        # ----------------------------------------------------------------------------
         if self.dwVersion >= 3:
             self.pExcludeCredentialList = ctypes.pointer(
                 WebAuthNCredentialList(credentials)
             )
         else:
             self.CredentialList = WebAuthNCredentials(credentials)
-        #----------------------------------------------------------------------------
+        # ----------------------------------------------------------------------------
+
 
 class WebAuthNCredentialAttestation(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL_ATTESTATION Struct.
@@ -655,7 +660,7 @@ class Info(object):
         self.data = None
 
 
-class WebAuthN(object):
+class WinAPI(object):
     """Implementation of Microsoft's WebAuthN APIs."""
 
     def get_info(self):
@@ -678,7 +683,7 @@ class WebAuthN(object):
         user_info = WebAuthNUserEntityInformation(user['id'], user['name'])
         cose_cred_params = WebAuthNCoseCredentialParameters(key_params)
         webauthn_client_data = WebAuthNClientData(client_data)
-        
+
         # TODO: add support for extensions
         make_cred_options = WebAuthNMakeCredentialOptions(
             timeout,
@@ -699,7 +704,7 @@ class WebAuthN(object):
             ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialAttestation))
         ]
         WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = ctypes.c_int
-        
+
         handle = GetForegroundWindow()
 
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
@@ -719,9 +724,8 @@ class WebAuthN(object):
 
             print('Failed to make credential using WebAuthN API: %s' % error)
             return sys.exit(1)
-        
-        return attestation_pointer.contents.to_attestation_object()
 
+        return attestation_pointer.contents.to_attestation_object()
 
     def get_assertion(
         self,
@@ -738,13 +742,13 @@ class WebAuthN(object):
             uv = options.get('uv', False)
         else:
             uv = False
-    
+
         webauthn_client_data = WebAuthNClientData(client_data)
         assertion_options = WebAuthNGetAssertionOptions(
             timeout,
             WebAuthNAuthenticatorAttachment.cross_platform,  # TODO: is this correct?
-            WebAuthNUserVerificationRequirement.required if uv else 
-                WebAuthNUserVerificationRequirement.any,
+            WebAuthNUserVerificationRequirement.required if uv else
+            WebAuthNUserVerificationRequirement.any,
             allow_list
         )
 
@@ -773,5 +777,5 @@ class WebAuthN(object):
 
             print('Failed to make credential using WebAuthN API: %s' % error)
             return sys.exit(1)
-        
+
         return [assertion_pointer.contents]
