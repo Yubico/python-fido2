@@ -5,7 +5,7 @@ import unittest
 from binascii import a2b_hex
 import six
 
-from fido2.client import ClientData, WEBAUTHN_TYPE
+from fido2.client import WEBAUTHN_TYPE, ClientData
 from fido2.ctap2 import AttestedCredentialData, AuthenticatorData
 from fido2.server import USER_VERIFICATION, Fido2Server, RelyingParty, U2FFido2Server
 
