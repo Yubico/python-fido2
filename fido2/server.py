@@ -29,7 +29,7 @@ from __future__ import absolute_import, unicode_literals
 
 from .rpid import verify_rp_id, verify_app_id
 from .cose import CoseKey
-from .webauthn import WEBAUTHN_TYPE
+from .client import WEBAUTHN_TYPE
 from .attestation import Attestation, FidoU2FAttestation, UnsupportedAttestation
 from .utils import sha256, websafe_encode, websafe_decode
 

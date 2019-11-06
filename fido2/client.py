@@ -32,7 +32,7 @@ from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
 from .cose import ES256
-from .win_api import WinAPI, WEBAUTHN_TYPE
+from .win_api import WinAPI
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
@@ -261,6 +261,12 @@ class U2fClient(object):
             "signatureData": signature_data.b64,
             "keyHandle": key["keyHandle"],
         }
+
+
+@unique
+class WEBAUTHN_TYPE(six.text_type, Enum):
+    MAKE_CREDENTIAL = "webauthn.create"
+    GET_ASSERTION = "webauthn.get"
 
 
 _CTAP1_INFO = b"\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50" + b"\0" * 16

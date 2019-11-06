@@ -38,7 +38,6 @@ https://github.com/microsoft/webauthn
 
 import ctypes
 import sys
-import six
 
 from win32gui import GetForegroundWindow
 from enum import Enum, unique
@@ -592,12 +591,6 @@ class WebAuthNCTAPTransport(Enum):
     TEST = 0x00000008
     INTERNAL = 0x00000010
     FLAGS_MASK = 0x0000001F
-
-
-@unique
-class WEBAUTHN_TYPE(six.text_type, Enum):
-    MAKE_CREDENTIAL = "webauthn.create"
-    GET_ASSERTION = "webauthn.get"
 
 
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
