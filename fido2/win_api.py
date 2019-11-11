@@ -39,7 +39,6 @@ https://github.com/microsoft/webauthn
 
 import ctypes
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND
-import sys
 
 from enum import IntEnum, unique
 
@@ -702,7 +701,7 @@ class WinAPI(object):
         handle = ctypes.windll.user32.GetForegroundWindow()
 
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
-        result = WEBAUTHN.WebAuthNAuthenticatorMakeCredential(
+        WEBAUTHN.WebAuthNAuthenticatorMakeCredential(
             handle,
             ctypes.byref(rp_info),
             ctypes.byref(user_info),
@@ -711,12 +710,6 @@ class WinAPI(object):
             ctypes.byref(make_cred_options),
             ctypes.byref(attestation_pointer),
         )
-
-        if result != 0:
-            error = WEBAUTHN.WebAuthNGetErrorName(result)
-
-            print("Failed to make credential using WebAuthN API: %s" % error)
-            return sys.exit(1)
 
         return attestation_pointer.contents.to_attestation_object()
 
@@ -742,18 +735,12 @@ class WinAPI(object):
 
         handle = ctypes.windll.user32.GetForegroundWindow()
         assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
-        result = WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
+        WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
             handle,
             rp_id,
             ctypes.pointer(webauthn_client_data),
             ctypes.pointer(assertion_options),
             ctypes.pointer(assertion_pointer),
         )
-
-        if result != 0:
-            error = WEBAUTHN.WebAuthNGetErrorName(result)
-
-            print("Failed to make credential using WebAuthN API: %s" % error)
-            return sys.exit(1)
 
         return [assertion_pointer.contents]
