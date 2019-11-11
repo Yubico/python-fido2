@@ -278,7 +278,7 @@ class WEBAUTHN_TYPE(six.text_type, Enum):
     GET_ASSERTION = "webauthn.get"
 
 
-_CTAP1_INFO = b"\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50" + b"\0" * 16
+_CTAP1_INFO = Info.create(["U2F_V2"])
 
 
 class Fido2Client(object):
@@ -297,7 +297,7 @@ class Fido2Client(object):
             self._do_get_assertion = self._ctap2_get_assertion
         except ValueError:
             self.ctap1 = CTAP1(device)
-            self.info = Info(_CTAP1_INFO)
+            self.info = _CTAP1_INFO
             self._do_make_credential = self._ctap1_make_credential
             self._do_get_assertion = self._ctap1_get_assertion
 
@@ -590,6 +590,9 @@ class Fido2Client(object):
         raise ClientError.ERR.DEVICE_INELIGIBLE()
 
 
+_WIN_INFO = Info.create(["U2F_V2", "FIDO_2_0"])
+
+
 class WindowsClient(object):
     """Fido2Client-like class using the Windows WebAuthn API.
 
@@ -606,10 +609,13 @@ class WindowsClient(object):
     """
 
     def __init__(self, origin, verify=verify_rp_id, handle=None):
-        self.info = Info(_CTAP1_INFO)
         self.api = WinAPI(handle)
         self.origin = origin
         self._verify = verify
+
+    @property
+    def info(self):
+        return _WIN_INFO
 
     @staticmethod
     def is_available():

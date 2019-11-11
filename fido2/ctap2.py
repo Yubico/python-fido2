@@ -137,6 +137,37 @@ class Info(bytes):
     def __str__(self):
         return self.__repr__()
 
+    @classmethod
+    def create(
+        cls,
+        versions,
+        extensions=None,
+        aaguid=b"\0" * 16,
+        options=None,
+        max_msg_size=None,
+        pin_protocols=None,
+        max_creds_in_list=None,
+        max_cred_id_length=None,
+        transports=None,
+        algorithms=None,
+    ):
+        return cls(
+            cbor.encode(
+                args(
+                    versions,
+                    extensions,
+                    aaguid,
+                    options,
+                    max_msg_size,
+                    pin_protocols,
+                    max_creds_in_list,
+                    max_cred_id_length,
+                    transports,
+                    algorithms,
+                )
+            )
+        )
+
 
 class AttestedCredentialData(bytes):
     """Binary encoding of the attested credential data.
