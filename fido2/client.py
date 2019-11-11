@@ -673,7 +673,7 @@ class WindowsClient(object):
             client_data,
             timeout or 0,
             rk,
-            WebAuthNAuthenticatorAttachment.ANY,
+            WebAuthNAuthenticatorAttachment.CROSS_PLATFORM,  # TODO: Make selectable
             WebAuthNUserVerificationRequirement.REQUIRED
             if uv
             else WebAuthNUserVerificationRequirement.ANY,
