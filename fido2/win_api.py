@@ -48,8 +48,6 @@ from .ctap2 import AttestationObject
 PBYTE = ctypes.POINTER(ctypes.c_ubyte)  # Different from wintypes.PBYTE, which is signed
 PCWSTR = ctypes.c_wchar_p
 
-WEBAUTHN = ctypes.windll.webauthn
-
 
 class BytesProperty(object):
     """Property for structs storing byte arrays as DWORD + PBYTE.
@@ -402,6 +400,9 @@ class WebAuthNAssertion(ctypes.Structure):
     signature = BytesProperty("Signature")
     user_id = BytesProperty("UserId")
 
+    def __del__(self):
+        WEBAUTHN.WebAuthNFreeAssertion(ctypes.byref(self))
+
     @property
     def credential(self):
         # type: () -> List[ctypes.c_byte]
@@ -497,6 +498,9 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
     attestation_object = BytesProperty("AttestationObject")
     credential_id = BytesProperty("CredentialId")
 
+    def __del__(self):
+        WEBAUTHN.WebAuthNFreeCredentialAttestation(ctypes.byref(self))
+
     def to_attestation_object(self):
         # type: () -> AttestationObject
         """Convert received WebAuthNCredentialAttestation to AttestationObject."""
@@ -559,9 +563,50 @@ class WebAuthNCTAPTransport(IntEnum):
     FLAGS_MASK = 0x0000001F
 
 
+WEBAUTHN = ctypes.windll.webauthn
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
 # The following is derived from
 # https://github.com/microsoft/webauthn/blob/master/webauthn.h#L37
+
+WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.argtypes = [
+    ctypes.POINTER(ctypes.c_bool)
+]
+WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.restype = ctypes.HRESULT
+
+WEBAUTHN.WebAuthNAuthenticatorMakeCredential.argtypes = [
+    HWND,
+    ctypes.POINTER(WebAuthNRpEntityInformation),
+    ctypes.POINTER(WebAuthNUserEntityInformation),
+    ctypes.POINTER(WebAuthNCoseCredentialParameters),
+    ctypes.POINTER(WebAuthNClientData),
+    ctypes.POINTER(WebAuthNMakeCredentialOptions),
+    ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialAttestation)),
+]
+WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = ctypes.HRESULT
+
+WEBAUTHN.WebAuthNAuthenticatorGetAssertion.argtypes = [
+    HWND,
+    LPCWSTR,
+    ctypes.POINTER(WebAuthNClientData),
+    ctypes.POINTER(WebAuthNGetAssertionOptions),
+    ctypes.POINTER(ctypes.POINTER(WebAuthNAssertion)),
+]
+WEBAUTHN.WebAuthNAuthenticatorGetAssertion.restype = ctypes.HRESULT
+
+WEBAUTHN.WebAuthNFreeCredentialAttestation.argtypes = [
+    ctypes.POINTER(WebAuthNCredentialAttestation)
+]
+WEBAUTHN.WebAuthNFreeAssertion.argtypes = [ctypes.POINTER(WebAuthNAssertion)]
+
+WEBAUTHN.WebAuthNGetCancellationId.argtypes = [ctypes.POINTER(GUID)]
+WEBAUTHN.WebAuthNGetCancellationId.restype = ctypes.HRESULT
+
+WEBAUTHN.WebAuthNCancelCurrentOperation.argtypes = [ctypes.POINTER(GUID)]
+WEBAUTHN.WebAuthNCancelCurrentOperation.restype = ctypes.HRESULT
+
+WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
+WEBAUTHN.WebAuthNGetErrorName.restype = PCWSTR
+
 
 WEBAUTHN_STRUCT_VERSIONS = {
     1: {
@@ -654,17 +699,6 @@ class WinAPI(object):
             exclude_list,
         )
 
-        WEBAUTHN.WebAuthNAuthenticatorMakeCredential.argtypes = [
-            HWND,
-            ctypes.POINTER(WebAuthNRpEntityInformation),
-            ctypes.POINTER(WebAuthNUserEntityInformation),
-            ctypes.POINTER(WebAuthNCoseCredentialParameters),
-            ctypes.POINTER(WebAuthNClientData),
-            ctypes.POINTER(WebAuthNMakeCredentialOptions),
-            ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialAttestation)),
-        ]
-        WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = ctypes.c_int
-
         handle = ctypes.windll.user32.GetForegroundWindow()
 
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
@@ -679,8 +713,6 @@ class WinAPI(object):
         )
 
         if result != 0:
-            WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
-            WEBAUTHN.WebAuthNGetErrorName.restype = ctypes.c_wchar_p
             error = WEBAUTHN.WebAuthNGetErrorName(result)
 
             print("Failed to make credential using WebAuthN API: %s" % error)
@@ -708,15 +740,6 @@ class WinAPI(object):
             allow_list,
         )
 
-        WEBAUTHN.WebAuthNAuthenticatorGetAssertion.argtypes = [
-            HWND,
-            LPCWSTR,
-            ctypes.POINTER(WebAuthNClientData),
-            ctypes.POINTER(WebAuthNGetAssertionOptions),
-            ctypes.POINTER(ctypes.POINTER(WebAuthNAssertion)),
-        ]
-        WEBAUTHN.WebAuthNAuthenticatorGetAssertion.restype = ctypes.c_int
-
         handle = ctypes.windll.user32.GetForegroundWindow()
         assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
         result = WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
@@ -728,8 +751,6 @@ class WinAPI(object):
         )
 
         if result != 0:
-            WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
-            WEBAUTHN.WebAuthNGetErrorName.restype = ctypes.c_wchar_p
             error = WEBAUTHN.WebAuthNGetErrorName(result)
 
             print("Failed to make credential using WebAuthN API: %s" % error)
