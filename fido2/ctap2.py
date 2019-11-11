@@ -73,8 +73,11 @@ class Info(bytes):
     :ivar aaguid: The AAGUID of the authenticator.
     :ivar options: The options supported by the authenticator.
     :ivar max_msg_size: The max message size supported by the authenticator.
-    :ivar pin_protocols: The PIN protocol versions supported by the
-        authenticator.
+    :ivar pin_protocols: The PIN protocol versions supported by the authenticator.
+    :ivar max_creds_in_list: Max number of credentials supported in list at a time.
+    :ivar max_cred_id_length: Max length of Credential ID supported.
+    :ivar transports: List of supported transports.
+    :ivar algorithms: List of supported algorithms for credential creation.
     :ivar data: The Info members, in the form of a dict.
     """
 
@@ -151,6 +154,10 @@ class Info(bytes):
         transports=None,
         algorithms=None,
     ):
+        """Create an Info by providing its components.
+
+        See class docstring for parameter descriptions.
+        """
         return cls(
             cbor.encode(
                 args(

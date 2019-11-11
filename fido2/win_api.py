@@ -80,8 +80,6 @@ class GUID(ctypes.Structure):
     ]
 
     def __str__(self):
-        # type: () -> str
-        """Return string."""
         return "{%08X-%04X-%04X-%04X-%012X}" % (
             self.Data1,
             self.Data2,
@@ -100,22 +98,24 @@ class WebAuthNCoseCredentialParameter(ctypes.Structure):
     """Maps to WEBAUTHN_COSE_CREDENTIAL_PARAMETER Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L185
+
+    :param Dict[str, Any] cred_params: Dict of Credential parameters.
     """
 
     _fields_ = [("dwVersion", DWORD), ("pwszCredentialType", LPCWSTR), ("lAlg", LONG)]
 
-    def __init__(self, cred_type, alg):
-        # type: (str, Union[str,int]) -> None
-        """Init struct."""
+    def __init__(self, cred_params):
         self.dwVersion = get_version(self.__class__.__name__)
-        self.pwszCredentialType = cred_type
-        self.lAlg = alg
+        self.pwszCredentialType = cred_params["type"]
+        self.lAlg = cred_params["alg"]
 
 
 class WebAuthNCoseCredentialParameters(ctypes.Structure):
     """Maps to WEBAUTHN_COSE_CREDENTIAL_PARAMETERS Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L191
+
+    :param List[Dict[str, Any]] params: List of Credential parameter dicts.
     """
 
     _fields_ = [
@@ -124,14 +124,9 @@ class WebAuthNCoseCredentialParameters(ctypes.Structure):
     ]
 
     def __init__(self, params):
-        # type: (List[Dict[str, str]]) -> None
-        """Create pointer to array of structs."""
         self.cCredentialParameters = len(params)
         self.pCredentialParameters = (WebAuthNCoseCredentialParameter * len(params))(
-            *(
-                WebAuthNCoseCredentialParameter(param["type"], param["alg"])
-                for param in params
-            )
+            *(WebAuthNCoseCredentialParameter(param) for param in params)
         )
 
 
@@ -139,6 +134,8 @@ class WebAuthNClientData(ctypes.Structure):
     """Maps to WEBAUTHN_CLIENT_DATA Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L153
+
+    :param bytes client_data: ClientData serialized as JSON bytes.
     """
 
     _fields_ = [
@@ -151,7 +148,6 @@ class WebAuthNClientData(ctypes.Structure):
     json = BytesProperty("ClientDataJSON")
 
     def __init__(self, client_data):
-        """Init struct."""
         self.dwVersion = get_version(self.__class__.__name__)
         self.json = client_data
         self.pwszHashAlgId = "SHA-256"
@@ -161,6 +157,8 @@ class WebAuthNRpEntityInformation(ctypes.Structure):
     """Maps to WEBAUTHN_RP_ENTITY_INFORMATION Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L98
+
+    :param Dict[str, Any] rp: Dict of RP information.
     """
 
     _fields_ = [
@@ -171,8 +169,6 @@ class WebAuthNRpEntityInformation(ctypes.Structure):
     ]
 
     def __init__(self, rp):
-        # type: (Dict[str,Union[str,bytes]]) -> None
-        """Init struct."""
         self.dwVersion = get_version(self.__class__.__name__)
         self.pwszId = rp["id"]
         self.pwszName = rp["name"]
@@ -183,6 +179,8 @@ class WebAuthNUserEntityInformation(ctypes.Structure):
     """Maps to WEBAUTHN_USER_ENTITY_INFORMATION Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L127
+
+    :param Dict[str, Any] user: Dict of User information.
     """
 
     _fields_ = [
@@ -197,9 +195,6 @@ class WebAuthNUserEntityInformation(ctypes.Structure):
     id = BytesProperty("Id")
 
     def __init__(self, user):
-        # type: (Dict[str, Union[str,bytes]]) -> None
-        """Init struct."""
-
         self.dwVersion = get_version(self.__class__.__name__)
         self.id = user["id"]
         self.pwszName = user["name"]
@@ -211,6 +206,8 @@ class WebAuthNCredentialEx(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL_EX Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L250
+
+    :param Dict[str, Any] cred: Dict of Credential Descriptor data.
     """
 
     _fields_ = [
@@ -224,18 +221,6 @@ class WebAuthNCredentialEx(ctypes.Structure):
     id = BytesProperty("Id")
 
     def __init__(self, cred):
-        # type: (Dict[str, str]) -> None
-        """
-        Initialize struct about credential with extra information, such as,
-        dwTransports.
-
-        Args:
-            cred_id (str): Unique ID for this particular credential.
-            cred_type (str): Well-known credential type specifying what
-                this particular credential is.
-            transport (WebAuthNCTAPTransport): Transports. 0 implies no transport
-                restrictions.
-        """
         self.dwVersion = get_version(self.__class__.__name__)
         self.id = cred["id"]
         self.pwszCredentialType = cred["type"]
@@ -246,6 +231,9 @@ class WebAuthNCredentialList(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL_LIST Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L261
+
+    :param List[Dict[str, Any]] credentials: List of dict of
+        Credential Descriptor data.
     """
 
     _fields_ = [
@@ -254,8 +242,6 @@ class WebAuthNCredentialList(ctypes.Structure):
     ]
 
     def __init__(self, credentials):
-        # type: (List[Dict[str,str]]) -> None
-        """Create pointer to array of structs."""
         self.cCredentials = len(credentials)
         self.ppCredentials = (ctypes.POINTER(WebAuthNCredentialEx) * len(credentials))(
             *(ctypes.pointer(WebAuthNCredentialEx(cred)) for cred in credentials)
@@ -291,6 +277,8 @@ class WebAuthNCredential(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L212
+
+    :param Dict[str, Any] cred: Dict of Credential Descriptor data.
     """
 
     _fields_ = [
@@ -303,8 +291,6 @@ class WebAuthNCredential(ctypes.Structure):
     id = BytesProperty("Id")
 
     def __init__(self, cred):
-        # type: (str, str) -> None
-        """Init information about credential."""
         self.id = cred["id"]
         self.pwszCredentialType = cred["type"]
 
@@ -317,6 +303,9 @@ class WebAuthNCredentials(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIALS Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L219
+
+    :param List[Dict[str, Any]] credentials: List of dict of
+        Credential Descriptor data.
     """
 
     _fields_ = [
@@ -325,8 +314,6 @@ class WebAuthNCredentials(ctypes.Structure):
     ]
 
     def __init__(self, credentials):
-        # type: (List[Dict[str,str]]) -> None
-        """Create pointer to array of structs."""
         self.cCredentials = len(credentials)
         self.pCredentials = (WebAuthNCredential * len(credentials))(
             *(WebAuthNCredential(cred) for cred in credentials)
@@ -337,6 +324,14 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
     """Maps to WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L452
+
+    :param int timeout: Time that the operation is expected to complete within.
+        This is used as guidance, and can be overridden by the platform.
+    :param WebAuthNAuthenticatorAttachment attachment: Platform vs Cross-Platform
+        Authenticators.
+    :param WebAuthNUserVerificationRequirement user_verification_requirement: User
+        Verification Requirement.
+    :param List[Dict[str,Any]] credentials: Allowed Credentials List.
     """
 
     _fields_ = [
@@ -354,19 +349,6 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
     ]
 
     def __init__(self, timeout, attachment, user_verification_requirement, credentials):
-        # type: (...) -> None
-        """Get Assertion options.
-
-        Args:
-            timeout (int): Time that the operation is expected to complete within.This
-                is used as guidance, and can be overridden by the platform.
-            attachment (WebAuthNAuthenticatorAttachment): Platform vs Cross-Platform
-                Authenticators.
-            user_verification_requirement (WebAuthNUserVerificationRequirement): User
-                Verification Requirement.
-            credentials (WebAuthNCredentials, WebAuthNCredentialList): Allowed
-                Credentials List.
-        """
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
         self.dwAuthenticatorAttachment = attachment
@@ -408,6 +390,17 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
     """maps to WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS Struct.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L394
+
+    :param int timeout: Time that the operation is expected to complete within.This
+        is used as guidance, and can be overridden by the platform.
+    :param bool require_resident_key: Require key to be resident or not.
+    :param WebAuthNAuthenticatorAttachment attachment: Platform vs Cross-Platform
+        Authenticators.
+    :param WebAuthNUserVerificationRequirement user_verification_requirement: User
+        Verification Requirement.
+    :param WebAuthNAttestationConvoyancePreference attestation_convoyence:
+        Attestation Conveyance Preference.
+    :param List[Dict[str,Any]] credentials: Credentials used for exclusion.
     """
 
     _fields_ = [
@@ -433,22 +426,6 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         attestation_convoyence,
         credentials,
     ):
-        """Make Credential Options.
-
-        Args:
-            timeout (int): Time that the operation is expected to complete within.This
-                is used as guidance, and can be overridden by the platform.
-            require_resident_key (bool): Require key to be resident or not.
-                                         Defaulting to FALSE.
-            attachment (WebAuthNAuthenticatorAttachment): Platform vs Cross-Platform
-                                                          Authenticators.
-            user_verification_requirement (WebAuthNUserVerificationRequirement): User
-                Verification Requirement.
-            attestation_convoyence (WebAuthNAttestationConvoyancePreference):
-                Attestation Conveyance Preference.
-            credentials (WebAuthNCredentials, WebAuthNCredentialList): Credentials used
-                for exclusion.
-        """
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
         self.bRequireResidentKey = require_resident_key
@@ -610,12 +587,16 @@ WEBAUTHN_STRUCT_VERSIONS = {
         "WebAuthNAssertion": 1,
     },
     2: {},
-}  # type: Dict[int, Dict[str, int]]
+}
 
 
 def get_version(class_name):
-    # type: (str) -> int
-    """Get version of struct."""
+    """Get version of struct.
+
+    :param str class_name: Struct class name.
+    :returns: Version of Struct to use.
+    :rtype: int
+    """
     if class_name in WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION]:
         return WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION][class_name]
 
@@ -623,7 +604,10 @@ def get_version(class_name):
 
 
 class WinAPI(object):
-    """Implementation of Microsoft's WebAuthN APIs."""
+    """Implementation of Microsoft's WebAuthN APIs.
+
+    :param ctypes.HWND handle: Window handle to use for API calls.
+    """
 
     version = WEBAUTHN_API_VERSION
 
@@ -633,11 +617,15 @@ class WinAPI(object):
     def get_error_message(self, errno):
         """Returns an error message given an error HRESULT value.
 
+        :param int errno: Error code from an OSError.
+        :return: An error message string.
+        :rtype: str
+
         Example:
-        try:
-            api.make_credential(*args, **kwargs)
-        except OSError as e:
-            print(api.get_error_message(e.errno))
+            try:
+                api.make_credential(*args, **kwargs)
+            except OSError as e:
+                print(api.get_error_message(e.errno))
         """
 
     def make_credential(
@@ -654,7 +642,25 @@ class WinAPI(object):
         exclude_credentials=None,
         extensions=None,
     ):
-        """Make credential using Windows WebAuthN API"""
+        """Make credential using Windows WebAuthN API.
+
+        :param Dict[str,Any] rp: Relying Party Entity data.
+        :param Dict[str,Any] user: User Entity data.
+        :param List[Dict[str,Any]] public_key_cred_params: List of
+            PubKeyCredentialParams data.
+        :param bytes client_data: ClientData JSON.
+        :param int timeout: (optional) Timeout value, in ms.
+        :param bool resident_key: (optional) Require resident key, default: False.
+        :param WebAuthNAuthenticatorAttachment platform_attachment: (optional)
+            Authenticator Attachment, default: any.
+        :param WebAuthNUserVerificationRequirement user_verification: (optional)
+            User Verification Requirement, default: any.
+        :param WebAuthNAttestationConvoyancePreference attestation: (optional)
+            Attestation Conveyance Preference, default: direct.
+        :param List[Dict[str,Any]] exclude_credentials: (optional) List of
+            PublicKeyCredentialDescriptor of previously registered credentials.
+        :param Any extensions: Currently not supported.
+        """
 
         # TODO: add support for extensions
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
@@ -689,8 +695,21 @@ class WinAPI(object):
         allow_credentials=None,
         extensions=None,
     ):
-        """Get assertion using Windows WebAuthN API."""
+        """Get assertion using Windows WebAuthN API.
 
+        :param str rp_id: Relying Party ID string.
+        :param bytes client_data: ClientData JSON.
+        :param int timeout: (optional) Timeout value, in ms.
+        :param WebAuthNAuthenticatorAttachment platform_attachment: (optional)
+            Authenticator Attachment, default: any.
+        :param WebAuthNUserVerificationRequirement user_verification: (optional)
+            User Verification Requirement, default: any.
+        :param List[Dict[str,Any]] allow_credentials: (optional) List of
+            PublicKeyCredentialDescriptor of previously registered credentials.
+        :param Any extensions: Currently not supported.
+        """
+
+        # TODO: add support for extensions
         assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
         WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
             self.handle,

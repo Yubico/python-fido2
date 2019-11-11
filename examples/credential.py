@@ -41,6 +41,7 @@ import sys
 use_nfc = False
 
 if WindowsClient.is_available():
+    # Use the Windows WebAuthn API if available
     client = WindowsClient("https://example.com")
 else:
     # Locate a device
