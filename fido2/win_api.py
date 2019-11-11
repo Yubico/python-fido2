@@ -41,7 +41,7 @@ import ctypes
 from ctypes import wintypes
 import sys
 
-from enum import Enum, unique
+from enum import IntEnum, unique
 
 from .ctap2 import AttestationObject, AuthenticatorData
 
@@ -543,46 +543,46 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
 
 
 @unique
-class WebAuthNUserVerificationRequirement(Enum):
+class WebAuthNUserVerificationRequirement(IntEnum):
     """Maps to WEBAUTHN_USER_VERIFICATION_REQUIREMENT_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L335
     """
 
-    any = 0
-    required = 1
-    preferred = 2
-    discouraged = 3
+    ANY = 0
+    REQUIRED = 1
+    PREFERRED = 2
+    DISCOURAGED = 3
 
 
 @unique
-class WebAuthNAttestationConvoyancePreference(Enum):
+class WebAuthNAttestationConvoyancePreference(IntEnum):
     """Maps to WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L340
     """
 
-    any = 0
-    none = 1
-    indirect = 2
-    direct = 3
+    ANY = 0
+    NONE = 1
+    INDIRECT = 2
+    DIRECT = 3
 
 
 @unique
-class WebAuthNAuthenticatorAttachment(Enum):
+class WebAuthNAuthenticatorAttachment(IntEnum):
     """Maps to WEBAUTHN_AUTHENTICATOR_ATTACHMENT_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L330
     """
 
-    any = 0
-    platform = 1
-    cross_platform = 2
-    cross_platform_u2f_v2 = 3
+    ANY = 0
+    PLATFORM = 1
+    CROSS_PLATFORM = 2
+    CROSS_PLATFORM_U2F_V2 = 3
 
 
 @unique
-class WebAuthNCTAPTransport(Enum):
+class WebAuthNCTAPTransport(IntEnum):
     """Maps to WEBAUTHN_CTAP_TRANSPORT_USB_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L225
@@ -691,9 +691,9 @@ class WinAPI(object):
         make_cred_options = WebAuthNMakeCredentialOptions(
             timeout,
             rk,
-            WebAuthNAuthenticatorAttachment.cross_platform,
-            WebAuthNUserVerificationRequirement.any,
-            WebAuthNAttestationConvoyancePreference.direct,
+            WebAuthNAuthenticatorAttachment.CROSS_PLATFORM,
+            WebAuthNUserVerificationRequirement.ANY,
+            WebAuthNAttestationConvoyancePreference.DIRECT,
             exclude_list,
         )
 
@@ -744,10 +744,10 @@ class WinAPI(object):
         webauthn_client_data = WebAuthNClientData(client_data)
         assertion_options = WebAuthNGetAssertionOptions(
             timeout,
-            WebAuthNAuthenticatorAttachment.cross_platform,  # TODO: is this correct?
-            WebAuthNUserVerificationRequirement.required
+            WebAuthNAuthenticatorAttachment.CROSS_PLATFORM,  # TODO: is this correct?
+            WebAuthNUserVerificationRequirement.REQUIRED
             if uv
-            else WebAuthNUserVerificationRequirement.any,
+            else WebAuthNUserVerificationRequirement.ANY,
             allow_list,
         )
 
