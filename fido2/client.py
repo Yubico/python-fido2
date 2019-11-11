@@ -35,9 +35,18 @@ from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
+
 import json
 import six
 import platform
+
+if platform.system().lower() == "windows":
+    from .win_api import (
+        WinAPI,
+        WebAuthNAuthenticatorAttachment,
+        WebAuthNUserVerificationRequirement,
+        WebAuthNAttestationConvoyancePreference,
+    )
 
 
 class ClientData(bytes):
@@ -272,49 +281,20 @@ class WEBAUTHN_TYPE(six.text_type, Enum):
 _CTAP1_INFO = b"\xa2\x01\x81\x66\x55\x32\x46\x5f\x56\x32\x03\x50" + b"\0" * 16
 
 
-def running_windows_non_admin():
-    """
-    Determine if running on Windows with version >= 1903
-    and not as an administrator, which would require the use of
-    the built in WebAuthN API in Windows.
-    """
-    if platform.system().lower() == 'windows':
-        import sys
-        import ctypes
-        shell = ctypes.WinDLL('shell32')
-        build = sys.getwindowsversion().build
-
-        # Corresponds to the breaking 1903 update
-        # https://en.wikipedia.org/wiki/Windows_10_version_history#Rings
-        if not shell.IsUserAnAdmin() and build >= 18362:
-            return True
-
-    return False
-
-
 class Fido2Client(object):
     def __init__(self, device, origin, verify=verify_rp_id):
         self.ctap1_poll_delay = 0.25
         self.origin = origin
         self._verify = verify
         try:
-            if running_windows_non_admin:
-                from .win_api import WinAPI
-                self.ctap2 = WinAPI()
-                self.info = self.ctap2.get_info()
-                self._do_make_credential = self._webauthn_make_credential
-                self._do_get_assertion = self._webauthn_get_assertion
-            else:
-                self.ctap2 = CTAP2(device)
-                self.info = self.ctap2.get_info()
-                self._do_make_credential = self._ctap2_make_credential
-                self._do_get_assertion = self._ctap2_get_assertion
-
+            self.ctap2 = CTAP2(device)
+            self.info = self.ctap2.get_info()
             if PinProtocolV1.VERSION in self.info.pin_protocols:
                 self.pin_protocol = PinProtocolV1(self.ctap2)
             else:
                 self.pin_protocol = None
-
+            self._do_make_credential = self._ctap2_make_credential
+            self._do_get_assertion = self._ctap2_get_assertion
         except ValueError:
             self.ctap1 = CTAP1(device)
             self.info = Info(_CTAP1_INFO)
@@ -372,56 +352,6 @@ class Fido2Client(object):
             )
         except CtapError as e:
             raise _ctap2client_err(e)
-
-    def _webauthn_make_credential(
-        self,
-        client_data,
-        rp,
-        user,
-        algos,
-        exclude_list,
-        extensions,
-        rk,
-        uv,
-        pin,
-        timeout,
-        on_keepalive,
-    ):
-        """Create credentials using Windows WebAuhtN APIs.
-
-        Args:
-            client_data: ClientData
-            rp: Relying Party information
-            user: Information about the user
-            algos: Algorithms used
-            exclude_list: List of credentials to exclude
-            extensions: Any credential extensions
-            rk: Whether the Resident Key is required
-            uv: Whether or not User Verification is required
-            timeout: Timeout while creating credential
-            on_keepalive: Unused
-        """
-        key_params = [{"type": "public-key", "alg": alg} for alg in algos]
-
-        if not (rk or uv):
-            options = None
-        else:
-            options = {}
-            if rk:
-                options["rk"] = True
-            if uv:
-                options["uv"] = True
-
-        return self.ctap2.make_credential(
-            client_data,
-            rp,
-            user,
-            key_params,
-            exclude_list,
-            extensions,
-            options,
-            timeout
-        )
 
     def _ctap2_make_credential(
         self,
@@ -571,48 +501,6 @@ class Fido2Client(object):
         except CtapError as e:
             raise _ctap2client_err(e)
 
-    def _webauthn_get_assertion(
-        self,
-        client_data,
-        rp_id,
-        allow_list,
-        extensions,
-        up,
-        uv,
-        pin,
-        timeout,
-        on_keepalive,
-    ):
-        """Get assertion using Windows WebAuthN APIs.
-
-        Args:
-            client_data: ClientData
-            rp_id: Relying Party ID
-            allow_list: List of credentials to allow
-            extensions: Any credential extensions
-            up: Unused
-            uv: Whether or not User Verification is required
-            pin: Unused
-            timeout: Timeout while creating credential
-            on_keepalive: Unused
-        """
-        options = {}
-        if not up:
-            options["up"] = False
-        if uv:
-            options["uv"] = True
-        if len(options) == 0:
-            options = None
-
-        return self.ctap2.get_assertion(
-            client_data,
-            rp_id,
-            allow_list,
-            extensions,
-            options,
-            timeout
-        )
-
     def _ctap2_get_assertion(
         self,
         client_data,
@@ -700,3 +588,142 @@ class Fido2Client(object):
                 if e.code == ClientError.ERR.TIMEOUT:
                     raise  # Other errors are ignored so we move to the next.
         raise ClientError.ERR.DEVICE_INELIGIBLE()
+
+
+class WindowsClient(object):
+    """Fido2Client-like class using the Windows WebAuthn API.
+
+    Note: This class only works on Windows 10 19H1 or later. This is also when Windows
+    started restricting access to FIDO devices, causing the standard client classes to
+    require admin priveleges to run (unlike this one).
+
+    The make_credential and get_assertion methods are intended to work as a drop-in
+    replacement for the Fido2Client methods of the same name.
+
+    :param str origin: The origin to use.
+    :param verify: Function to verify an RP ID for a given origin.
+    :param ctypes.wintypes.HWND handle: (optional) Window reference to use.
+    """
+
+    def __init__(self, origin, verify=verify_rp_id, handle=None):
+        self.info = Info(_CTAP1_INFO)
+        self.api = WinAPI(handle)
+        self.origin = origin
+        self._verify = verify
+
+    @staticmethod
+    def is_available():
+        return platform.system().lower() == "windows" and WinAPI.version > 0
+
+    def _verify_rp_id(self, rp_id):
+        try:
+            if self._verify(rp_id, self.origin):
+                return
+        except Exception:
+            pass  # Fall through to ClientError
+        raise ClientError.ERR.BAD_REQUEST()
+
+    def make_credential(
+        self,
+        rp,
+        user,
+        challenge,
+        algos=[ES256.ALGORITHM],
+        exclude_list=None,
+        extensions=None,
+        rk=False,
+        uv=False,
+        pin=None,
+        timeout=None,
+        on_keepalive=None,
+    ):
+        """Create credentials using Windows WebAuhtN APIs.
+
+        Args:
+            client_data: ClientData
+            rp: Relying Party information
+            user: Information about the user
+            algos: Algorithms used
+            exclude_list: List of credentials to exclude
+            extensions: Any credential extensions
+            rk: Whether the Resident Key is required
+            uv: Whether or not User Verification is required
+            timeout: Timeout while creating credential
+        """
+
+        self._verify_rp_id(rp["id"])
+
+        client_data = ClientData.build(
+            type=WEBAUTHN_TYPE.MAKE_CREDENTIAL,
+            clientExtensions={},
+            challenge=challenge,
+            origin=self.origin,
+        )
+
+        result = self.api.make_credential(
+            rp,
+            user,
+            [{"type": "public-key", "alg": alg} for alg in algos],
+            client_data,
+            timeout or 0,
+            rk,
+            WebAuthNAuthenticatorAttachment.ANY,
+            WebAuthNUserVerificationRequirement.REQUIRED
+            if uv
+            else WebAuthNUserVerificationRequirement.ANY,
+            WebAuthNAttestationConvoyancePreference.DIRECT,
+            exclude_list,
+            extensions,
+        )
+
+        return AttestationObject(result), client_data
+
+    def get_assertion(
+        self,
+        rp_id,
+        challenge,
+        allow_list=None,
+        extensions=None,
+        up=True,
+        uv=False,
+        pin=None,
+        timeout=None,
+        on_keepalive=None,
+    ):
+        """Get assertion using Windows WebAuthN APIs.
+
+        Args:
+            client_data: ClientData
+            rp_id: Relying Party ID
+            allow_list: List of credentials to allow
+            extensions: Any credential extensions
+            uv: Whether or not User Verification is required
+            timeout: Timeout while creating credential
+        """
+
+        self._verify_rp_id(rp_id)
+
+        client_data = ClientData.build(
+            type=WEBAUTHN_TYPE.GET_ASSERTION,
+            clientExtensions={},
+            challenge=challenge,
+            origin=self.origin,
+        )
+
+        (credential, auth_data, signature, user_id) = self.api.get_assertion(
+            rp_id,
+            client_data,
+            timeout or 0,
+            WebAuthNAuthenticatorAttachment.ANY,
+            WebAuthNUserVerificationRequirement.REQUIRED
+            if uv
+            else WebAuthNUserVerificationRequirement.ANY,
+            allow_list,
+            extensions,
+        )
+
+        user = {"id": user_id} if user_id else None
+        return (
+            [AssertionResponse.create(credential, auth_data, signature, user)],
+            client_data,
+        )

@@ -33,33 +33,36 @@ This works with both FIDO 2.0 devices as well as with U2F devices.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client
+from fido2.client import Fido2Client, WindowsClient
 from fido2.attestation import Attestation
 from getpass import getpass
 import sys
 
 use_nfc = False
 
-# Locate a device
-dev = next(CtapHidDevice.list_devices(), None)
-if dev is not None:
-    print("Use USB HID channel.")
+if WindowsClient.is_available():
+    client = WindowsClient("https://example.com")
 else:
-    try:
-        from fido2.pcsc import CtapPcscDevice
+    # Locate a device
+    dev = next(CtapHidDevice.list_devices(), None)
+    if dev is not None:
+        print("Use USB HID channel.")
+    else:
+        try:
+            from fido2.pcsc import CtapPcscDevice
 
-        dev = next(CtapPcscDevice.list_devices(), None)
-        print("Use NFC channel.")
-        use_nfc = True
-    except Exception as e:
-        print("NFC channel search error:", e)
+            dev = next(CtapPcscDevice.list_devices(), None)
+            print("Use NFC channel.")
+            use_nfc = True
+        except Exception as e:
+            print("NFC channel search error:", e)
 
-if not dev:
-    print("No FIDO device found")
-    sys.exit(1)
-
-# Set up a FIDO 2 client using the origin https://example.com
-client = Fido2Client(dev, "https://example.com")
+    # Set up a FIDO 2 client using the origin https://example.com
+    if not dev:
+        print("No FIDO device found")
+        sys.exit(1)
+    else:
+        client = Fido2Client(dev, "https://example.com")
 
 # Prepare parameters for makeCredential
 rp = {"id": "example.com", "name": "Example RP"}
