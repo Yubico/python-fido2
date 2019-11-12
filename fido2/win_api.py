@@ -514,7 +514,7 @@ class WebAuthNAuthenticatorAttachment(IntEnum):
 
 @unique
 class WebAuthNCTAPTransport(IntEnum):
-    """Maps to WEBAUTHN_CTAP_TRANSPORT_USB_*.
+    """Maps to WEBAUTHN_CTAP_TRANSPORT_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L225
     """
