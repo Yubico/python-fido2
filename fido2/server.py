@@ -31,59 +31,26 @@ from .rpid import verify_rp_id, verify_app_id
 from .cose import CoseKey
 from .client import WEBAUTHN_TYPE
 from .attestation import Attestation, FidoU2FAttestation, UnsupportedAttestation
-from .utils import sha256, websafe_encode, websafe_decode
+from .utils import websafe_encode, websafe_decode
+from .webauthn import (
+    AttestationConveyancePreference,
+    PublicKeyCredentialRpEntity,
+    AuthenticatorSelectionCriteria,
+    PublicKeyCredentialDescriptor,
+    PublicKeyCredentialParameters,
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialRequestOptions,
+    UserVerificationRequirement,
+)
+
 
 import os
-import six
-from enum import Enum, unique
 from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature
 
 
 def _verify_origin_for_rp(rp_id):
     return lambda o: verify_rp_id(rp_id, o)
-
-
-@unique
-class ATTESTATION(six.text_type, Enum):
-    NONE = "none"
-    INDIRECT = "indirect"
-    DIRECT = "direct"
-
-
-@unique
-class USER_VERIFICATION(six.text_type, Enum):
-    DISCOURAGED = "discouraged"
-    PREFERRED = "preferred"
-    REQUIRED = "required"
-
-
-@unique
-class AUTHENTICATOR_ATTACHMENT(six.text_type, Enum):
-    PLATFORM = "platform"
-    CROSS_PLATFORM = "cross-platform"
-
-
-class RelyingParty(object):
-    """Representation of relying party data.
-
-    See https://www.w3.org/TR/webauthn/#sctn-rp-credential-params for details.
-
-    :param ident: Unique identifier of the relying party,
-        see https://www.w3.org/TR/webauthn/#rp-id for details.
-    :param name: Name of the relying party.
-    :param icon: URL with the relying party icon.
-    """
-
-    def __init__(self, ident, name=None, icon=None):
-        self.ident = ident
-        self.name = name or ident
-        self.icon = icon
-
-    @property
-    def id_hash(self):
-        """Return SHA256 hash of the identifier."""
-        return sha256(self.ident.encode())
 
 
 def _default_attestations():
@@ -108,7 +75,7 @@ def _validata_challenge(challenge):
 class Fido2Server(object):
     """FIDO2 server
 
-    :param rp: Relying party data as `RelyingParty` instance.
+    :param rp: Relying party data as `PublicKeyCredentialRpEntity` instance.
     :param attestation: (optional) Requirement on authenticator attestation.
     :param verify_origin: (optional) Alternative function to validate an origin.
     :param attestation_types: (optional) List of `Attestation` subclasses to use
@@ -120,15 +87,18 @@ class Fido2Server(object):
     def __init__(
         self,
         rp,
-        attestation=ATTESTATION.NONE,
+        attestation=AttestationConveyancePreference.NONE,
         verify_origin=None,
         attestation_types=None,
     ):
-        self.rp = rp
-        self._verify = verify_origin or _verify_origin_for_rp(rp.ident)
+        self.rp = PublicKeyCredentialRpEntity(rp)
+        self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
         self.timeout = 30
-        self.attestation = ATTESTATION(attestation)
-        self.allowed_algorithms = CoseKey.supported_algorithms()
+        self.attestation = AttestationConveyancePreference(attestation)
+        self.allowed_algorithms = [
+            PublicKeyCredentialParameters("public-key", alg)
+            for alg in CoseKey.supported_algorithms()
+        ]
         self._attestation_types = attestation_types or _default_attestations()
 
     def register_begin(
@@ -136,7 +106,7 @@ class Fido2Server(object):
         user,
         credentials=None,
         resident_key=False,
-        user_verification=USER_VERIFICATION.PREFERRED,
+        user_verification=UserVerificationRequirement.PREFERRED,
         authenticator_attachment=None,
         challenge=None,
     ):
@@ -156,46 +126,30 @@ class Fido2Server(object):
         if not self.allowed_algorithms:
             raise ValueError("Server has no allowed algorithms.")
 
-        uv = USER_VERIFICATION(user_verification)
         challenge = _validata_challenge(challenge)
 
-        # Serialize RP
-        rp_data = {"id": self.rp.ident, "name": self.rp.name}
-        if self.rp.icon:
-            rp_data["icon"] = self.rp.icon
+        state = self._make_internal_state(challenge, user_verification)
 
-        authenticator_selection = {
-            "requireResidentKey": resident_key,
-            "userVerification": uv,
-        }
-
-        if authenticator_attachment:
-            authenticator_selection[
-                "authenticatorAttachment"
-            ] = AUTHENTICATOR_ATTACHMENT(authenticator_attachment)
-
-        data = {
-            "publicKey": {
-                "rp": rp_data,
-                "user": user,
-                "challenge": challenge,
-                "pubKeyCredParams": [
-                    {"type": "public-key", "alg": alg}
-                    for alg in self.allowed_algorithms
-                ],
-                "excludeCredentials": [
-                    {"type": "public-key", "id": cred.credential_id}
-                    for cred in credentials or []
-                ],
-                "timeout": int(self.timeout * 1000),
-                "attestation": self.attestation,
-                "authenticatorSelection": authenticator_selection,
-            }
-        }
-
-        state = self._make_internal_state(challenge, uv)
-
-        return data, state
+        return (
+            {
+                "publicKey": PublicKeyCredentialCreationOptions(
+                    self.rp,
+                    user,
+                    challenge,
+                    self.allowed_algorithms,
+                    int(self.timeout * 1000),
+                    [
+                        PublicKeyCredentialDescriptor("public-key", cred.credential_id)
+                        for cred in credentials or []
+                    ],
+                    AuthenticatorSelectionCriteria(
+                        authenticator_attachment, resident_key, user_verification
+                    ),
+                    self.attestation,
+                )
+            },
+            state,
+        )
 
     def register_complete(self, state, client_data, attestation_object):
         """Verify the correctness of the registration data received from
@@ -222,14 +176,14 @@ class Fido2Server(object):
             raise ValueError("User Present flag not set.")
 
         if (
-            state["user_verification"] is USER_VERIFICATION.REQUIRED
+            state["user_verification"] == UserVerificationRequirement.REQUIRED
             and not attestation_object.auth_data.is_user_verified()
         ):
             raise ValueError(
                 "User verification required, but User Verified flag not set."
             )
 
-        if self.attestation != ATTESTATION.NONE:
+        if self.attestation != AttestationConveyancePreference.NONE:
             att_verifier = UnsupportedAttestation(attestation_object.fmt)
             for at in self._attestation_types:
                 if getattr(at, "FORMAT", None) == attestation_object.fmt:
@@ -249,7 +203,10 @@ class Fido2Server(object):
         return attestation_object.auth_data
 
     def authenticate_begin(
-        self, credentials, user_verification=USER_VERIFICATION.PREFERRED, challenge=None
+        self,
+        credentials,
+        user_verification=UserVerificationRequirement.PREFERRED,
+        challenge=None,
     ):
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
@@ -260,25 +217,25 @@ class Fido2Server(object):
         :param challenge: A custom challenge to sign and verify or None to use
             OS-specific random bytes.
         :return: Assertion data, internal state."""
-        uv = USER_VERIFICATION(user_verification)
         challenge = _validata_challenge(challenge)
 
-        data = {
-            "publicKey": {
-                "rpId": self.rp.ident,
-                "challenge": challenge,
-                "allowCredentials": [
-                    {"type": "public-key", "id": cred.credential_id}
-                    for cred in credentials
-                ],
-                "timeout": int(self.timeout * 1000),
-                "userVerification": uv,
-            }
-        }
+        state = self._make_internal_state(challenge, user_verification)
 
-        state = self._make_internal_state(challenge, uv)
-
-        return data, state
+        return (
+            {
+                "publicKey": PublicKeyCredentialRequestOptions(
+                    challenge,
+                    int(self.timeout * 1000),
+                    self.rp.id,
+                    [
+                        PublicKeyCredentialDescriptor("public-key", cred.credential_id)
+                        for cred in credentials
+                    ],
+                    user_verification,
+                )
+            },
+            state,
+        )
 
     def authenticate_complete(
         self, state, credentials, credential_id, client_data, auth_data, signature
@@ -305,7 +262,7 @@ class Fido2Server(object):
             raise ValueError("User Present flag not set.")
 
         if (
-            state["user_verification"] is USER_VERIFICATION.REQUIRED
+            state["user_verification"] == UserVerificationRequirement.REQUIRED
             and not auth_data.is_user_verified()
         ):
             raise ValueError(
@@ -350,7 +307,9 @@ class U2FFido2Server(Fido2Server):
         else:
             kwargs["verify_origin"] = lambda o: verify_app_id(app_id, o)
         self._app_id = app_id
-        self._app_id_server = Fido2Server(RelyingParty(app_id), *args, **kwargs)
+        self._app_id_server = Fido2Server(
+            PublicKeyCredentialRpEntity(app_id, self.rp.name), *args, **kwargs
+        )
 
     def register_begin(self, *args, **kwargs):
         req, state = super(U2FFido2Server, self).register_begin(*args, **kwargs)

@@ -39,6 +39,7 @@ from fido2.ctap import CtapError
 from fido2.ctap1 import ApduError, APDU, RegistrationData, SignatureData
 from fido2.ctap2 import Info, AttestationObject
 from fido2.client import ClientData, U2fClient, ClientError, Fido2Client
+from fido2.webauthn import PublicKeyCredentialCreationOptions
 
 
 class TestClientData(unittest.TestCase):
@@ -342,10 +343,12 @@ class TestFido2Client(unittest.TestCase):
         client = Fido2Client(dev, APP_ID)
         try:
             client.make_credential(
-                {"id": "bar.example.com", "name": "Invalid RP"},
-                user,
-                challenge,
-                timeout=1,
+                PublicKeyCredentialCreationOptions(
+                    {"id": "bar.example.com", "name": "Invalid RP"},
+                    user,
+                    challenge,
+                    [{"type": "public-key", "alg": -7}],
+                )
             )
             self.fail("make_credential did not raise error")
         except ClientError as e:
@@ -362,7 +365,11 @@ class TestFido2Client(unittest.TestCase):
         client = Fido2Client(dev, APP_ID)
 
         try:
-            client.make_credential(rp, user, challenge, timeout=1)
+            client.make_credential(
+                PublicKeyCredentialCreationOptions(
+                    rp, user, challenge, [{"type": "public-key", "alg": -7}]
+                )
+            )
             self.fail("make_credential did not raise error")
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
@@ -381,7 +388,9 @@ class TestFido2Client(unittest.TestCase):
         client = Fido2Client(dev, APP_ID)
 
         attestation, client_data = client.make_credential(
-            rp, user, challenge, timeout=1
+            PublicKeyCredentialCreationOptions(
+                rp, user, challenge, [{"type": "public-key", "alg": -7}], timeout=1000
+            )
         )
 
         self.assertIsInstance(attestation, AttestationObject)
@@ -416,7 +425,9 @@ class TestFido2Client(unittest.TestCase):
         client.ctap1.register.return_value = REG_DATA
 
         attestation, client_data = client.make_credential(
-            rp, user, challenge, timeout=1
+            PublicKeyCredentialCreationOptions(
+                rp, user, challenge, [{"type": "public-key", "alg": -7}]
+            )
         )
 
         self.assertIsInstance(attestation, AttestationObject)

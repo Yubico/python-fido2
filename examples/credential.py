@@ -73,14 +73,23 @@ challenge = "Y2hhbGxlbmdl"
 # Prompt for PIN if needed
 pin = None
 if client.info.options.get("clientPin"):
-    pin = getpass("Please enter PIN:")
+    pin = getpass("Please enter PIN: ")
 else:
     print("no pin")
 
 # Create a credential
 if not use_nfc:
     print("\nTouch your authenticator device now...\n")
-attestation_object, client_data = client.make_credential(rp, user, challenge, pin=pin)
+
+attestation_object, client_data = client.make_credential(
+    {
+        "rp": rp,
+        "user": user,
+        "challenge": challenge,
+        "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+    },
+    pin=pin,
+)
 
 
 print("New credential created!")
@@ -107,7 +116,9 @@ allow_list = [{"type": "public-key", "id": credential.credential_id}]
 if not use_nfc:
     print("\nTouch your authenticator device now...\n")
 
-assertions, client_data = client.get_assertion(rp["id"], challenge, allow_list, pin=pin)
+assertions, client_data = client.get_assertion(
+    {"rpId": rp["id"], "challenge": challenge, "allowCredentials": allow_list}, pin=pin
+)
 
 print("Credential authenticated!")
 

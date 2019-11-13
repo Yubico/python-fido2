@@ -25,12 +25,17 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
+from __future__ import absolute_import, unicode_literals, division
 
 from .hid import STATUS
 from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
+from .webauthn import (
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialRequestOptions,
+    AuthenticatorSelectionCriteria,
+)
 from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
 from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
@@ -309,43 +314,40 @@ class Fido2Client(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def make_credential(
-        self,
-        rp,
-        user,
-        challenge,
-        algos=[ES256.ALGORITHM],
-        exclude_list=None,
-        extensions=None,
-        rk=False,
-        uv=False,
-        pin=None,
-        timeout=None,
-        on_keepalive=None,
-    ):
+    def make_credential(self, options, pin=None, on_keepalive=None):
+        """Create credentials using Windows WebAuhtN APIs.
 
-        self._verify_rp_id(rp["id"])
+        :param options: PublicKeyCredentialCreationOptions data.
+        :param pin: (optional) Not used.
+        :param on_keepalive: (optional) Not implemented.
+        """
+
+        options = PublicKeyCredentialCreationOptions(options)
+
+        self._verify_rp_id(options.rp.id)
 
         client_data = ClientData.build(
             type=WEBAUTHN_TYPE.MAKE_CREDENTIAL,
             clientExtensions={},
-            challenge=challenge,
+            challenge=options.challenge,
             origin=self.origin,
         )
+
+        selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
 
         try:
             return (
                 self._do_make_credential(
                     client_data,
-                    rp,
-                    user,
-                    algos,
-                    exclude_list,
-                    extensions,
-                    rk,
-                    uv,
+                    options.rp,
+                    options.user,
+                    options.pub_key_cred_params,
+                    options.exclude_credentials,
+                    options.extensions,
+                    selection.require_resident_key,
+                    selection.user_verification == "required",  # TODO base on info?
                     pin,
-                    timeout,
+                    options.timeout / 1000 if options.timeout is not None else None,
                     on_keepalive,
                 ),
                 client_data,
@@ -358,7 +360,7 @@ class Fido2Client(object):
         client_data,
         rp,
         user,
-        algos,
+        key_params,
         exclude_list,
         extensions,
         rk,
@@ -367,8 +369,6 @@ class Fido2Client(object):
         timeout,
         on_keepalive,
     ):
-        key_params = [{"type": "public-key", "alg": alg} for alg in algos]
-
         pin_auth = None
         pin_protocol = None
         if pin:
@@ -417,7 +417,7 @@ class Fido2Client(object):
         client_data,
         rp,
         user,
-        algos,
+        key_params,
         exclude_list,
         extensions,
         rk,
@@ -426,7 +426,7 @@ class Fido2Client(object):
         timeout,
         on_keepalive,
     ):
-        if rk or uv or ES256.ALGORITHM not in algos:
+        if rk or uv or ES256.ALGORITHM not in [p.alg for p in key_params]:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
         app_param = sha256(rp["id"].encode())
@@ -461,25 +461,22 @@ class Fido2Client(object):
             ),
         )
 
-    def get_assertion(
-        self,
-        rp_id,
-        challenge,
-        allow_list=None,
-        extensions=None,
-        up=True,
-        uv=False,
-        pin=None,
-        timeout=None,
-        on_keepalive=None,
-    ):
+    def get_assertion(self, options, pin=None, on_keepalive=None):
+        """Get assertion using Windows WebAuthN APIs.
 
-        self._verify_rp_id(rp_id)
+        :param options: PublicKeyCredentialRequestOptions data.
+        :param pin: (optional) Not used.
+        :param on_keepalive: (optional) Not implemented.
+        """
+
+        options = PublicKeyCredentialRequestOptions(options)
+
+        self._verify_rp_id(options.rp_id)
 
         client_data = ClientData.build(
             type=WEBAUTHN_TYPE.GET_ASSERTION,
             clientExtensions={},
-            challenge=challenge,
+            challenge=options.challenge,
             origin=self.origin,
         )
 
@@ -487,13 +484,12 @@ class Fido2Client(object):
             return (
                 self._do_get_assertion(
                     client_data,
-                    rp_id,
-                    allow_list,
-                    extensions,
-                    up,
-                    uv,
+                    options.rp_id,
+                    options.allow_credentials,
+                    options.extensions,
+                    options.user_verification == "required",  # TODO base on info?
                     pin,
-                    timeout,
+                    options.timeout / 1000 if options.timeout is not None else None,
                     on_keepalive,
                 ),
                 client_data,
@@ -502,16 +498,7 @@ class Fido2Client(object):
             raise _ctap2client_err(e)
 
     def _ctap2_get_assertion(
-        self,
-        client_data,
-        rp_id,
-        allow_list,
-        extensions,
-        up,
-        uv,
-        pin,
-        timeout,
-        on_keepalive,
+        self, client_data, rp_id, allow_list, extensions, uv, pin, timeout, on_keepalive
     ):
         pin_auth = None
         pin_protocol = None
@@ -522,12 +509,9 @@ class Fido2Client(object):
         elif self.info.options.get("clientPin"):
             raise ValueError("PIN required!")
 
-        options = {}
-        if not up:
-            options["up"] = False
         if uv:
-            options["uv"] = True
-        if len(options) == 0:
+            options = {"uv": True}
+        else:
             options = None
 
         if allow_list:
@@ -556,18 +540,9 @@ class Fido2Client(object):
         )
 
     def _ctap1_get_assertion(
-        self,
-        client_data,
-        rp_id,
-        allow_list,
-        extensions,
-        up,
-        uv,
-        pin,
-        timeout,
-        on_keepalive,
+        self, client_data, rp_id, allow_list, extensions, uv, pin, timeout, on_keepalive
     ):
-        if (not up) or uv or not allow_list:
+        if uv or not allow_list:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
         app_param = sha256(rp_id.encode())
@@ -629,103 +604,78 @@ class WindowsClient(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def make_credential(
-        self,
-        rp,
-        user,
-        challenge,
-        algos=[ES256.ALGORITHM],
-        exclude_list=None,
-        extensions=None,
-        rk=False,
-        uv=False,
-        pin=None,
-        timeout=None,
-        on_keepalive=None,
-    ):
+    def make_credential(self, options, pin=None, on_keepalive=None):
         """Create credentials using Windows WebAuhtN APIs.
 
-        Args:
-            client_data: ClientData
-            rp: Relying Party information
-            user: Information about the user
-            algos: Algorithms used
-            exclude_list: List of credentials to exclude
-            extensions: Any credential extensions
-            rk: Whether the Resident Key is required
-            uv: Whether or not User Verification is required
-            timeout: Timeout while creating credential
+        :param options: PublicKeyCredentialCreationOptions data.
+        :param pin: (optional) Not used.
+        :param on_keepalive: (optional) Not implemented.
         """
 
-        self._verify_rp_id(rp["id"])
+        options = PublicKeyCredentialCreationOptions(options)
+
+        self._verify_rp_id(options.rp.id)
 
         client_data = ClientData.build(
             type=WEBAUTHN_TYPE.MAKE_CREDENTIAL,
             clientExtensions={},
-            challenge=challenge,
+            challenge=options.challenge,
             origin=self.origin,
         )
 
+        selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
+
         result = self.api.make_credential(
-            rp,
-            user,
-            [{"type": "public-key", "alg": alg} for alg in algos],
+            options.rp,
+            options.user,
+            options.pub_key_cred_params,
             client_data,
-            timeout or 0,
-            rk,
-            WebAuthNAuthenticatorAttachment.CROSS_PLATFORM,  # TODO: Make selectable
-            WebAuthNUserVerificationRequirement.REQUIRED
-            if uv
-            else WebAuthNUserVerificationRequirement.ANY,
-            WebAuthNAttestationConvoyancePreference.DIRECT,
-            exclude_list,
-            extensions,
+            options.timeout or 0,
+            selection.require_resident_key,
+            WebAuthNAuthenticatorAttachment.from_string(
+                selection.authenticator_attachment or "any"
+            ),
+            WebAuthNUserVerificationRequirement.from_string(
+                selection.user_verification or "discouraged"
+            ),
+            WebAuthNAttestationConvoyancePreference.from_string(
+                options.attestation or "none"
+            ),
+            options.exclude_credentials,
+            options.extensions,
         )
 
         return AttestationObject(result), client_data
 
-    def get_assertion(
-        self,
-        rp_id,
-        challenge,
-        allow_list=None,
-        extensions=None,
-        up=True,
-        uv=False,
-        pin=None,
-        timeout=None,
-        on_keepalive=None,
-    ):
+    def get_assertion(self, options, pin=None, on_keepalive=None):
         """Get assertion using Windows WebAuthN APIs.
 
-        Args:
-            client_data: ClientData
-            rp_id: Relying Party ID
-            allow_list: List of credentials to allow
-            extensions: Any credential extensions
-            uv: Whether or not User Verification is required
-            timeout: Timeout while creating credential
+        :param options: PublicKeyCredentialRequestOptions data.
+        :param pin: (optional) Not used.
+        :param on_keepalive: (optional) Not implemented.
         """
 
-        self._verify_rp_id(rp_id)
+        options = PublicKeyCredentialRequestOptions(options)
+
+        self._verify_rp_id(options.rp_id)
 
         client_data = ClientData.build(
             type=WEBAUTHN_TYPE.GET_ASSERTION,
             clientExtensions={},
-            challenge=challenge,
+            challenge=options.challenge,
             origin=self.origin,
         )
 
         (credential, auth_data, signature, user_id) = self.api.get_assertion(
-            rp_id,
+            options.rp_id,
             client_data,
-            timeout or 0,
+            options.timeout or 0,
             WebAuthNAuthenticatorAttachment.ANY,
-            WebAuthNUserVerificationRequirement.REQUIRED
-            if uv
-            else WebAuthNUserVerificationRequirement.ANY,
-            allow_list,
-            extensions,
+            WebAuthNUserVerificationRequirement.from_string(
+                options.user_verification or "discouraged"
+            ),
+            options.allow_credentials,
+            options.extensions,
         )
 
         user = {"id": user_id} if user_id else None

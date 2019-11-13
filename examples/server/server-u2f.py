@@ -35,8 +35,9 @@ Navigate to https://localhost:5000 in a supported web browser.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
+from fido2.webauthn import PublicKeyCredentialRpEntity
 from fido2.client import ClientData
-from fido2.server import U2FFido2Server, RelyingParty
+from fido2.server import U2FFido2Server
 from fido2.ctap2 import AttestationObject, AuthenticatorData
 from fido2.ctap1 import RegistrationData
 from fido2.utils import sha256, websafe_encode
@@ -49,7 +50,7 @@ import os
 app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
 
-rp = RelyingParty("localhost", "Demo server")
+rp = PublicKeyCredentialRpEntity("localhost", "Demo server")
 # By using the U2FFido2Server class, we can support existing credentials
 # registered by the legacy u2f.register API for an appId.
 server = U2FFido2Server("https://localhost:5000", rp)
