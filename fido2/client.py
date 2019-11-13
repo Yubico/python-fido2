@@ -322,7 +322,7 @@ class Fido2Client(object):
         :param on_keepalive: (optional) Not implemented.
         """
 
-        options = PublicKeyCredentialCreationOptions(options)
+        options = PublicKeyCredentialCreationOptions._wrap(options)
 
         self._verify_rp_id(options.rp.id)
 
@@ -469,7 +469,7 @@ class Fido2Client(object):
         :param on_keepalive: (optional) Not implemented.
         """
 
-        options = PublicKeyCredentialRequestOptions(options)
+        options = PublicKeyCredentialRequestOptions._wrap(options)
 
         self._verify_rp_id(options.rp_id)
 
@@ -612,7 +612,7 @@ class WindowsClient(object):
         :param on_keepalive: (optional) Not implemented.
         """
 
-        options = PublicKeyCredentialCreationOptions(options)
+        options = PublicKeyCredentialCreationOptions._wrap(options)
 
         self._verify_rp_id(options.rp.id)
 
@@ -655,7 +655,7 @@ class WindowsClient(object):
         :param on_keepalive: (optional) Not implemented.
         """
 
-        options = PublicKeyCredentialRequestOptions(options)
+        options = PublicKeyCredentialRequestOptions._wrap(options)
 
         self._verify_rp_id(options.rp_id)
 

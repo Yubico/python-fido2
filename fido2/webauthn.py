@@ -71,24 +71,7 @@ def _camel2snake(name):
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
-class DataObjectMeta(type):
-    """Metaclass for DataObject, allowing constructors to alternatively be called with
-    a dict of values."""
-
-    def __init__(cls, name, bases, dct):
-        init = cls.__init__
-
-        def new_init(self, *args, **kwargs):
-            if not kwargs and len(args) == 1:
-                data = args[0]
-                if isinstance(data, dict):
-                    args, kwargs = (), {_camel2snake(k): v for k, v in data.items()}
-            init(self, *args, **kwargs)
-
-        cls.__init__ = new_init
-
-
-class DataObject(six.with_metaclass(DataObjectMeta, dict)):
+class DataObject(dict):
     """Base class for WebAuthn data types, acting both as dict and providing attribute
     access to values.
     """
@@ -115,6 +98,20 @@ class DataObject(six.with_metaclass(DataObjectMeta, dict)):
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, dict(self))
+
+    @classmethod
+    def _wrap(cls, data):
+        if data is None:
+            return None
+        if isinstance(data, cls):
+            return data
+        if isinstance(data, list):
+            raise Exception("ERR")
+        return cls(**{_camel2snake(k): v for k, v in data.items()})
+
+    @classmethod
+    def _wrap_list(cls, datas):
+        return [cls._wrap(x) for x in datas] if datas is not None else None
 
 
 class PublicKeyCredentialRpEntity(DataObject):
@@ -180,23 +177,19 @@ class PublicKeyCredentialCreationOptions(DataObject):
         extensions=None,
     ):
         super(PublicKeyCredentialCreationOptions, self).__init__(
-            rp=PublicKeyCredentialRpEntity(rp),
-            user=PublicKeyCredentialUserEntity(user),
+            rp=PublicKeyCredentialRpEntity._wrap(rp),
+            user=PublicKeyCredentialUserEntity._wrap(user),
             challenge=challenge,
-            pub_key_cred_params=[
-                PublicKeyCredentialParameters(p) for p in pub_key_cred_params
-            ],
+            pub_key_cred_params=PublicKeyCredentialParameters._wrap_list(
+                pub_key_cred_params
+            ),
             timeout=timeout,
-            exclude_credentials=[
-                PublicKeyCredentialDescriptor(c) for c in exclude_credentials
-            ]
-            if exclude_credentials
-            else None,
-            authenticator_selection=AuthenticatorSelectionCriteria(
+            exclude_credentials=PublicKeyCredentialDescriptor._wrap_list(
+                exclude_credentials
+            ),
+            authenticator_selection=AuthenticatorSelectionCriteria._wrap(
                 authenticator_selection
-            )
-            if authenticator_selection
-            else None,
+            ),
             attestation=AttestationConveyancePreference(attestation),
             extensions=extensions,
         )
@@ -216,11 +209,9 @@ class PublicKeyCredentialRequestOptions(DataObject):
             challenge=challenge,
             timeout=timeout,
             rp_id=rp_id,
-            allow_credentials=[
-                PublicKeyCredentialDescriptor(c) for c in allow_credentials
-            ]
-            if allow_credentials
-            else None,
+            allow_credentials=PublicKeyCredentialDescriptor._wrap_list(
+                allow_credentials
+            ),
             user_verification=UserVerificationRequirement(user_verification),
             extensions=extensions,
         )
