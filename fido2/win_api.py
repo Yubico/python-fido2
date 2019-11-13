@@ -485,6 +485,10 @@ class WebAuthNUserVerificationRequirement(IntEnum):
     PREFERRED = 2
     DISCOURAGED = 3
 
+    @classmethod
+    def from_string(cls, value):
+        return getattr(cls, value.upper().replace("-", "_"))
+
 
 @unique
 class WebAuthNAttestationConvoyancePreference(IntEnum):
@@ -498,6 +502,10 @@ class WebAuthNAttestationConvoyancePreference(IntEnum):
     INDIRECT = 2
     DIRECT = 3
 
+    @classmethod
+    def from_string(cls, value):
+        return getattr(cls, value.upper().replace("-", "_"))
+
 
 @unique
 class WebAuthNAuthenticatorAttachment(IntEnum):
@@ -510,6 +518,10 @@ class WebAuthNAuthenticatorAttachment(IntEnum):
     PLATFORM = 1
     CROSS_PLATFORM = 2
     CROSS_PLATFORM_U2F_V2 = 3
+
+    @classmethod
+    def from_string(cls, value):
+        return getattr(cls, value.upper().replace("-", "_"))
 
 
 @unique
@@ -525,6 +537,10 @@ class WebAuthNCTAPTransport(IntEnum):
     TEST = 0x00000008
     INTERNAL = 0x00000010
     FLAGS_MASK = 0x0000001F
+
+    @classmethod
+    def from_string(cls, value):
+        return getattr(cls, value.upper().replace("-", "_"))
 
 
 WEBAUTHN = ctypes.windll.webauthn
@@ -632,7 +648,7 @@ class WinAPI(object):
         self,
         rp,
         user,
-        public_key_cred_params,
+        pub_key_cred_params,
         client_data,
         timeout=0,
         resident_key=False,
@@ -646,7 +662,7 @@ class WinAPI(object):
 
         :param Dict[str,Any] rp: Relying Party Entity data.
         :param Dict[str,Any] user: User Entity data.
-        :param List[Dict[str,Any]] public_key_cred_params: List of
+        :param List[Dict[str,Any]] pub_key_cred_params: List of
             PubKeyCredentialParams data.
         :param bytes client_data: ClientData JSON.
         :param int timeout: (optional) Timeout value, in ms.
@@ -668,7 +684,7 @@ class WinAPI(object):
             self.handle,
             ctypes.byref(WebAuthNRpEntityInformation(rp)),
             ctypes.byref(WebAuthNUserEntityInformation(user)),
-            ctypes.byref(WebAuthNCoseCredentialParameters(public_key_cred_params)),
+            ctypes.byref(WebAuthNCoseCredentialParameters(pub_key_cred_params)),
             ctypes.byref(WebAuthNClientData(client_data)),
             ctypes.byref(
                 WebAuthNMakeCredentialOptions(
