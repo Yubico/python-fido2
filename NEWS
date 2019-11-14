@@ -1,3 +1,17 @@
+* Version 0.8.0 (unreleased)
+ ** New fido2.webauthn classes modeled after the W3C WebAuthn spec introduced.
+ ** Method signatures for client and server classes changed.
+ ** Fido2Client:
+  *** make_credential/get_assertion now take WebAuthn options objects.
+ ** Fido2Server:
+  *** ATTESTATION, USER_VERIFICATION, and AUTHENTICATOR_ATTACHMENT enums
+      have been replaced with fido2.webauthn classes.
+  *** RelyingParty has been replaced with PublicKeyCredentialRpEntity, and
+      name is no longer optional.
+  *** Fido2Server.allowed_algorithms now contains a list of
+      PublicKeyCredentialParameters instead of algorithm identifiers.
+ ** Support native WebAuthn API on Windows through WindowsClient.
+
 * Version 0.7.3 (released 2019-10-24)
  ** Bugfix: Workaround for size of int on Python 2 on Windows.
 
