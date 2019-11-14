@@ -46,14 +46,6 @@ import json
 import six
 import platform
 
-if platform.system().lower() == "windows":
-    from .win_api import (
-        WinAPI,
-        WebAuthNAuthenticatorAttachment,
-        WebAuthNUserVerificationRequirement,
-        WebAuthNAttestationConvoyancePreference,
-    )
-
 
 class ClientData(bytes):
     def __init__(self, _):
@@ -178,6 +170,16 @@ class U2F_TYPE(six.text_type, Enum):
 
 
 class U2fClient(object):
+    """U2F-like client implementation.
+
+    The client allows registration and authentication of U2F credentials against
+    an Authenticator using CTAP 1. Prefer using Fido2Client if possible.
+
+    :param device: CtapDevice to use.
+    :param str origin: The origin to use.
+    :param verify: Function to verify an APP ID for a given origin.
+    """
+
     def __init__(self, device, origin, verify=verify_app_id):
         self.poll_delay = 0.25
         self.ctap = CTAP1(device)
@@ -284,14 +286,46 @@ class WEBAUTHN_TYPE(six.text_type, Enum):
     GET_ASSERTION = "webauthn.get"
 
 
+class _BaseClient(object):
+    def __init__(self, origin, verify):
+        self.origin = origin
+        self._verify = verify
+
+    def _verify_rp_id(self, rp_id):
+        try:
+            if self._verify(rp_id, self.origin):
+                return
+        except Exception:
+            pass  # Fall through to ClientError
+        raise ClientError.ERR.BAD_REQUEST()
+
+    def _build_client_data(self, typ, challenge, extensions={}):
+        return ClientData.build(
+            type=typ,
+            origin=self.origin,
+            challenge=challenge,
+            clientExtensions=extensions,
+        )
+
+
 _CTAP1_INFO = Info.create(["U2F_V2"])
 
 
-class Fido2Client(object):
+class Fido2Client(_BaseClient):
+    """WebAuthn-like client implementation.
+
+    The client allows registration and authentication of WebAuthn credentials against
+    an Authenticator using CTAP (1 or 2).
+
+    :param device: CtapDevice to use.
+    :param str origin: The origin to use.
+    :param verify: Function to verify an RP ID for a given origin.
+    """
+
     def __init__(self, device, origin, verify=verify_rp_id):
+        super(Fido2Client, self).__init__(origin, verify)
+
         self.ctap1_poll_delay = 0.25
-        self.origin = origin
-        self._verify = verify
         try:
             self.ctap2 = CTAP2(device)
             self.info = self.ctap2.get_info()
@@ -306,14 +340,6 @@ class Fido2Client(object):
             self.info = _CTAP1_INFO
             self._do_make_credential = self._ctap1_make_credential
             self._do_get_assertion = self._ctap1_get_assertion
-
-    def _verify_rp_id(self, rp_id):
-        try:
-            if self._verify(rp_id, self.origin):
-                return
-        except Exception:
-            pass  # Fall through to ClientError
-        raise ClientError.ERR.BAD_REQUEST()
 
     def _get_ctap_uv(self, uv_requirement, pin_provided):
         pin_supported = "clientPin" in self.info.options
@@ -356,11 +382,8 @@ class Fido2Client(object):
 
         self._verify_rp_id(options.rp.id)
 
-        client_data = ClientData.build(
-            type=WEBAUTHN_TYPE.MAKE_CREDENTIAL,
-            clientExtensions={},
-            challenge=options.challenge,
-            origin=self.origin,
+        client_data = self._build_client_data(
+            WEBAUTHN_TYPE.MAKE_CREDENTIAL, options.challenge
         )
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
@@ -505,11 +528,8 @@ class Fido2Client(object):
 
         self._verify_rp_id(options.rp_id)
 
-        client_data = ClientData.build(
-            type=WEBAUTHN_TYPE.GET_ASSERTION,
-            clientExtensions={},
-            challenge=options.challenge,
-            origin=self.origin,
+        client_data = self._build_client_data(
+            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
         )
 
         try:
@@ -599,8 +619,16 @@ class Fido2Client(object):
 
 _WIN_INFO = Info.create(["U2F_V2", "FIDO_2_0"])
 
+if platform.system().lower() == "windows":
+    from .win_api import (
+        WinAPI,
+        WebAuthNAuthenticatorAttachment,
+        WebAuthNUserVerificationRequirement,
+        WebAuthNAttestationConvoyancePreference,
+    )
 
-class WindowsClient(object):
+
+class WindowsClient(_BaseClient):
     """Fido2Client-like class using the Windows WebAuthn API.
 
     Note: This class only works on Windows 10 19H1 or later. This is also when Windows
@@ -616,9 +644,8 @@ class WindowsClient(object):
     """
 
     def __init__(self, origin, verify=verify_rp_id, handle=None):
+        super(WindowsClient, self).__init__(origin, verify)
         self.api = WinAPI(handle)
-        self.origin = origin
-        self._verify = verify
 
     @property
     def info(self):
@@ -627,14 +654,6 @@ class WindowsClient(object):
     @staticmethod
     def is_available():
         return platform.system().lower() == "windows" and WinAPI.version > 0
-
-    def _verify_rp_id(self, rp_id):
-        try:
-            if self._verify(rp_id, self.origin):
-                return
-        except Exception:
-            pass  # Fall through to ClientError
-        raise ClientError.ERR.BAD_REQUEST()
 
     def make_credential(self, options, **kwargs):
         """Create credentials using Windows WebAuhtN APIs.
@@ -646,11 +665,8 @@ class WindowsClient(object):
 
         self._verify_rp_id(options.rp.id)
 
-        client_data = ClientData.build(
-            type=WEBAUTHN_TYPE.MAKE_CREDENTIAL,
-            clientExtensions={},
-            challenge=options.challenge,
-            origin=self.origin,
+        client_data = self._build_client_data(
+            WEBAUTHN_TYPE.MAKE_CREDENTIAL, options.challenge
         )
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
@@ -690,11 +706,8 @@ class WindowsClient(object):
 
         self._verify_rp_id(options.rp_id)
 
-        client_data = ClientData.build(
-            type=WEBAUTHN_TYPE.GET_ASSERTION,
-            clientExtensions={},
-            challenge=options.challenge,
-            origin=self.origin,
+        client_data = self._build_client_data(
+            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
         )
 
         try:

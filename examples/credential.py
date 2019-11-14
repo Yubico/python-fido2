@@ -40,6 +40,8 @@ from getpass import getpass
 import sys
 
 use_prompt = False
+pin = None
+uv = "discouraged"
 
 if WindowsClient.is_available():
     # Use the Windows WebAuthn API if available
@@ -63,25 +65,24 @@ else:
     if not dev:
         print("No FIDO device found")
         sys.exit(1)
+
+    client = Fido2Client(dev, "https://example.com")
+
+    # Prefer UV if supported
+    if client.info.options.get("uv"):
+        uv = "preferred"
+        print("Authenticator supports User Verification")
+    elif client.info.options.get("clientPin"):
+        # Prompt for PIN if needed
+        pin = getpass("Please enter PIN: ")
     else:
-        client = Fido2Client(dev, "https://example.com")
+        print("PIN not set, won't use")
+
 
 # Prepare parameters for makeCredential
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
 challenge = "Y2hhbGxlbmdl"
-
-uv = "discouraged"
-pin = None
-# Prefer UV if supported
-if client.info.options.get("uv"):
-    uv = "preferred"
-    print("Authenticator supports User Verification")
-elif client.info.options.get("clientPin"):
-    # Prompt for PIN if needed
-    pin = getpass("Please enter PIN: ")
-else:
-    print("PIN not set, won't use")
 
 # Create a credential
 if use_prompt:

@@ -32,6 +32,12 @@ from enum import Enum, unique
 import six
 import re
 
+"""
+Data classes based on the W3C WebAuthn specification (https://www.w3.org/TR/webauthn/).
+
+See the specification for a description and details on their usage.
+"""
+
 
 @unique
 class AttestationConveyancePreference(six.text_type, Enum):
@@ -71,17 +77,17 @@ def _camel2snake(name):
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
-class DataObject(dict):
+class _DataObject(dict):
     """Base class for WebAuthn data types, acting both as dict and providing attribute
     access to values.
     """
 
     def __init__(self, **data):
         keys = {k: _snake2camel(k) for k in data.keys()}
-        super(DataObject, self).__init__(
+        super(_DataObject, self).__init__(
             {keys[k]: v for k, v in data.items() if v is not None}
         )
-        super(DataObject, self).__setattr__("_keys", keys)
+        super(_DataObject, self).__setattr__("_keys", keys)
 
     def __getattr__(self, name):
         if name in self._keys:
@@ -94,7 +100,7 @@ class DataObject(dict):
         if name in self._keys:
             self[self._keys[name]] = value
         else:
-            super(DataObject, self).__setattr__(name, value)
+            super(_DataObject, self).__setattr__(name, value)
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, dict(self))
@@ -114,7 +120,7 @@ class DataObject(dict):
         return [cls._wrap(x) for x in datas] if datas is not None else None
 
 
-class PublicKeyCredentialRpEntity(DataObject):
+class PublicKeyCredentialRpEntity(_DataObject):
     def __init__(self, id, name, icon=None):
         super(PublicKeyCredentialRpEntity, self).__init__(id=id, name=name, icon=icon)
 
@@ -124,19 +130,19 @@ class PublicKeyCredentialRpEntity(DataObject):
         return sha256(self.id.encode("utf8"))
 
 
-class PublicKeyCredentialUserEntity(DataObject):
+class PublicKeyCredentialUserEntity(_DataObject):
     def __init__(self, id, name, icon=None, display_name=None):
         super(PublicKeyCredentialUserEntity, self).__init__(
             id=id, name=name, icon=icon, display_name=display_name
         )
 
 
-class PublicKeyCredentialParameters(DataObject):
+class PublicKeyCredentialParameters(_DataObject):
     def __init__(self, type, alg):
         super(PublicKeyCredentialParameters, self).__init__(type=type, alg=alg)
 
 
-class PublicKeyCredentialDescriptor(DataObject):
+class PublicKeyCredentialDescriptor(_DataObject):
     def __init__(self, type, id, transports=None):
         super(PublicKeyCredentialDescriptor, self).__init__(
             type=type,
@@ -147,7 +153,7 @@ class PublicKeyCredentialDescriptor(DataObject):
         )
 
 
-class AuthenticatorSelectionCriteria(DataObject):
+class AuthenticatorSelectionCriteria(_DataObject):
     def __init__(
         self,
         authenticator_attachment=None,
@@ -163,7 +169,7 @@ class AuthenticatorSelectionCriteria(DataObject):
         )
 
 
-class PublicKeyCredentialCreationOptions(DataObject):
+class PublicKeyCredentialCreationOptions(_DataObject):
     def __init__(
         self,
         rp,
@@ -195,7 +201,7 @@ class PublicKeyCredentialCreationOptions(DataObject):
         )
 
 
-class PublicKeyCredentialRequestOptions(DataObject):
+class PublicKeyCredentialRequestOptions(_DataObject):
     def __init__(
         self,
         challenge,
