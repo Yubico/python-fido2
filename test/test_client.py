@@ -367,7 +367,11 @@ class TestFido2Client(unittest.TestCase):
         try:
             client.make_credential(
                 PublicKeyCredentialCreationOptions(
-                    rp, user, challenge, [{"type": "public-key", "alg": -7}]
+                    rp,
+                    user,
+                    challenge,
+                    [{"type": "public-key", "alg": -7}],
+                    authenticator_selection={"userVerification": "discouraged"},
                 )
             )
             self.fail("make_credential did not raise error")
@@ -389,7 +393,12 @@ class TestFido2Client(unittest.TestCase):
 
         attestation, client_data = client.make_credential(
             PublicKeyCredentialCreationOptions(
-                rp, user, challenge, [{"type": "public-key", "alg": -7}], timeout=1000
+                rp,
+                user,
+                challenge,
+                [{"type": "public-key", "alg": -7}],
+                timeout=1000,
+                authenticator_selection={"userVerification": "discouraged"},
             )
         )
 

@@ -655,25 +655,28 @@ class WindowsClient(object):
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
 
-        result = self.api.make_credential(
-            options.rp,
-            options.user,
-            options.pub_key_cred_params,
-            client_data,
-            options.timeout or 0,
-            selection.require_resident_key,
-            WebAuthNAuthenticatorAttachment.from_string(
-                selection.authenticator_attachment or "any"
-            ),
-            WebAuthNUserVerificationRequirement.from_string(
-                selection.user_verification or "discouraged"
-            ),
-            WebAuthNAttestationConvoyancePreference.from_string(
-                options.attestation or "none"
-            ),
-            options.exclude_credentials,
-            options.extensions,
-        )
+        try:
+            result = self.api.make_credential(
+                options.rp,
+                options.user,
+                options.pub_key_cred_params,
+                client_data,
+                options.timeout or 0,
+                selection.require_resident_key,
+                WebAuthNAuthenticatorAttachment.from_string(
+                    selection.authenticator_attachment or "any"
+                ),
+                WebAuthNUserVerificationRequirement.from_string(
+                    selection.user_verification or "discouraged"
+                ),
+                WebAuthNAttestationConvoyancePreference.from_string(
+                    options.attestation or "none"
+                ),
+                options.exclude_credentials,
+                options.extensions,
+            )
+        except OSError as e:
+            raise ClientError.ERR.OTHER_ERROR(e)
 
         return AttestationObject(result), client_data
 
@@ -694,17 +697,20 @@ class WindowsClient(object):
             origin=self.origin,
         )
 
-        (credential, auth_data, signature, user_id) = self.api.get_assertion(
-            options.rp_id,
-            client_data,
-            options.timeout or 0,
-            WebAuthNAuthenticatorAttachment.ANY,
-            WebAuthNUserVerificationRequirement.from_string(
-                options.user_verification or "discouraged"
-            ),
-            options.allow_credentials,
-            options.extensions,
-        )
+        try:
+            (credential, auth_data, signature, user_id) = self.api.get_assertion(
+                options.rp_id,
+                client_data,
+                options.timeout or 0,
+                WebAuthNAuthenticatorAttachment.ANY,
+                WebAuthNUserVerificationRequirement.from_string(
+                    options.user_verification or "discouraged"
+                ),
+                options.allow_credentials,
+                options.extensions,
+            )
+        except OSError as e:
+            raise ClientError.ERR.OTHER_ERROR(e)
 
         user = {"id": user_id} if user_id else None
         return (

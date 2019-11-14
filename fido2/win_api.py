@@ -631,19 +631,20 @@ class WinAPI(object):
     def __init__(self, handle=None):
         self.handle = handle or ctypes.windll.user32.GetForegroundWindow()
 
-    def get_error_message(self, errno):
-        """Returns an error message given an error HRESULT value.
+    def get_error_name(self, winerror):
+        """Returns an error name given an error HRESULT value.
 
-        :param int errno: Error code from an OSError.
-        :return: An error message string.
+        :param int winerror: Windows error code from an OSError.
+        :return: An error name.
         :rtype: str
 
         Example:
             try:
                 api.make_credential(*args, **kwargs)
             except OSError as e:
-                print(api.get_error_message(e.errno))
+                print(api.get_error_name(e.winerror))
         """
+        return WEBAUTHN.WebAuthNGetErrorName(winerror)
 
     def make_credential(
         self,
