@@ -35,6 +35,7 @@ from .webauthn import (
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
+    UserVerificationRequirement,
 )
 from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
@@ -314,15 +315,44 @@ class Fido2Client(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def make_credential(self, options, pin=None, on_keepalive=None):
+    def _get_ctap_uv(self, uv_requirement, pin_provided):
+        pin_supported = "clientPin" in self.info.options
+        pin_set = self.info.options.get("clientPin", False)
+
+        if pin_provided:
+            if not pin_set:
+                raise ClientError.ERR.BAD_REQUEST("PIN provided, but not set/supported")
+            else:
+                return False  # If PIN is provided, internal uv is not used
+
+        uv_supported = "uv" in self.info.options
+        uv_set = self.info.options.get("uv", False)
+
+        if uv_requirement == UserVerificationRequirement.REQUIRED:
+            if not uv_set:
+                raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
+                    "User verification not configured/supported"
+                )
+            return True
+        elif uv_requirement == UserVerificationRequirement.PREFERRED:
+            if not uv_set and (uv_supported or pin_supported):
+                raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
+                    "User verification supported but not configured"
+                )
+
+        return False
+
+    def make_credential(self, options, **kwargs):
         """Create credentials using Windows WebAuhtN APIs.
 
         :param options: PublicKeyCredentialCreationOptions data.
-        :param pin: (optional) Not used.
-        :param on_keepalive: (optional) Not implemented.
+        :param pin: (optional) Used if PIN verification is required.
+        :param on_keepalive: (optional) function to call with CTAP status updates.
         """
 
         options = PublicKeyCredentialCreationOptions._wrap(options)
+        pin = kwargs.get("pin")
+        on_keepalive = kwargs.get("on_keepalive")
 
         self._verify_rp_id(options.rp.id)
 
@@ -345,7 +375,7 @@ class Fido2Client(object):
                     options.exclude_credentials,
                     options.extensions,
                     selection.require_resident_key,
-                    selection.user_verification == "required",  # TODO base on info?
+                    self._get_ctap_uv(selection.user_verification, pin is not None),
                     pin,
                     options.timeout / 1000 if options.timeout is not None else None,
                     on_keepalive,
@@ -376,7 +406,7 @@ class Fido2Client(object):
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
         elif self.info.options.get("clientPin"):
-            raise ValueError("PIN required!")
+            raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
 
         if not (rk or uv):
             options = None
@@ -461,15 +491,17 @@ class Fido2Client(object):
             ),
         )
 
-    def get_assertion(self, options, pin=None, on_keepalive=None):
+    def get_assertion(self, options, **kwargs):
         """Get assertion using Windows WebAuthN APIs.
 
         :param options: PublicKeyCredentialRequestOptions data.
-        :param pin: (optional) Not used.
+        :param pin: (optional) Used if PIN verification is required.
         :param on_keepalive: (optional) Not implemented.
         """
 
         options = PublicKeyCredentialRequestOptions._wrap(options)
+        pin = kwargs.get("pin")
+        on_keepalive = kwargs.get("on_keepalive")
 
         self._verify_rp_id(options.rp_id)
 
@@ -487,7 +519,7 @@ class Fido2Client(object):
                     options.rp_id,
                     options.allow_credentials,
                     options.extensions,
-                    options.user_verification == "required",  # TODO base on info?
+                    self._get_ctap_uv(options.user_verification, pin is not None),
                     pin,
                     options.timeout / 1000 if options.timeout is not None else None,
                     on_keepalive,
@@ -507,7 +539,7 @@ class Fido2Client(object):
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
         elif self.info.options.get("clientPin"):
-            raise ValueError("PIN required!")
+            raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
 
         if uv:
             options = {"uv": True}
@@ -604,12 +636,10 @@ class WindowsClient(object):
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def make_credential(self, options, pin=None, on_keepalive=None):
+    def make_credential(self, options, **kwargs):
         """Create credentials using Windows WebAuhtN APIs.
 
         :param options: PublicKeyCredentialCreationOptions data.
-        :param pin: (optional) Not used.
-        :param on_keepalive: (optional) Not implemented.
         """
 
         options = PublicKeyCredentialCreationOptions._wrap(options)
@@ -647,12 +677,10 @@ class WindowsClient(object):
 
         return AttestationObject(result), client_data
 
-    def get_assertion(self, options, pin=None, on_keepalive=None):
+    def get_assertion(self, options, **kwargs):
         """Get assertion using Windows WebAuthN APIs.
 
         :param options: PublicKeyCredentialRequestOptions data.
-        :param pin: (optional) Not used.
-        :param on_keepalive: (optional) Not implemented.
         """
 
         options = PublicKeyCredentialRequestOptions._wrap(options)

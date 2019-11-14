@@ -224,7 +224,7 @@ class WebAuthNCredentialEx(ctypes.Structure):
         self.dwVersion = get_version(self.__class__.__name__)
         self.id = cred["id"]
         self.pwszCredentialType = cred["type"]
-        self.dwTransports = WebAuthNCTAPTransport[cred.get("transport", "USB")]
+        self.dwTransports = WebAuthNCTAPTransport[cred.get("transport", "ANY")]
 
 
 class WebAuthNCredentialList(ctypes.Structure):
@@ -531,6 +531,7 @@ class WebAuthNCTAPTransport(IntEnum):
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L225
     """
 
+    ANY = 0x00000000
     USB = 0x00000001
     NFC = 0x00000002
     BLE = 0x00000004

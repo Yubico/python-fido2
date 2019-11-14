@@ -29,6 +29,7 @@
 Connects to the first FIDO device found (starts from USB, then looks into NFC),
 creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
+On Windows, the native WebAuthn API will be used.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
@@ -38,7 +39,7 @@ from fido2.attestation import Attestation
 from getpass import getpass
 import sys
 
-use_nfc = False
+use_prompt = False
 
 if WindowsClient.is_available():
     # Use the Windows WebAuthn API if available
@@ -48,13 +49,13 @@ else:
     dev = next(CtapHidDevice.list_devices(), None)
     if dev is not None:
         print("Use USB HID channel.")
+        use_prompt = True
     else:
         try:
             from fido2.pcsc import CtapPcscDevice
 
             dev = next(CtapPcscDevice.list_devices(), None)
             print("Use NFC channel.")
-            use_nfc = True
         except Exception as e:
             print("NFC channel search error:", e)
 
@@ -70,15 +71,20 @@ rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
 challenge = "Y2hhbGxlbmdl"
 
-# Prompt for PIN if needed
+uv = "discouraged"
 pin = None
-if client.info.options.get("clientPin"):
+# Prefer UV if supported
+if client.info.options.get("uv"):
+    uv = "preferred"
+    print("Authenticator supports User Verification")
+elif client.info.options.get("clientPin"):
+    # Prompt for PIN if needed
     pin = getpass("Please enter PIN: ")
 else:
-    print("no pin")
+    print("PIN not set, won't use")
 
 # Create a credential
-if not use_nfc:
+if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
 attestation_object, client_data = client.make_credential(
@@ -86,7 +92,14 @@ attestation_object, client_data = client.make_credential(
         "rp": rp,
         "user": user,
         "challenge": challenge,
-        "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+        "pubKeyCredParams": [
+            {"type": "public-key", "alg": -7},
+            {"type": "public-key", "alg": -257},
+        ],
+        "authenticatorSelection": {
+            "authenticatorAttachment": "cross-platform",
+            "userVerification": uv,
+        },
     },
     pin=pin,
 )
@@ -113,11 +126,17 @@ challenge = "Q0hBTExFTkdF"  # Use a new challenge for each call.
 allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Authenticate the credential
-if not use_nfc:
+if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
 assertions, client_data = client.get_assertion(
-    {"rpId": rp["id"], "challenge": challenge, "allowCredentials": allow_list}, pin=pin
+    {
+        "rpId": rp["id"],
+        "challenge": challenge,
+        "allowCredentials": allow_list,
+        "userVerification": uv,
+    },
+    pin=pin,
 )
 
 print("Credential authenticated!")
