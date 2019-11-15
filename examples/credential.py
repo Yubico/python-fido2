@@ -35,7 +35,7 @@ from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client, WindowsClient
-from fido2.attestation import Attestation
+from fido2.server import Fido2Server
 from getpass import getpass
 import sys
 
@@ -79,75 +79,57 @@ else:
         print("PIN not set, won't use")
 
 
-# Prepare parameters for makeCredential
-rp = {"id": "example.com", "name": "Example RP"}
+server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
+
 user = {"id": b"user_id", "name": "A. User"}
-challenge = "Y2hhbGxlbmdl"
+
+# Prepare parameters for makeCredential
+create_options, state = server.register_begin(
+    user, user_verification=uv, authenticator_attachment="cross-platform"
+)
 
 # Create a credential
 if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
 attestation_object, client_data = client.make_credential(
-    {
-        "rp": rp,
-        "user": user,
-        "challenge": challenge,
-        "pubKeyCredParams": [
-            {"type": "public-key", "alg": -7},
-            {"type": "public-key", "alg": -257},
-        ],
-        "authenticatorSelection": {
-            "authenticatorAttachment": "cross-platform",
-            "userVerification": uv,
-        },
-    },
-    pin=pin,
+    create_options["publicKey"], pin=pin
 )
 
+# Complete registration
+auth_data = server.register_complete(state, client_data, attestation_object)
+credentials = [auth_data.credential_data]
 
 print("New credential created!")
 
 print("CLIENT DATA:", client_data)
 print("ATTESTATION OBJECT:", attestation_object)
 print()
-print("CREDENTIAL DATA:", attestation_object.auth_data.credential_data)
+print("CREDENTIAL DATA:", auth_data.credential_data)
 
-# Verify signature
-verifier = Attestation.for_type(attestation_object.fmt)
-verifier().verify(
-    attestation_object.att_statement, attestation_object.auth_data, client_data.hash
-)
-print("Attestation signature verified!")
-
-credential = attestation_object.auth_data.credential_data
 
 # Prepare parameters for getAssertion
-challenge = "Q0hBTExFTkdF"  # Use a new challenge for each call.
-allow_list = [{"type": "public-key", "id": credential.credential_id}]
+request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
 # Authenticate the credential
 if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
-assertions, client_data = client.get_assertion(
-    {
-        "rpId": rp["id"],
-        "challenge": challenge,
-        "allowCredentials": allow_list,
-        "userVerification": uv,
-    },
-    pin=pin,
+assertions, client_data = client.get_assertion(request_options["publicKey"], pin=pin)
+assertion = assertions[0]  # Only one cred in allowCredentials, only one response.
+
+# Complete authenticator
+server.authenticate_complete(
+    state,
+    credentials,
+    assertion.credential["id"],
+    client_data,
+    assertion.auth_data,
+    assertion.signature,
 )
 
 print("Credential authenticated!")
 
-assertion = assertions[0]  # Only one cred in allowList, only one response.
-
 print("CLIENT DATA:", client_data)
 print()
 print("ASSERTION DATA:", assertion)
-
-# Verify signature
-assertion.verify(client_data.hash, credential.public_key)
-print("Assertion signature verified!")

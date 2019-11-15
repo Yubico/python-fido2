@@ -67,6 +67,11 @@ class AuthenticatorTransport(six.text_type, Enum):
     INTERNAL = "internal"
 
 
+@unique
+class PublicKeyCredentialType(six.text_type, Enum):
+    PUBLIC_KEY = "public-key"
+
+
 def _snake2camel(name):
     parts = name.split("_")
     return parts[0] + "".join(p.title() for p in parts[1:])
@@ -111,8 +116,6 @@ class _DataObject(dict):
             return None
         if isinstance(data, cls):
             return data
-        if isinstance(data, list):
-            raise Exception("ERR")
         return cls(**{_camel2snake(k): v for k, v in data.items()})
 
     @classmethod
@@ -139,13 +142,15 @@ class PublicKeyCredentialUserEntity(_DataObject):
 
 class PublicKeyCredentialParameters(_DataObject):
     def __init__(self, type, alg):
-        super(PublicKeyCredentialParameters, self).__init__(type=type, alg=alg)
+        super(PublicKeyCredentialParameters, self).__init__(
+            type=PublicKeyCredentialType(type), alg=alg
+        )
 
 
 class PublicKeyCredentialDescriptor(_DataObject):
     def __init__(self, type, id, transports=None):
         super(PublicKeyCredentialDescriptor, self).__init__(
-            type=type,
+            type=PublicKeyCredentialType(type),
             id=id,
             tranports=[AuthenticatorTransport(t) for t in transports]
             if transports

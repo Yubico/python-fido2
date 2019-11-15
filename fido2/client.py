@@ -303,7 +303,7 @@ class _BaseClient(object):
         return ClientData.build(
             type=typ,
             origin=self.origin,
-            challenge=challenge,
+            challenge=websafe_encode(challenge),
             clientExtensions=extensions,
         )
 

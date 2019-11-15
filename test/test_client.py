@@ -316,7 +316,7 @@ class TestU2fClient(unittest.TestCase):
 
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
-challenge = "Y2hhbGxlbmdl"
+challenge = b"Y2hhbGxlbmdl"
 _INFO_NO_PIN = a2b_hex(
     "a60182665532465f5632684649444f5f325f3002826375766d6b686d61632d7365637265740350f8a011f38c0a4d15800617111f9edc7d04a462726bf5627570f564706c6174f469636c69656e7450696ef4051904b0068101"  # noqa E501
 )
@@ -422,7 +422,7 @@ class TestFido2Client(unittest.TestCase):
 
         self.assertEqual(client_data.get("origin"), APP_ID)
         self.assertEqual(client_data.get("type"), "webauthn.create")
-        self.assertEqual(client_data.get("challenge"), challenge)
+        self.assertEqual(client_data.challenge, challenge)
 
     def test_make_credential_ctap1(self):
         dev = mock.Mock()
@@ -448,6 +448,6 @@ class TestFido2Client(unittest.TestCase):
 
         self.assertEqual(client_data.get("origin"), APP_ID)
         self.assertEqual(client_data.get("type"), "webauthn.create")
-        self.assertEqual(client_data.get("challenge"), challenge)
+        self.assertEqual(client_data.challenge, challenge)
 
         self.assertEqual(attestation.fmt, "fido-u2f")
