@@ -31,7 +31,7 @@ from . import cbor
 from .ctap import CtapError
 from .cose import CoseKey, ES256
 from .hid import CTAPHID, CAPABILITY
-from .utils import Timeout, ByteBuffer, sha256, hmac_sha256, bytes2int, int2bytes
+from .utils import ByteBuffer, sha256, hmac_sha256, bytes2int, int2bytes
 from .attestation import FidoU2FAttestation
 
 from cryptography.hazmat.backends import default_backend
@@ -622,7 +622,7 @@ class CTAP2(object):
         self._strict_cbor = strict_cbor
 
     def send_cbor(
-        self, cmd, data=None, timeout=None, parse=cbor.decode, on_keepalive=None
+        self, cmd, data=None, event=None, parse=cbor.decode, on_keepalive=None
     ):
         """Sends a CBOR message to the device, and waits for a response.
 
@@ -631,8 +631,7 @@ class CTAP2(object):
 
         :param cmd: The command byte of the request.
         :param data: The payload to send (to be CBOR encoded).
-        :param timeout: Optional timeout in seconds, or an instance of
-            threading.Event used to cancel the command.
+        :param event: Optional threading.Event used to cancel the request.
         :param parse: Function used to parse the binary response data, defaults
             to parsing the CBOR.
         :param on_keepalive: Optional function called when keep-alive is sent by
@@ -643,8 +642,7 @@ class CTAP2(object):
         request = struct.pack(">B", cmd)
         if data is not None:
             request += cbor.encode(data)
-        with Timeout(timeout) as event:
-            response = self.device.call(CTAPHID.CBOR, request, event, on_keepalive)
+        response = self.device.call(CTAPHID.CBOR, request, event, on_keepalive)
         status = six.indexbytes(response, 0)
         if status != 0x00:
             raise CtapError(status)
@@ -673,7 +671,7 @@ class CTAP2(object):
         options=None,
         pin_auth=None,
         pin_protocol=None,
-        timeout=None,
+        event=None,
         on_keepalive=None,
     ):
         """CTAP2 makeCredential operation.
@@ -687,8 +685,7 @@ class CTAP2(object):
         :param options: Optional dict of options.
         :param pin_auth: Optional PIN auth parameter.
         :param pin_protocol: The version of PIN protocol used, if any.
-        :param timeout: Optional timeout in seconds, or threading.Event object
-            used to cancel the request.
+        :param event: Optional threading.Event used to cancel the request.
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
         :return: The new credential.
@@ -706,7 +703,7 @@ class CTAP2(object):
                 pin_auth,
                 pin_protocol,
             ),
-            timeout,
+            event,
             AttestationObject,
             on_keepalive,
         )
@@ -720,7 +717,7 @@ class CTAP2(object):
         options=None,
         pin_auth=None,
         pin_protocol=None,
-        timeout=None,
+        event=None,
         on_keepalive=None,
     ):
         """CTAP2 getAssertion command.
@@ -732,8 +729,8 @@ class CTAP2(object):
         :param options: Optional dict of options.
         :param pin_auth: Optional PIN auth parameter.
         :param pin_protocol: The version of PIN protocol used, if any.
-        :param timeout: Optional timeout in seconds, or threading.Event object
-            used to cancel the request.
+        :param timeout: Optional timeout in seconds
+        :param event: Optional threading.Event used to cancel the request.
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
         :return: The new assertion.
@@ -749,7 +746,7 @@ class CTAP2(object):
                 pin_auth,
                 pin_protocol,
             ),
-            timeout,
+            event,
             AssertionResponse,
             on_keepalive,
         )

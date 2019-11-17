@@ -93,7 +93,7 @@ class Fido2Server(object):
     ):
         self.rp = PublicKeyCredentialRpEntity._wrap(rp)
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
-        self.timeout = 30
+        self.timeout = 30000
         self.attestation = AttestationConveyancePreference(attestation)
         self.allowed_algorithms = [
             PublicKeyCredentialParameters("public-key", alg)
@@ -137,7 +137,7 @@ class Fido2Server(object):
                     user,
                     challenge,
                     self.allowed_algorithms,
-                    int(self.timeout * 1000),
+                    self.timeout,
                     [
                         PublicKeyCredentialDescriptor("public-key", cred.credential_id)
                         for cred in credentials or []
@@ -225,7 +225,7 @@ class Fido2Server(object):
             {
                 "publicKey": PublicKeyCredentialRequestOptions(
                     challenge,
-                    int(self.timeout * 1000),
+                    self.timeout,
                     self.rp.id,
                     [
                         PublicKeyCredentialDescriptor("public-key", cred.credential_id)

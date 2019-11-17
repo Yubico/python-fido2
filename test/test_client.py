@@ -31,7 +31,7 @@ from __future__ import absolute_import, unicode_literals
 
 import mock
 import unittest
-from threading import Event
+from threading import Event, Timer
 from binascii import a2b_hex
 from fido2.utils import sha256, websafe_decode
 from fido2.hid import CAPABILITY
@@ -93,7 +93,6 @@ class TestU2fClient(unittest.TestCase):
                 "https://bar.example.com",
                 [{"version": "U2F_V2", "challenge": "foobar"}],
                 [],
-                timeout=1,
             )
             self.fail("register did not raise error")
         except ClientError as e:
@@ -105,9 +104,7 @@ class TestU2fClient(unittest.TestCase):
         client.ctap.get_version.return_value = "U2F_XXX"
 
         try:
-            client.register(
-                APP_ID, [{"version": "U2F_V2", "challenge": "foobar"}], [], timeout=1
-            )
+            client.register(APP_ID, [{"version": "U2F_V2", "challenge": "foobar"}], [])
             self.fail("register did not raise error")
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
@@ -125,7 +122,6 @@ class TestU2fClient(unittest.TestCase):
                 APP_ID,
                 [{"version": "U2F_V2", "challenge": "foobar"}],
                 [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-                timeout=1,
             )
             self.fail("register did not raise error")
         except ClientError as e:
@@ -168,12 +164,15 @@ class TestU2fClient(unittest.TestCase):
         client.ctap.register.side_effect = ApduError(APDU.USE_NOT_SATISFIED)
 
         client.poll_delay = 0.01
+        event = Event()
+        timer = Timer(0.1, event.set)
+        timer.start()
         try:
             client.register(
                 APP_ID,
                 [{"version": "U2F_V2", "challenge": "foobar"}],
                 [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-                timeout=0.1,
+                event=event,
             )
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.TIMEOUT)
@@ -197,7 +196,7 @@ class TestU2fClient(unittest.TestCase):
             APP_ID,
             [{"version": "U2F_V2", "challenge": "foobar"}],
             [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-            timeout=event,
+            event=event,
         )
 
         event.wait.assert_called()
@@ -299,7 +298,7 @@ class TestU2fClient(unittest.TestCase):
             APP_ID,
             "challenge",
             [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-            timeout=event,
+            event=event,
         )
 
         event.wait.assert_called()
@@ -416,7 +415,7 @@ class TestFido2Client(unittest.TestCase):
             None,
             None,
             None,
-            1,
+            mock.ANY,
             None,
         )
 

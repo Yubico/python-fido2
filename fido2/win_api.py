@@ -41,6 +41,7 @@ from __future__ import absolute_import, unicode_literals
 
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND
+from threading import Thread
 
 import ctypes
 
@@ -348,11 +349,21 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         ("pAllowCredentialList", ctypes.POINTER(WebAuthNCredentialList)),
     ]
 
-    def __init__(self, timeout, attachment, user_verification_requirement, credentials):
+    def __init__(
+        self,
+        timeout,
+        attachment,
+        user_verification_requirement,
+        credentials,
+        cancellationId,
+    ):
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
         self.dwAuthenticatorAttachment = attachment
         self.dwUserVerificationRequirement = user_verification_requirement
+
+        if self.dwVersion >= 3:
+            self.pCancellationId = cancellationId
 
         if self.dwVersion >= 4:
             clist = WebAuthNCredentialList(credentials)
@@ -425,6 +436,7 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         user_verification_requirement,
         attestation_convoyence,
         credentials,
+        cancellationId,
     ):
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
@@ -432,6 +444,9 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         self.dwAuthenticatorAttachment = attachment
         self.dwUserVerificationRequirement = user_verification_requirement
         self.dwAttestationConveyancePreference = attestation_convoyence
+
+        if self.dwVersion >= 2:
+            self.pCancellationId = cancellationId
 
         if self.dwVersion >= 3:
             self.pExcludeCredentialList = ctypes.pointer(
@@ -620,6 +635,26 @@ def get_version(class_name):
     return WEBAUTHN_STRUCT_VERSIONS[1][class_name]
 
 
+class CancelThread(Thread):
+    def __init__(self, event):
+        super(CancelThread, self).__init__()
+        self.daemon = True
+        self._completed = False
+        self.event = event
+        self.guid = GUID()
+        WEBAUTHN.WebAuthNGetCancellationId(ctypes.byref(self.guid))
+
+    def run(self):
+        self.event.wait()
+        if not self._completed:
+            WEBAUTHN.WebAuthNCancelCurrentOperation(ctypes.byref(self.guid))
+
+    def complete(self):
+        self._completed = True
+        self.event.set()
+        self.join()
+
+
 class WinAPI(object):
     """Implementation of Microsoft's WebAuthN APIs.
 
@@ -659,6 +694,7 @@ class WinAPI(object):
         attestation=WebAuthNAttestationConvoyancePreference.DIRECT,
         exclude_credentials=None,
         extensions=None,
+        event=None,
     ):
         """Make credential using Windows WebAuthN API.
 
@@ -678,7 +714,12 @@ class WinAPI(object):
         :param List[Dict[str,Any]] exclude_credentials: (optional) List of
             PublicKeyCredentialDescriptor of previously registered credentials.
         :param Any extensions: Currently not supported.
+        :param threading.Event event: (optional) Signal to abort the operation.
         """
+
+        if event:
+            t = CancelThread(event)
+            t.start()
 
         # TODO: add support for extensions
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
@@ -696,10 +737,13 @@ class WinAPI(object):
                     user_verification,
                     attestation,
                     exclude_credentials or [],
+                    ctypes.pointer(t.guid) if event else None,
                 )
             ),
             ctypes.byref(attestation_pointer),
         )
+        if event:
+            t.complete()
 
         return attestation_pointer.contents.attestation_object
 
@@ -712,6 +756,7 @@ class WinAPI(object):
         user_verification=WebAuthNUserVerificationRequirement.ANY,
         allow_credentials=None,
         extensions=None,
+        event=None,
     ):
         """Get assertion using Windows WebAuthN API.
 
@@ -725,7 +770,12 @@ class WinAPI(object):
         :param List[Dict[str,Any]] allow_credentials: (optional) List of
             PublicKeyCredentialDescriptor of previously registered credentials.
         :param Any extensions: Currently not supported.
+        :param threading.Event event: (optional) Signal to abort the operation.
         """
+
+        if event:
+            t = CancelThread(event)
+            t.start()
 
         # TODO: add support for extensions
         assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
@@ -739,10 +789,14 @@ class WinAPI(object):
                     platform_attachment,
                     user_verification,
                     allow_credentials or [],
+                    ctypes.pointer(t.guid) if event else None,
                 )
             ),
             ctypes.byref(assertion_pointer),
         )
+
+        if event:
+            t.complete()
 
         obj = assertion_pointer.contents
         return obj.Credential.descriptor, obj.auth_data, obj.signature, obj.user_id

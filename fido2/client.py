@@ -39,8 +39,9 @@ from .webauthn import (
 )
 from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
-from .utils import Timeout, sha256, hmac_sha256, websafe_decode, websafe_encode
+from .utils import sha256, hmac_sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
+from threading import Timer, Event
 
 import json
 import six
@@ -145,21 +146,21 @@ def _ctap2client_err(e):
     return ce(e)
 
 
-def _call_polling(poll_delay, timeout, on_keepalive, func, *args, **kwargs):
-    with Timeout(timeout or 30) as event:
-        while not event.is_set():
-            try:
-                return func(*args, **kwargs)
-            except ApduError as e:
-                if e.code == APDU.USE_NOT_SATISFIED:
-                    if on_keepalive:
-                        on_keepalive(STATUS.UPNEEDED)
-                        on_keepalive = None
-                    event.wait(poll_delay)
-                else:
-                    raise ClientError.ERR.OTHER_ERROR(e)
-            except CtapError as e:
-                raise _ctap2client_err(e)
+def _call_polling(poll_delay, event, on_keepalive, func, *args, **kwargs):
+    event = event or Event()
+    while not event.is_set():
+        try:
+            return func(*args, **kwargs)
+        except ApduError as e:
+            if e.code == APDU.USE_NOT_SATISFIED:
+                if on_keepalive:
+                    on_keepalive(STATUS.UPNEEDED)
+                    on_keepalive = None
+                event.wait(poll_delay)
+            else:
+                raise ClientError.ERR.OTHER_ERROR(e)
+        except CtapError as e:
+            raise _ctap2client_err(e)
     raise ClientError.ERR.TIMEOUT()
 
 
@@ -195,12 +196,7 @@ class U2fClient(object):
         raise ClientError.ERR.BAD_REQUEST()
 
     def register(
-        self,
-        app_id,
-        register_requests,
-        registered_keys,
-        timeout=None,
-        on_keepalive=None,
+        self, app_id, register_requests, registered_keys, event=None, on_keepalive=None
     ):
         self._verify_app_id(app_id)
 
@@ -236,7 +232,7 @@ class U2fClient(object):
 
         reg_data = _call_polling(
             self.poll_delay,
-            timeout,
+            event,
             on_keepalive,
             self.ctap.register,
             client_data.hash,
@@ -245,7 +241,7 @@ class U2fClient(object):
 
         return {"registrationData": reg_data.b64, "clientData": client_data.b64}
 
-    def sign(self, app_id, challenge, registered_keys, timeout=None, on_keepalive=None):
+    def sign(self, app_id, challenge, registered_keys, event=None, on_keepalive=None):
         client_data = ClientData.build(
             typ=U2F_TYPE.SIGN, challenge=challenge, origin=self.origin
         )
@@ -260,7 +256,7 @@ class U2fClient(object):
                 try:
                     signature_data = _call_polling(
                         self.poll_delay,
-                        timeout,
+                        event,
                         on_keepalive,
                         self.ctap.authenticate,
                         client_data.hash,
@@ -373,12 +369,17 @@ class Fido2Client(_BaseClient):
 
         :param options: PublicKeyCredentialCreationOptions data.
         :param pin: (optional) Used if PIN verification is required.
+        :param threading.Event event: (optional) Signal to abort the operation.
         :param on_keepalive: (optional) function to call with CTAP status updates.
         """
 
         options = PublicKeyCredentialCreationOptions._wrap(options)
         pin = kwargs.get("pin")
-        on_keepalive = kwargs.get("on_keepalive")
+        event = kwargs.get("event", Event())
+        if options.timeout:
+            timer = Timer(options.timeout / 1000, event.set)
+            timer.daemon = True
+            timer.start()
 
         self._verify_rp_id(options.rp.id)
 
@@ -400,13 +401,16 @@ class Fido2Client(_BaseClient):
                     selection.require_resident_key,
                     self._get_ctap_uv(selection.user_verification, pin is not None),
                     pin,
-                    options.timeout / 1000 if options.timeout is not None else None,
-                    on_keepalive,
+                    event,
+                    kwargs.get("on_keepalive"),
                 ),
                 client_data,
             )
         except CtapError as e:
             raise _ctap2client_err(e)
+        finally:
+            if options.timeout:
+                timer.cancel()
 
     def _ctap2_make_credential(
         self,
@@ -419,7 +423,7 @@ class Fido2Client(_BaseClient):
         rk,
         uv,
         pin,
-        timeout,
+        event,
         on_keepalive,
     ):
         pin_auth = None
@@ -461,7 +465,7 @@ class Fido2Client(_BaseClient):
             options,
             pin_auth,
             pin_protocol,
-            timeout,
+            event,
             on_keepalive,
         )
 
@@ -476,7 +480,7 @@ class Fido2Client(_BaseClient):
         rk,
         uv,
         pin,
-        timeout,
+        event,
         on_keepalive,
     ):
         if rk or uv or ES256.ALGORITHM not in [p.alg for p in key_params]:
@@ -494,7 +498,7 @@ class Fido2Client(_BaseClient):
                 if e.code == APDU.USE_NOT_SATISFIED:
                     _call_polling(
                         self.ctap1_poll_delay,
-                        timeout,
+                        event,
                         on_keepalive,
                         self.ctap1.register,
                         dummy_param,
@@ -506,7 +510,7 @@ class Fido2Client(_BaseClient):
             app_param,
             _call_polling(
                 self.ctap1_poll_delay,
-                timeout,
+                event,
                 on_keepalive,
                 self.ctap1.register,
                 client_data.hash,
@@ -519,12 +523,17 @@ class Fido2Client(_BaseClient):
 
         :param options: PublicKeyCredentialRequestOptions data.
         :param pin: (optional) Used if PIN verification is required.
+        :param threading.Event event: (optional) Signal to abort the operation.
         :param on_keepalive: (optional) Not implemented.
         """
 
         options = PublicKeyCredentialRequestOptions._wrap(options)
         pin = kwargs.get("pin")
-        on_keepalive = kwargs.get("on_keepalive")
+        event = kwargs.get("event", Event())
+        if options.timeout:
+            timer = Timer(options.timeout / 1000, event.set)
+            timer.daemon = True
+            timer.start()
 
         self._verify_rp_id(options.rp_id)
 
@@ -541,16 +550,19 @@ class Fido2Client(_BaseClient):
                     options.extensions,
                     self._get_ctap_uv(options.user_verification, pin is not None),
                     pin,
-                    options.timeout / 1000 if options.timeout is not None else None,
-                    on_keepalive,
+                    event,
+                    kwargs.get("on_keepalive"),
                 ),
                 client_data,
             )
         except CtapError as e:
             raise _ctap2client_err(e)
+        finally:
+            if options.timeout:
+                timer.cancel()
 
     def _ctap2_get_assertion(
-        self, client_data, rp_id, allow_list, extensions, uv, pin, timeout, on_keepalive
+        self, client_data, rp_id, allow_list, extensions, uv, pin, event, on_keepalive
     ):
         pin_auth = None
         pin_protocol = None
@@ -587,12 +599,12 @@ class Fido2Client(_BaseClient):
             options,
             pin_auth,
             pin_protocol,
-            timeout,
+            event,
             on_keepalive,
         )
 
     def _ctap1_get_assertion(
-        self, client_data, rp_id, allow_list, extensions, uv, pin, timeout, on_keepalive
+        self, client_data, rp_id, allow_list, extensions, uv, pin, event, on_keepalive
     ):
         if uv or not allow_list:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
@@ -603,7 +615,7 @@ class Fido2Client(_BaseClient):
             try:
                 auth_resp = _call_polling(
                     self.ctap1_poll_delay,
-                    timeout,
+                    event,
                     on_keepalive,
                     self.ctap1.authenticate,
                     client_param,
@@ -659,6 +671,7 @@ class WindowsClient(_BaseClient):
         """Create credentials using Windows WebAuhtN APIs.
 
         :param options: PublicKeyCredentialCreationOptions data.
+        :param threading.Event event: (optional) Signal to abort the operation.
         """
 
         options = PublicKeyCredentialCreationOptions._wrap(options)
@@ -690,6 +703,7 @@ class WindowsClient(_BaseClient):
                 ),
                 options.exclude_credentials,
                 options.extensions,
+                kwargs.get("event"),
             )
         except OSError as e:
             raise ClientError.ERR.OTHER_ERROR(e)
@@ -700,6 +714,7 @@ class WindowsClient(_BaseClient):
         """Get assertion using Windows WebAuthN APIs.
 
         :param options: PublicKeyCredentialRequestOptions data.
+        :param threading.Event event: (optional) Signal to abort the operation.
         """
 
         options = PublicKeyCredentialRequestOptions._wrap(options)
@@ -721,6 +736,7 @@ class WindowsClient(_BaseClient):
                 ),
                 options.allow_credentials,
                 options.extensions,
+                kwargs.get("event"),
             )
         except OSError as e:
             raise ClientError.ERR.OTHER_ERROR(e)
