@@ -361,6 +361,7 @@ class Fido2Client(_BaseClient):
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
                     "User verification supported but not configured"
                 )
+            return uv_set
 
         return False
 
@@ -432,7 +433,7 @@ class Fido2Client(_BaseClient):
             pin_protocol = self.pin_protocol.VERSION
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
-        elif self.info.options.get("clientPin"):
+        elif self.info.options.get("clientPin") and not uv:
             raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
 
         if not (rk or uv):
@@ -570,7 +571,7 @@ class Fido2Client(_BaseClient):
             pin_protocol = self.pin_protocol.VERSION
             pin_token = self.pin_protocol.get_pin_token(pin)
             pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
-        elif self.info.options.get("clientPin"):
+        elif self.info.options.get("clientPin") and not uv:
             raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
 
         if uv:

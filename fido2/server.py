@@ -140,8 +140,10 @@ class Fido2Server(object):
                     self.timeout,
                     [
                         PublicKeyCredentialDescriptor("public-key", cred.credential_id)
-                        for cred in credentials or []
-                    ],
+                        for cred in credentials
+                    ]
+                    if credentials
+                    else None,
                     AuthenticatorSelectionCriteria(
                         authenticator_attachment, resident_key, user_verification
                     ),
@@ -204,7 +206,7 @@ class Fido2Server(object):
 
     def authenticate_begin(
         self,
-        credentials,
+        credentials=None,
         user_verification=UserVerificationRequirement.PREFERRED,
         challenge=None,
     ):
@@ -230,7 +232,9 @@ class Fido2Server(object):
                     [
                         PublicKeyCredentialDescriptor("public-key", cred.credential_id)
                         for cred in credentials
-                    ],
+                    ]
+                    if credentials
+                    else None,
                     user_verification,
                 )
             },
