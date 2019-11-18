@@ -68,7 +68,7 @@ use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
 # Prepare parameters for makeCredential
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
-challenge = "Y2hhbGxlbmdl"
+challenge = b"Y2hhbGxlbmdl"
 
 # Prompt for PIN if needed
 pin = None
@@ -83,7 +83,14 @@ hmac_ext = HmacSecretExtension(client.ctap2)
 if not use_nfc:
     print("\nTouch your authenticator device now...\n")
 attestation_object, client_data = client.make_credential(
-    rp, user, challenge, extensions=hmac_ext.create_dict(), pin=pin
+    {
+        "rp": rp,
+        "user": user,
+        "challenge": challenge,
+        "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+        "extensions": hmac_ext.create_dict(),
+    },
+    pin=pin,
 )
 
 # HmacSecret result:
@@ -93,7 +100,7 @@ credential = attestation_object.auth_data.credential_data
 print("New credential created, with the HmacSecret extension.")
 
 # Prepare parameters for getAssertion
-challenge = "Q0hBTExFTkdF"  # Use a new challenge for each call.
+challenge = b"Q0hBTExFTkdF"  # Use a new challenge for each call.
 allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Generate a salt for HmacSecret:
@@ -105,7 +112,13 @@ if not use_nfc:
     print("\nTouch your authenticator device now...\n")
 
 assertions, client_data = client.get_assertion(
-    rp["id"], challenge, allow_list, extensions=hmac_ext.get_dict(salt), pin=pin
+    {
+        "rpId": rp["id"],
+        "challenge": challenge,
+        "allowCredentials": allow_list,
+        "extensions": hmac_ext.get_dict(salt),
+    },
+    pin=pin,
 )
 
 assertion = assertions[0]  # Only one cred in allowList, only one response.
@@ -123,7 +136,13 @@ if not use_nfc:
 
 # The first salt is reused, which should result in the same secret.
 assertions, client_data = client.get_assertion(
-    rp["id"], challenge, allow_list, extensions=hmac_ext.get_dict(salt, salt2), pin=pin
+    {
+        "rpId": rp["id"],
+        "challenge": challenge,
+        "allowCredentials": allow_list,
+        "extensions": hmac_ext.get_dict(salt, salt2),
+    },
+    pin=pin,
 )
 
 assertion = assertions[0]  # Only one cred in allowList, only one response.

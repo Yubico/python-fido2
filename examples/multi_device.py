@@ -48,7 +48,7 @@ clients = [Fido2Client(d, "https://example.com") for d in devs]
 # Prepare parameters for makeCredential
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
-challenge = "Y2hhbGxlbmdl"
+challenge = b"Y2hhbGxlbmdl"
 cancel = Event()
 attestation, client_data = None, None
 
@@ -66,7 +66,14 @@ def work(client):
     global attestation, client_data
     try:
         attestation, client_data = client.make_credential(
-            rp, user, challenge, timeout=cancel, on_keepalive=on_keepalive
+            {
+                "rp": rp,
+                "user": user,
+                "challenge": challenge,
+                "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+            },
+            event=cancel,
+            on_keepalive=on_keepalive,
         )
     except ClientError as e:
         if e.code != ClientError.ERR.TIMEOUT:
