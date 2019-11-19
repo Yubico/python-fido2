@@ -31,17 +31,14 @@ This module contains various functions used throughout the rest of the project.
 """
 
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from threading import Timer, Event
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from binascii import b2a_hex
-from numbers import Number
 from io import BytesIO
 import six
 import struct
 
 __all__ = [
-    "Timeout",
     "websafe_encode",
     "websafe_decode",
     "sha256",
@@ -120,34 +117,6 @@ def websafe_encode(data):
     :return: The encoded string.
     """
     return urlsafe_b64encode(data).replace(b"=", b"").decode("ascii")
-
-
-class Timeout(object):
-    """Utility class for adding a timeout to an event.
-
-    :param time_or_event: A number, in seconds, or a threading.Event object.
-    :ivar event: The Event associated with the Timeout.
-    :ivar timer: The Timer associated with the Timeout, if any.
-    """
-
-    def __init__(self, time_or_event):
-
-        if isinstance(time_or_event, Number):
-            self.event = Event()
-            self.timer = Timer(time_or_event, self.event.set)
-        else:
-            self.event = time_or_event
-            self.timer = None
-
-    def __enter__(self):
-        if self.timer:
-            self.timer.start()
-        return self.event
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.timer:
-            self.timer.cancel()
-            self.timer.join()
 
 
 class ByteBuffer(BytesIO):

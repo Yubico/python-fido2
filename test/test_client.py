@@ -31,7 +31,7 @@ from __future__ import absolute_import, unicode_literals
 
 import mock
 import unittest
-from threading import Event
+from threading import Event, Timer
 from binascii import a2b_hex
 from fido2.utils import sha256, websafe_decode
 from fido2.hid import CAPABILITY
@@ -39,6 +39,7 @@ from fido2.ctap import CtapError
 from fido2.ctap1 import ApduError, APDU, RegistrationData, SignatureData
 from fido2.ctap2 import Info, AttestationObject
 from fido2.client import ClientData, U2fClient, ClientError, Fido2Client
+from fido2.webauthn import PublicKeyCredentialCreationOptions
 
 
 class TestClientData(unittest.TestCase):
@@ -92,7 +93,6 @@ class TestU2fClient(unittest.TestCase):
                 "https://bar.example.com",
                 [{"version": "U2F_V2", "challenge": "foobar"}],
                 [],
-                timeout=1,
             )
             self.fail("register did not raise error")
         except ClientError as e:
@@ -104,9 +104,7 @@ class TestU2fClient(unittest.TestCase):
         client.ctap.get_version.return_value = "U2F_XXX"
 
         try:
-            client.register(
-                APP_ID, [{"version": "U2F_V2", "challenge": "foobar"}], [], timeout=1
-            )
+            client.register(APP_ID, [{"version": "U2F_V2", "challenge": "foobar"}], [])
             self.fail("register did not raise error")
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
@@ -124,7 +122,6 @@ class TestU2fClient(unittest.TestCase):
                 APP_ID,
                 [{"version": "U2F_V2", "challenge": "foobar"}],
                 [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-                timeout=1,
             )
             self.fail("register did not raise error")
         except ClientError as e:
@@ -167,12 +164,15 @@ class TestU2fClient(unittest.TestCase):
         client.ctap.register.side_effect = ApduError(APDU.USE_NOT_SATISFIED)
 
         client.poll_delay = 0.01
+        event = Event()
+        timer = Timer(0.1, event.set)
+        timer.start()
         try:
             client.register(
                 APP_ID,
                 [{"version": "U2F_V2", "challenge": "foobar"}],
                 [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-                timeout=0.1,
+                event=event,
             )
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.TIMEOUT)
@@ -196,7 +196,7 @@ class TestU2fClient(unittest.TestCase):
             APP_ID,
             [{"version": "U2F_V2", "challenge": "foobar"}],
             [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-            timeout=event,
+            event=event,
         )
 
         event.wait.assert_called()
@@ -298,7 +298,7 @@ class TestU2fClient(unittest.TestCase):
             APP_ID,
             "challenge",
             [{"version": "U2F_V2", "keyHandle": "a2V5"}],
-            timeout=event,
+            event=event,
         )
 
         event.wait.assert_called()
@@ -315,7 +315,7 @@ class TestU2fClient(unittest.TestCase):
 
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
-challenge = "Y2hhbGxlbmdl"
+challenge = b"Y2hhbGxlbmdl"
 _INFO_NO_PIN = a2b_hex(
     "a60182665532465f5632684649444f5f325f3002826375766d6b686d61632d7365637265740350f8a011f38c0a4d15800617111f9edc7d04a462726bf5627570f564706c6174f469636c69656e7450696ef4051904b0068101"  # noqa E501
 )
@@ -342,10 +342,12 @@ class TestFido2Client(unittest.TestCase):
         client = Fido2Client(dev, APP_ID)
         try:
             client.make_credential(
-                {"id": "bar.example.com", "name": "Invalid RP"},
-                user,
-                challenge,
-                timeout=1,
+                PublicKeyCredentialCreationOptions(
+                    {"id": "bar.example.com", "name": "Invalid RP"},
+                    user,
+                    challenge,
+                    [{"type": "public-key", "alg": -7}],
+                )
             )
             self.fail("make_credential did not raise error")
         except ClientError as e:
@@ -362,7 +364,15 @@ class TestFido2Client(unittest.TestCase):
         client = Fido2Client(dev, APP_ID)
 
         try:
-            client.make_credential(rp, user, challenge, timeout=1)
+            client.make_credential(
+                PublicKeyCredentialCreationOptions(
+                    rp,
+                    user,
+                    challenge,
+                    [{"type": "public-key", "alg": -7}],
+                    authenticator_selection={"userVerification": "discouraged"},
+                )
+            )
             self.fail("make_credential did not raise error")
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
@@ -381,7 +391,14 @@ class TestFido2Client(unittest.TestCase):
         client = Fido2Client(dev, APP_ID)
 
         attestation, client_data = client.make_credential(
-            rp, user, challenge, timeout=1
+            PublicKeyCredentialCreationOptions(
+                rp,
+                user,
+                challenge,
+                [{"type": "public-key", "alg": -7}],
+                timeout=1000,
+                authenticator_selection={"userVerification": "discouraged"},
+            )
         )
 
         self.assertIsInstance(attestation, AttestationObject)
@@ -398,13 +415,13 @@ class TestFido2Client(unittest.TestCase):
             None,
             None,
             None,
-            1,
+            mock.ANY,
             None,
         )
 
         self.assertEqual(client_data.get("origin"), APP_ID)
         self.assertEqual(client_data.get("type"), "webauthn.create")
-        self.assertEqual(client_data.get("challenge"), challenge)
+        self.assertEqual(client_data.challenge, challenge)
 
     def test_make_credential_ctap1(self):
         dev = mock.Mock()
@@ -416,7 +433,9 @@ class TestFido2Client(unittest.TestCase):
         client.ctap1.register.return_value = REG_DATA
 
         attestation, client_data = client.make_credential(
-            rp, user, challenge, timeout=1
+            PublicKeyCredentialCreationOptions(
+                rp, user, challenge, [{"type": "public-key", "alg": -7}]
+            )
         )
 
         self.assertIsInstance(attestation, AttestationObject)
@@ -428,6 +447,6 @@ class TestFido2Client(unittest.TestCase):
 
         self.assertEqual(client_data.get("origin"), APP_ID)
         self.assertEqual(client_data.get("type"), "webauthn.create")
-        self.assertEqual(client_data.get("challenge"), challenge)
+        self.assertEqual(client_data.challenge, challenge)
 
         self.assertEqual(attestation.fmt, "fido-u2f")

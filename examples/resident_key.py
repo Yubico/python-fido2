@@ -42,6 +42,7 @@ import sys
 use_prompt = False
 pin = None
 uv = "discouraged"
+uv = "preferred"
 
 if WindowsClient.is_available():
     # Use the Windows WebAuthn API if available
@@ -85,7 +86,10 @@ user = {"id": b"user_id", "name": "A. User"}
 
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
-    user, user_verification=uv, authenticator_attachment="cross-platform"
+    user,
+    resident_key=True,
+    user_verification=uv,
+    authenticator_attachment="cross-platform",
 )
 
 # Create a credential
@@ -109,7 +113,7 @@ print("CREDENTIAL DATA:", auth_data.credential_data)
 
 
 # Prepare parameters for getAssertion
-request_options, state = server.authenticate_begin(credentials, user_verification=uv)
+request_options, state = server.authenticate_begin(user_verification=uv)
 
 # Authenticate the credential
 if use_prompt:

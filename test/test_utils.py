@@ -30,9 +30,8 @@
 
 import unittest
 from binascii import a2b_hex
-from threading import Event
 
-from fido2.utils import Timeout, hmac_sha256, sha256, websafe_encode, websafe_decode
+from fido2.utils import hmac_sha256, sha256, websafe_encode, websafe_decode
 
 
 class TestSha256(unittest.TestCase):
@@ -92,28 +91,3 @@ class TestWebSafe(unittest.TestCase):
         self.assertEqual(websafe_encode(b"foob"), u"Zm9vYg")
         self.assertEqual(websafe_encode(b"fooba"), u"Zm9vYmE")
         self.assertEqual(websafe_encode(b"foobar"), u"Zm9vYmFy")
-
-
-class TestTimeout(unittest.TestCase):
-    def test_event(self):
-        event = Event()
-        timeout = Timeout(event)
-        self.assertIsNone(timeout.timer)
-        with timeout as e:
-            self.assertIs(event, e)
-            self.assertFalse(e.is_set())
-        self.assertFalse(event.is_set())
-
-    def test_timer_stops(self):
-        timeout = Timeout(10)
-        self.assertFalse(timeout.timer.is_alive())
-        with timeout as e:
-            self.assertTrue(timeout.timer.is_alive())
-            self.assertFalse(e.is_set())
-        self.assertFalse(timeout.timer.is_alive())
-        self.assertFalse(e.is_set())
-
-    def test_timer_triggers(self):
-        with Timeout(0.01) as e:
-            self.assertTrue(e.wait(1.0))
-        self.assertTrue(e.is_set())
