@@ -366,7 +366,7 @@ class Fido2Client(_BaseClient):
         return False
 
     def make_credential(self, options, **kwargs):
-        """Create credentials using Windows WebAuhtN APIs.
+        """Creates a credential.
 
         :param options: PublicKeyCredentialCreationOptions data.
         :param pin: (optional) Used if PIN verification is required.
@@ -520,7 +520,7 @@ class Fido2Client(_BaseClient):
         )
 
     def get_assertion(self, options, **kwargs):
-        """Get assertion using Windows WebAuthN APIs.
+        """Get an assertion.
 
         :param options: PublicKeyCredentialRequestOptions data.
         :param pin: (optional) Used if PIN verification is required.
@@ -669,7 +669,7 @@ class WindowsClient(_BaseClient):
         return platform.system().lower() == "windows" and WinAPI.version > 0
 
     def make_credential(self, options, **kwargs):
-        """Create credentials using Windows WebAuhtN APIs.
+        """Create a credential using Windows WebAuthN APIs.
 
         :param options: PublicKeyCredentialCreationOptions data.
         :param threading.Event event: (optional) Signal to abort the operation.
