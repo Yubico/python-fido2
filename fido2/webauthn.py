@@ -39,28 +39,36 @@ See the specification for a description and details on their usage.
 """
 
 
+class _StringEnum(six.text_type, Enum):
+    @classmethod
+    def _wrap(cls, value):
+        if value is None:
+            return None
+        return cls(value)
+
+
 @unique
-class AttestationConveyancePreference(six.text_type, Enum):
+class AttestationConveyancePreference(_StringEnum):
     NONE = "none"
     INDIRECT = "indirect"
     DIRECT = "direct"
 
 
 @unique
-class UserVerificationRequirement(six.text_type, Enum):
+class UserVerificationRequirement(_StringEnum):
     REQUIRED = "required"
     PREFERRED = "preferred"
     DISCOURAGED = "discouraged"
 
 
 @unique
-class AuthenticatorAttachment(six.text_type, Enum):
+class AuthenticatorAttachment(_StringEnum):
     PLATFORM = "platform"
     CROSS_PLATFORM = "cross-platform"
 
 
 @unique
-class AuthenticatorTransport(six.text_type, Enum):
+class AuthenticatorTransport(_StringEnum):
     USB = "usb"
     NFC = "nfc"
     BLE = "ble"
@@ -68,7 +76,7 @@ class AuthenticatorTransport(six.text_type, Enum):
 
 
 @unique
-class PublicKeyCredentialType(six.text_type, Enum):
+class PublicKeyCredentialType(_StringEnum):
     PUBLIC_KEY = "public-key"
 
 
@@ -162,15 +170,15 @@ class AuthenticatorSelectionCriteria(_DataObject):
     def __init__(
         self,
         authenticator_attachment=None,
-        require_resident_key=False,
-        user_verification=UserVerificationRequirement.PREFERRED,
+        require_resident_key=None,
+        user_verification=None,
     ):
         super(AuthenticatorSelectionCriteria, self).__init__(
-            authenticator_attachment=AuthenticatorAttachment(authenticator_attachment)
-            if authenticator_attachment is not None
-            else None,
+            authenticator_attachment=AuthenticatorAttachment._wrap(
+                authenticator_attachment
+            ),
             require_resident_key=require_resident_key,
-            user_verification=UserVerificationRequirement(user_verification),
+            user_verification=UserVerificationRequirement._wrap(user_verification),
         )
 
 
@@ -184,7 +192,7 @@ class PublicKeyCredentialCreationOptions(_DataObject):
         timeout=None,
         exclude_credentials=None,
         authenticator_selection=None,
-        attestation=AttestationConveyancePreference.NONE,
+        attestation=None,
         extensions=None,
     ):
         super(PublicKeyCredentialCreationOptions, self).__init__(
@@ -201,7 +209,7 @@ class PublicKeyCredentialCreationOptions(_DataObject):
             authenticator_selection=AuthenticatorSelectionCriteria._wrap(
                 authenticator_selection
             ),
-            attestation=AttestationConveyancePreference(attestation),
+            attestation=AttestationConveyancePreference._wrap(attestation),
             extensions=extensions,
         )
 
@@ -213,7 +221,7 @@ class PublicKeyCredentialRequestOptions(_DataObject):
         timeout=None,
         rp_id=None,
         allow_credentials=None,
-        user_verification=UserVerificationRequirement.PREFERRED,
+        user_verification=None,
         extensions=None,
     ):
         super(PublicKeyCredentialRequestOptions, self).__init__(
@@ -223,6 +231,6 @@ class PublicKeyCredentialRequestOptions(_DataObject):
             allow_credentials=PublicKeyCredentialDescriptor._wrap_list(
                 allow_credentials
             ),
-            user_verification=UserVerificationRequirement(user_verification),
+            user_verification=UserVerificationRequirement._wrap(user_verification),
             extensions=extensions,
         )

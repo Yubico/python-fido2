@@ -105,8 +105,8 @@ class Fido2Server(object):
         self,
         user,
         credentials=None,
-        resident_key=False,
-        user_verification=UserVerificationRequirement.PREFERRED,
+        resident_key=None,
+        user_verification=None,
         authenticator_attachment=None,
         challenge=None,
     ):
@@ -146,7 +146,9 @@ class Fido2Server(object):
                     else None,
                     AuthenticatorSelectionCriteria(
                         authenticator_attachment, resident_key, user_verification
-                    ),
+                    )
+                    if any((authenticator_attachment, resident_key, user_verification))
+                    else None,
                     self.attestation,
                 )
             },
@@ -205,10 +207,7 @@ class Fido2Server(object):
         return attestation_object.auth_data
 
     def authenticate_begin(
-        self,
-        credentials=None,
-        user_verification=UserVerificationRequirement.PREFERRED,
-        challenge=None,
+        self, credentials=None, user_verification=None, challenge=None
     ):
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
