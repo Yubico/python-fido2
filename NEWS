@@ -12,6 +12,8 @@
       have been replaced with fido2.webauthn classes.
   *** RelyingParty has been replaced with PublicKeyCredentialRpEntity, and
       name is no longer optional.
+  *** Options returned by register_begin/authenticate_begin now omit unspecified
+      values if they are optional, instead of filling in default values.
   *** Fido2Server.allowed_algorithms now contains a list of
       PublicKeyCredentialParameters instead of algorithm identifiers.
   *** Fido2Server.timeout is now in ms and of type int.

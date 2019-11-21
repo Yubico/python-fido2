@@ -183,7 +183,7 @@ class Fido2Server(object):
                 "User verification required, but User Verified flag not set."
             )
 
-        if self.attestation != AttestationConveyancePreference.NONE:
+        if self.attestation not in (None, AttestationConveyancePreference.NONE):
             att_verifier = UnsupportedAttestation(attestation_object.fmt)
             for at in self._attestation_types:
                 if getattr(at, "FORMAT", None) == attestation_object.fmt:
