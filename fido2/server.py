@@ -85,16 +85,12 @@ class Fido2Server(object):
     """
 
     def __init__(
-        self,
-        rp,
-        attestation=AttestationConveyancePreference.NONE,
-        verify_origin=None,
-        attestation_types=None,
+        self, rp, attestation=None, verify_origin=None, attestation_types=None
     ):
         self.rp = PublicKeyCredentialRpEntity._wrap(rp)
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
         self.timeout = 30000
-        self.attestation = AttestationConveyancePreference(attestation)
+        self.attestation = AttestationConveyancePreference._wrap(attestation)
         self.allowed_algorithms = [
             PublicKeyCredentialParameters("public-key", alg)
             for alg in CoseKey.supported_algorithms()
