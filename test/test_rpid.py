@@ -133,3 +133,11 @@ class TestRpId(unittest.TestCase):
         self.assertFalse(verify_rp_id(b"example.com", "http://example.com"))
         self.assertFalse(verify_rp_id("example.com", b"http://www.example.com"))
         self.assertFalse(verify_rp_id(b"example.com", b"https://example-test.com"))
+
+    def test_suffix_list(self):
+        self.assertFalse(verify_rp_id(b"co.uk", "https://foobar.co.uk"))
+        self.assertTrue(verify_rp_id(b"foobar.co.uk", "https://site.foobar.co.uk"))
+        self.assertFalse(verify_rp_id(b"appspot.com", "https://example.appspot.com"))
+        self.assertTrue(
+            verify_rp_id(b"example.appspot.com", "https://example.appspot.com")
+        )
