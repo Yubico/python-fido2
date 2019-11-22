@@ -626,9 +626,6 @@ class CTAP2(object):
     ):
         """Sends a CBOR message to the device, and waits for a response.
 
-        The optional parameter 'timeout' can either be a numeric time in seconds
-        or a threading.Event object used to cancel the request.
-
         :param cmd: The command byte of the request.
         :param data: The payload to send (to be CBOR encoded).
         :param event: Optional threading.Event used to cancel the request.
@@ -729,7 +726,6 @@ class CTAP2(object):
         :param options: Optional dict of options.
         :param pin_auth: Optional PIN auth parameter.
         :param pin_protocol: The version of PIN protocol used, if any.
-        :param timeout: Optional timeout in seconds
         :param event: Optional threading.Event used to cancel the request.
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
@@ -792,8 +788,7 @@ class CTAP2(object):
     def reset(self, event=None, on_keepalive=None):
         """CTAP2 reset command, erases all credentials and PIN.
 
-        :param timeout: Optional timeout in seconds, or threading.Event object
-            used to cancel the request.
+        :param event: Optional threading.Event object used to cancel the request.
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
         """
