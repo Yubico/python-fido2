@@ -113,7 +113,9 @@ class _DataObject(dict):
         if name in self._keys:
             self[self._keys[name]] = value
         else:
-            super(_DataObject, self).__setattr__(name, value)
+            raise AttributeError(
+                "'{}' object has no attribute '{}'".format(type(self).__name__, name)
+            )
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, dict(self))
