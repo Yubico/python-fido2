@@ -160,7 +160,7 @@ class PublicKeyCredentialDescriptor(_DataObject):
         super(PublicKeyCredentialDescriptor, self).__init__(
             type=PublicKeyCredentialType(type),
             id=id,
-            tranports=transports,  # Note: Type is str as in current WebAuthn draft!
+            transports=transports,  # Note: Type is str as in current WebAuthn draft!
         )
 
 
