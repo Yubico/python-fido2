@@ -789,7 +789,7 @@ class CTAP2(object):
             ),
         )
 
-    def reset(self, timeout=None, on_keepalive=None):
+    def reset(self, event=None, on_keepalive=None):
         """CTAP2 reset command, erases all credentials and PIN.
 
         :param timeout: Optional timeout in seconds, or threading.Event object
@@ -797,7 +797,7 @@ class CTAP2(object):
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
         """
-        self.send_cbor(CTAP2.CMD.RESET, timeout=timeout, on_keepalive=on_keepalive)
+        self.send_cbor(CTAP2.CMD.RESET, event=event, on_keepalive=on_keepalive)
 
     def get_next_assertion(self):
         """CTAP2 getNextAssertion command.
