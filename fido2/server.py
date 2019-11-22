@@ -29,6 +29,7 @@ from __future__ import absolute_import, unicode_literals
 
 from .rpid import verify_rp_id, verify_app_id
 from .cose import CoseKey
+from .ctap2 import AttestedCredentialData
 from .client import WEBAUTHN_TYPE
 from .attestation import Attestation, FidoU2FAttestation, UnsupportedAttestation
 from .utils import websafe_encode, websafe_decode
@@ -37,6 +38,7 @@ from .webauthn import (
     PublicKeyCredentialRpEntity,
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
+    PublicKeyCredentialType,
     PublicKeyCredentialParameters,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
@@ -70,6 +72,32 @@ def _validata_challenge(challenge):
         if len(challenge) < 16:
             raise ValueError("Custom challenge length must be >= 16.")
     return challenge
+
+
+def to_descriptor(credential, transports=None):
+    """Converts an AttestedCredentialData to a PublicKeyCredentialDescriptor.
+
+    :param credential: AttestedCredentialData containing the credential ID to use.
+    :param transports: Optional list of AuthenticatorTransport strings to add to the
+        descriptor.
+    :return: A descriptor of the credential, for use with register_begin or
+        authenticate_begin.
+    :rtype: PublicKeyCredentialDescriptor
+    """
+    return PublicKeyCredentialDescriptor(
+        PublicKeyCredentialType.PUBLIC_KEY, credential.credential_id, transports
+    )
+
+
+def _wrap_credentials(creds):
+    if creds is None:
+        return None
+    return [
+        to_descriptor(c)
+        if isinstance(c, AttestedCredentialData)
+        else PublicKeyCredentialDescriptor._wrap(c)
+        for c in creds
+    ]
 
 
 class Fido2Server(object):
@@ -111,7 +139,8 @@ class Fido2Server(object):
         corresponding `register_complete` call.
 
         :param user: The dict containing the user data.
-        :param credentials: The list of previously registered credentials.
+        :param credentials: The list of previously registered credentials, these can be
+            of type AttestedCredentialData, or PublicKeyCredentialDescriptor.
         :param resident_key: True to request a resident credential.
         :param user_verification: The desired USER_VERIFICATION level.
         :param authenticator_attachment: The desired AUTHENTICATOR_ATTACHMENT
@@ -134,12 +163,7 @@ class Fido2Server(object):
                     challenge,
                     self.allowed_algorithms,
                     self.timeout,
-                    [
-                        PublicKeyCredentialDescriptor("public-key", cred.credential_id)
-                        for cred in credentials
-                    ]
-                    if credentials
-                    else None,
+                    _wrap_credentials(credentials),
                     AuthenticatorSelectionCriteria(
                         authenticator_attachment, resident_key, user_verification
                     )
@@ -209,7 +233,8 @@ class Fido2Server(object):
         state dictionary that needs to be passed as is to the corresponding
         `authenticate_complete` call.
 
-        :param credentials: The list of previously registered credentials.
+        :param credentials: The list of previously registered credentials, these can be
+            of type AttestedCredentialData, or PublicKeyCredentialDescriptor.
         :param user_verification: The desired USER_VERIFICATION level.
         :param challenge: A custom challenge to sign and verify or None to use
             OS-specific random bytes.
@@ -224,12 +249,7 @@ class Fido2Server(object):
                     challenge,
                     self.timeout,
                     self.rp.id,
-                    [
-                        PublicKeyCredentialDescriptor("public-key", cred.credential_id)
-                        for cred in credentials
-                    ]
-                    if credentials
-                    else None,
+                    _wrap_credentials(credentials),
                     user_verification,
                 )
             },
