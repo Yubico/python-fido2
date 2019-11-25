@@ -695,7 +695,7 @@ class WindowsClient(_BaseClient):
                 options.pub_key_cred_params,
                 client_data,
                 options.timeout or 0,
-                selection.require_resident_key,
+                selection.require_resident_key or False,
                 WebAuthNAuthenticatorAttachment.from_string(
                     selection.authenticator_attachment or "any"
                 ),
