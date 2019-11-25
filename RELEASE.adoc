@@ -37,7 +37,7 @@
   $ git merge --ff release/x.y.z
   $ git branch -d release/x.y.z
   $ git push && git push --tags
-  $ git push :release/x.y.z
+  $ git push origin :release/x.y.z
 
 * Bump the version number by incrementing the PATCH version and appending -dev0
   in fido2/__init__.py and add a new entry (unreleased) to the NEWS file.

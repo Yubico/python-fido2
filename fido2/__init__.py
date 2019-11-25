@@ -38,4 +38,4 @@ if six.PY2:
     abc.ABC = ABC
 
 
-__version__ = "0.8.0"
+__version__ = "0.8.1-dev0"
