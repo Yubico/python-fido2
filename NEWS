@@ -1,3 +1,7 @@
+* Version 0.8.1 (released 2019-11-25)
+ ** Bugfix: WindowsClient.make_credential error when resident key requirement is
+    unspecified.
+
 * Version 0.8.0 (released 2019-11-25)
  ** New fido2.webauthn classes modeled after the W3C WebAuthn spec introduced.
  ** CTAP2 send_cbor/make_credential/get_assertion  and U2fClient

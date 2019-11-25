@@ -1,5 +1,5 @@
-python-fido2 (0.8.0) xenial; urgency=low
+python-fido2 (0.8.1) xenial; urgency=low
 
   * Build for ppa
 
- -- Dain Nilsson <dain@yubico.com>  Mon, 25 Nov 2019 11:33:07 +0100
+ -- Dain Nilsson <dain@yubico.com>  Mon, 25 Nov 2019 13:07:14 +0100
