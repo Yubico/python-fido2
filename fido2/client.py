@@ -633,12 +633,15 @@ class Fido2Client(_BaseClient):
 _WIN_INFO = Info.create(["U2F_V2", "FIDO_2_0"])
 
 if platform.system().lower() == "windows":
-    from .win_api import (
-        WinAPI,
-        WebAuthNAuthenticatorAttachment,
-        WebAuthNUserVerificationRequirement,
-        WebAuthNAttestationConvoyancePreference,
-    )
+    try:
+        from .win_api import (
+            WinAPI,
+            WebAuthNAuthenticatorAttachment,
+            WebAuthNUserVerificationRequirement,
+            WebAuthNAttestationConvoyancePreference,
+        )
+    except Exception:  # TODO: Make this less generic
+        pass
 
 
 class WindowsClient(_BaseClient):
