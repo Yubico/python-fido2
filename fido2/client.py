@@ -461,7 +461,7 @@ class Fido2Client(_BaseClient):
             rp,
             user,
             key_params,
-            exclude_list,
+            exclude_list if exclude_list else None,
             extensions,
             options,
             pin_auth,
@@ -595,7 +595,7 @@ class Fido2Client(_BaseClient):
         return self.ctap2.get_assertions(
             rp_id,
             client_data.hash,
-            allow_list,
+            allow_list if allow_list else None,
             extensions,
             options,
             pin_auth,
