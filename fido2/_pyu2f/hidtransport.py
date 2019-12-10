@@ -102,7 +102,7 @@ class UsbHidTransport(object):
 
     def ToWireFormat(self):
       """Serializes the packet."""
-      ret = bytearray(64)
+      ret = bytearray(self.packet_size)
       ret[0:4] = self.cid
       ret[4] = self.cmd
       struct.pack_into('>H', ret, 5, self.size)
