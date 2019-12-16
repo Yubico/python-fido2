@@ -331,7 +331,7 @@ class Fido2Client(_BaseClient):
                 self.pin_protocol = None
             self._do_make_credential = self._ctap2_make_credential
             self._do_get_assertion = self._ctap2_get_assertion
-        except ValueError:
+        except (ValueError, CtapError):
             self.ctap1 = CTAP1(device)
             self.info = _CTAP1_INFO
             self._do_make_credential = self._ctap1_make_credential
