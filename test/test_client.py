@@ -330,7 +330,7 @@ class TestFido2Client(unittest.TestCase):
         dev.capabilities = 0
         client = Fido2Client(dev, APP_ID)
         self.assertEqual(client.info.versions, ["U2F_V2"])
-        self.assertEqual(client.info.pin_protocols, [])
+        self.assertEqual(client.info.pin_uv_protocols, [])
 
     @mock.patch("fido2.client.CTAP2")
     def test_make_credential_wrong_app_id(self, PatchedCTAP2):
