@@ -73,7 +73,7 @@ class Info(bytes):
     :ivar aaguid: The AAGUID of the authenticator.
     :ivar options: The options supported by the authenticator.
     :ivar max_msg_size: The max message size supported by the authenticator.
-    :ivar pin_protocols: The PIN protocol versions supported by the authenticator.
+    :ivar pin_uv_protocols: The PIN/UV protocol versions supported by the authenticator.
     :ivar max_creds_in_list: Max number of credentials supported in list at a time.
     :ivar max_cred_id_length: Max length of Credential ID supported.
     :ivar transports: List of supported transports.
@@ -88,7 +88,7 @@ class Info(bytes):
         AAGUID = 0x03
         OPTIONS = 0x04
         MAX_MSG_SIZE = 0x05
-        PIN_PROTOCOLS = 0x06
+        PIN_UV_PROTOCOLS = 0x06
         MAX_CREDS_IN_LIST = 0x07
         MAX_CRED_ID_LENGTH = 0x08
         TRANSPORTS = 0x09
@@ -110,7 +110,7 @@ class Info(bytes):
         self.aaguid = data[Info.KEY.AAGUID]
         self.options = data.get(Info.KEY.OPTIONS, {})
         self.max_msg_size = data.get(Info.KEY.MAX_MSG_SIZE, 1024)
-        self.pin_protocols = data.get(Info.KEY.PIN_PROTOCOLS, [])
+        self.pin_uv_protocols = data.get(Info.KEY.PIN_UV_PROTOCOLS, [])
         self.max_creds_in_list = data.get(Info.KEY.MAX_CREDS_IN_LIST)
         self.max_cred_id_length = data.get(Info.KEY.MAX_CRED_ID_LENGTH)
         self.transports = data.get(Info.KEY.TRANSPORTS, [])
@@ -125,8 +125,8 @@ class Info(bytes):
         if self.options:
             r += ", options: %r" % self.options
         r += ", max_message_size: %d" % self.max_msg_size
-        if self.pin_protocols:
-            r += ", pin_protocols: %r" % self.pin_protocols
+        if self.pin_uv_protocols:
+            r += ", pin_uv_protocols: %r" % self.pin_uv_protocols
         if self.max_creds_in_list:
             r += ", max_credential_count_in_list: %d" % self.max_creds_in_list
         if self.max_cred_id_length:
@@ -148,7 +148,7 @@ class Info(bytes):
         aaguid=b"\0" * 16,
         options=None,
         max_msg_size=None,
-        pin_protocols=None,
+        pin_uv_protocols=None,
         max_creds_in_list=None,
         max_cred_id_length=None,
         transports=None,
@@ -166,7 +166,7 @@ class Info(bytes):
                     aaguid,
                     options,
                     max_msg_size,
-                    pin_protocols,
+                    pin_uv_protocols,
                     max_creds_in_list,
                     max_cred_id_length,
                     transports,
@@ -668,8 +668,8 @@ class CTAP2(object):
         exclude_list=None,
         extensions=None,
         options=None,
-        pin_auth=None,
-        pin_protocol=None,
+        pin_uv_param=None,
+        pin_uv_protocol=None,
         event=None,
         on_keepalive=None,
     ):
@@ -682,8 +682,8 @@ class CTAP2(object):
         :param exclude_list: Optional list of PublicKeyCredentialDescriptors.
         :param extensions: Optional dict of extensions.
         :param options: Optional dict of options.
-        :param pin_auth: Optional PIN auth parameter.
-        :param pin_protocol: The version of PIN protocol used, if any.
+        :param pin_uv_param: Optional PIN/UV auth parameter.
+        :param pin_uv_protocol: The version of PIN/UV protocol used, if any.
         :param event: Optional threading.Event used to cancel the request.
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
@@ -699,8 +699,8 @@ class CTAP2(object):
                 exclude_list,
                 extensions,
                 options,
-                pin_auth,
-                pin_protocol,
+                pin_uv_param,
+                pin_uv_protocol,
             ),
             event,
             AttestationObject,
@@ -714,8 +714,8 @@ class CTAP2(object):
         allow_list=None,
         extensions=None,
         options=None,
-        pin_auth=None,
-        pin_protocol=None,
+        pin_uv_param=None,
+        pin_uv_protocol=None,
         event=None,
         on_keepalive=None,
     ):
@@ -726,8 +726,8 @@ class CTAP2(object):
         :param allow_list: Optional list of PublicKeyCredentialDescriptors.
         :param extensions: Optional dict of extensions.
         :param options: Optional dict of options.
-        :param pin_auth: Optional PIN auth parameter.
-        :param pin_protocol: The version of PIN protocol used, if any.
+        :param pin_uv_param: Optional PIN/UV auth parameter.
+        :param pin_uv_protocol: The version of PIN/UV protocol used, if any.
         :param event: Optional threading.Event used to cancel the request.
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
@@ -741,8 +741,8 @@ class CTAP2(object):
                 allow_list,
                 extensions,
                 options,
-                pin_auth,
-                pin_protocol,
+                pin_uv_param,
+                pin_uv_protocol,
             ),
             event,
             AssertionResponse,
@@ -758,19 +758,22 @@ class CTAP2(object):
 
     def client_pin(
         self,
-        pin_protocol,
+        pin_uv_protocol,
         sub_cmd,
         key_agreement=None,
-        pin_auth=None,
+        pin_uv_param=None,
         new_pin_enc=None,
         pin_hash_enc=None,
     ):
         """CTAP2 clientPin command, used for various PIN operations.
 
-        :param pin_protocol: The PIN protocol version to use.
+        This method is not intended to be called directly. It is intended to be used by
+        an instance of the PinProtocolV1 class.
+
+        :param pin_uv_protocol: The PIN/UV protocol version to use.
         :param sub_cmd: A clientPin sub command.
         :param key_agreement: The keyAgreement parameter.
-        :param pin_auth: The pinAuth parameter.
+        :param pin_uv_param: The pinAuth parameter.
         :param new_pin_enc: The newPinEnc parameter.
         :param pin_hash_enc: The pinHashEnc parameter.
         :return: The response of the command, decoded.
@@ -778,10 +781,10 @@ class CTAP2(object):
         return self.send_cbor(
             CTAP2.CMD.CLIENT_PIN,
             args(
-                pin_protocol,
+                pin_uv_protocol,
                 sub_cmd,
                 key_agreement,
-                pin_auth,
+                pin_uv_param,
                 new_pin_enc,
                 pin_hash_enc,
             ),
@@ -804,7 +807,7 @@ class CTAP2(object):
         return self.send_cbor(CTAP2.CMD.GET_NEXT_ASSERTION, parse=AssertionResponse)
 
     def credential_mgmt(
-        self, sub_cmd, sub_cmd_params=None, pin_protocol=None, pin_auth=None
+        self, sub_cmd, sub_cmd_params=None, pin_uv_protocol=None, pin_uv_param=None
     ):
         """CTAP2 credentialManagement command, used to manage resident
         credentials.
@@ -817,12 +820,12 @@ class CTAP2(object):
 
         :param sub_cmd: A CredentialManagement sub command.
         :param sub_cmd_params: Sub command specific parameters.
-        :param pin_protocol: PIN protocol version used.
-        :param pin_auth: PIN auth param.
+        :param pin_uv_protocol: PIN/UV auth protocol version used.
+        :param pin_uv_param: PIN/UV Auth parameter.
         """
         return self.send_cbor(
             CTAP2.CMD.CREDENTIAL_MGMT,
-            args(sub_cmd, sub_cmd_params, pin_protocol, pin_auth),
+            args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
         )
 
     def bio_enrollment(
@@ -830,8 +833,8 @@ class CTAP2(object):
         modality=None,
         sub_cmd=None,
         sub_cmd_params=None,
-        pin_protocol=None,
-        pin_auth=None,
+        pin_uv_protocol=None,
+        pin_uv_param=None,
         get_modality=None,
     ):
         """CTAP2 bio enrollment command. Used to provision/enumerate/delete bio
@@ -846,14 +849,19 @@ class CTAP2(object):
         :param modality: The user verification modality being used.
         :param sub_cmd: A BioEnrollment sub command.
         :param sub_cmd_params: Sub command specific parameters.
-        :param pin_protocol: PIN protocol version used.
-        :param pin_auth: PIN auth param.
+        :param pin_uv_protocol: PIN/UV protocol version used.
+        :param pin_uv_param: PIN/UV auth param.
         :param get_modality: Get the user verification type modality.
         """
         return self.send_cbor(
             CTAP2.CMD.BIO_ENROLLMENT,
             args(
-                modality, sub_cmd, sub_cmd_params, pin_protocol, pin_auth, get_modality
+                modality,
+                sub_cmd,
+                sub_cmd_params,
+                pin_uv_protocol,
+                pin_uv_param,
+                get_modality,
             ),
         )
 
@@ -883,10 +891,10 @@ def _pad_pin(pin):
 
 
 class PinProtocolV1(object):
-    """Implementation of the CTAP2 PIN protocol v1.
+    """Implementation of the CTAP2 PIN/UV protocol v1.
 
     :param ctap: An instance of a CTAP2 object.
-    :cvar VERSION: The version number of the PIV protocol.
+    :cvar VERSION: The version number of the PIV/UV protocol.
     :cvar IV: An all-zero IV used for some cryptographic operations.
     """
 
@@ -899,14 +907,14 @@ class PinProtocolV1(object):
         GET_KEY_AGREEMENT = 0x02
         SET_PIN = 0x03
         CHANGE_PIN = 0x04
-        GET_UV_TOKEN_PIN = 0x05
-        GET_UV_TOKEN_UV = 0x06
+        GET_TOKEN_USING_PIN = 0x05
+        GET_TOKEN_USING_UV = 0x06
         GET_UV_RETRIES = 0x07
 
     @unique
     class RESULT(IntEnum):
         KEY_AGREEMENT = 0x01
-        UV_TOKEN = 0x02
+        PIN_UV_TOKEN = 0x02
         PIN_RETRIES = 0x03
         POWER_CYCLE_STATE = 0x04
         UV_RETRIES = 0x05
@@ -941,10 +949,10 @@ class PinProtocolV1(object):
         return Cipher(algorithms.AES(secret), modes.CBC(PinProtocolV1.IV), be)
 
     def get_pin_token(self, pin):
-        """Get a UV token from the authenticator using PIN.
+        """Get a PIN/UV token from the authenticator using PIN.
 
         :param pin: The PIN of the authenticator.
-        :return: A UV token.
+        :return: A PIN/UV token.
         """
         key_agreement, shared_secret = self.get_shared_secret()
 
@@ -955,29 +963,29 @@ class PinProtocolV1(object):
 
         resp = self.ctap.client_pin(
             PinProtocolV1.VERSION,
-            PinProtocolV1.CMD.GET_UV_TOKEN_PIN,
+            PinProtocolV1.CMD.GET_TOKEN_USING_PIN,
             key_agreement=key_agreement,
             pin_hash_enc=pin_hash_enc,
         )
         dec = cipher.decryptor()
-        return dec.update(resp[PinProtocolV1.RESULT.UV_TOKEN]) + dec.finalize()
+        return dec.update(resp[PinProtocolV1.RESULT.PIN_UV_TOKEN]) + dec.finalize()
 
     def get_uv_token(self):
-        """Get a UV token from the authenticator using built-in UV.
+        """Get a PIN/UV token from the authenticator using built-in UV.
 
-        :return: A UV token.
+        :return: A PIN/UV token.
         """
         key_agreement, shared_secret = self.get_shared_secret()
 
-        cipher = self._get_cipher(shared_secret)
-
         resp = self.ctap.client_pin(
             PinProtocolV1.VERSION,
-            PinProtocolV1.CMD.GET_UV_TOKEN_UV,
+            PinProtocolV1.CMD.GET_TOKEN_USING_UV,
             key_agreement=key_agreement,
         )
+
+        cipher = self._get_cipher(shared_secret)
         dec = cipher.decryptor()
-        return dec.update(resp[PinProtocolV1.RESULT.UV_TOKEN]) + dec.finalize()
+        return dec.update(resp[PinProtocolV1.RESULT.PIN_UV_TOKEN]) + dec.finalize()
 
     def get_pin_retries(self):
         """Get the number of PIN retries remaining.
@@ -1021,13 +1029,13 @@ class PinProtocolV1(object):
         cipher = self._get_cipher(shared_secret)
         enc = cipher.encryptor()
         pin_enc = enc.update(pin) + enc.finalize()
-        pin_auth = hmac_sha256(shared_secret, pin_enc)[:16]
+        pin_uv_param = hmac_sha256(shared_secret, pin_enc)[:16]
         self.ctap.client_pin(
             PinProtocolV1.VERSION,
             PinProtocolV1.CMD.SET_PIN,
             key_agreement=key_agreement,
             new_pin_enc=pin_enc,
-            pin_auth=pin_auth,
+            pin_uv_param=pin_uv_param,
         )
 
     def change_pin(self, old_pin, new_pin):
@@ -1048,14 +1056,14 @@ class PinProtocolV1(object):
         pin_hash_enc = enc.update(pin_hash) + enc.finalize()
         enc = cipher.encryptor()
         new_pin_enc = enc.update(new_pin) + enc.finalize()
-        pin_auth = hmac_sha256(shared_secret, new_pin_enc + pin_hash_enc)[:16]
+        pin_uv_param = hmac_sha256(shared_secret, new_pin_enc + pin_hash_enc)[:16]
         self.ctap.client_pin(
             PinProtocolV1.VERSION,
             PinProtocolV1.CMD.CHANGE_PIN,
             key_agreement=key_agreement,
             pin_hash_enc=pin_hash_enc,
             new_pin_enc=new_pin_enc,
-            pin_auth=pin_auth,
+            pin_uv_param=pin_uv_param,
         )
 
 
@@ -1064,8 +1072,8 @@ class CredentialManagement(object):
     WARNING: This specification is not final and this class is likely to change.
 
     :param ctap: An instance of a CTAP2 object.
-    :param pin_protocol: The PIN protocol version used.
-    :param pin_token: A valid pin_token for the current CTAP session.
+    :param pin_uv_protocol: The PIN/UV protocol version used.
+    :param pin_uv_token: A valid PIN/UV Auth Token for the current CTAP session.
     """
 
     @unique
@@ -1095,10 +1103,10 @@ class CredentialManagement(object):
         TOTAL_CREDENTIALS = 0x09
         CRED_PROTECT = 0x0A
 
-    def __init__(self, ctap, pin_protocol, pin_token):
+    def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
         self.ctap = ctap
-        self.pin_protocol = pin_protocol
-        self.pin_token = pin_token
+        self.pin_uv_protocol = pin_uv_protocol
+        self.pin_uv_token = pin_uv_token
 
     def _call(self, sub_cmd, params=None, auth=True):
         kwargs = {"sub_cmd": sub_cmd, "sub_cmd_params": params}
@@ -1106,8 +1114,8 @@ class CredentialManagement(object):
             msg = struct.pack(">B", sub_cmd)
             if params is not None:
                 msg += cbor.encode(params)
-            kwargs["pin_protocol"] = self.pin_protocol
-            kwargs["pin_auth"] = hmac_sha256(self.pin_token, msg)[:16]
+            kwargs["pin_uv_protocol"] = self.pin_uv_protocol
+            kwargs["pin_uv_param"] = hmac_sha256(self.pin_uv_token, msg)[:16]
         return self.ctap.credential_mgmt(**kwargs)
 
     def get_metadata(self):
@@ -1295,14 +1303,12 @@ class FPBioEnrollment(BioEnrollment):
     """Implementation of a draft specification of the bio enrollment API.
     WARNING: This specification is not final and this class is likely to change.
 
-    NOTE: The get_modality and get_fingerprint_sensor_info methods do not require
-    authentication, and can be used by setting modality, pin_protocol, and pin_token to
-    None.
+    NOTE: The get_fingerprint_sensor_info method does not require authentication, and
+    can be used by setting pin_uv_protocol and pin_uv_token to None.
 
     :param ctap: An instance of a CTAP2 object.
-    :param modality: The modality to use, only FINGERPRINT is currently supported.
-    :param pin_protocol: The PIN protocol version used.
-    :param pin_token: A valid pin_token for the current CTAP session.
+    :param pin_uv_protocol: The PIN/UV protocol version used.
+    :param pin_uv_token: A valid PIN/UV Auth Token for the current CTAP session.
     """
 
     @unique
@@ -1342,10 +1348,10 @@ class FPBioEnrollment(BioEnrollment):
         def __str__(self):
             return "0x%02X - %s" % (self.value, self.name)
 
-    def __init__(self, ctap, pin_protocol, pin_token):
+    def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
         super(FPBioEnrollment, self).__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)
-        self.pin_protocol = pin_protocol
-        self.pin_token = pin_token
+        self.pin_uv_protocol = pin_uv_protocol
+        self.pin_uv_token = pin_uv_token
 
     def _call(self, sub_cmd, params=None, auth=True):
         if params is not None:
@@ -1359,8 +1365,8 @@ class FPBioEnrollment(BioEnrollment):
             msg = struct.pack(">BB", self.modality, sub_cmd)
             if params is not None:
                 msg += cbor.encode(params)
-            kwargs["pin_protocol"] = self.pin_protocol
-            kwargs["pin_auth"] = hmac_sha256(self.pin_token, msg)[:16]
+            kwargs["pin_uv_protocol"] = self.pin_uv_protocol
+            kwargs["pin_uv_param"] = hmac_sha256(self.pin_uv_token, msg)[:16]
         return self.ctap.bio_enrollment(**kwargs)
 
     def get_fingerprint_sensor_info(self):

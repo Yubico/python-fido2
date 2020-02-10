@@ -66,7 +66,7 @@ class TestInfo(unittest.TestCase):
             info.options, {"rk": True, "up": True, "plat": False, "clientPin": False}
         )
         self.assertEqual(info.max_msg_size, 1200)
-        self.assertEqual(info.pin_protocols, [1])
+        self.assertEqual(info.pin_uv_protocols, [1])
         self.assertEqual(
             info.data,
             {
@@ -80,7 +80,7 @@ class TestInfo(unittest.TestCase):
                     "up": True,
                 },
                 Info.KEY.MAX_MSG_SIZE: 1200,
-                Info.KEY.PIN_PROTOCOLS: [1],
+                Info.KEY.PIN_UV_PROTOCOLS: [1],
             },
         )
 
@@ -325,7 +325,7 @@ class TestPinProtocolV1(unittest.TestCase):
             new_pin_enc=a2b_hex(
                 "0222fc42c6dd76a274a7057858b9b29d98e8a722ec2dc6668476168c5320473cec9907b4cd76ce7943c96ba5683943211d84471e64d9c51e54763488cd66526a"  # noqa E501
             ),
-            pin_auth=a2b_hex("7b40c084ccc5794194189ab57836475f"),
+            pin_uv_param=a2b_hex("7b40c084ccc5794194189ab57836475f"),
         )
 
     def test_change_pin(self):
@@ -340,7 +340,7 @@ class TestPinProtocolV1(unittest.TestCase):
             new_pin_enc=a2b_hex(
                 "4280e14aac4fcbf02dd079985f0c0ffc9ea7d5f9c173fd1a4c843826f7590cb3c2d080c6923e2fe6d7a52c31ea1309d3fcca3dedae8a2ef14b6330cafc79339e"  # noqa E501
             ),
-            pin_auth=a2b_hex("fb97e92f3724d7c85e001d7f93e6490a"),
+            pin_uv_param=a2b_hex("fb97e92f3724d7c85e001d7f93e6490a"),
             pin_hash_enc=a2b_hex("afe8327ce416da8ee3d057589c2ce1a9"),
         )
 

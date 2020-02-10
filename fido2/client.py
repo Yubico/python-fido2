@@ -325,7 +325,7 @@ class Fido2Client(_BaseClient):
         try:
             self.ctap2 = CTAP2(device)
             self.info = self.ctap2.get_info()
-            if PinProtocolV1.VERSION in self.info.pin_protocols:
+            if PinProtocolV1.VERSION in self.info.pin_uv_protocols:
                 self.pin_protocol = PinProtocolV1(self.ctap2)
             else:
                 self.pin_protocol = None
