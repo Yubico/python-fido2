@@ -13,8 +13,6 @@
 # limitations under the License.
 """Implements raw hid interface on OpenBSD with character devices"""
 
-import ctypes
-import ctypes.util
 import fcntl
 import select
 import os
@@ -34,16 +32,14 @@ from ctypes import (
 
 from . import base
 
-# /usr/include/dev/hid/hid.h
-hid_input = 0
-hid_output = 1
-
 # /usr/include/dev/usb/usb.h
 USB_GET_DEVICEINFO = 0x421C5570
-USB_GET_REPORT_ID = 0x40045519
 USB_MAX_STRING_LEN = 127
 USB_MAX_DEVNAMES = 4
 USB_MAX_DEVNAMELEN = 16
+
+FIDO_DEVS = "/dev/fido"
+MAX_U2F_HIDLEN = 64
 
 
 class UsbDeviceInfo(Structure):
@@ -69,84 +65,19 @@ class UsbDeviceInfo(Structure):
     ]
 
 
-class HidItem(Structure):
-    _fields_ = [
-        ("_usage_page", c_uint32),
-        ("logical_minimum", c_int32),
-        ("logical_maximum", c_int32),
-        ("physical_minimum", c_int32),
-        ("physical_maximum", c_int32),
-        ("unit_exponent", c_int32),
-        ("unit", c_int32),
-        ("report_size", c_int32),
-        ("report_ID", c_int32),
-        ("report_count", c_int32),
-        ("usage", c_uint32),
-        ("usage_minimum", c_int32),
-        ("usage_maximum", c_int32),
-        ("designator_index", c_int32),
-        ("designator_minimum", c_int32),
-        ("designator_maximum", c_int32),
-        ("string_index", c_int32),
-        ("string_minimum", c_int32),
-        ("string_maximum", c_int32),
-        ("set_delimiter", c_int32),
-        ("collection", c_int32),
-        ("collevel", c_int),
-        ("kind", c_int),
-        ("flags", c_uint32),
-        ("pos", c_uint32),
-        ("next", c_void_p),
-    ]
-
-
-def GetLibUsbHid():
-    libusbhid = ctypes.CDLL(ctypes.util.find_library("usbhid"))
-    libusbhid.hid_get_report_desc.restype = c_void_p
-    libusbhid.hid_start_parse.restype = c_void_p
-    return libusbhid
-
-
-def ReadReportDescriptor(device_fd, desc):
-    libusbhid = GetLibUsbHid()
-    usb_report_id = c_int(0)
-
-    fcntl.ioctl(device_fd, USB_GET_REPORT_ID, ctypes.pointer(usb_report_id))
-
-    rdesc = libusbhid.hid_get_report_desc(device_fd)
-    if rdesc == None:
-        raise OSError("Cannot get report descriptor")
-
-    try:
-        hiddata = libusbhid.hid_start_parse(c_void_p(rdesc), 1 << 3, 0)
-        if hiddata == None:
-            raise OSError("Cannot get hiddata")
-
-        desc.internal_max_in_report_len = libusbhid.hid_report_size(
-            c_void_p(rdesc), hid_input, usb_report_id
-        )
-        desc.internal_max_out_report_len = libusbhid.hid_report_size(
-            c_void_p(rdesc), hid_output, usb_report_id
-        )
-
-        hiditem = HidItem()
-        res = libusbhid.hid_get_item(c_void_p(hiddata), ctypes.byref(hiditem))
-        if res < 0:
-            raise OSError("Cannot get hiddata")
-        desc.usage_page = (hiditem.usage & 0xFFFF0000) >> 16
-        desc.usage = hiditem.usage & 0x0000FFFF
-    finally:
-        libusbhid.hid_dispose_report_desc(c_void_p(rdesc))
-
+def BaseDesc():
+    desc = base.DeviceDescriptor()
+    desc.internal_max_in_report_len = MAX_U2F_HIDLEN
+    desc.internal_max_out_report_len = MAX_U2F_HIDLEN
+    desc.usage = 0x1
+    desc.usage_page = 0xf1d0
+    return desc
 
 class OpenBSDHidDevice(base.HidDevice):
     @staticmethod
     def Enumerate():
-        for dev in os.listdir("/dev/"):
-            if not dev.startswith("uhid"):
-                continue
-
-            path = os.path.join("/dev", dev)
+        for dev in os.listdir(FIDO_DEVS):
+            path = os.path.join(FIDO_DEVS, dev)
 
             try:
                 f = os.open(path, os.O_RDONLY)
@@ -154,29 +85,28 @@ class OpenBSDHidDevice(base.HidDevice):
                 continue
 
             dev_info = UsbDeviceInfo()
-            desc = base.DeviceDescriptor()
+            desc = BaseDesc()
             desc.path = path
 
             try:
                 fcntl.ioctl(f, USB_GET_DEVICEINFO, dev_info)
-
-                desc.vendor_id = int(dev_info.udi_vendorNo)
-                desc.vendor_string = dev_info.udi_vendor.decode("utf-8")
-                desc.product_id = int(dev_info.udi_productNo)
-                desc.product_string = dev_info.udi_product.decode("utf-8")
-                ReadReportDescriptor(f, desc)
-                os.close(f)
             except OSError:
                 continue
+            finally:
+                os.close(f)
+
+            desc.vendor_id = int(dev_info.udi_vendorNo)
+            desc.vendor_string = dev_info.udi_vendor.decode("utf-8")
+            desc.product_id = int(dev_info.udi_productNo)
+            desc.product_string = dev_info.udi_product.decode("utf-8")
 
             yield desc.ToPublicDict()
 
     def __init__(self, path):
         base.HidDevice.__init__(self, path)
-        self.desc = base.DeviceDescriptor()
+        self.desc = BaseDesc()
         self.desc.path = path
         self.dev = os.open(self.desc.path, os.O_RDWR)
-        ReadReportDescriptor(self.dev, self.desc)
 
         try:
             self.TerriblePingKludge()

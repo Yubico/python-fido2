@@ -19,8 +19,6 @@ import sys
 
 import mock
 
-from fido2._pyu2f.base import DeviceDescriptor
-
 if sys.platform.startswith("openbsd"):
     from fido2._pyu2f import openbsd
 
@@ -80,90 +78,18 @@ class FakeLibUsbHid:
 
 @unittest.skipIf(not sys.platform.startswith("openbsd"), "OpenBSD specific test cases")
 class OpenBSDTest(unittest.TestCase):
-    def testReadReportDescriptorNoDesc(self):
-        fake_libusbhid = FakeLibUsbHid()
-
-        with mock.patch(
-            "fido2._pyu2f.openbsd.GetLibUsbHid", return_value=fake_libusbhid
-        ), mock.patch("fido2._pyu2f.openbsd.fcntl"):
-            with self.assertRaises(OSError):
-                openbsd.ReadReportDescriptor(0, {})
-
-    def testReadReportDescriptorBadHidData(self):
-        fake_libusbhid = FakeLibUsbHid()
-        fake_libusbhid.rdesc = 0
-        fake_libusbhid.hiddata = None
-
-        with mock.patch(
-            "fido2._pyu2f.openbsd.GetLibUsbHid", return_value=fake_libusbhid
-        ), mock.patch("fido2._pyu2f.openbsd.fcntl"):
-            with self.assertRaises(OSError):
-                openbsd.ReadReportDescriptor(0, {})
-
-    def testReadReportDescriptorBadHidItem(self):
-        fake_libusbhid = FakeLibUsbHid()
-        fake_libusbhid.rdesc = 0
-        fake_libusbhid.hiddata = 0
-        fake_libusbhid.hiditem_ret = -1
-
-        def test_byref(val):
-            return val
-
-        with mock.patch(
-            "fido2._pyu2f.openbsd.GetLibUsbHid", return_value=fake_libusbhid
-        ), mock.patch("fido2._pyu2f.openbsd.fcntl"), mock.patch(
-            "fido2._pyu2f.openbsd.ctypes.byref", test_byref
-        ):
-            with self.assertRaises(OSError):
-                openbsd.ReadReportDescriptor(0, DeviceDescriptor())
-
-    def testReadReportDescriptor(self):
-        fake_libusbhid = FakeLibUsbHid()
-        fake_libusbhid.rdesc = 0
-        fake_libusbhid.hiddata = 0
-        fake_libusbhid.hiditem_ret = 1
-
-        fake_libusbhid.hiditem = openbsd.HidItem(usage=0x00020001)
-
-        def test_byref(val):
-            return val
-
-        with mock.patch(
-            "fido2._pyu2f.openbsd.GetLibUsbHid", return_value=fake_libusbhid
-        ), mock.patch("fido2._pyu2f.openbsd.fcntl"), mock.patch(
-            "fido2._pyu2f.openbsd.ctypes.byref", test_byref
-        ):
-            desc = DeviceDescriptor()
-            openbsd.ReadReportDescriptor(0, desc)
-
-            self.assertEqual(desc.usage_page, 2)
-            self.assertEqual(desc.usage, 1)
-
     def testInvalidEnumerate(self):
         fake_os = FakeOsModule()
-        fake_libusbhid = FakeLibUsbHid()
-
-        def usb_get_device(fd, _, dev_info):
-            dev_info.udi_vendorNo = ctypes.c_uint16(0x1050)
-            dev_info.udi_vendor = b"Yubico"
-            dev_info.udi_productNo = ctypes.c_uint16(0x0407)
-            dev_info.udi_product = b"YubiKey OTP+FIDO+CCID"
-
         fake_os.dirs = ["uhid20", "sd0a"]
 
         with mock.patch("fido2._pyu2f.openbsd.os", fake_os), mock.patch(
-            "fido2._pyu2f.openbsd.fcntl.ioctl", side_effect=usb_get_device
-        ), mock.patch(
-            "fido2._pyu2f.openbsd.GetLibUsbHid", return_value=fake_libusbhid
-        ), mock.patch(
-            "fido2._pyu2f.openbsd.ReadReportDescriptor", side_effect=OSError
+            "fido2._pyu2f.openbsd.fcntl.ioctl", side_effect=OSError
         ):
             devs = list(openbsd.OpenBSDHidDevice.Enumerate())
             self.assertEqual(len(devs), 0)
 
     def testEnumerate(self):
         fake_os = FakeOsModule()
-        fake_libusbhid = FakeLibUsbHid()
 
         def usb_get_device(fd, _, dev_info):
             dev_info.udi_vendorNo = ctypes.c_uint16(0x1050)
@@ -171,14 +97,10 @@ class OpenBSDTest(unittest.TestCase):
             dev_info.udi_productNo = ctypes.c_uint16(0x0407)
             dev_info.udi_product = b"YubiKey OTP+FIDO+CCID"
 
-        fake_os.dirs = ["uhid20", "sd0a"]
+        fake_os.dirs = ["0"]
 
         with mock.patch("fido2._pyu2f.openbsd.os", fake_os), mock.patch(
             "fido2._pyu2f.openbsd.fcntl.ioctl", side_effect=usb_get_device
-        ), mock.patch(
-            "fido2._pyu2f.openbsd.GetLibUsbHid", return_value=fake_libusbhid
-        ), mock.patch(
-            "fido2._pyu2f.openbsd.ReadReportDescriptor"
         ):
             devs = list(openbsd.OpenBSDHidDevice.Enumerate())
             self.assertEqual(len(devs), 1)
