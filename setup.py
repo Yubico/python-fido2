@@ -60,7 +60,7 @@ setup(
     ],
     extras_require={':python_version < "3.4"': ["enum34"], "pcsc": ["pyscard"]},
     test_suite="test",
-    tests_require=["mock>=1.0.1", 'pyfakefs>=3.4;platform_system=="Linux"'],
+    tests_require=["mock<4", 'pyfakefs>=3.4;platform_system=="Linux"'],
     classifiers=[
         "License :: OSI Approved :: BSD License",
         "License :: OSI Approved :: Apache Software License",

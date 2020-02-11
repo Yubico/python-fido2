@@ -1,0 +1,126 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: [2.7, 3.5, 3.6, 3.7, 3.8, pypy2, pypy3]
+        architecture: [x86, x64]
+        exclude:
+          - os: ubuntu-latest
+            architecture: x86
+          - os: macos-latest
+            architecture: x86
+          - os: windows-latest
+            python: pypy2
+          - os: windows-latest
+            python: pypy3
+          - os: macos-latest
+            python: pypy2
+          - os: macos-latest
+            python: pypy3
+
+    name: ${{ matrix.os }} Py ${{ matrix.python }} ${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools
+          python -m pip install .
+
+      - name: Run pre-commit
+        if: matrix.python != '3.5'
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files
+
+      - name: Run unit tests
+        run: python setup.py test
+
+  build:
+    #needs: test
+    runs-on: ubuntu-latest
+    name: Build Python source .tar.gz
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.x
+
+      - name: Build source package
+        run: |
+          python -m pip install --upgrade pip setuptools
+          python setup.py sdist
+
+      - name: Upload source package
+        uses: actions/upload-artifact@v1
+        with:
+          name: fido2-python-sdist
+          path: dist
+
+  deb:
+    #needs: test
+    runs-on: ubuntu-latest
+    name: Build .deb
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Check Debian version
+        run: |
+          export PY_VER=$(awk '/__version__/{print $NF}' fido2/__init__.py | tr -d '"')
+          export DEB_VER=$(dpkg-parsechangelog --show-field Version)
+          case "$PY_VER" in
+            *-dev*)
+              if [[ ! $DEB_VER =~ "+git" ]]
+              then
+                echo "Debian package version mismatch, must contain +git!"
+                exit 1
+              fi
+              ;;
+            *)
+              if [ $PY_VER != $DEB_VER ]
+              then
+                echo "Debian package version mismatch, expected $PY_VER!"
+                exit 1
+              fi
+              ;;
+          esac
+
+      - name: Build .deb
+        run: |
+          sudo apt install -y devscripts equivs
+          yes | sudo mk-build-deps -i debian/control
+          debuild -us -uc
+          mkdir dist
+          mv ../python-fido2_* ../python3-fido2_* dist/
+
+      - name: Install .deb
+        run: |
+          ! python2 -c "import fido2"
+          sudo dpkg -i dist/python-fido2_*.deb
+          python2 -c "import fido2"
+          ! python3 -c "import fido2"
+          sudo dpkg -i dist/python3-fido2_*.deb
+          python3 -c "import fido2"
+
+      - name: Upload Debian packages
+        uses: actions/upload-artifact@v1
+        with:
+          name: python2-deb-files
+          path: dist
