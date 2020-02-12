@@ -42,7 +42,6 @@ import sys
 use_prompt = False
 pin = None
 uv = "discouraged"
-uv = "preferred"
 
 if WindowsClient.is_available():
     # Use the Windows WebAuthn API if available

@@ -233,7 +233,6 @@ class Acr122uSamPcscDevice(CtapPcscDevice):
                 return str_result
         except Exception as e:
             print("Get version error:", e)
-            pass
         return "n/a"
 
     def led_control(
