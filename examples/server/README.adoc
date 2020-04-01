@@ -3,7 +3,7 @@ This example shows a minimal website that uses python-fido2 to implement
 WebAuthn credential registration, and use.
 
 
-=== Running
+=== Running locally
 To run this sample, you will need `pipenv`. For instructions on installing
 `pipenv`, see https://docs.pipenv.org.
 
@@ -22,6 +22,20 @@ https://localhost:5000 to access the website.
 NOTE: As this server uses a self-signed certificate, you will get warnings in
 your browser about the connection not being secure. This is expected, and you
 can safely proceed to the site.
+
+=== Deploy to Cloud Foundry
+To deploy this sample to a Cloud Foundry environment, follow your cloud provider's
+instructions to log in and select the environment. Then push the application:
+
+  $ cf push
+
+Once the application has been deployed successfully, open the app's URI in a
+supported browser. In the terminal, follow the activities in the log file:
+
+  $ cf logs python-fido2-test
+
+Note: Depending on your cloud provider, the above commands may require the use of
+a wrapper. As example, for IBM Cloud use "ibmcloud cf push".
 
 === Using the website
 The site allows you to register a WebAuthn credential, and to authenticate it.

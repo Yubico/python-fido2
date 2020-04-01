@@ -42,13 +42,21 @@ from fido2.ctap2 import AttestationObject, AuthenticatorData
 from fido2 import cbor
 from flask import Flask, session, request, redirect, abort
 
-import os
+import os,json
 
 
 app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
 
-rp = PublicKeyCredentialRpEntity("localhost", "Demo server")
+# Detect if using Cloud Foundry
+# We need to extract the assigned URI for RP below
+domain="localhost"
+if 'VCAP_SERVICES' in os.environ:
+    domain=json.loads(os.environ['VCAP_APPLICATION'])['uris'][0]
+    
+
+
+rp = PublicKeyCredentialRpEntity(domain, "Demo server")
 server = Fido2Server(rp)
 
 
@@ -56,10 +64,13 @@ server = Fido2Server(rp)
 # support, state is lost when the server terminates.
 credentials = []
 
-
 @app.route("/")
 def index():
-    return redirect("/index.html")
+    # redirect to https if not already in use
+    # https needed for secure context
+    if request.url.startswith('http://'):
+       url = request.url.replace('http://', 'https://', 1)
+    return redirect(url+"index.html")
 
 
 @app.route("/api/register/begin", methods=["POST"])
@@ -132,7 +143,11 @@ def authenticate_complete():
     print("ASSERTION OK")
     return cbor.encode({"status": "OK"})
 
-
+port = os.getenv('PORT', '5000')
 if __name__ == "__main__":
     print(__doc__)
-    app.run(ssl_context="adhoc", debug=True)
+    # Are we local or in Cloud Foundry?
+    if 'VCAP_SERVICES' in os.environ:
+        app.run(host='0.0.0.0', port=int(port), debug = True, use_reloader=False)
+    else:
+        app.run(ssl_context="adhoc", debug=True)

@@ -1,0 +1,5 @@
+applications:
+  - name: python-fido2-test
+    memory: 128M
+    command: python server.py
+    random-route: true
