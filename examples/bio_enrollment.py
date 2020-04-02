@@ -35,7 +35,7 @@ Consider this highly experimental.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import CTAP2, PinProtocolV1, FPBioEnrollment
+from fido2.ctap2 import CTAP2, PinProtocolV1, FPBioEnrollment, CaptureError
 from getpass import getpass
 import sys
 
@@ -71,5 +71,8 @@ enroller = bio.enroll()
 template_id = None
 while template_id is None:
     print("Press your fingerprint against the sensor now...")
-    template_id = enroller.capture()
+    try:
+        template_id = enroller.capture()
+    except CaptureError as e:
+        print(e)
 print("Fingerprint registered successfully with ID:", template_id)
