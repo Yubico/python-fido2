@@ -60,7 +60,7 @@ class MacOsTest(unittest.TestCase):
     init_mock_cf(cf)
     init_mock_get_int_property(GetDeviceIntProperty)
 
-    device = macos.MacOsHidDevice('fakepath')
+    device = macos.MacOsHidDevice('1')
 
     self.assertEqual(64, device.GetInReportDataLength())
     self.assertEqual(64, device.GetOutReportDataLength())
@@ -73,7 +73,7 @@ class MacOsTest(unittest.TestCase):
     init_mock_cf(cf)
     init_mock_get_int_property(GetDeviceIntProperty)
 
-    device = macos.MacOsHidDevice('fakepath')
+    device = macos.MacOsHidDevice('1')
 
     # Write 64 bytes to device
     data = bytearray(range(64))
@@ -109,7 +109,7 @@ class MacOsTest(unittest.TestCase):
     # Make set report call return failure (non-zero)
     iokit.IOHIDDeviceSetReport.return_value = -1
 
-    device = macos.MacOsHidDevice('fakepath')
+    device = macos.MacOsHidDevice('1')
 
     # Write 64 bytes to device
     data = bytearray(range(64))
@@ -126,7 +126,7 @@ class MacOsTest(unittest.TestCase):
     init_mock_cf(cf)
     init_mock_get_int_property(GetDeviceIntProperty)
 
-    device = macos.MacOsHidDevice('fakepath')
+    device = macos.MacOsHidDevice('1')
 
     # Call callback for IN report
     report = (ctypes.c_uint8 * 64)()
