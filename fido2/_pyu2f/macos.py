@@ -453,6 +453,10 @@ class MacOsHidDevice(base.HidDevice):
         raise OSError('Failed reading a response')
 
   def __del__(self):
+    if not hasattr(self, 'device_handle'):
+      logger.warn('Destroying MacOsHidDevice that has no device handle')
+      return
+
     # Unregister the callback
     iokit.IOHIDDeviceRegisterInputReportCallback(
         self.device_handle,
