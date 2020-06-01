@@ -28,7 +28,6 @@ from . import base
 logger = logging.getLogger('_pyu2f.macos')
 
 # Constants
-DEVICE_PATH_BUFFER_SIZE = 512
 DEVICE_STRING_PROPERTY_BUFFER_SIZE = 512
 
 HID_DEVICE_PROPERTY_VENDOR_ID = b'VendorID'
@@ -77,6 +76,8 @@ CF_TYPE_REF = ctypes.POINTER(_CFType)
 CF_RUN_LOOP_REF = ctypes.POINTER(_CFRunLoop)
 CF_RUN_LOOP_RUN_RESULT = ctypes.c_int32
 CF_ALLOCATOR_REF = ctypes.POINTER(_CFAllocator)
+CF_DICTIONARY_REF = ctypes.c_void_p
+CF_MUTABLE_DICTIONARY_REF = ctypes.c_void_p
 CF_TYPE_ID = ctypes.c_ulong  # pylint: disable=invalid-name
 CF_INDEX = ctypes.c_long  # pylint: disable=invalid-name
 CF_TIME_INTERVAL = ctypes.c_double  # pylint: disable=invalid-name
@@ -84,7 +85,6 @@ IO_RETURN = ctypes.c_uint
 IO_HID_REPORT_TYPE = ctypes.c_uint
 IO_OBJECT_T = ctypes.c_uint
 MACH_PORT_T = ctypes.c_uint
-IO_STRING_T = ctypes.c_char_p  # pylint: disable=invalid-name
 IO_SERVICE_T = IO_OBJECT_T
 IO_REGISTRY_ENTRY_T = IO_OBJECT_T
 
@@ -104,7 +104,6 @@ K_CF_NUMBER_SINT32_TYPE = 3
 K_CF_STRING_ENCODING_UTF8 = 0x08000100
 K_CF_ALLOCATOR_DEFAULT = None
 
-K_IO_SERVICE_PLANE = b'IOService'
 K_IO_MASTER_PORT_DEFAULT = 0
 K_IO_HID_REPORT_TYPE_OUTPUT = 1
 K_IO_RETURN_SUCCESS = 0
@@ -165,8 +164,10 @@ if sys.platform.startswith('darwin'):
   iokit.IOHIDDeviceRegisterInputReportCallback.argtypes = [
       IO_HID_DEVICE_REF, ctypes.POINTER(ctypes.c_uint8), CF_INDEX,
       IO_HID_REPORT_CALLBACK, ctypes.py_object]
-  iokit.IORegistryEntryFromPath.restype = IO_REGISTRY_ENTRY_T
-  iokit.IORegistryEntryFromPath.argtypes = [MACH_PORT_T, IO_STRING_T]
+  iokit.IORegistryEntryIDMatching.restype = CF_MUTABLE_DICTIONARY_REF
+  iokit.IORegistryEntryIDMatching.argtypes = [ctypes.c_uint64]
+  iokit.IORegistryEntryGetRegistryEntryID.argtypes = [IO_REGISTRY_ENTRY_T,
+                                                      ctypes.POINTER(ctypes.c_uint64)]
   iokit.IOHIDDeviceCreate.restype = IO_HID_DEVICE_REF
   iokit.IOHIDDeviceCreate.argtypes = [CF_ALLOCATOR_REF, IO_SERVICE_T]
   iokit.IOHIDDeviceScheduleWithRunLoop.restype = None
@@ -182,6 +183,10 @@ if sys.platform.startswith('darwin'):
                                          CF_INDEX,
                                          ctypes.POINTER(ctypes.c_uint8),
                                          CF_INDEX]
+
+  iokit.IOServiceGetMatchingService.restype = IO_SERVICE_T
+  iokit.IOServiceGetMatchingService.argtypes = [MACH_PORT_T,
+                                                CF_DICTIONARY_REF]
 else:
   logger.warn('Not running on MacOS')
 
@@ -243,22 +248,25 @@ def GetDeviceStringProperty(dev_ref, key):
   return out.value.decode('utf8')
 
 
-def GetDevicePath(device_handle):
-  """Obtains the unique path for the device.
+def GetDeviceEntryIdString(device_handle):
+  """Obtains the unique IORegistry entry ID for the device.
 
   Args:
     device_handle: reference to the device
 
   Returns:
-    A unique path for the device, obtained from the IO Registry
-
+    A unique ID for the device, obtained from the IO Registry
+    and converted to a string.
   """
-  # Obtain device path from IO Registry
+  # Obtain device entry ID from IO Registry
   io_service_obj = iokit.IOHIDDeviceGetService(device_handle)
-  str_buffer = ctypes.create_string_buffer(DEVICE_PATH_BUFFER_SIZE)
-  iokit.IORegistryEntryGetPath(io_service_obj, K_IO_SERVICE_PLANE, str_buffer)
+  entry_id = ctypes.c_uint64()
+  result = iokit.IORegistryEntryGetRegistryEntryID(io_service_obj,
+                                                   ctypes.byref(entry_id))
+  if result != K_IO_RETURN_SUCCESS:
+    raise OSError("Failed to obtain IORegistry entry ID")
 
-  return str_buffer.value
+  return str(entry_id.value)
 
 
 def HidReadCallback(read_queue, result, sender, report_type, report_id, report,
@@ -358,7 +366,7 @@ class MacOsHidDevice(base.HidDevice):
       d.usage_page = GetDeviceIntProperty(
           dev, HID_DEVICE_PROPERTY_PRIMARY_USAGE_PAGE)
       d.report_id = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_REPORT_ID)
-      d.path = GetDevicePath(dev)
+      d.path = GetDeviceEntryIdString(dev)
       descriptors.append(d.ToPublicDict())
 
     # Clean up CF objects
@@ -369,10 +377,13 @@ class MacOsHidDevice(base.HidDevice):
 
   def __init__(self, path):
     # Resolve the path to device handle
-    device_entry = iokit.IORegistryEntryFromPath(K_IO_MASTER_PORT_DEFAULT, path)
+    entry_id = ctypes.c_uint64(int(path))
+    matching_dict = iokit.IORegistryEntryIDMatching(entry_id)
+    device_entry = iokit.IOServiceGetMatchingService(K_IO_MASTER_PORT_DEFAULT,
+                                                     matching_dict)
     if not device_entry:
-      raise OSError('Device path does not match any HID device on '
-                              'the system')
+      raise OSError('Device path {} does not match any HID device on '
+                    'the system'.format(path))
 
     self.device_handle = iokit.IOHIDDeviceCreate(K_CF_ALLOCATOR_DEFAULT,
                                                  device_entry)
