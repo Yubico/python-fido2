@@ -836,6 +836,8 @@ class CTAP2(object):
         pin_uv_protocol=None,
         pin_uv_param=None,
         get_modality=None,
+        event=None,
+        on_keepalive=None,
     ):
         """CTAP2 bio enrollment command. Used to provision/enumerate/delete bio
         enrollments in the authenticator.
@@ -863,6 +865,8 @@ class CTAP2(object):
                 pin_uv_param,
                 get_modality,
             ),
+            event=event,
+            on_keepalive=on_keepalive,
         )
 
     def get_assertions(self, *args, **kwargs):
@@ -1271,7 +1275,7 @@ class FPEnrollmentContext(object):
         self.timeout = timeout
         self.template_id = None
 
-    def capture(self):
+    def capture(self, event=None, on_keepalive=None):
         """Capture a fingerprint sample.
 
         This call will block for up to timeout milliseconds (or indefinitely, if
@@ -1282,10 +1286,12 @@ class FPEnrollmentContext(object):
             completed.
         """
         if self.template_id is None:
-            self.template_id, status, remaining = self._bio.enroll_begin(self.timeout)
+            self.template_id, status, remaining = self._bio.enroll_begin(
+                self.timeout, event, on_keepalive
+            )
         else:
             status, remaining = self._bio.enroll_capture_next(
-                self.template_id, self.timeout
+                self.template_id, self.timeout, event, on_keepalive
             )
         if status != FPBioEnrollment.FEEDBACK.FP_GOOD:
             raise CaptureError(status)
@@ -1353,13 +1359,15 @@ class FPBioEnrollment(BioEnrollment):
         self.pin_uv_protocol = pin_uv_protocol
         self.pin_uv_token = pin_uv_token
 
-    def _call(self, sub_cmd, params=None, auth=True):
+    def _call(self, sub_cmd, params=None, auth=True, event=None, on_keepalive=None):
         if params is not None:
             params = {k: v for k, v in params.items() if v is not None}
         kwargs = {
             "modality": self.modality,
             "sub_cmd": sub_cmd,
             "sub_cmd_params": params,
+            "event": event,
+            "on_keepalive": on_keepalive,
         }
         if auth:
             msg = struct.pack(">BB", self.modality, sub_cmd)
@@ -1376,7 +1384,7 @@ class FPBioEnrollment(BioEnrollment):
         """
         return self._call(FPBioEnrollment.CMD.GET_SENSOR_INFO, auth=False)
 
-    def enroll_begin(self, timeout=None):
+    def enroll_begin(self, timeout=None, event=None, on_keepalive=None):
         """Start fingerprint enrollment.
 
         Starts the process of enrolling a new fingerprint, and will wait for the user
@@ -1389,6 +1397,8 @@ class FPBioEnrollment(BioEnrollment):
         result = self._call(
             FPBioEnrollment.CMD.ENROLL_BEGIN,
             {FPBioEnrollment.PARAM.TIMEOUT_MS: timeout},
+            event=event,
+            on_keepalive=on_keepalive,
         )
         return (
             result[BioEnrollment.RESULT.TEMPLATE_ID],
@@ -1396,7 +1406,9 @@ class FPBioEnrollment(BioEnrollment):
             result[BioEnrollment.RESULT.REMAINING_SAMPLES],
         )
 
-    def enroll_capture_next(self, template_id, timeout=None):
+    def enroll_capture_next(
+        self, template_id, timeout=None, event=None, on_keepalive=None
+    ):
         """Continue fingerprint enrollment.
 
         Continues enrolling a new fingerprint and will wait for the user to scan their
@@ -1414,6 +1426,8 @@ class FPBioEnrollment(BioEnrollment):
                 FPBioEnrollment.PARAM.TEMPLATE_ID: template_id,
                 FPBioEnrollment.PARAM.TIMEOUT_MS: timeout,
             },
+            event=event,
+            on_keepalive=on_keepalive,
         )
         return (
             FPBioEnrollment.FEEDBACK(result[BioEnrollment.RESULT.LAST_SAMPLE_STATUS]),
