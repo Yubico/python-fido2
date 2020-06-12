@@ -72,7 +72,7 @@ class TpmAlgHash(IntEnum):
 
     def _hash_alg(self):
         if self == TpmAlgHash.SHA1:
-            return hashes.SHA1()
+            return hashes.SHA1()  # nosec
         elif self == TpmAlgHash.SHA256:
             return hashes.SHA256()
         elif self == TpmAlgHash.SHA384:
@@ -170,7 +170,6 @@ class TpmAttestationFormat(object):
         self.data = data
         self.clock_info = clock_info
         self.firmware_version = firmware_version
-        assert attested.__class__ == TpmsCertifyInfo
         self.attested = attested
 
     def __repr__(self):
