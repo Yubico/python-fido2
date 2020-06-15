@@ -191,7 +191,7 @@ class U2fClient(object):
         try:
             if self._verify(app_id, self.origin):
                 return
-        except Exception:
+        except Exception:  # nosec
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
@@ -264,7 +264,7 @@ class U2fClient(object):
                         key_handle,
                     )
                     break
-                except ClientError:
+                except ClientError:  # nosec
                     pass  # Ignore and try next key
         else:
             raise ClientError.ERR.DEVICE_INELIGIBLE()
@@ -291,7 +291,7 @@ class _BaseClient(object):
         try:
             if self._verify(rp_id, self.origin):
                 return
-        except Exception:
+        except Exception:  # nosec
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
@@ -640,7 +640,7 @@ if platform.system().lower() == "windows":
             WebAuthNUserVerificationRequirement,
             WebAuthNAttestationConvoyancePreference,
         )
-    except Exception:  # TODO: Make this less generic
+    except Exception:  # nosec # TODO: Make this less generic
         pass
 
 

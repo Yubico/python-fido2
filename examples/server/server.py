@@ -135,4 +135,4 @@ def authenticate_complete():
 
 if __name__ == "__main__":
     print(__doc__)
-    app.run(ssl_context="adhoc", debug=True)
+    app.run(ssl_context="adhoc", debug=False)

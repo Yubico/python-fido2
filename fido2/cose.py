@@ -210,7 +210,7 @@ class EdDSA(CoseKey):
 
 class RS1(CoseKey):
     ALGORITHM = -65535
-    _HASH_ALG = hashes.SHA1()
+    _HASH_ALG = hashes.SHA1()  # nosec
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(

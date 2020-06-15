@@ -311,8 +311,9 @@ class WindowsHidDevice(base.HidDevice):
         FillDeviceAttributes(device, descriptor)
         FillDeviceCapabilities(device, descriptor)
         out.append(descriptor.ToPublicDict())
-      except Exception:
-        continue  # Try with next device
+      except Exception:  # nosec
+        # Try with next device
+        continue
       finally:
         kernel32.CloseHandle(device)
 
