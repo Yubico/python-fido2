@@ -35,7 +35,7 @@ Consider this highly experimental.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import CTAP2, PinProtocolV1, FPBioEnrollment, CaptureError
+from fido2.ctap2 import CTAP2, ClientPin, PinProtocolV1, FPBioEnrollment, CaptureError
 from getpass import getpass
 import sys
 
@@ -61,8 +61,9 @@ if "bioEnroll" not in info.options:
 # Authenticate with PIN
 print("Preparing to enroll a new fingerprint.")
 pin = getpass("Please enter PIN: ")
-pin_token = PinProtocolV1(ctap).get_pin_token(pin)
-bio = FPBioEnrollment(ctap, PinProtocolV1.VERSION, pin_token)
+pin_protocol = PinProtocolV1()
+pin_token = ClientPin(ctap, pin_protocol).get_pin_token(pin)
+bio = FPBioEnrollment(ctap, pin_protocol, pin_token)
 
 print(bio.enumerate_enrollments())
 

@@ -30,7 +30,14 @@ from __future__ import absolute_import, unicode_literals, division
 from .hid import STATUS
 from .ctap import CtapError
 from .ctap1 import CTAP1, APDU, ApduError
-from .ctap2 import CTAP2, PinProtocolV1, AttestationObject, AssertionResponse, Info
+from .ctap2 import (
+    CTAP2,
+    ClientPin,
+    PinProtocolV1,
+    AttestationObject,
+    AssertionResponse,
+    Info,
+)
 from .webauthn import (
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
@@ -39,7 +46,7 @@ from .webauthn import (
 )
 from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
-from .utils import sha256, hmac_sha256, websafe_decode, websafe_encode
+from .utils import sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
 from threading import Timer, Event
 
@@ -326,9 +333,9 @@ class Fido2Client(_BaseClient):
             self.ctap2 = CTAP2(device)
             self.info = self.ctap2.get_info()
             if PinProtocolV1.VERSION in self.info.pin_uv_protocols:
-                self.pin_protocol = PinProtocolV1(self.ctap2)
+                self.client_pin = ClientPin(self.ctap2, PinProtocolV1())
             else:
-                self.pin_protocol = None
+                self.client_pin = None
             self._do_make_credential = self._ctap2_make_credential
             self._do_get_assertion = self._ctap2_get_assertion
         except (ValueError, CtapError):
@@ -430,9 +437,11 @@ class Fido2Client(_BaseClient):
         pin_auth = None
         pin_protocol = None
         if pin:
-            pin_protocol = self.pin_protocol.VERSION
-            pin_token = self.pin_protocol.get_pin_token(pin)
-            pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
+            pin_protocol = self.client_pin.protocol.VERSION
+            pin_token = self.client_pin.get_pin_token(pin)
+            pin_auth = self.client_pin.protocol.authenticate(
+                pin_token, client_data.hash
+            )
         elif self.info.options.get("clientPin") and not uv:
             raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
 
@@ -568,9 +577,11 @@ class Fido2Client(_BaseClient):
         pin_auth = None
         pin_protocol = None
         if pin:
-            pin_protocol = self.pin_protocol.VERSION
-            pin_token = self.pin_protocol.get_pin_token(pin)
-            pin_auth = hmac_sha256(pin_token, client_data.hash)[:16]
+            pin_protocol = self.client_pin.protocol.VERSION
+            pin_token = self.client_pin.get_pin_token(pin)
+            pin_auth = self.client_pin.protocol.authenticate(
+                pin_token, client_data.hash
+            )
         elif self.info.options.get("clientPin") and not uv:
             raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
 

@@ -905,6 +905,49 @@ class PinProtocolV1(object):
     VERSION = 1
     IV = b"\x00" * 16
 
+    def encapsulate(self, peer_cose_key):
+        be = default_backend()
+        sk = ec.generate_private_key(ec.SECP256R1(), be)
+        pn = sk.public_key().public_numbers()
+        key_agreement = {
+            1: 2,
+            3: -25,  # Per the spec, "although this is NOT the algorithm actually used"
+            -1: 1,
+            -2: int2bytes(pn.x, 32),
+            -3: int2bytes(pn.y, 32),
+        }
+
+        x = bytes2int(peer_cose_key[-2])
+        y = bytes2int(peer_cose_key[-3])
+        pk = ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key(be)
+        shared_secret = sha256(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
+        return key_agreement, shared_secret
+
+    def _get_cipher(self, secret):
+        be = default_backend()
+        return Cipher(algorithms.AES(secret), modes.CBC(PinProtocolV1.IV), be)
+
+    def encrypt(self, key, plaintext):
+        cipher = self._get_cipher(key)
+        enc = cipher.encryptor()
+        return enc.update(plaintext) + enc.finalize()
+
+    def decrypt(self, key, ciphertext):
+        cipher = self._get_cipher(key)
+        dec = cipher.decryptor()
+        return dec.update(ciphertext) + dec.finalize()
+
+    def authenticate(self, key, message):
+        return hmac_sha256(key, message)[:16]
+
+
+class ClientPin(object):
+    """Implementation of the CTAP2 Client PIN API.
+
+    :param ctap: An instance of a CTAP2 object.
+    :param protocol: An instance of a PinUvAuthProtocol object.
+    """
+
     @unique
     class CMD(IntEnum):
         GET_PIN_RETRIES = 0x01
@@ -923,34 +966,17 @@ class PinProtocolV1(object):
         POWER_CYCLE_STATE = 0x04
         UV_RETRIES = 0x05
 
-    def __init__(self, ctap):
+    def __init__(self, ctap, protocol):
         self.ctap = ctap
+        self.protocol = protocol
 
-    def get_shared_secret(self):
-        be = default_backend()
-        sk = ec.generate_private_key(ec.SECP256R1(), be)
-        pn = sk.public_key().public_numbers()
-        key_agreement = {
-            1: 2,
-            3: -25,  # Per the spec, "although this is NOT the algorithm actually used"
-            -1: 1,
-            -2: int2bytes(pn.x, 32),
-            -3: int2bytes(pn.y, 32),
-        }
-
+    def _get_shared_secret(self):
         resp = self.ctap.client_pin(
-            PinProtocolV1.VERSION, PinProtocolV1.CMD.GET_KEY_AGREEMENT
+            self.protocol.VERSION, ClientPin.CMD.GET_KEY_AGREEMENT
         )
-        pk = resp[PinProtocolV1.RESULT.KEY_AGREEMENT]
-        x = bytes2int(pk[-2])
-        y = bytes2int(pk[-3])
-        pk = ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key(be)
-        shared_secret = sha256(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
-        return key_agreement, shared_secret
+        pk = resp[ClientPin.RESULT.KEY_AGREEMENT]
 
-    def _get_cipher(self, secret):
-        be = default_backend()
-        return Cipher(algorithms.AES(secret), modes.CBC(PinProtocolV1.IV), be)
+        return self.protocol.encapsulate(pk)
 
     def get_pin_token(self, pin):
         """Get a PIN/UV token from the authenticator using PIN.
@@ -958,38 +984,35 @@ class PinProtocolV1(object):
         :param pin: The PIN of the authenticator.
         :return: A PIN/UV token.
         """
-        key_agreement, shared_secret = self.get_shared_secret()
+        key_agreement, shared_secret = self._get_shared_secret()
 
-        cipher = self._get_cipher(shared_secret)
         pin_hash = sha256(pin.encode())[:16]
-        enc = cipher.encryptor()
-        pin_hash_enc = enc.update(pin_hash) + enc.finalize()
+        pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
 
         resp = self.ctap.client_pin(
-            PinProtocolV1.VERSION,
-            PinProtocolV1.CMD.GET_TOKEN_USING_PIN,
+            self.protocol.VERSION,
+            ClientPin.CMD.GET_TOKEN_USING_PIN,
             key_agreement=key_agreement,
             pin_hash_enc=pin_hash_enc,
         )
-        dec = cipher.decryptor()
-        return dec.update(resp[PinProtocolV1.RESULT.PIN_UV_TOKEN]) + dec.finalize()
+        pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
+        return self.protocol.decrypt(shared_secret, pin_token_enc)
 
     def get_uv_token(self):
         """Get a PIN/UV token from the authenticator using built-in UV.
 
         :return: A PIN/UV token.
         """
-        key_agreement, shared_secret = self.get_shared_secret()
+        key_agreement, shared_secret = self._get_shared_secret()
 
         resp = self.ctap.client_pin(
-            PinProtocolV1.VERSION,
-            PinProtocolV1.CMD.GET_TOKEN_USING_UV,
+            self.protocol.VERSION,
+            ClientPin.CMD.GET_TOKEN_USING_UV,
             key_agreement=key_agreement,
         )
 
-        cipher = self._get_cipher(shared_secret)
-        dec = cipher.decryptor()
-        return dec.update(resp[PinProtocolV1.RESULT.PIN_UV_TOKEN]) + dec.finalize()
+        pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
+        return self.protocol.decrypt(shared_secret, pin_token_enc)
 
     def get_pin_retries(self):
         """Get the number of PIN retries remaining.
@@ -998,11 +1021,11 @@ class PinProtocolV1(object):
         authenticator is locked, and the power cycle state, if available.
         """
         resp = self.ctap.client_pin(
-            PinProtocolV1.VERSION, PinProtocolV1.CMD.GET_PIN_RETRIES
+            self.protocol.VERSION, ClientPin.CMD.GET_PIN_RETRIES
         )
         return (
-            resp[PinProtocolV1.RESULT.PIN_RETRIES],
-            resp.get(PinProtocolV1.RESULT.POWER_CYCLE_STATE),
+            resp[ClientPin.RESULT.PIN_RETRIES],
+            resp.get(ClientPin.RESULT.POWER_CYCLE_STATE),
         )
 
     def get_uv_retries(self):
@@ -1011,12 +1034,10 @@ class PinProtocolV1(object):
         :return: A tuple of the number of UV attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
-        resp = self.ctap.client_pin(
-            PinProtocolV1.VERSION, PinProtocolV1.CMD.GET_UV_RETRIES
-        )
+        resp = self.ctap.client_pin(self.protocol.VERSION, ClientPin.CMD.GET_UV_RETRIES)
         return (
-            resp[PinProtocolV1.RESULT.UV_RETRIES],
-            resp.get(PinProtocolV1.RESULT.POWER_CYCLE_STATE),
+            resp[ClientPin.RESULT.UV_RETRIES],
+            resp.get(ClientPin.RESULT.POWER_CYCLE_STATE),
         )
 
     def set_pin(self, pin):
@@ -1028,15 +1049,13 @@ class PinProtocolV1(object):
         :param pin: A PIN to set.
         """
         pin = _pad_pin(pin)
-        key_agreement, shared_secret = self.get_shared_secret()
+        key_agreement, shared_secret = self._get_shared_secret()
 
-        cipher = self._get_cipher(shared_secret)
-        enc = cipher.encryptor()
-        pin_enc = enc.update(pin) + enc.finalize()
-        pin_uv_param = hmac_sha256(shared_secret, pin_enc)[:16]
+        pin_enc = self.protocol.encrypt(shared_secret, pin)
+        pin_uv_param = self.protocol.authenticate(shared_secret, pin_enc)
         self.ctap.client_pin(
-            PinProtocolV1.VERSION,
-            PinProtocolV1.CMD.SET_PIN,
+            self.protocol.VERSION,
+            ClientPin.CMD.SET_PIN,
             key_agreement=key_agreement,
             new_pin_enc=pin_enc,
             pin_uv_param=pin_uv_param,
@@ -1052,18 +1071,17 @@ class PinProtocolV1(object):
         :param new_pin: The new PIN to set.
         """
         new_pin = _pad_pin(new_pin)
-        key_agreement, shared_secret = self.get_shared_secret()
+        key_agreement, shared_secret = self._get_shared_secret()
 
-        cipher = self._get_cipher(shared_secret)
         pin_hash = sha256(old_pin.encode())[:16]
-        enc = cipher.encryptor()
-        pin_hash_enc = enc.update(pin_hash) + enc.finalize()
-        enc = cipher.encryptor()
-        new_pin_enc = enc.update(new_pin) + enc.finalize()
-        pin_uv_param = hmac_sha256(shared_secret, new_pin_enc + pin_hash_enc)[:16]
+        pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
+        new_pin_enc = self.protocol.encrypt(shared_secret, new_pin)
+        pin_uv_param = self.protocol.authenticate(
+            shared_secret, new_pin_enc + pin_hash_enc
+        )
         self.ctap.client_pin(
-            PinProtocolV1.VERSION,
-            PinProtocolV1.CMD.CHANGE_PIN,
+            self.protocol.VERSION,
+            ClientPin.CMD.CHANGE_PIN,
             key_agreement=key_agreement,
             pin_hash_enc=pin_hash_enc,
             new_pin_enc=new_pin_enc,
@@ -1076,7 +1094,7 @@ class CredentialManagement(object):
     WARNING: This specification is not final and this class is likely to change.
 
     :param ctap: An instance of a CTAP2 object.
-    :param pin_uv_protocol: The PIN/UV protocol version used.
+    :param pin_uv_protocol: An instance of a PinUvAuthProtocol.
     :param pin_uv_token: A valid PIN/UV Auth Token for the current CTAP session.
     """
 
@@ -1118,8 +1136,10 @@ class CredentialManagement(object):
             msg = struct.pack(">B", sub_cmd)
             if params is not None:
                 msg += cbor.encode(params)
-            kwargs["pin_uv_protocol"] = self.pin_uv_protocol
-            kwargs["pin_uv_param"] = hmac_sha256(self.pin_uv_token, msg)[:16]
+            kwargs["pin_uv_protocol"] = self.pin_uv_protocol.VERSION
+            kwargs["pin_uv_param"] = self.pin_uv_protocol.authenticate(
+                self.pin_uv_token, msg
+            )
         return self.ctap.credential_mgmt(**kwargs)
 
     def get_metadata(self):
@@ -1373,8 +1393,10 @@ class FPBioEnrollment(BioEnrollment):
             msg = struct.pack(">BB", self.modality, sub_cmd)
             if params is not None:
                 msg += cbor.encode(params)
-            kwargs["pin_uv_protocol"] = self.pin_uv_protocol
-            kwargs["pin_uv_param"] = hmac_sha256(self.pin_uv_token, msg)[:16]
+            kwargs["pin_uv_protocol"] = self.pin_uv_protocol.VERSION
+            kwargs["pin_uv_param"] = self.pin_uv_protocol.authenticate(
+                self.pin_uv_token, msg
+            )
         return self.ctap.bio_enrollment(**kwargs)
 
     def get_fingerprint_sensor_info(self):
