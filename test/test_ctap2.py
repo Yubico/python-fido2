@@ -30,6 +30,7 @@ from __future__ import absolute_import, unicode_literals
 from fido2.ctap1 import RegistrationData
 from fido2.ctap2 import (
     CTAP2,
+    ClientPin,
     PinProtocolV1,
     Info,
     AttestedCredentialData,
@@ -283,10 +284,10 @@ TOKEN = a2b_hex("aff12c6dcfbf9df52f7a09211e8865cd")
 PIN_HASH_ENC = a2b_hex("afe8327ce416da8ee3d057589c2ce1a9")
 
 
-class TestPinProtocolV1(unittest.TestCase):
+class TestClientPin(unittest.TestCase):
     @mock.patch("cryptography.hazmat.primitives.asymmetric.ec.generate_private_key")
     def test_establish_shared_secret(self, patched_generate):
-        prot = PinProtocolV1(mock.MagicMock())
+        prot = ClientPin(mock.MagicMock(), PinProtocolV1())
 
         patched_generate.return_value = ec.derive_private_key(
             EC_PRIV, ec.SECP256R1(), default_backend()
@@ -296,15 +297,15 @@ class TestPinProtocolV1(unittest.TestCase):
             1: {1: 2, 3: -25, -1: 1, -2: DEV_PUB_X, -3: DEV_PUB_Y}
         }
 
-        key_agreement, shared = prot.get_shared_secret()
+        key_agreement, shared = prot._get_shared_secret()
 
         self.assertEqual(shared, SHARED)
         self.assertEqual(key_agreement[-2], EC_PUB_X)
         self.assertEqual(key_agreement[-3], EC_PUB_Y)
 
     def test_get_pin_token(self):
-        prot = PinProtocolV1(mock.MagicMock())
-        prot.get_shared_secret = mock.Mock(return_value=({}, SHARED))
+        prot = ClientPin(mock.MagicMock(), PinProtocolV1())
+        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))
         prot.ctap.client_pin.return_value = {2: TOKEN_ENC}
 
         self.assertEqual(prot.get_pin_token("1234"), TOKEN)
@@ -314,8 +315,8 @@ class TestPinProtocolV1(unittest.TestCase):
         )
 
     def test_set_pin(self):
-        prot = PinProtocolV1(mock.MagicMock())
-        prot.get_shared_secret = mock.Mock(return_value=({}, SHARED))
+        prot = ClientPin(mock.MagicMock(), PinProtocolV1())
+        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))
 
         prot.set_pin("1234")
         prot.ctap.client_pin.assert_called_with(
@@ -329,8 +330,8 @@ class TestPinProtocolV1(unittest.TestCase):
         )
 
     def test_change_pin(self):
-        prot = PinProtocolV1(mock.MagicMock())
-        prot.get_shared_secret = mock.Mock(return_value=({}, SHARED))
+        prot = ClientPin(mock.MagicMock(), PinProtocolV1())
+        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))
 
         prot.change_pin("1234", "4321")
         prot.ctap.client_pin.assert_called_with(
@@ -345,11 +346,11 @@ class TestPinProtocolV1(unittest.TestCase):
         )
 
     def test_short_pin(self):
-        prot = PinProtocolV1(mock.MagicMock())
+        prot = ClientPin(mock.MagicMock(), PinProtocolV1())
         with self.assertRaises(ValueError):
             prot.set_pin("123")
 
     def test_long_pin(self):
-        prot = PinProtocolV1(mock.MagicMock())
+        prot = ClientPin(mock.MagicMock(), PinProtocolV1())
         with self.assertRaises(ValueError):
             prot.set_pin("1" * 256)
