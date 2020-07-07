@@ -27,8 +27,6 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from .ctap2 import PinProtocolV1
-from .utils import hmac_sha256
 import abc
 
 
@@ -94,8 +92,8 @@ class HmacSecretExtension(Extension):
     NAME = "hmac-secret"
     SALT_LEN = 32
 
-    def __init__(self, ctap):
-        self._pin_protocol = PinProtocolV1(ctap)
+    def __init__(self, client_pin):
+        self._client_pin = client_pin
 
     def create_data(self):
         return True
@@ -110,22 +108,21 @@ class HmacSecretExtension(Extension):
         if salt2 and len(salt2) != self.SALT_LEN:
             raise ValueError("Wrong length for salt2")
 
-        key_agreement, shared_secret = self._pin_protocol.get_shared_secret()
+        key_agreement, shared_secret = self._client_pin._get_shared_secret()
         self._agreement = key_agreement
         self._secret = shared_secret
 
-        enc = self._pin_protocol._get_cipher(shared_secret).encryptor()
-        salt_enc = enc.update(salt1) + enc.update(salt2) + enc.finalize()
+        salt_enc = self._client_pin.protocol.encrypt(shared_secret, salt1 + salt2)
+        salt_auth = self._client_pin.protocol.authenticate(shared_secret, salt_enc)
 
         return {
             1: key_agreement,
             2: salt_enc,
-            3: hmac_sha256(shared_secret, salt_enc)[:16],
+            3: salt_auth,
         }
 
     def get_result(self, data):
-        dec = self._pin_protocol._get_cipher(self._secret).decryptor()
-        salt = dec.update(data) + dec.finalize()
+        salt = self._client_pin.protocol.decrypt(self._secret, data)
         return (
             salt[: HmacSecretExtension.SALT_LEN],
             salt[HmacSecretExtension.SALT_LEN :],
