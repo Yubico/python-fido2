@@ -77,7 +77,7 @@ if client.info.options.get("clientPin"):
 else:
     print("no pin")
 
-hmac_ext = HmacSecretExtension(client.ctap2)
+hmac_ext = HmacSecretExtension(client.client_pin)
 
 # Create a credential
 if not use_nfc:
