@@ -764,6 +764,10 @@ class CTAP2(object):
         pin_uv_param=None,
         new_pin_enc=None,
         pin_hash_enc=None,
+        min_pin_len=None,
+        min_pin_len_rpids=None,
+        permissions=None,
+        permissions_rpid=None,
     ):
         """CTAP2 clientPin command, used for various PIN operations.
 
@@ -776,6 +780,10 @@ class CTAP2(object):
         :param pin_uv_param: The pinAuth parameter.
         :param new_pin_enc: The newPinEnc parameter.
         :param pin_hash_enc: The pinHashEnc parameter.
+        :param min_pin_len: The minPinLength parameter.
+        :param min_pin_len_rpids: The minPinLengthRPIDs parameter.
+        :param permissions: The permissions parameter.
+        :param permissions_rpid: The permissions RPID parameter.
         :return: The response of the command, decoded.
         """
         return self.send_cbor(
@@ -787,6 +795,10 @@ class CTAP2(object):
                 pin_uv_param,
                 new_pin_enc,
                 pin_hash_enc,
+                min_pin_len,
+                min_pin_len_rpids,
+                permissions,
+                permissions_rpid,
             ),
         )
 
@@ -998,9 +1010,11 @@ class ClientPin(object):
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
         return self.protocol.decrypt(shared_secret, pin_token_enc)
 
-    def get_uv_token(self):
+    def get_uv_token(self, permissions, permissions_rpid):
         """Get a PIN/UV token from the authenticator using built-in UV.
 
+        :param permissions: The permissions to associate with the token.
+        :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
         key_agreement, shared_secret = self._get_shared_secret()
@@ -1009,6 +1023,8 @@ class ClientPin(object):
             self.protocol.VERSION,
             ClientPin.CMD.GET_TOKEN_USING_UV,
             key_agreement=key_agreement,
+            permissions=permissions,
+            permissions_rpid=permissions_rpid,
         )
 
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
