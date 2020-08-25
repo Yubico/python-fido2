@@ -331,7 +331,7 @@ class Fido2Client(_BaseClient):
         self.ctap1_poll_delay = 0.25
         try:
             self.ctap2 = CTAP2(device)
-            self.info = self.ctap2.get_info()
+            self.info = self.ctap2.info
             if PinProtocolV1.VERSION in self.info.pin_uv_protocols:
                 self.client_pin = ClientPin(self.ctap2, PinProtocolV1())
             else:
@@ -438,7 +438,9 @@ class Fido2Client(_BaseClient):
         pin_protocol = None
         if pin:
             pin_protocol = self.client_pin.protocol.VERSION
-            pin_token = self.client_pin.get_pin_token(pin)
+            pin_token = self.client_pin.get_pin_token(
+                pin, ClientPin.PERMISSION.MC, rp["id"]
+            )
             pin_auth = self.client_pin.protocol.authenticate(
                 pin_token, client_data.hash
             )
@@ -578,7 +580,9 @@ class Fido2Client(_BaseClient):
         pin_protocol = None
         if pin:
             pin_protocol = self.client_pin.protocol.VERSION
-            pin_token = self.client_pin.get_pin_token(pin)
+            pin_token = self.client_pin.get_pin_token(
+                pin, ClientPin.PERMISSION.GA, rp_id
+            )
             pin_auth = self.client_pin.protocol.authenticate(
                 pin_token, client_data.hash
             )

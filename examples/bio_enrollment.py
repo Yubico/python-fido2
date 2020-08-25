@@ -62,7 +62,7 @@ if "bioEnroll" not in info.options:
 print("Preparing to enroll a new fingerprint.")
 pin = getpass("Please enter PIN: ")
 pin_protocol = PinProtocolV1()
-pin_token = ClientPin(ctap, pin_protocol).get_pin_token(pin)
+pin_token = ClientPin(ctap, pin_protocol).get_pin_token(pin, ClientPin.PERMISSION.BE)
 bio = FPBioEnrollment(ctap, pin_protocol, pin_token)
 
 print(bio.enumerate_enrollments())

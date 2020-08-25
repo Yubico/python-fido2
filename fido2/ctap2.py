@@ -612,16 +612,27 @@ class CTAP2(object):
         CLIENT_PIN = 0x06
         RESET = 0x07
         GET_NEXT_ASSERTION = 0x08
-        # 0x40 is the command byte for bio enrollment preview
-        BIO_ENROLLMENT = 0x40  # 0x09
-        # 0x41 is the command byte for credmgmt preview
-        CREDENTIAL_MGMT = 0x41
+        BIO_ENROLLMENT = 0x09
+        CREDENTIAL_MGMT = 0x0A
+
+        BIO_ENROLLMENT_PRE = 0x40
+        CREDENTIAL_MGMT_PRE = 0x41
 
     def __init__(self, device, strict_cbor=True):
         if not device.capabilities & CAPABILITY.CBOR:
             raise ValueError("Device does not support CTAP2.")
         self.device = device
         self._strict_cbor = strict_cbor
+        self._info = self.get_info()
+
+    @property
+    def info(self):
+        """Get a cached Info object which can be used to determine capabilities.
+
+        :rtype: Info
+        :return: The response of calling GetAuthenticatorInfo.
+        """
+        return self._info
 
     def send_cbor(
         self, cmd, data=None, event=None, parse=cbor.decode, on_keepalive=None
@@ -835,9 +846,16 @@ class CTAP2(object):
         :param pin_uv_protocol: PIN/UV auth protocol version used.
         :param pin_uv_param: PIN/UV Auth parameter.
         """
+        if "credMgmt" in self.info.options:
+            cmd = CTAP2.CMD.CREDENTIAL_MGMT
+        elif "credentialMgmtPreview" in self.info.options:
+            cmd = CTAP2.CMD.CREDENTIAL_MGMT_PRE
+        else:
+            raise ValueError(
+                "Credential Management not supported by this Authenticator"
+            )
         return self.send_cbor(
-            CTAP2.CMD.CREDENTIAL_MGMT,
-            args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
+            cmd, args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
         )
 
     def bio_enrollment(
@@ -867,8 +885,14 @@ class CTAP2(object):
         :param pin_uv_param: PIN/UV auth param.
         :param get_modality: Get the user verification type modality.
         """
+        if "bioEnroll" in self.info.options:
+            cmd = CTAP2.CMD.BIO_ENROLLMENT
+        elif "userVerificationMgmtPreview" in self.info.options:
+            cmd = CTAP2.CMD.BIO_ENROLLMENT_PRE
+        else:
+            raise ValueError("Bio enroll not supported by this Authenticator")
         return self.send_cbor(
-            CTAP2.CMD.BIO_ENROLLMENT,
+            cmd,
             args(
                 modality,
                 sub_cmd,
@@ -966,9 +990,11 @@ class ClientPin(object):
         GET_KEY_AGREEMENT = 0x02
         SET_PIN = 0x03
         CHANGE_PIN = 0x04
-        GET_TOKEN_USING_PIN = 0x05
+        GET_TOKEN_USING_PIN_LEGACY = 0x05
         GET_TOKEN_USING_UV = 0x06
         GET_UV_RETRIES = 0x07
+        SET_MIN_PIN_LENGTH = 0x08
+        GET_TOKEN_USING_PIN = 0x09
 
     @unique
     class RESULT(IntEnum):
@@ -978,9 +1004,19 @@ class ClientPin(object):
         POWER_CYCLE_STATE = 0x04
         UV_RETRIES = 0x05
 
+    @unique
+    class PERMISSION(IntEnum):
+        MC = 0x01
+        GA = 0x02
+        CM = 0x04
+        BE = 0x08
+        CFG = 0x10
+        ACFG = 0x20
+
     def __init__(self, ctap, protocol):
         self.ctap = ctap
         self.protocol = protocol
+        self._supports_permissions = ctap.info.options.get("pinUvAuthToken")
 
     def _get_shared_secret(self):
         resp = self.ctap.client_pin(
@@ -990,10 +1026,12 @@ class ClientPin(object):
 
         return self.protocol.encapsulate(pk)
 
-    def get_pin_token(self, pin):
+    def get_pin_token(self, pin, permissions=None, permissions_rpid=None):
         """Get a PIN/UV token from the authenticator using PIN.
 
         :param pin: The PIN of the authenticator.
+        :param permissions: The permissions to associate with the token.
+        :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
         key_agreement, shared_secret = self._get_shared_secret()
@@ -1001,11 +1039,21 @@ class ClientPin(object):
         pin_hash = sha256(pin.encode())[:16]
         pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
 
+        if self._supports_permissions:
+            cmd = ClientPin.CMD.GET_TOKEN_USING_PIN
+        else:
+            cmd = ClientPin.CMD.GET_TOKEN_USING_PIN_LEGACY
+            # Ignore permissions if not supported
+            permissions = None
+            permissions_rpid = None
+
         resp = self.ctap.client_pin(
             self.protocol.VERSION,
-            ClientPin.CMD.GET_TOKEN_USING_PIN,
+            cmd,
             key_agreement=key_agreement,
             pin_hash_enc=pin_hash_enc,
+            permissions=permissions,
+            permissions_rpid=permissions_rpid,
         )
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
         return self.protocol.decrypt(shared_secret, pin_token_enc)

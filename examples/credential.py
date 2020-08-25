@@ -38,13 +38,14 @@ from fido2.client import Fido2Client, WindowsClient
 from fido2.server import Fido2Server
 from getpass import getpass
 import sys
+import ctypes
 
 use_prompt = False
 pin = None
 uv = "discouraged"
 
-if WindowsClient.is_available():
-    # Use the Windows WebAuthn API if available
+if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
+    # Use the Windows WebAuthn API if available, and we're not running as admin
     client = WindowsClient("https://example.com")
 else:
     # Locate a device
