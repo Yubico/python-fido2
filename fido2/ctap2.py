@@ -35,14 +35,17 @@ from .utils import ByteBuffer, sha256, hmac_sha256, bytes2int, int2bytes
 from .attestation import FidoU2FAttestation
 
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from binascii import b2a_hex
 from enum import IntEnum, unique
 import struct
 import six
 import re
+import os
 
 
 def args(*params):
@@ -941,6 +944,9 @@ class PinProtocolV1(object):
     VERSION = 1
     IV = b"\x00" * 16
 
+    def kdf(self, z):
+        return sha256(z)
+
     def encapsulate(self, peer_cose_key):
         be = default_backend()
         sk = ec.generate_private_key(ec.SECP256R1(), be)
@@ -956,7 +962,7 @@ class PinProtocolV1(object):
         x = bytes2int(peer_cose_key[-2])
         y = bytes2int(peer_cose_key[-3])
         pk = ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key(be)
-        shared_secret = sha256(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
+        shared_secret = self.kdf(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
         return key_agreement, shared_secret
 
     def _get_cipher(self, secret):
@@ -975,6 +981,61 @@ class PinProtocolV1(object):
 
     def authenticate(self, key, message):
         return hmac_sha256(key, message)[:16]
+
+
+class PinProtocolV2(PinProtocolV1):
+    """Implementation of the CTAP2 PIN/UV protocol v2.
+
+    :param ctap: An instance of a CTAP2 object.
+    :cvar VERSION: The version number of the PIV/UV protocol.
+    :cvar IV: An all-zero IV used for some cryptographic operations.
+    """
+
+    VERSION = 2
+    HKDF_SALT = b"\x00" * 32
+    HKDF_INFO_HMAC = b"CTAP2 HMAC key"
+    HKDF_INFO_AES = b"CTAP2 AES key"
+
+    def kdf(self, z):
+        be = default_backend()
+        hmac_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=PinProtocolV2.HKDF_SALT,
+            info=PinProtocolV2.HKDF_INFO_HMAC,
+            backend=be,
+        ).derive(z)
+        aes_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=PinProtocolV2.HKDF_SALT,
+            info=PinProtocolV2.HKDF_INFO_AES,
+            backend=be,
+        ).derive(z)
+        return hmac_key + aes_key
+
+    def _get_cipher(self, secret, iv):
+        be = default_backend()
+        return Cipher(algorithms.AES(secret), modes.CBC(iv), be)
+
+    def encrypt(self, key, plaintext):
+        aes_key = key[32:]
+        iv = os.urandom(16)
+
+        cipher = self._get_cipher(aes_key, iv)
+        enc = cipher.encryptor()
+        return iv + enc.update(plaintext) + enc.finalize()
+
+    def decrypt(self, key, ciphertext):
+        aes_key = key[32:]
+        iv, ciphertext = ciphertext[:16], ciphertext[16:]
+        cipher = self._get_cipher(aes_key, iv)
+        dec = cipher.decryptor()
+        return dec.update(ciphertext) + dec.finalize()
+
+    def authenticate(self, key, message):
+        hmac_key = key[:32]
+        return hmac_sha256(hmac_key, message)
 
 
 class ClientPin(object):
@@ -1010,8 +1071,9 @@ class ClientPin(object):
         GA = 0x02
         CM = 0x04
         BE = 0x08
-        CFG = 0x10
+        LBW = 0x10
         ACFG = 0x20
+        SMPL = 0x40
 
     def __init__(self, ctap, protocol):
         self.ctap = ctap
@@ -1149,6 +1211,25 @@ class ClientPin(object):
             key_agreement=key_agreement,
             pin_hash_enc=pin_hash_enc,
             new_pin_enc=new_pin_enc,
+            pin_uv_param=pin_uv_param,
+        )
+
+    def set_min_pin_length(self, min_pin_len, min_pin_len_rpids):
+        """Set the minimum PIN length.
+
+        Set the minimum PIN length which is used by the Authenticator when changing or
+        setting the PIN.
+
+        :param length: The minimum length to allow for a PIN.
+        """
+
+        # TODO: Implement auth
+        pin_uv_param = None
+        self.ctap.client_pin(
+            self.protocol.VERSION,
+            ClientPin.CMD.SET_MIN_PIN_LENGTH,
+            min_pin_len=min_pin_len,
+            min_pin_len_rpids=min_pin_len_rpids,
             pin_uv_param=pin_uv_param,
         )
 
