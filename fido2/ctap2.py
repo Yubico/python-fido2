@@ -1042,8 +1042,15 @@ class ClientPin(object):
     """Implementation of the CTAP2 Client PIN API.
 
     :param ctap: An instance of a CTAP2 object.
-    :param protocol: An instance of a PinUvAuthProtocol object.
+    :param protocol: An optional instance of a PinUvAuthProtocol object. If None is
+        provided then the latest protocol supported by both library and Authenticator
+        will be used.
     """
+
+    PROTOCOLS = [
+        PinProtocolV2,
+        PinProtocolV1,
+    ]
 
     @unique
     class CMD(IntEnum):
@@ -1067,16 +1074,23 @@ class ClientPin(object):
 
     @unique
     class PERMISSION(IntEnum):
-        MC = 0x01
-        GA = 0x02
-        CM = 0x04
-        BE = 0x08
-        LBW = 0x10
-        ACFG = 0x20
-        SMPL = 0x40
+        MAKE_CREDENTIAL = 0x01
+        GET_ASSERTION = 0x02
+        CREDENTIAL_MGMT = 0x04
+        BIO_ENROLL = 0x08
+        LARGE_BLOB_WRITE = 0x10
+        AUTHENTICATOR_CFG = 0x20
+        SET_MIN_PIN_LEN = 0x40
 
-    def __init__(self, ctap, protocol):
+    def __init__(self, ctap, protocol=None):
         self.ctap = ctap
+        if protocol is None:
+            for proto in ClientPin.PROTOCOLS:
+                if proto.VERSION in ctap.info.pin_uv_protocols:
+                    protocol = proto()
+                    break
+            else:
+                raise ValueError("No compatible PIN/UV protocols supported!")
         self.protocol = protocol
         self._supports_permissions = ctap.info.options.get("pinUvAuthToken")
 
@@ -1214,17 +1228,28 @@ class ClientPin(object):
             pin_uv_param=pin_uv_param,
         )
 
-    def set_min_pin_length(self, min_pin_len, min_pin_len_rpids):
+    def set_min_pin_length(self, min_pin_len, min_pin_len_rpids, pin_uv_token=None):
         """Set the minimum PIN length.
 
         Set the minimum PIN length which is used by the Authenticator when changing or
         setting the PIN.
 
-        :param length: The minimum length to allow for a PIN.
+        :param min_pin_len: The minimum length to allow for a PIN.
+        :param min_pin_len_rpids: The list of RP IDs allowed to read this setting
+        :param pin_uv_token: (optional) A PIN/UV token with the SMPL permission.
         """
 
-        # TODO: Implement auth
-        pin_uv_param = None
+        if pin_uv_token is not None:
+            pin_uv_param = self.protocol.authenticate(
+                pin_uv_token,
+                b"\xff" * 32
+                + b"\x06\x08"
+                + struct.pack("<I", min_pin_len)
+                + cbor.encode(min_pin_len_rpids),
+            )
+        else:
+            pin_uv_param = None
+
         self.ctap.client_pin(
             self.protocol.VERSION,
             ClientPin.CMD.SET_MIN_PIN_LENGTH,

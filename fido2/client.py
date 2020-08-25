@@ -33,7 +33,6 @@ from .ctap1 import CTAP1, APDU, ApduError
 from .ctap2 import (
     CTAP2,
     ClientPin,
-    PinProtocolV1,
     AttestationObject,
     AssertionResponse,
     Info,
@@ -332,9 +331,9 @@ class Fido2Client(_BaseClient):
         try:
             self.ctap2 = CTAP2(device)
             self.info = self.ctap2.info
-            if PinProtocolV1.VERSION in self.info.pin_uv_protocols:
-                self.client_pin = ClientPin(self.ctap2, PinProtocolV1())
-            else:
+            try:
+                self.client_pin = ClientPin(self.ctap2)
+            except ValueError:
                 self.client_pin = None
             self._do_make_credential = self._ctap2_make_credential
             self._do_get_assertion = self._ctap2_get_assertion
@@ -439,7 +438,7 @@ class Fido2Client(_BaseClient):
         if pin:
             pin_protocol = self.client_pin.protocol.VERSION
             pin_token = self.client_pin.get_pin_token(
-                pin, ClientPin.PERMISSION.MC, rp["id"]
+                pin, ClientPin.PERMISSION.MAKE_CREDENTIAL, rp["id"]
             )
             pin_auth = self.client_pin.protocol.authenticate(
                 pin_token, client_data.hash
@@ -581,7 +580,7 @@ class Fido2Client(_BaseClient):
         if pin:
             pin_protocol = self.client_pin.protocol.VERSION
             pin_token = self.client_pin.get_pin_token(
-                pin, ClientPin.PERMISSION.GA, rp_id
+                pin, ClientPin.PERMISSION.GET_ASSERTION, rp_id
             )
             pin_auth = self.client_pin.protocol.authenticate(
                 pin_token, client_data.hash

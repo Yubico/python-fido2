@@ -119,6 +119,7 @@ class HmacSecretExtension(Extension):
             1: key_agreement,
             2: salt_enc,
             3: salt_auth,
+            4: self._client_pin.protocol.VERSION,
         }
 
     def get_result(self, data):
