@@ -223,8 +223,13 @@ class TestAttestationObject(unittest.TestCase):
 
 
 class TestCTAP2(unittest.TestCase):
+    def mock_ctap(self):
+        device = mock.MagicMock()
+        device.call.return_value = b"\0" + _INFO
+        return CTAP2(device)
+
     def test_send_cbor_ok(self):
-        ctap = CTAP2(mock.MagicMock())
+        ctap = self.mock_ctap()
         ctap.device.call.return_value = b"\0" + cbor.encode({1: b"response"})
 
         self.assertEqual({1: b"response"}, ctap.send_cbor(2, b"foobar"))
@@ -233,15 +238,14 @@ class TestCTAP2(unittest.TestCase):
         )
 
     def test_get_info(self):
-        ctap = CTAP2(mock.MagicMock())
-        ctap.device.call.return_value = b"\0" + _INFO
+        ctap = self.mock_ctap()
 
         info = ctap.get_info()
         ctap.device.call.assert_called_with(0x10, b"\4", mock.ANY, None)
         self.assertIsInstance(info, Info)
 
     def test_make_credential(self):
-        ctap = CTAP2(mock.MagicMock())
+        ctap = self.mock_ctap()
         ctap.device.call.return_value = b"\0" + _MC_RESP
 
         resp = ctap.make_credential(1, 2, 3, 4)
@@ -256,7 +260,7 @@ class TestCTAP2(unittest.TestCase):
         self.assertSetEqual(set(resp.att_statement.keys()), {"alg", "sig", "x5c"})
 
     def test_get_assertion(self):
-        ctap = CTAP2(mock.MagicMock())
+        ctap = self.mock_ctap()
         ctap.device.call.return_value = b"\0" + _GA_RESP
 
         resp = ctap.get_assertion(1, 2)
