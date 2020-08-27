@@ -1134,7 +1134,7 @@ class ClientPin(object):
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
         return self.protocol.decrypt(shared_secret, pin_token_enc)
 
-    def get_uv_token(self, permissions, permissions_rpid):
+    def get_uv_token(self, permissions, permissions_rpid=None):
         """Get a PIN/UV token from the authenticator using built-in UV.
 
         :param permissions: The permissions to associate with the token.
@@ -1464,6 +1464,7 @@ class FPEnrollmentContext(object):
         self._bio = bio
         self.timeout = timeout
         self.template_id = None
+        self.remaining = None
 
     def capture(self, event=None, on_keepalive=None):
         """Capture a fingerprint sample.
@@ -1476,16 +1477,16 @@ class FPEnrollmentContext(object):
             completed.
         """
         if self.template_id is None:
-            self.template_id, status, remaining = self._bio.enroll_begin(
+            self.template_id, status, self.remaining = self._bio.enroll_begin(
                 self.timeout, event, on_keepalive
             )
         else:
-            status, remaining = self._bio.enroll_capture_next(
+            status, self.remaining = self._bio.enroll_capture_next(
                 self.template_id, self.timeout, event, on_keepalive
             )
         if status != FPBioEnrollment.FEEDBACK.FP_GOOD:
             raise CaptureError(status)
-        if remaining == 0:
+        if self.remaining == 0:
             return self.template_id
         return None
 

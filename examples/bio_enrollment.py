@@ -74,6 +74,7 @@ while template_id is None:
     print("Press your fingerprint against the sensor now...")
     try:
         template_id = enroller.capture()
+        print(enroller.remaining, "more scans needed.")
     except CaptureError as e:
         print(e)
 print("Fingerprint registered successfully with ID:", template_id)
