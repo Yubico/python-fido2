@@ -35,8 +35,7 @@ class FreeBSDHidDevice(linux.LinuxHidDevice):
             desc.product_id = dev["product_id"]
             desc.product_string = dev["product_desc"]
             fd = os.open(desc.path, os.O_RDONLY)
-            linux.ParseReportDescriptor(
-                uhid_freebsd.get_report_data(fd, 3), desc)
+            linux.ParseReportDescriptor(uhid_freebsd.get_report_data(fd, 3), desc)
             os.close(fd)
             yield desc.ToPublicDict()
 
@@ -46,9 +45,10 @@ class FreeBSDHidDevice(linux.LinuxHidDevice):
         self.desc = linux.base.DeviceDescriptor()
         self.desc.path = path
         linux.ParseReportDescriptor(
-            uhid_freebsd.get_report_data(self.dev, 3), self.desc)
+            uhid_freebsd.get_report_data(self.dev, 3), self.desc
+        )
 
     def Write(self, packet):
         """See base class."""
-        out = bytes(bytearray([0]*64 + packet))  # 64 zero bytes (report ID)
+        out = bytes(bytearray([0] * 64 + packet))  # 64 zero bytes (report ID)
         os.write(self.dev, out)

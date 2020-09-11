@@ -24,39 +24,43 @@ import sys
 
 
 class hid(object):
-  @staticmethod
-  def Enumerate():
-    return InternalPlatformSwitch('Enumerate')
+    @staticmethod
+    def Enumerate():
+        return InternalPlatformSwitch("Enumerate")
 
-
-  @staticmethod
-  def Open(path):
-    return InternalPlatformSwitch('__init__', path)
+    @staticmethod
+    def Open(path):
+        return InternalPlatformSwitch("__init__", path)
 
 
 def InternalPlatformSwitch(funcname, *args, **kwargs):
-  """Determine, on a platform-specific basis, which module to use."""
-  # pylint: disable=g-import-not-at-top
-  clz = None
-  if sys.platform.startswith('linux'):
-    from . import linux
-    clz = linux.LinuxHidDevice
-  elif sys.platform.startswith('win32'):
-    from . import windows
-    clz = windows.WindowsHidDevice
-  elif sys.platform.startswith('darwin'):
-    from . import macos
-    clz = macos.MacOsHidDevice
-  elif sys.platform.startswith('freebsd'):
-    from . import freebsd
-    clz = freebsd.FreeBSDHidDevice
-  elif sys.platform.startswith('openbsd'):
-    from . import openbsd
-    clz = openbsd.OpenBSDHidDevice
+    """Determine, on a platform-specific basis, which module to use."""
+    # pylint: disable=g-import-not-at-top
+    clz = None
+    if sys.platform.startswith("linux"):
+        from . import linux
 
-  if not clz:
-    raise Exception('Unsupported platform: ' + sys.platform)
+        clz = linux.LinuxHidDevice
+    elif sys.platform.startswith("win32"):
+        from . import windows
 
-  if funcname == '__init__':
-    return clz(*args, **kwargs)
-  return getattr(clz, funcname)(*args, **kwargs)
+        clz = windows.WindowsHidDevice
+    elif sys.platform.startswith("darwin"):
+        from . import macos
+
+        clz = macos.MacOsHidDevice
+    elif sys.platform.startswith("freebsd"):
+        from . import freebsd
+
+        clz = freebsd.FreeBSDHidDevice
+    elif sys.platform.startswith("openbsd"):
+        from . import openbsd
+
+        clz = openbsd.OpenBSDHidDevice
+
+    if not clz:
+        raise Exception("Unsupported platform: " + sys.platform)
+
+    if funcname == "__init__":
+        return clz(*args, **kwargs)
+    return getattr(clz, funcname)(*args, **kwargs)

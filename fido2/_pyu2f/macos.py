@@ -25,48 +25,48 @@ import threading
 
 from . import base
 
-logger = logging.getLogger('_pyu2f.macos')
+logger = logging.getLogger("_pyu2f.macos")
 
 # Constants
 DEVICE_STRING_PROPERTY_BUFFER_SIZE = 512
 
-HID_DEVICE_PROPERTY_VENDOR_ID = b'VendorID'
-HID_DEVICE_PROPERTY_PRODUCT_ID = b'ProductID'
-HID_DEVICE_PROPERTY_PRODUCT = b'Product'
-HID_DEVICE_PROPERTY_PRIMARY_USAGE = b'PrimaryUsage'
-HID_DEVICE_PROPERTY_PRIMARY_USAGE_PAGE = b'PrimaryUsagePage'
-HID_DEVICE_PROPERTY_MAX_INPUT_REPORT_SIZE = b'MaxInputReportSize'
-HID_DEVICE_PROPERTY_MAX_OUTPUT_REPORT_SIZE = b'MaxOutputReportSize'
-HID_DEVICE_PROPERTY_REPORT_ID = b'ReportID'
+HID_DEVICE_PROPERTY_VENDOR_ID = b"VendorID"
+HID_DEVICE_PROPERTY_PRODUCT_ID = b"ProductID"
+HID_DEVICE_PROPERTY_PRODUCT = b"Product"
+HID_DEVICE_PROPERTY_PRIMARY_USAGE = b"PrimaryUsage"
+HID_DEVICE_PROPERTY_PRIMARY_USAGE_PAGE = b"PrimaryUsagePage"
+HID_DEVICE_PROPERTY_MAX_INPUT_REPORT_SIZE = b"MaxInputReportSize"
+HID_DEVICE_PROPERTY_MAX_OUTPUT_REPORT_SIZE = b"MaxOutputReportSize"
+HID_DEVICE_PROPERTY_REPORT_ID = b"ReportID"
 
 
 # Declare C types
 class _CFType(ctypes.Structure):
-  pass
+    pass
 
 
 class _CFString(_CFType):
-  pass
+    pass
 
 
 class _CFSet(_CFType):
-  pass
+    pass
 
 
 class _IOHIDManager(_CFType):
-  pass
+    pass
 
 
 class _IOHIDDevice(_CFType):
-  pass
+    pass
 
 
 class _CFRunLoop(_CFType):
-  pass
+    pass
 
 
 class _CFAllocator(_CFType):
-  pass
+    pass
 
 
 # Linter isn't consistent about valid class names. Disabling some of the errors
@@ -91,13 +91,17 @@ IO_REGISTRY_ENTRY_T = IO_OBJECT_T
 IO_HID_MANAGER_REF = ctypes.POINTER(_IOHIDManager)
 IO_HID_DEVICE_REF = ctypes.POINTER(_IOHIDDevice)
 
-IO_HID_REPORT_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
-                                          ctypes.c_void_p, IO_HID_REPORT_TYPE,
-                                          ctypes.c_uint32,
-                                          ctypes.POINTER(ctypes.c_uint8),
-                                          CF_INDEX)
-IO_HID_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN,
-                                   ctypes.c_void_p)
+IO_HID_REPORT_CALLBACK = ctypes.CFUNCTYPE(
+    None,
+    ctypes.py_object,
+    IO_RETURN,
+    ctypes.c_void_p,
+    IO_HID_REPORT_TYPE,
+    ctypes.c_uint32,
+    ctypes.POINTER(ctypes.c_uint8),
+    CF_INDEX,
+)
+IO_HID_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.py_object, IO_RETURN, ctypes.c_void_p)
 
 # Define C constants
 K_CF_NUMBER_SINT32_TYPE = 3
@@ -117,82 +121,102 @@ cf = None
 
 # Only use iokit and cf if we're on macos, this way we can still run tests
 # on other platforms if we properly mock
-if sys.platform.startswith('darwin'):
-  # Load relevant libraries
-  iokit = ctypes.cdll.LoadLibrary(ctypes.util.find_library('IOKit'))
-  cf = ctypes.cdll.LoadLibrary(ctypes.util.find_library('CoreFoundation'))
+if sys.platform.startswith("darwin"):
+    # Load relevant libraries
+    iokit = ctypes.cdll.LoadLibrary(ctypes.util.find_library("IOKit"))
+    cf = ctypes.cdll.LoadLibrary(ctypes.util.find_library("CoreFoundation"))
 
-  # Exported constants
-  K_CF_RUNLOOP_DEFAULT_MODE = CF_STRING_REF.in_dll(cf, 'kCFRunLoopDefaultMode')
+    # Exported constants
+    K_CF_RUNLOOP_DEFAULT_MODE = CF_STRING_REF.in_dll(cf, "kCFRunLoopDefaultMode")
 
-  # Declare C function prototypes
-  cf.CFSetGetValues.restype = None
-  cf.CFSetGetValues.argtypes = [CF_SET_REF, ctypes.POINTER(ctypes.c_void_p)]
-  cf.CFStringCreateWithCString.restype = CF_STRING_REF
-  cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
-                                           ctypes.c_uint32]
-  cf.CFStringGetCString.restype = ctypes.c_int
-  cf.CFStringGetCString.argtypes = [CF_STRING_REF, ctypes.c_char_p, CF_INDEX,
-                                    ctypes.c_uint32]
-  cf.CFStringGetLength.restype = CF_INDEX
-  cf.CFStringGetLength.argtypes = [CF_STRING_REF]
-  cf.CFGetTypeID.restype = CF_TYPE_ID
-  cf.CFGetTypeID.argtypes = [CF_TYPE_REF]
-  cf.CFNumberGetTypeID.restype = CF_TYPE_ID
-  cf.CFNumberGetValue.restype = ctypes.c_int
-  cf.CFRelease.restype = None
-  cf.CFRelease.argtypes = [CF_TYPE_REF]
-  cf.CFRunLoopGetCurrent.restype = CF_RUN_LOOP_REF
-  cf.CFRunLoopGetCurrent.argTypes = []
-  cf.CFRunLoopRunInMode.restype = CF_RUN_LOOP_RUN_RESULT
-  cf.CFRunLoopRunInMode.argtypes = [CF_STRING_REF, CF_TIME_INTERVAL,
-                                    ctypes.c_bool]
+    # Declare C function prototypes
+    cf.CFSetGetValues.restype = None
+    cf.CFSetGetValues.argtypes = [CF_SET_REF, ctypes.POINTER(ctypes.c_void_p)]
+    cf.CFStringCreateWithCString.restype = CF_STRING_REF
+    cf.CFStringCreateWithCString.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_char_p,
+        ctypes.c_uint32,
+    ]
+    cf.CFStringGetCString.restype = ctypes.c_int
+    cf.CFStringGetCString.argtypes = [
+        CF_STRING_REF,
+        ctypes.c_char_p,
+        CF_INDEX,
+        ctypes.c_uint32,
+    ]
+    cf.CFStringGetLength.restype = CF_INDEX
+    cf.CFStringGetLength.argtypes = [CF_STRING_REF]
+    cf.CFGetTypeID.restype = CF_TYPE_ID
+    cf.CFGetTypeID.argtypes = [CF_TYPE_REF]
+    cf.CFNumberGetTypeID.restype = CF_TYPE_ID
+    cf.CFNumberGetValue.restype = ctypes.c_int
+    cf.CFRelease.restype = None
+    cf.CFRelease.argtypes = [CF_TYPE_REF]
+    cf.CFRunLoopGetCurrent.restype = CF_RUN_LOOP_REF
+    cf.CFRunLoopGetCurrent.argTypes = []
+    cf.CFRunLoopRunInMode.restype = CF_RUN_LOOP_RUN_RESULT
+    cf.CFRunLoopRunInMode.argtypes = [CF_STRING_REF, CF_TIME_INTERVAL, ctypes.c_bool]
 
-  iokit.IOObjectRelease.argtypes = [IO_OBJECT_T]
-  iokit.IOHIDManagerCreate.restype = IO_HID_MANAGER_REF
-  iokit.IOHIDManagerCopyDevices.restype = CF_SET_REF
-  iokit.IOHIDManagerCopyDevices.argtypes = [IO_HID_MANAGER_REF]
-  iokit.IOHIDManagerSetDeviceMatching.restype = None
-  iokit.IOHIDManagerSetDeviceMatching.argtypes = [IO_HID_MANAGER_REF,
-                                                  CF_TYPE_REF]
-  iokit.IOHIDDeviceGetProperty.restype = CF_TYPE_REF
-  iokit.IOHIDDeviceGetProperty.argtypes = [IO_HID_DEVICE_REF, CF_STRING_REF]
-  iokit.IOHIDDeviceRegisterRemovalCallback.restype = None
-  iokit.IOHIDDeviceRegisterRemovalCallback.argtypes = [
-      IO_HID_DEVICE_REF, IO_HID_CALLBACK, ctypes.py_object]
-  iokit.IOHIDDeviceRegisterInputReportCallback.restype = None
-  iokit.IOHIDDeviceRegisterInputReportCallback.argtypes = [
-      IO_HID_DEVICE_REF, ctypes.POINTER(ctypes.c_uint8), CF_INDEX,
-      IO_HID_REPORT_CALLBACK, ctypes.py_object]
-  iokit.IORegistryEntryIDMatching.restype = CF_MUTABLE_DICTIONARY_REF
-  iokit.IORegistryEntryIDMatching.argtypes = [ctypes.c_uint64]
-  iokit.IORegistryEntryGetRegistryEntryID.argtypes = [IO_REGISTRY_ENTRY_T,
-                                                      ctypes.POINTER(ctypes.c_uint64)]
-  iokit.IOHIDDeviceCreate.restype = IO_HID_DEVICE_REF
-  iokit.IOHIDDeviceCreate.argtypes = [CF_ALLOCATOR_REF, IO_SERVICE_T]
-  iokit.IOHIDDeviceScheduleWithRunLoop.restype = None
-  iokit.IOHIDDeviceScheduleWithRunLoop.argtypes = [IO_HID_DEVICE_REF,
-                                                   CF_RUN_LOOP_REF,
-                                                   CF_STRING_REF]
-  iokit.IOHIDDeviceUnscheduleFromRunLoop.restype = None
-  iokit.IOHIDDeviceUnscheduleFromRunLoop.argtypes = [IO_HID_DEVICE_REF,
-                                                     CF_RUN_LOOP_REF,
-                                                     CF_STRING_REF]
-  iokit.IOHIDDeviceSetReport.restype = IO_RETURN
-  iokit.IOHIDDeviceSetReport.argtypes = [IO_HID_DEVICE_REF, IO_HID_REPORT_TYPE,
-                                         CF_INDEX,
-                                         ctypes.POINTER(ctypes.c_uint8),
-                                         CF_INDEX]
+    iokit.IOObjectRelease.argtypes = [IO_OBJECT_T]
+    iokit.IOHIDManagerCreate.restype = IO_HID_MANAGER_REF
+    iokit.IOHIDManagerCopyDevices.restype = CF_SET_REF
+    iokit.IOHIDManagerCopyDevices.argtypes = [IO_HID_MANAGER_REF]
+    iokit.IOHIDManagerSetDeviceMatching.restype = None
+    iokit.IOHIDManagerSetDeviceMatching.argtypes = [IO_HID_MANAGER_REF, CF_TYPE_REF]
+    iokit.IOHIDDeviceGetProperty.restype = CF_TYPE_REF
+    iokit.IOHIDDeviceGetProperty.argtypes = [IO_HID_DEVICE_REF, CF_STRING_REF]
+    iokit.IOHIDDeviceRegisterRemovalCallback.restype = None
+    iokit.IOHIDDeviceRegisterRemovalCallback.argtypes = [
+        IO_HID_DEVICE_REF,
+        IO_HID_CALLBACK,
+        ctypes.py_object,
+    ]
+    iokit.IOHIDDeviceRegisterInputReportCallback.restype = None
+    iokit.IOHIDDeviceRegisterInputReportCallback.argtypes = [
+        IO_HID_DEVICE_REF,
+        ctypes.POINTER(ctypes.c_uint8),
+        CF_INDEX,
+        IO_HID_REPORT_CALLBACK,
+        ctypes.py_object,
+    ]
+    iokit.IORegistryEntryIDMatching.restype = CF_MUTABLE_DICTIONARY_REF
+    iokit.IORegistryEntryIDMatching.argtypes = [ctypes.c_uint64]
+    iokit.IORegistryEntryGetRegistryEntryID.argtypes = [
+        IO_REGISTRY_ENTRY_T,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    iokit.IOHIDDeviceCreate.restype = IO_HID_DEVICE_REF
+    iokit.IOHIDDeviceCreate.argtypes = [CF_ALLOCATOR_REF, IO_SERVICE_T]
+    iokit.IOHIDDeviceScheduleWithRunLoop.restype = None
+    iokit.IOHIDDeviceScheduleWithRunLoop.argtypes = [
+        IO_HID_DEVICE_REF,
+        CF_RUN_LOOP_REF,
+        CF_STRING_REF,
+    ]
+    iokit.IOHIDDeviceUnscheduleFromRunLoop.restype = None
+    iokit.IOHIDDeviceUnscheduleFromRunLoop.argtypes = [
+        IO_HID_DEVICE_REF,
+        CF_RUN_LOOP_REF,
+        CF_STRING_REF,
+    ]
+    iokit.IOHIDDeviceSetReport.restype = IO_RETURN
+    iokit.IOHIDDeviceSetReport.argtypes = [
+        IO_HID_DEVICE_REF,
+        IO_HID_REPORT_TYPE,
+        CF_INDEX,
+        ctypes.POINTER(ctypes.c_uint8),
+        CF_INDEX,
+    ]
 
-  iokit.IOServiceGetMatchingService.restype = IO_SERVICE_T
-  iokit.IOServiceGetMatchingService.argtypes = [MACH_PORT_T,
-                                                CF_DICTIONARY_REF]
+    iokit.IOServiceGetMatchingService.restype = IO_SERVICE_T
+    iokit.IOServiceGetMatchingService.argtypes = [MACH_PORT_T, CF_DICTIONARY_REF]
 else:
-  logger.warn('Not running on MacOS')
+    logger.warn("Not running on MacOS")
 
 
 def CFStr(s):
-  """Builds a CFString from a python string.
+    """Builds a CFString from a python string.
 
   Args:
     s: source string
@@ -202,54 +226,52 @@ def CFStr(s):
 
   Resulting CFString must be CFReleased when no longer needed.
   """
-  return cf.CFStringCreateWithCString(None, s, 0)
+    return cf.CFStringCreateWithCString(None, s, 0)
 
 
 def GetDeviceIntProperty(dev_ref, key):
-  """Reads int property from the HID device."""
-  cf_key = CFStr(key)
-  type_ref = iokit.IOHIDDeviceGetProperty(dev_ref, cf_key)
-  cf.CFRelease(cf_key)
-  if not type_ref:
-    return None
+    """Reads int property from the HID device."""
+    cf_key = CFStr(key)
+    type_ref = iokit.IOHIDDeviceGetProperty(dev_ref, cf_key)
+    cf.CFRelease(cf_key)
+    if not type_ref:
+        return None
 
-  if cf.CFGetTypeID(type_ref) != cf.CFNumberGetTypeID():
-    raise OSError('Expected number type, got {}'.format(
-        cf.CFGetTypeID(type_ref)))
+    if cf.CFGetTypeID(type_ref) != cf.CFNumberGetTypeID():
+        raise OSError("Expected number type, got {}".format(cf.CFGetTypeID(type_ref)))
 
-  out = ctypes.c_int32()
-  ret = cf.CFNumberGetValue(type_ref, K_CF_NUMBER_SINT32_TYPE,
-                            ctypes.byref(out))
-  if not ret:
-    return None
+    out = ctypes.c_int32()
+    ret = cf.CFNumberGetValue(type_ref, K_CF_NUMBER_SINT32_TYPE, ctypes.byref(out))
+    if not ret:
+        return None
 
-  return out.value
+    return out.value
 
 
 def GetDeviceStringProperty(dev_ref, key):
-  """Reads string property from the HID device."""
-  cf_key = CFStr(key)
-  type_ref = iokit.IOHIDDeviceGetProperty(dev_ref, cf_key)
-  cf.CFRelease(cf_key)
-  if not type_ref:
-    return None
+    """Reads string property from the HID device."""
+    cf_key = CFStr(key)
+    type_ref = iokit.IOHIDDeviceGetProperty(dev_ref, cf_key)
+    cf.CFRelease(cf_key)
+    if not type_ref:
+        return None
 
-  if cf.CFGetTypeID(type_ref) != cf.CFStringGetTypeID():
-    raise OSError('Expected string type, got {}'.format(
-        cf.CFGetTypeID(type_ref)))
+    if cf.CFGetTypeID(type_ref) != cf.CFStringGetTypeID():
+        raise OSError("Expected string type, got {}".format(cf.CFGetTypeID(type_ref)))
 
-  type_ref = ctypes.cast(type_ref, CF_STRING_REF)
-  out = ctypes.create_string_buffer(DEVICE_STRING_PROPERTY_BUFFER_SIZE)
-  ret = cf.CFStringGetCString(type_ref, out, DEVICE_STRING_PROPERTY_BUFFER_SIZE,
-                              K_CF_STRING_ENCODING_UTF8)
-  if not ret:
-    return None
+    type_ref = ctypes.cast(type_ref, CF_STRING_REF)
+    out = ctypes.create_string_buffer(DEVICE_STRING_PROPERTY_BUFFER_SIZE)
+    ret = cf.CFStringGetCString(
+        type_ref, out, DEVICE_STRING_PROPERTY_BUFFER_SIZE, K_CF_STRING_ENCODING_UTF8
+    )
+    if not ret:
+        return None
 
-  return out.value.decode('utf8')
+    return out.value.decode("utf8")
 
 
 def GetDeviceEntryIdString(device_handle):
-  """Obtains the unique IORegistry entry ID for the device.
+    """Obtains the unique IORegistry entry ID for the device.
 
   Args:
     device_handle: reference to the device
@@ -258,24 +280,27 @@ def GetDeviceEntryIdString(device_handle):
     A unique ID for the device, obtained from the IO Registry
     and converted to a string.
   """
-  # Obtain device entry ID from IO Registry
-  io_service_obj = iokit.IOHIDDeviceGetService(device_handle)
-  entry_id = ctypes.c_uint64()
-  result = iokit.IORegistryEntryGetRegistryEntryID(io_service_obj,
-                                                   ctypes.byref(entry_id))
-  if result != K_IO_RETURN_SUCCESS:
-    raise OSError("Failed to obtain IORegistry entry ID")
+    # Obtain device entry ID from IO Registry
+    io_service_obj = iokit.IOHIDDeviceGetService(device_handle)
+    entry_id = ctypes.c_uint64()
+    result = iokit.IORegistryEntryGetRegistryEntryID(
+        io_service_obj, ctypes.byref(entry_id)
+    )
+    if result != K_IO_RETURN_SUCCESS:
+        raise OSError("Failed to obtain IORegistry entry ID")
 
-  return str(entry_id.value)
+    return str(entry_id.value)
 
 
-def HidReadCallback(read_queue, result, sender, report_type, report_id, report,
-                    report_length):
-  """Handles incoming IN report from HID device."""
-  del result, sender, report_type, report_id  # Unused by the callback function
+def HidReadCallback(
+    read_queue, result, sender, report_type, report_id, report, report_length
+):
+    """Handles incoming IN report from HID device."""
+    del result, sender, report_type, report_id  # Unused by the callback function
 
-  incoming_bytes = [report[i] for i in range(report_length)]
-  read_queue.put(incoming_bytes)
+    incoming_bytes = [report[i] for i in range(report_length)]
+    read_queue.put(incoming_bytes)
+
 
 # C wrapper around ReadCallback()
 # Declared in this scope so it doesn't get GC-ed
@@ -283,15 +308,15 @@ REGISTERED_READ_CALLBACK = IO_HID_REPORT_CALLBACK(HidReadCallback)
 
 
 def HidRemovalCallback(hid_device, result, sender):
-  del result, sender
-  cf.CFRunLoopStop(hid_device.run_loop_ref)
+    del result, sender
+    cf.CFRunLoopStop(hid_device.run_loop_ref)
 
 
 REMOVAL_CALLBACK = IO_HID_CALLBACK(HidRemovalCallback)
 
 
 def DeviceReadThread(hid_device):
-  """Binds a device to the thread's run loop, then starts the run loop.
+    """Binds a device to the thread's run loop, then starts the run loop.
 
   Args:
     hid_device: The MacOsHidDevice object
@@ -300,178 +325,182 @@ def DeviceReadThread(hid_device):
   function serves that purpose.
   """
 
-  # Schedule device events with run loop
-  hid_device.run_loop_ref = cf.CFRunLoopGetCurrent()
-  if not hid_device.run_loop_ref:
-    logger.error('Failed to get current run loop')
-    return
+    # Schedule device events with run loop
+    hid_device.run_loop_ref = cf.CFRunLoopGetCurrent()
+    if not hid_device.run_loop_ref:
+        logger.error("Failed to get current run loop")
+        return
 
-  iokit.IOHIDDeviceScheduleWithRunLoop(hid_device.device_handle,
-                                       hid_device.run_loop_ref,
-                                       K_CF_RUNLOOP_DEFAULT_MODE)
+    iokit.IOHIDDeviceScheduleWithRunLoop(
+        hid_device.device_handle, hid_device.run_loop_ref, K_CF_RUNLOOP_DEFAULT_MODE
+    )
 
-  iokit.IOHIDDeviceRegisterRemovalCallback(
-      hid_device.device_handle, REMOVAL_CALLBACK,
-      ctypes.py_object(hid_device))
+    iokit.IOHIDDeviceRegisterRemovalCallback(
+        hid_device.device_handle, REMOVAL_CALLBACK, ctypes.py_object(hid_device)
+    )
 
-  # Run the run loop
-  run_loop_run_result = cf.CFRunLoopRunInMode(
-    K_CF_RUNLOOP_DEFAULT_MODE,
-    4,  # Timeout in seconds
-    True)  # Return after source handled
+    # Run the run loop
+    run_loop_run_result = cf.CFRunLoopRunInMode(
+        K_CF_RUNLOOP_DEFAULT_MODE, 4, True  # Timeout in seconds
+    )  # Return after source handled
 
-  # log any unexpected run loop exit
-  if run_loop_run_result != K_CF_RUN_LOOP_RUN_HANDLED_SOURCE:
-    logger.error('Unexpected run loop exit code: %d', run_loop_run_result)
+    # log any unexpected run loop exit
+    if run_loop_run_result != K_CF_RUN_LOOP_RUN_HANDLED_SOURCE:
+        logger.error("Unexpected run loop exit code: %d", run_loop_run_result)
 
-  # Unschedule from run loop
-  iokit.IOHIDDeviceUnscheduleFromRunLoop(hid_device.device_handle,
-                                         hid_device.run_loop_ref,
-                                         K_CF_RUNLOOP_DEFAULT_MODE)
+    # Unschedule from run loop
+    iokit.IOHIDDeviceUnscheduleFromRunLoop(
+        hid_device.device_handle, hid_device.run_loop_ref, K_CF_RUNLOOP_DEFAULT_MODE
+    )
 
 
 class MacOsHidDevice(base.HidDevice):
-  """Implementation of HID device for MacOS.
+    """Implementation of HID device for MacOS.
 
   Uses IOKit HID Manager to interact with the device.
   """
 
-  @staticmethod
-  def Enumerate():
-    """See base class."""
-    # Init a HID manager
-    hid_mgr = iokit.IOHIDManagerCreate(None, None)
-    if not hid_mgr:
-      raise OSError('Unable to obtain HID manager reference')
-    iokit.IOHIDManagerSetDeviceMatching(hid_mgr, None)
+    @staticmethod
+    def Enumerate():
+        """See base class."""
+        # Init a HID manager
+        hid_mgr = iokit.IOHIDManagerCreate(None, None)
+        if not hid_mgr:
+            raise OSError("Unable to obtain HID manager reference")
+        iokit.IOHIDManagerSetDeviceMatching(hid_mgr, None)
 
-    # Get devices from HID manager
-    device_set_ref = iokit.IOHIDManagerCopyDevices(hid_mgr)
-    if not device_set_ref:
-      raise OSError('Failed to obtain devices from HID manager')
+        # Get devices from HID manager
+        device_set_ref = iokit.IOHIDManagerCopyDevices(hid_mgr)
+        if not device_set_ref:
+            raise OSError("Failed to obtain devices from HID manager")
 
-    num = iokit.CFSetGetCount(device_set_ref)
-    devices = (IO_HID_DEVICE_REF * num)()
-    iokit.CFSetGetValues(device_set_ref, devices)
+        num = iokit.CFSetGetCount(device_set_ref)
+        devices = (IO_HID_DEVICE_REF * num)()
+        iokit.CFSetGetValues(device_set_ref, devices)
 
-    # Retrieve and build descriptor dictionaries for each device
-    descriptors = []
-    for dev in devices:
-      d = base.DeviceDescriptor()
-      d.vendor_id = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_VENDOR_ID)
-      d.product_id = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_PRODUCT_ID)
-      d.product_string = GetDeviceStringProperty(dev,
-                                                 HID_DEVICE_PROPERTY_PRODUCT)
-      d.usage = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_PRIMARY_USAGE)
-      d.usage_page = GetDeviceIntProperty(
-          dev, HID_DEVICE_PROPERTY_PRIMARY_USAGE_PAGE)
-      d.report_id = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_REPORT_ID)
-      d.path = GetDeviceEntryIdString(dev)
-      descriptors.append(d.ToPublicDict())
+        # Retrieve and build descriptor dictionaries for each device
+        descriptors = []
+        for dev in devices:
+            d = base.DeviceDescriptor()
+            d.vendor_id = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_VENDOR_ID)
+            d.product_id = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_PRODUCT_ID)
+            d.product_string = GetDeviceStringProperty(dev, HID_DEVICE_PROPERTY_PRODUCT)
+            d.usage = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_PRIMARY_USAGE)
+            d.usage_page = GetDeviceIntProperty(
+                dev, HID_DEVICE_PROPERTY_PRIMARY_USAGE_PAGE
+            )
+            d.report_id = GetDeviceIntProperty(dev, HID_DEVICE_PROPERTY_REPORT_ID)
+            d.path = GetDeviceEntryIdString(dev)
+            descriptors.append(d.ToPublicDict())
 
-    # Clean up CF objects
-    cf.CFRelease(device_set_ref)
-    cf.CFRelease(hid_mgr)
+        # Clean up CF objects
+        cf.CFRelease(device_set_ref)
+        cf.CFRelease(hid_mgr)
 
-    return descriptors
+        return descriptors
 
-  def __init__(self, path):
-    # Resolve the path to device handle
-    entry_id = ctypes.c_uint64(int(path))
-    matching_dict = iokit.IORegistryEntryIDMatching(entry_id)
-    device_entry = iokit.IOServiceGetMatchingService(K_IO_MASTER_PORT_DEFAULT,
-                                                     matching_dict)
-    if not device_entry:
-      raise OSError('Device path {} does not match any HID device on '
-                    'the system'.format(path))
+    def __init__(self, path):
+        # Resolve the path to device handle
+        entry_id = ctypes.c_uint64(int(path))
+        matching_dict = iokit.IORegistryEntryIDMatching(entry_id)
+        device_entry = iokit.IOServiceGetMatchingService(
+            K_IO_MASTER_PORT_DEFAULT, matching_dict
+        )
+        if not device_entry:
+            raise OSError(
+                "Device path {} does not match any HID device on "
+                "the system".format(path)
+            )
 
-    self.device_handle = iokit.IOHIDDeviceCreate(K_CF_ALLOCATOR_DEFAULT,
-                                                 device_entry)
-    if not self.device_handle:
-      raise OSError('Failed to obtain device handle from registry '
-                              'entry')
-    iokit.IOObjectRelease(device_entry)
+        self.device_handle = iokit.IOHIDDeviceCreate(
+            K_CF_ALLOCATOR_DEFAULT, device_entry
+        )
+        if not self.device_handle:
+            raise OSError("Failed to obtain device handle from registry " "entry")
+        iokit.IOObjectRelease(device_entry)
 
-    self.device_path = path
+        self.device_path = path
 
-    # Open device
-    result = iokit.IOHIDDeviceOpen(self.device_handle, 0)
-    if result != K_IO_RETURN_SUCCESS:
-      raise OSError('Failed to open device for communication: {}'
-                              .format(result))
+        # Open device
+        result = iokit.IOHIDDeviceOpen(self.device_handle, 0)
+        if result != K_IO_RETURN_SUCCESS:
+            raise OSError("Failed to open device for communication: {}".format(result))
 
-    # Create read queue
-    self.read_queue = Queue()
+        # Create read queue
+        self.read_queue = Queue()
 
-    # Create and start read thread
-    self.run_loop_ref = None
+        # Create and start read thread
+        self.run_loop_ref = None
 
-    # Read max report sizes for in/out
-    self.internal_max_in_report_len = GetDeviceIntProperty(
-        self.device_handle,
-        HID_DEVICE_PROPERTY_MAX_INPUT_REPORT_SIZE)
-    if not self.internal_max_in_report_len:
-      raise OSError('Unable to obtain max in report size')
+        # Read max report sizes for in/out
+        self.internal_max_in_report_len = GetDeviceIntProperty(
+            self.device_handle, HID_DEVICE_PROPERTY_MAX_INPUT_REPORT_SIZE
+        )
+        if not self.internal_max_in_report_len:
+            raise OSError("Unable to obtain max in report size")
 
-    self.internal_max_out_report_len = GetDeviceIntProperty(
-        self.device_handle,
-        HID_DEVICE_PROPERTY_MAX_OUTPUT_REPORT_SIZE)
-    if not self.internal_max_out_report_len:
-      raise OSError('Unable to obtain max out report size')
+        self.internal_max_out_report_len = GetDeviceIntProperty(
+            self.device_handle, HID_DEVICE_PROPERTY_MAX_OUTPUT_REPORT_SIZE
+        )
+        if not self.internal_max_out_report_len:
+            raise OSError("Unable to obtain max out report size")
 
-    # Register read callback
-    self.in_report_buffer = (ctypes.c_uint8 * self.internal_max_in_report_len)()
-    iokit.IOHIDDeviceRegisterInputReportCallback(
-        self.device_handle,
-        self.in_report_buffer,
-        self.internal_max_in_report_len,
-        REGISTERED_READ_CALLBACK,
-        ctypes.py_object(self.read_queue))
+        # Register read callback
+        self.in_report_buffer = (ctypes.c_uint8 * self.internal_max_in_report_len)()
+        iokit.IOHIDDeviceRegisterInputReportCallback(
+            self.device_handle,
+            self.in_report_buffer,
+            self.internal_max_in_report_len,
+            REGISTERED_READ_CALLBACK,
+            ctypes.py_object(self.read_queue),
+        )
 
-  def GetInReportDataLength(self):
-    """See base class."""
-    return self.internal_max_in_report_len
+    def GetInReportDataLength(self):
+        """See base class."""
+        return self.internal_max_in_report_len
 
-  def GetOutReportDataLength(self):
-    """See base class."""
-    return self.internal_max_out_report_len
+    def GetOutReportDataLength(self):
+        """See base class."""
+        return self.internal_max_out_report_len
 
-  def Write(self, packet):
-    """See base class."""
-    report_id = 0
-    out_report_buffer = (ctypes.c_uint8 * self.internal_max_out_report_len)()
-    out_report_buffer[:] = packet[:]
+    def Write(self, packet):
+        """See base class."""
+        report_id = 0
+        out_report_buffer = (ctypes.c_uint8 * self.internal_max_out_report_len)()
+        out_report_buffer[:] = packet[:]
 
-    result = iokit.IOHIDDeviceSetReport(self.device_handle,
-                                        K_IO_HID_REPORT_TYPE_OUTPUT,
-                                        report_id,
-                                        out_report_buffer,
-                                        self.internal_max_out_report_len)
+        result = iokit.IOHIDDeviceSetReport(
+            self.device_handle,
+            K_IO_HID_REPORT_TYPE_OUTPUT,
+            report_id,
+            out_report_buffer,
+            self.internal_max_out_report_len,
+        )
 
-    # Non-zero status indicates failure
-    if result != K_IO_RETURN_SUCCESS:
-      raise OSError('Failed to write report to device')
+        # Non-zero status indicates failure
+        if result != K_IO_RETURN_SUCCESS:
+            raise OSError("Failed to write report to device")
 
-  def Read(self):
-    """See base class."""
-    read_thread = threading.Thread(target=DeviceReadThread,
-                                   args=(self,))
-    read_thread.start()
-    read_thread.join()
-    try:
-        return self.read_queue.get(False)
-    except Empty:
-        raise OSError('Failed reading a response')
+    def Read(self):
+        """See base class."""
+        read_thread = threading.Thread(target=DeviceReadThread, args=(self,))
+        read_thread.start()
+        read_thread.join()
+        try:
+            return self.read_queue.get(False)
+        except Empty:
+            raise OSError("Failed reading a response")
 
-  def __del__(self):
-    if not hasattr(self, 'device_handle'):
-      logger.warn('Destroying MacOsHidDevice that has no device handle')
-      return
+    def __del__(self):
+        if not hasattr(self, "device_handle"):
+            logger.warn("Destroying MacOsHidDevice that has no device handle")
+            return
 
-    # Unregister the callback
-    iokit.IOHIDDeviceRegisterInputReportCallback(
-        self.device_handle,
-        self.in_report_buffer,
-        self.internal_max_in_report_len,
-        ctypes.cast(0, IO_HID_REPORT_CALLBACK),
-        None)
+        # Unregister the callback
+        iokit.IOHIDDeviceRegisterInputReportCallback(
+            self.device_handle,
+            self.in_report_buffer,
+            self.internal_max_in_report_len,
+            ctypes.cast(0, IO_HID_REPORT_CALLBACK),
+            None,
+        )

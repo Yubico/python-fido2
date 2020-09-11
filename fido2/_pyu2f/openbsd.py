@@ -70,8 +70,9 @@ def BaseDesc():
     desc.internal_max_in_report_len = MAX_U2F_HIDLEN
     desc.internal_max_out_report_len = MAX_U2F_HIDLEN
     desc.usage = 0x1
-    desc.usage_page = 0xf1d0
+    desc.usage_page = 0xF1D0
     return desc
+
 
 class OpenBSDHidDevice(base.HidDevice):
     @staticmethod
