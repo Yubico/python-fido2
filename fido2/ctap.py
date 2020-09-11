@@ -60,6 +60,12 @@ class CtapDevice(abc.ABC):
     def close(self):
         """Close the device, releasing any held resources."""
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, typ, value, traceback):
+        self.close()
+
     @classmethod
     @abc.abstractmethod
     def list_devices(cls):
