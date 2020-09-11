@@ -32,7 +32,7 @@ See the _COPYING_ file for the full license text.
 
 This project contains source code from pyu2f (https://github.com/google/pyu2f)
 which is licensed under the Apache License, version 2.0.
-These files are located in `fido2/_pyu2f/` and `test/_pyu2f/`.
+These files are located in `fido2/hid/`.
 See http://www.apache.org/licenses/LICENSE-2.0,
 or the _COPYING.APLv2_ file for the full license text.
 

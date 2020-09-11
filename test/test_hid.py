@@ -27,10 +27,8 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido2.ctap import CtapError
 from fido2.hid import CtapHidDevice
 import unittest
-import mock
 
 
 class HidTest(unittest.TestCase):
@@ -50,49 +48,3 @@ class HidTest(unittest.TestCase):
         self.assertEqual(dev.ping(msg1), msg1)
         self.assertEqual(dev.ping(msg2), msg2)
         self.assertEqual(dev.ping(msg3), msg3)
-
-    def test_call_error(self):
-        dev = mock.Mock()
-        hid_dev = CtapHidDevice(None, dev)
-        dev.InternalRecv = mock.Mock(return_value=(0xBF, bytearray([7])))
-        try:
-            hid_dev.call(0x01)
-            self.fail("call did not raise exception")
-        except CtapError as e:
-            self.assertEqual(e.code, 7)
-
-    def test_call_keepalive(self):
-        dev = mock.Mock()
-        hid_dev = CtapHidDevice(None, dev)
-        on_keepalive = mock.MagicMock()
-
-        dev.InternalRecv = mock.Mock(
-            side_effect=[
-                (0xBB, bytearray([0])),
-                (0xBB, bytearray([0])),
-                (0xBB, bytearray([0])),
-                (0xBB, bytearray([0])),
-                (0x81, bytearray(b"done")),
-            ]
-        )
-
-        self.assertEqual(hid_dev.call(0x01, on_keepalive=on_keepalive), b"done")
-        on_keepalive.assert_called_once_with(0)
-
-        dev.InternalRecv.side_effect = [
-            (0xBB, bytearray([1])),
-            (0xBB, bytearray([0])),
-            (0xBB, bytearray([0])),
-            (0xBB, bytearray([1])),
-            (0xBB, bytearray([1])),
-            (0xBB, bytearray([1])),
-            (0xBB, bytearray([1])),
-            (0xBB, bytearray([0])),
-            (0x81, bytearray(b"done")),
-        ]
-        on_keepalive.reset_mock()
-        self.assertEqual(hid_dev.call(0x01, on_keepalive=on_keepalive), b"done")
-        self.assertEqual(
-            on_keepalive.call_args_list,
-            [mock.call(1), mock.call(0), mock.call(1), mock.call(0)],
-        )

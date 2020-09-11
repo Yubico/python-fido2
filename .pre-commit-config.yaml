@@ -3,12 +3,10 @@ repos:
     rev: 3.7.9
     hooks:
     -   id: flake8
-        exclude: '^(fido2|test)/_pyu2f/.*'
 -   repo: https://github.com/psf/black
     rev: 19.10b0
     hooks:
     -   id: black
-        exclude: '^(fido2|test)/_pyu2f/.*'
 -   repo: https://github.com/PyCQA/bandit
     rev: 1.6.2
     hooks:
