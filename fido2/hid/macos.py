@@ -386,28 +386,28 @@ def list_descriptors():
     hid_mgr = iokit.IOHIDManagerCreate(None, 0)
     if not hid_mgr:
         raise OSError("Unable to obtain HID manager reference")
-    iokit.IOHIDManagerSetDeviceMatching(hid_mgr, None)
+    try:
+        iokit.IOHIDManagerSetDeviceMatching(hid_mgr, None)
 
-    # Get devices from HID manager
-    device_set_ref = iokit.IOHIDManagerCopyDevices(hid_mgr)
-    if not device_set_ref:
-        raise OSError("Failed to obtain devices from HID manager")
-
-    num = iokit.CFSetGetCount(device_set_ref)
-    devices = (IO_HID_DEVICE_REF * num)()
-    iokit.CFSetGetValues(device_set_ref, devices)
-
-    # Retrieve and build descriptor dictionaries for each device
-    descriptors = []
-    for handle in devices:
+        # Get devices from HID manager
+        device_set_ref = iokit.IOHIDManagerCopyDevices(hid_mgr)
+        if not device_set_ref:
+            raise OSError("Failed to obtain devices from HID manager")
         try:
-            descriptors.append(_get_descriptor_from_handle(handle))
-        except Exception as e:
-            logger.debug("Failed opening HID device", exc_info=e)
-            continue
+            num = iokit.CFSetGetCount(device_set_ref)
+            devices = (IO_HID_DEVICE_REF * num)()
+            iokit.CFSetGetValues(device_set_ref, devices)
 
-    # Clean up CF objects
-    cf.CFRelease(device_set_ref)
-    cf.CFRelease(hid_mgr)
-
-    return descriptors
+            # Retrieve and build descriptor dictionaries for each device
+            descriptors = []
+            for handle in devices:
+                try:
+                    descriptors.append(_get_descriptor_from_handle(handle))
+                except Exception as e:
+                    logger.debug("Failed opening HID device", exc_info=e)
+                    continue
+            return descriptors
+        finally:
+            cf.CFRelease(device_set_ref)
+    finally:
+        cf.CFRelease(hid_mgr)
