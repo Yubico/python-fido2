@@ -334,6 +334,8 @@ def list_descriptors():
 
             try:
                 descriptors.append(get_descriptor(path))
+            except ValueError:
+                continue
             except Exception as e:
                 logger.debug("Failed opening HID device", exc_info=e)
                 continue

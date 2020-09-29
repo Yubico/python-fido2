@@ -48,7 +48,7 @@ def get_descriptor(path):
         # Read VID, PID
         buf = bytearray(4 + 2 + 2)
         fcntl.ioctl(f, GET_INFO, buf, True)
-        _, vid, pid = struct.unpack(">IHH", buf)
+        _, vid, pid = struct.unpack("<IHH", buf)
 
         # Read report descriptor
         buf = bytearray(4)
