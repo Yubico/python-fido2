@@ -982,6 +982,11 @@ class PinProtocolV1(object):
     def authenticate(self, key, message):
         return hmac_sha256(key, message)[:16]
 
+    def validate_token(self, token):
+        if len(token) not in (16, 32):
+            raise ValueError("PIN/UV token must be 16 or 32 bytes")
+        return token
+
 
 class PinProtocolV2(PinProtocolV1):
     """Implementation of the CTAP2 PIN/UV protocol v2.
@@ -1036,6 +1041,11 @@ class PinProtocolV2(PinProtocolV1):
     def authenticate(self, key, message):
         hmac_key = key[:32]
         return hmac_sha256(hmac_key, message)
+
+    def validate_token(self, token):
+        if len(token) != 32:
+            raise ValueError("PIN/UV token must be 32 bytes")
+        return token
 
 
 class ClientPin(object):
@@ -1132,7 +1142,9 @@ class ClientPin(object):
             permissions_rpid=permissions_rpid,
         )
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
-        return self.protocol.decrypt(shared_secret, pin_token_enc)
+        return self.protocol.validate_token(
+            self.protocol.decrypt(shared_secret, pin_token_enc)
+        )
 
     def get_uv_token(self, permissions, permissions_rpid=None):
         """Get a PIN/UV token from the authenticator using built-in UV.
@@ -1152,7 +1164,9 @@ class ClientPin(object):
         )
 
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
-        return self.protocol.decrypt(shared_secret, pin_token_enc)
+        return self.protocol.validate_token(
+            self.protocol.decrypt(shared_secret, pin_token_enc)
+        )
 
     def get_pin_retries(self):
         """Get the number of PIN retries remaining.
