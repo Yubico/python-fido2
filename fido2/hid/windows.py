@@ -257,6 +257,7 @@ def get_descriptor(path):
 
             if caps.UsagePage == FIDO_USAGE_PAGE and caps.Usage == FIDO_USAGE:
                 vid, pid = get_vid_pid(device)
+                # Sizes here include 1-byte report ID, which we need to remove.
                 size_in = caps.InputReportByteLength - 1
                 size_out = caps.OutputReportByteLength - 1
                 return HidDescriptor(path, vid, pid, size_in, size_out)

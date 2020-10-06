@@ -70,7 +70,8 @@ class FileCtapHidConnection(CtapHidConnection):
         os.close(self.handle)
 
     def write_packet(self, packet):
-        os.write(self.handle, packet)
+        if os.write(self.handle, packet) != len(packet):
+            raise OSError("failed to write entire packet")
 
     def read_packet(self):
         return os.read(self.handle, self.descriptor.report_size_in)
