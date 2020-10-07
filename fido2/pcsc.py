@@ -34,7 +34,7 @@ from smartcard import System
 from smartcard.pcsc.PCSCExceptions import ListReadersException
 from smartcard.pcsc.PCSCContext import PCSCContext
 
-from binascii import b2a_hex
+from binascii import b2a_hex as _b2a_hex
 from threading import Event
 import struct
 import six
@@ -48,6 +48,10 @@ SW1_MORE_DATA = 0x61
 
 
 logger = logging.getLogger(__name__)
+
+
+def b2a_hex(data):
+    return _b2a_hex(data).decode("ascii")
 
 
 class CtapPcscDevice(CtapDevice):
@@ -98,10 +102,10 @@ class CtapPcscDevice(CtapDevice):
         :return: byte string. response from card
         """
 
-        logger.debug("apdu %s", b2a_hex(apdu))
+        logger.debug("SEND: %s", b2a_hex(apdu))
         resp, sw1, sw2 = self._conn.transmit(list(six.iterbytes(apdu)), protocol)
         response = bytes(bytearray(resp))
-        logger.debug("response [0x%04X] %s", sw1 << 8 + sw2, b2a_hex(response))
+        logger.debug("RECV: %s SW=%04X", b2a_hex(response), sw1 << 8 + sw2)
 
         return response, sw1, sw2
 
