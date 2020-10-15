@@ -23,6 +23,7 @@ from .base import HidDescriptor, FileCtapHidConnection, parse_report_descriptor
 import glob
 import fcntl
 import struct
+from array import array
 
 import logging
 
@@ -47,17 +48,17 @@ def open_connection(descriptor):
 def get_descriptor(path):
     with open(path, "rb") as f:
         # Read VID, PID
-        buf = bytearray(4 + 2 + 2)
+        buf = array("B", [0] * (4 + 2 + 2))
         fcntl.ioctl(f, HIDIOCGRAWINFO, buf, True)
         _, vid, pid = struct.unpack("<IHH", buf)
 
         # Read report descriptor
-        buf = bytearray(4)
+        buf = array("B", [0] * 4)
         fcntl.ioctl(f, HIDIOCGRDESCSIZE, buf, True)
         size = struct.unpack("<I", buf)[0]
-        buf += bytearray(size)
+        buf += array("B", [0] * size)
         fcntl.ioctl(f, HIDIOCGRDESC, buf, True)
-        data = buf[4:]
+        data = bytearray(buf[4:])
 
     max_in_size, max_out_size = parse_report_descriptor(data)
     return HidDescriptor(path, vid, pid, max_in_size, max_out_size)
