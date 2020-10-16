@@ -617,6 +617,9 @@ class CTAP2(object):
         GET_NEXT_ASSERTION = 0x08
         BIO_ENROLLMENT = 0x09
         CREDENTIAL_MGMT = 0x0A
+        SELECTION = 0x0B
+        LARGE_BLOBS = 0x0C
+        CONFIG = 0x0D
 
         BIO_ENROLLMENT_PRE = 0x40
         CREDENTIAL_MGMT_PRE = 0x41
@@ -672,6 +675,68 @@ class CTAP2(object):
                     "Got: {}\n".format(enc_h) + "Expected: {}".format(exp_h)
                 )
         return parse(enc)
+
+    def get_info(self):
+        """CTAP2 getInfo command.
+
+        :return: Information about the authenticator.
+        """
+        return self.send_cbor(CTAP2.CMD.GET_INFO, parse=Info)
+
+    def client_pin(
+        self,
+        pin_uv_protocol,
+        sub_cmd,
+        key_agreement=None,
+        pin_uv_param=None,
+        new_pin_enc=None,
+        pin_hash_enc=None,
+        min_pin_len=None,
+        min_pin_len_rpids=None,
+        permissions=None,
+        permissions_rpid=None,
+    ):
+        """CTAP2 clientPin command, used for various PIN operations.
+
+        This method is not intended to be called directly. It is intended to be used by
+        an instance of the PinProtocolV1 class.
+
+        :param pin_uv_protocol: The PIN/UV protocol version to use.
+        :param sub_cmd: A clientPin sub command.
+        :param key_agreement: The keyAgreement parameter.
+        :param pin_uv_param: The pinAuth parameter.
+        :param new_pin_enc: The newPinEnc parameter.
+        :param pin_hash_enc: The pinHashEnc parameter.
+        :param min_pin_len: The minPinLength parameter.
+        :param min_pin_len_rpids: The minPinLengthRPIDs parameter.
+        :param permissions: The permissions parameter.
+        :param permissions_rpid: The permissions RPID parameter.
+        :return: The response of the command, decoded.
+        """
+        return self.send_cbor(
+            CTAP2.CMD.CLIENT_PIN,
+            args(
+                pin_uv_protocol,
+                sub_cmd,
+                key_agreement,
+                pin_uv_param,
+                new_pin_enc,
+                pin_hash_enc,
+                min_pin_len,
+                min_pin_len_rpids,
+                permissions,
+                permissions_rpid,
+            ),
+        )
+
+    def reset(self, event=None, on_keepalive=None):
+        """CTAP2 reset command, erases all credentials and PIN.
+
+        :param event: Optional threading.Event object used to cancel the request.
+        :param on_keepalive: Optional callback function to handle keep-alive
+            messages from the authenticator.
+        """
+        self.send_cbor(CTAP2.CMD.RESET, event=event, on_keepalive=on_keepalive)
 
     def make_credential(
         self,
@@ -743,8 +808,8 @@ class CTAP2(object):
         :param pin_uv_param: Optional PIN/UV auth parameter.
         :param pin_uv_protocol: The version of PIN/UV protocol used, if any.
         :param event: Optional threading.Event used to cancel the request.
-        :param on_keepalive: Optional callback function to handle keep-alive
-            messages from the authenticator.
+        :param on_keepalive: Optional callback function to handle keep-alive messages
+            from the authenticator.
         :return: The new assertion.
         """
         return self.send_cbor(
@@ -763,74 +828,24 @@ class CTAP2(object):
             on_keepalive,
         )
 
-    def get_info(self):
-        """CTAP2 getInfo command.
-
-        :return: Information about the authenticator.
-        """
-        return self.send_cbor(CTAP2.CMD.GET_INFO, parse=Info)
-
-    def client_pin(
-        self,
-        pin_uv_protocol,
-        sub_cmd,
-        key_agreement=None,
-        pin_uv_param=None,
-        new_pin_enc=None,
-        pin_hash_enc=None,
-        min_pin_len=None,
-        min_pin_len_rpids=None,
-        permissions=None,
-        permissions_rpid=None,
-    ):
-        """CTAP2 clientPin command, used for various PIN operations.
-
-        This method is not intended to be called directly. It is intended to be used by
-        an instance of the PinProtocolV1 class.
-
-        :param pin_uv_protocol: The PIN/UV protocol version to use.
-        :param sub_cmd: A clientPin sub command.
-        :param key_agreement: The keyAgreement parameter.
-        :param pin_uv_param: The pinAuth parameter.
-        :param new_pin_enc: The newPinEnc parameter.
-        :param pin_hash_enc: The pinHashEnc parameter.
-        :param min_pin_len: The minPinLength parameter.
-        :param min_pin_len_rpids: The minPinLengthRPIDs parameter.
-        :param permissions: The permissions parameter.
-        :param permissions_rpid: The permissions RPID parameter.
-        :return: The response of the command, decoded.
-        """
-        return self.send_cbor(
-            CTAP2.CMD.CLIENT_PIN,
-            args(
-                pin_uv_protocol,
-                sub_cmd,
-                key_agreement,
-                pin_uv_param,
-                new_pin_enc,
-                pin_hash_enc,
-                min_pin_len,
-                min_pin_len_rpids,
-                permissions,
-                permissions_rpid,
-            ),
-        )
-
-    def reset(self, event=None, on_keepalive=None):
-        """CTAP2 reset command, erases all credentials and PIN.
-
-        :param event: Optional threading.Event object used to cancel the request.
-        :param on_keepalive: Optional callback function to handle keep-alive
-            messages from the authenticator.
-        """
-        self.send_cbor(CTAP2.CMD.RESET, event=event, on_keepalive=on_keepalive)
-
     def get_next_assertion(self):
         """CTAP2 getNextAssertion command.
 
         :return: The next available assertion response.
         """
         return self.send_cbor(CTAP2.CMD.GET_NEXT_ASSERTION, parse=AssertionResponse)
+
+    def get_assertions(self, *args, **kwargs):
+        """Convenience method to get list of assertions.
+
+        See get_assertion and get_next_assertion for details.
+        """
+        first = self.get_assertion(*args, **kwargs)
+        rest = [
+            self.get_next_assertion()
+            for _ in range(1, first.number_of_credentials or 1)
+        ]
+        return [first] + rest
 
     def credential_mgmt(
         self, sub_cmd, sub_cmd_params=None, pin_uv_protocol=None, pin_uv_param=None
@@ -908,17 +923,17 @@ class CTAP2(object):
             on_keepalive=on_keepalive,
         )
 
-    def get_assertions(self, *args, **kwargs):
-        """Convenience method to get list of assertions.
+    def selection(self, event=None, on_keepalive=None):
+        """CTAP2 authenticator selection command.
 
-        See get_assertion and get_next_assertion for details.
+        This command allows the platform to let a user select a certain authenticator
+        by asking for user presence.
+
+        :param event: Optional threading.Event used to cancel the request.
+        :param on_keepalive: Optional callback function to handle keep-alive messages
+            from the authenticator.
         """
-        first = self.get_assertion(*args, **kwargs)
-        rest = [
-            self.get_next_assertion()
-            for _ in range(1, first.number_of_credentials or 1)
-        ]
-        return [first] + rest
+        self.send_cbor(CTAP2.CMD.SELECTION, event=event, on_keepalive=on_keepalive)
 
 
 def _pad_pin(pin):
