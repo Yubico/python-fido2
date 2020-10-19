@@ -935,7 +935,7 @@ class CTAP2(object):
         elif "userVerificationMgmtPreview" in self.info.options:
             cmd = CTAP2.CMD.BIO_ENROLLMENT_PRE
         else:
-            raise ValueError("Bio enroll not supported by this Authenticator")
+            raise ValueError("Authenticator does not support Bio Enroll")
         return self.send_cbor(
             cmd,
             args(
@@ -972,11 +972,43 @@ class CTAP2(object):
         pin_uv_protocol=None,
     ):
         """CTAP2 authenticator large blobs command.
-        """
 
+        This command is used to read and write the large blob array.
+
+        This method is not intended to be called directly. It is intended to be used by
+        an instance of the LargeBlobs class.
+
+        :param offset: The offset of where to start reading/writing data.
+        :param get: Optional (max) length of data to read.
+        :param set: Optional data to write.
+        :param length: Length of the payload in set.
+        :param pin_uv_protocol: PIN/UV protocol version used.
+        :param pin_uv_param: PIN/UV auth param.
+        """
         return self.send_cbor(
             CTAP2.CMD.LARGE_BLOBS,
-            args(get, set, offset, length, pin_uv_param, pin_uv_protocol,),
+            args(get, set, offset, length, pin_uv_param, pin_uv_protocol),
+        )
+
+    def config(
+        self, sub_cmd, sub_cmd_params=None, pin_uv_protocol=None, pin_uv_param=None
+    ):
+        """CTAP2 authenticator config command.
+
+        This command is used to configure various authenticator features through the
+        use of its subcommands.
+
+        This method is not intended to be called directly. It is intended to be used by
+        an instance of the Config class.
+
+        :param sub_cmd: A Config sub command.
+        :param sub_cmd_params: Sub command specific parameters.
+        :param pin_uv_protocol: PIN/UV auth protocol version used.
+        :param pin_uv_param: PIN/UV Auth parameter.
+        """
+        return self.send_cbor(
+            CTAP2.CMD.CONFIG,
+            args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
         )
 
 
@@ -1152,6 +1184,9 @@ class ClientPin(object):
         SET_MIN_PIN_LEN = 0x40
 
     def __init__(self, ctap, protocol=None):
+        if "clientPin" not in ctap.info.options:
+            raise ValueError("Authenticator does not support ClientPin")
+
         self.ctap = ctap
         if protocol is None:
             for proto in ClientPin.PROTOCOLS:
@@ -1212,6 +1247,9 @@ class ClientPin(object):
         :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
+        if not self.ctap.info.options.get("uvBioEnroll"):
+            raise ValueError("Authenticator does not support get_uv_token")
+
         key_agreement, shared_secret = self._get_shared_secret()
 
         resp = self.ctap.client_pin(
@@ -1367,8 +1405,14 @@ class CredentialManagement(object):
         PUBLIC_KEY = 0x08
         TOTAL_CREDENTIALS = 0x09
         CRED_PROTECT = 0x0A
+        LARGE_BLOB_KEY = 0x0B
 
     def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
+        if not ctap.info.options.get("credMgmt"):
+            # We also support the Prototype command
+            if not ctap.info.options.get("credentialMgmtPreview"):
+                raise ValueError("Authenticator does not support Credential Management")
+
         self.ctap = ctap
         self.pin_uv_protocol = pin_uv_protocol
         self.pin_uv_token = pin_uv_token
@@ -1505,6 +1549,14 @@ class BioEnrollment(object):
         FINGERPRINT = 0x01
 
     def __init__(self, ctap, modality):
+        if "bioEnroll" not in ctap.info.options:
+            # We also support the Prototype command
+            if not (
+                "FIDO_2_1_PRE" in ctap.info.versions
+                and ctap.info.options.get("credentialMgmtPreview")
+            ):
+                raise ValueError("Authenticator does not support BioEnroll")
+
         self.ctap = ctap
         self.modality = self.get_modality()
         if modality != self.modality:
@@ -1800,27 +1852,27 @@ def _lb_unpack(key, entry):
 
 
 class LargeBlobs(object):
+    """Implementation of the CTAP2.1 Large Blobs API.
+
+    :param ctap: An instance of a CTAP2 object.
+    :param pin_uv_protocol: An instance of a PinUvAuthProtocol.
+    :param pin_uv_token: A valid PIN/UV Auth Token for the current CTAP session.
+    """
+
     def __init__(self, ctap, pin_uv_protocol=None, pin_uv_token=None):
+        if not ctap.info.options.get("largeBlobs"):
+            raise ValueError("Authenticator does not support LargeBlobs")
+
         self.ctap = ctap
         self.max_fragment_length = self.ctap.info.max_msg_size - 64
         self.pin_uv_protocol = pin_uv_protocol
         self.pin_uv_token = pin_uv_token
 
-    def _call(self, offset, **kwargs):
-        if self.pin_uv_protocol and "set" in kwargs:
-            msg = (
-                b"\xff" * 32
-                + b"\x0c\x00"
-                + struct.pack("<I", offset)
-                + sha256(kwargs["set"])
-            )
-            kwargs["pin_uv_protocol"] = self.pin_uv_protocol.VERSION
-            kwargs["pin_uv_param"] = self.pin_uv_protocol.authenticate(
-                self.pin_uv_token, msg
-            )
-        return self.ctap.large_blobs(offset, **kwargs)
-
     def read_blob_array(self):
+        """Gets the entire contents of the Large Blobs array.
+
+        :return: The CBOR decoded list of Large Blobs.
+        """
         offset = 0
         buf = b""
         while True:
@@ -1836,6 +1888,10 @@ class LargeBlobs(object):
         return cbor.decode(data)
 
     def write_blob_array(self, blob_array):
+        """Writes the entire Large Blobs array.
+
+        :param blob_array: A list to write to the Authenticator.
+        """
         if not isinstance(blob_array, list):
             raise TypeError("large-blob array must be a list")
 
@@ -1871,6 +1927,11 @@ class LargeBlobs(object):
             offset += ln
 
     def get_blob(self, large_blob_key):
+        """Gets the Large Blob stored for a single credential.
+
+        :param large_blob_key: The largeBlobKey for the credential.
+        :returns: The decrypted and deflated value stored for the credential.
+        """
         for entry in self.read_blob_array():
             try:
                 compressed, orig_size = _lb_unpack(large_blob_key, entry)
@@ -1881,6 +1942,13 @@ class LargeBlobs(object):
                 continue
 
     def put_blob(self, large_blob_key, data):
+        """Stores a Large Blob for a single credential.
+
+        Any existing entries for the same credential will be replaced.
+
+        :param large_blob_key: The largeBlobKey for the credential.
+        :param data: The data to compress, encrypt and store.
+        """
         modified = data is not None
         entries = []
 
@@ -1898,4 +1966,84 @@ class LargeBlobs(object):
             self.write_blob_array(entries)
 
     def delete_blob(self, large_blob_key):
+        """Deletes any Large Blob(s) stored for a single credential.
+
+        :param large_blob_key: The largeBlobKey for the credential.
+        """
         self.put_blob(large_blob_key, None)
+
+
+class Config(object):
+    """Implementation of the CTAP2.1 Authenticator Config API.
+
+    :param ctap: An instance of a CTAP2 object.
+    :param pin_uv_protocol: An instance of a PinUvAuthProtocol.
+    :param pin_uv_token: A valid PIN/UV Auth Token for the current CTAP session.
+    """
+
+    @unique
+    class CMD(IntEnum):
+        ENABLE_ENTERPRISE_ATT = 0x01
+        TOGGLE_ALWAYS_UV = 0x02
+        SET_MIN_PIN_LENGTH = 0x03
+        VENDOR_PROTOTYPE = 0xFF
+
+    @unique
+    class PARAM(IntEnum):
+        NEW_MIN_PIN_LENGTH = 0x01
+        MIN_PIN_LENGTH_RPIDS = 0x02
+        FORCE_CHANGE_PIN = 0x03
+
+    def __init__(self, ctap, pin_uv_protocol=None, pin_uv_token=None):
+        if not ctap.info.options.get("authnrCfg"):
+            raise ValueError("Authenticator does not support Config")
+
+        self.ctap = ctap
+        self.pin_uv_protocol = pin_uv_protocol
+        self.pin_uv_token = pin_uv_token
+
+    def _call(self, sub_cmd, params=None):
+        if params:
+            params = {k: v for k, v in params.items() if v is not None}
+        else:
+            params = None
+        if self.pin_uv_protocol:
+            msg = (
+                b"\xff" * 32
+                + b"\x0d"
+                + struct.pack("<b", sub_cmd)
+                + (cbor.encode(params) if params else b"")
+            )
+            pin_uv_protocol = self.pin_uv_protocol.VERSION
+            pin_uv_param = self.pin_uv_protocol.authenticate(self.pin_uv_token, msg)
+        else:
+            pin_uv_protocol = None
+            pin_uv_param = None
+        return self.ctap.config(sub_cmd, params, pin_uv_protocol, pin_uv_param)
+
+    def toggle_always_uv(self):
+        """Toggle the alwaysUV setting.
+
+        When true, the Authenticator always requires UV for credential assertion.
+        """
+        self._call(Config.CMD.TOGGLE_ALWAYS_UV)
+
+    def set_min_pin_length(
+        self, min_pin_length=None, rp_ids=None, force_change_pin=None
+    ):
+        """Set the minimum PIN length allowed when setting/changing the PIN.
+
+        :param min_pin_length: The minimum PIN length the Authenticator should allow.
+        :param rp_ids: A list of RP IDs which should be allowed to get the current
+            minimum PIN length.
+        :param force_change_pin: True if the Authenticator should enforce changing the
+            PIN before the next use.
+        """
+        self._call(
+            Config.CMD.SET_MIN_PIN_LENGTH,
+            {
+                Config.PARAM.NEW_MIN_PIN_LENGTH: min_pin_length,
+                Config.PARAM.MIN_PIN_LENGTH_RPIDS: rp_ids,
+                Config.PARAM.FORCE_CHANGE_PIN: force_change_pin,
+            },
+        )
