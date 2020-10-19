@@ -39,10 +39,12 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.exceptions import InvalidTag
 
 from binascii import b2a_hex
 from enum import IntEnum, unique
 import struct
+import zlib
 import six
 import re
 import os
@@ -96,6 +98,12 @@ class Info(bytes):
         MAX_CRED_ID_LENGTH = 0x08
         TRANSPORTS = 0x09
         ALGORITHMS = 0x0A
+        MAX_LARGE_BLOB = 0x0B
+        MIN_PIN_LENGTH = 0x0D
+        FIRMWARE_VERSION = 0x0E
+        MAX_CRED_BLOB_LENGTH = 0x0F
+        MAX_RPIDS_FOR_MIN_PIN = 0x10
+        UV_MODALITY = 0x12
 
         @classmethod
         def get(cls, key):
@@ -118,6 +126,12 @@ class Info(bytes):
         self.max_cred_id_length = data.get(Info.KEY.MAX_CRED_ID_LENGTH)
         self.transports = data.get(Info.KEY.TRANSPORTS, [])
         self.algorithms = data.get(Info.KEY.ALGORITHMS)
+        self.max_large_blob = data.get(Info.KEY.MAX_LARGE_BLOB)
+        self.min_pin_length = data.get(Info.KEY.MIN_PIN_LENGTH, 4)
+        self.firmware_version = data.get(Info.KEY.FIRMWARE_VERSION)
+        self.max_cred_blob_length = data.get(Info.KEY.MAX_CRED_BLOB_LENGTH)
+        self.max_rpids_for_min_pin = data.get(Info.KEY.MAX_RPIDS_FOR_MIN_PIN, 0)
+        self.uv_modality = data.get(Info.KEY.UV_MODALITY)
         self.data = data
 
     def __repr__(self):
@@ -398,6 +412,8 @@ class AttestationObject(bytes):
         FMT = 1
         AUTH_DATA = 2
         ATT_STMT = 3
+        EP_ATT = 4
+        LARGE_BLOB_KEY = 5
 
         @classmethod
         def for_key(cls, key):
@@ -435,13 +451,20 @@ class AttestationObject(bytes):
         self.auth_data = AuthenticatorData(data[AttestationObject.KEY.AUTH_DATA])
         data[AttestationObject.KEY.AUTH_DATA] = self.auth_data
         self.att_statement = data[AttestationObject.KEY.ATT_STMT]
+        self.ep_att = data.get(AttestationObject.KEY.EP_ATT)
+        self.large_blob_key = data.get(AttestationObject.KEY.LARGE_BLOB_KEY)
         self.data = data
 
     def __repr__(self):
-        return "AttestationObject(fmt: %r, auth_data: %r, att_statement: %r)" % (
+        return (
+            "AttestationObject(fmt: %r, auth_data: %r, att_statement: %r, "
+            "ep_attr: %r, large_blob_key: %r)"
+        ) % (
             self.fmt,
             self.auth_data,
             self.att_statement,
+            self.ep_att,
+            self.large_blob_key,
         )
 
     def __str__(self):
@@ -529,6 +552,8 @@ class AssertionResponse(bytes):
         SIGNATURE = 3
         USER = 4
         N_CREDS = 5
+        USER_SELECTED = 6
+        LARGE_BLOB_KEY = 7
 
     def __init__(self, _):
         super(AssertionResponse, self).__init__()
@@ -541,6 +566,8 @@ class AssertionResponse(bytes):
         self.signature = data[AssertionResponse.KEY.SIGNATURE]
         self.user = data.get(AssertionResponse.KEY.USER)
         self.number_of_credentials = data.get(AssertionResponse.KEY.N_CREDS)
+        self.user_selected = data.get(AssertionResponse.KEY.USER_SELECTED, False)
+        self.large_blob_key = data.get(AssertionResponse.KEY.LARGE_BLOB_KEY)
         self.data = data
 
     def __repr__(self):
@@ -934,6 +961,23 @@ class CTAP2(object):
             from the authenticator.
         """
         self.send_cbor(CTAP2.CMD.SELECTION, event=event, on_keepalive=on_keepalive)
+
+    def large_blobs(
+        self,
+        offset,
+        get=None,
+        set=None,
+        length=None,
+        pin_uv_param=None,
+        pin_uv_protocol=None,
+    ):
+        """CTAP2 authenticator large blobs command.
+        """
+
+        return self.send_cbor(
+            CTAP2.CMD.LARGE_BLOBS,
+            args(get, set, offset, length, pin_uv_param, pin_uv_protocol,),
+        )
 
 
 def _pad_pin(pin):
@@ -1712,3 +1756,146 @@ class FPBioEnrollment(BioEnrollment):
             FPBioEnrollment.CMD.REMOVE_ENROLLMENT,
             {BioEnrollment.TEMPLATE_INFO.ID: template_id},
         )
+
+
+def _lb_ad(orig_size):
+    return b"blob" + struct.pack("<L", orig_size)
+
+
+def _lb_pack(key, data):
+    orig_size = len(data)
+    nonce = os.urandom(12)
+    cipher = Cipher(algorithms.AES(key), modes.GCM(nonce), default_backend())
+    encryptor = cipher.encryptor()
+    encryptor.authenticate_additional_data(_lb_ad(orig_size))
+    ciphertext = encryptor.update(zlib.compress(data)) + encryptor.finalize()
+
+    return {
+        1: ciphertext + encryptor.tag,
+        2: nonce,
+        3: orig_size,
+    }
+
+
+def _lb_unpack(key, entry):
+    try:
+        ciphertext, tag = entry[1][:-16], entry[1][-16:]
+        nonce = entry[2]
+        orig_size = entry[3]
+        cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), default_backend())
+        decryptor = cipher.decryptor()
+        decryptor.authenticate_additional_data(_lb_ad(orig_size))
+    except (TypeError, IndexError, KeyError):
+        raise ValueError("Invalid entry")
+
+    try:
+        compressed = decryptor.update(ciphertext) + decryptor.finalize()
+        return compressed, orig_size
+    except InvalidTag:
+        raise ValueError("Wrong key")
+
+    plain = zlib.decompress(compressed)
+    if len(plain) == orig_size:
+        return plain
+
+
+class LargeBlobs(object):
+    def __init__(self, ctap, pin_uv_protocol=None, pin_uv_token=None):
+        self.ctap = ctap
+        self.max_fragment_length = self.ctap.info.max_msg_size - 64
+        self.pin_uv_protocol = pin_uv_protocol
+        self.pin_uv_token = pin_uv_token
+
+    def _call(self, offset, **kwargs):
+        if self.pin_uv_protocol and "set" in kwargs:
+            msg = (
+                b"\xff" * 32
+                + b"\x0c\x00"
+                + struct.pack("<I", offset)
+                + sha256(kwargs["set"])
+            )
+            kwargs["pin_uv_protocol"] = self.pin_uv_protocol.VERSION
+            kwargs["pin_uv_param"] = self.pin_uv_protocol.authenticate(
+                self.pin_uv_token, msg
+            )
+        return self.ctap.large_blobs(offset, **kwargs)
+
+    def read_blob_array(self):
+        offset = 0
+        buf = b""
+        while True:
+            fragment = self.ctap.large_blobs(offset, get=self.max_fragment_length)[1]
+            buf += fragment
+            if len(fragment) < self.max_fragment_length:
+                break
+            offset += self.max_fragment_length
+
+        data, check = buf[:-16], buf[-16:]
+        if check != sha256(data)[:-16]:
+            return []
+        return cbor.decode(data)
+
+    def write_blob_array(self, blob_array):
+        if not isinstance(blob_array, list):
+            raise TypeError("large-blob array must be a list")
+
+        data = cbor.encode(blob_array)
+        data += sha256(data)[:16]
+        offset = 0
+        size = len(data)
+
+        pin_uv_param = None
+        pin_uv_protocol = self.pin_uv_protocol.VERSION if self.pin_uv_token else None
+
+        while offset < size:
+            ln = min(size - offset, self.max_fragment_length)
+            _set = data[offset : offset + ln]
+
+            if self.pin_uv_token:
+                msg = (
+                    b"\xff" * 32
+                    + b"\x0c\x00"
+                    + struct.pack("<I", offset)
+                    + sha256(_set)
+                )
+                pin_uv_param = self.pin_uv_protocol.authenticate(self.pin_uv_token, msg)
+
+            self.ctap.large_blobs(
+                offset,
+                set=_set,
+                length=ln,
+                pin_uv_protocol=pin_uv_protocol,
+                pin_uv_param=pin_uv_param,
+            )
+
+            offset += ln
+
+    def get_blob(self, large_blob_key):
+        for entry in self.read_blob_array():
+            try:
+                compressed, orig_size = _lb_unpack(large_blob_key, entry)
+                decompressed = zlib.decompress(compressed)
+                if len(decompressed) == orig_size:
+                    return decompressed
+            except (ValueError, zlib.error):
+                continue
+
+    def put_blob(self, large_blob_key, data):
+        modified = data is not None
+        entries = []
+
+        for entry in self.read_blob_array():
+            try:
+                _lb_unpack(large_blob_key, entry)
+                modified = True
+            except ValueError:
+                entries.append(entry)
+
+        if data is not None:
+            entries.append(_lb_pack(large_blob_key, data))
+
+        if modified:
+            self.write_blob_array(entries)
+
+    def delete_blob(self, large_blob_key):
+        self.put_blob(large_blob_key, None)
