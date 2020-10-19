@@ -1,3 +1,13 @@
+* Version 0.9.0 (unreleased)
+ ** Renames: The CTAP1 and CTAP2 classes have been renamed to Ctap1 and Ctap2,
+    respectively. The old names currently work, but will be removed in the
+    future.
+ ** ClientPin: The ClientPin API has been restructured to support multiple PIN
+    protocols, UV tokens, and token permissions.
+ ** CTAP 2.1 PRE: Several new features have been added for CTAP 2.1, including
+    Credential Management, Bio Enrollment, Large Blobs, and Authenticator Config.
+ ** HID: The platform specific HID code has been revamped and cleaned up.
+
 * Version 0.8.1 (released 2019-11-25)
  ** Bugfix: WindowsClient.make_credential error when resident key requirement is
     unspecified.

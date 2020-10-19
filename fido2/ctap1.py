@@ -196,7 +196,7 @@ class SignatureData(bytes):
         return cls(websafe_decode(data))
 
 
-class CTAP1(object):
+class Ctap1(object):
     """Implementation of the CTAP1 specification.
 
     :param device: A CtapHidDevice handle supporting CTAP1.
@@ -243,7 +243,7 @@ class CTAP1(object):
 
         :return: A U2F version string.
         """
-        return self.send_apdu(ins=CTAP1.INS.VERSION).decode()
+        return self.send_apdu(ins=Ctap1.INS.VERSION).decode()
 
     def register(self, client_param, app_param):
         """Register a new U2F credential.
@@ -253,7 +253,7 @@ class CTAP1(object):
         :return: The registration response from the authenticator.
         """
         data = client_param + app_param
-        response = self.send_apdu(ins=CTAP1.INS.REGISTER, data=data)
+        response = self.send_apdu(ins=Ctap1.INS.REGISTER, data=data)
         return RegistrationData(response)
 
     def authenticate(self, client_param, app_param, key_handle, check_only=False):
@@ -270,5 +270,8 @@ class CTAP1(object):
             client_param + app_param + struct.pack(">B", len(key_handle)) + key_handle
         )
         p1 = 0x07 if check_only else 0x03
-        response = self.send_apdu(ins=CTAP1.INS.AUTHENTICATE, p1=p1, data=data)
+        response = self.send_apdu(ins=Ctap1.INS.AUTHENTICATE, p1=p1, data=data)
         return SignatureData(response)
+
+
+CTAP1 = Ctap1

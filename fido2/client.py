@@ -29,13 +29,13 @@ from __future__ import absolute_import, unicode_literals, division
 
 from .hid import STATUS
 from .ctap import CtapError
-from .ctap1 import CTAP1, APDU, ApduError
+from .ctap1 import Ctap1, APDU, ApduError
 from .ctap2 import (
-    CTAP2,
-    ClientPin,
+    Ctap2,
     AttestationObject,
     AssertionResponse,
     Info,
+    ClientPin,
 )
 from .webauthn import (
     PublicKeyCredentialCreationOptions,
@@ -189,7 +189,7 @@ class U2fClient(object):
 
     def __init__(self, device, origin, verify=verify_app_id):
         self.poll_delay = 0.25
-        self.ctap = CTAP1(device)
+        self.ctap = Ctap1(device)
         self.origin = origin
         self._verify = verify
 
@@ -329,7 +329,7 @@ class Fido2Client(_BaseClient):
 
         self.ctap1_poll_delay = 0.25
         try:
-            self.ctap2 = CTAP2(device)
+            self.ctap2 = Ctap2(device)
             self.info = self.ctap2.info
             try:
                 self.client_pin = ClientPin(self.ctap2)
@@ -338,7 +338,7 @@ class Fido2Client(_BaseClient):
             self._do_make_credential = self._ctap2_make_credential
             self._do_get_assertion = self._ctap2_get_assertion
         except (ValueError, CtapError):
-            self.ctap1 = CTAP1(device)
+            self.ctap1 = Ctap1(device)
             self.info = _CTAP1_INFO
             self._do_make_credential = self._ctap1_make_credential
             self._do_get_assertion = self._ctap1_get_assertion
