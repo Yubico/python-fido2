@@ -40,7 +40,7 @@ import os
 
 
 def _lb_ad(orig_size):
-    return b"blob" + struct.pack("<L", orig_size)
+    return b"blob" + struct.pack("<Q", orig_size)
 
 
 def _lb_pack(key, data):
