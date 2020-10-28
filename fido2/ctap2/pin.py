@@ -273,7 +273,7 @@ class ClientPin(object):
         :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
-        if not self.ctap.info.options.get("uvBioEnroll"):
+        if not self.ctap.info.options.get("pinUvAuthToken"):
             raise ValueError("Authenticator does not support get_uv_token")
 
         key_agreement, shared_secret = self._get_shared_secret()

@@ -73,10 +73,10 @@ if "largeBlobKey" not in client.info.extensions:
     sys.exit(1)
 
 
-# Prefer UV if supported
-if client.info.options.get("uv"):
+# Prefer UV token if supported
+if client.info.options.get("pinUvAuthToken") and client.info.options.get("uv"):
     uv = "preferred"
-    print("Authenticator supports User Verification")
+    print("Authenticator supports UV token")
 elif client.info.options.get("clientPin"):
     # Prompt for PIN if needed
     pin = getpass("Please enter PIN: ")
@@ -114,7 +114,10 @@ print("New credential created!")
 print("Large Blob Key:", key)
 
 client_pin = ClientPin(client.ctap2)
-token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+if pin:
+    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+else:
+    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
 large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
 
 # Write a large blob
@@ -138,7 +141,10 @@ assertion = assertions[0]  # Only one cred in allowCredentials, only one respons
 key = assertion.large_blob_key
 
 # Get a fresh PIN token
-token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+if pin:
+    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+else:
+    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
 large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
 
 blob = large_blobs.get_blob(key)
