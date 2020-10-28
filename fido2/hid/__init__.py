@@ -185,8 +185,7 @@ class CtapHidDevice(CtapDevice):
                     r_len = struct.unpack_from(">H", recv)[0]
                     recv = recv[2:]
                 elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
-                    ka_status = struct.unpack_from(">B", recv)[0]
-                    recv = recv[1:]
+                    ka_status = struct.unpack_from(">B", recv[2:])[0]
                     logger.debug("Got keepalive status: %02x" % ka_status)
                     if on_keepalive and ka_status != last_ka:
                         try:
