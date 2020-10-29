@@ -75,13 +75,11 @@ def _lb_unpack(key, entry):
     except InvalidTag:
         raise ValueError("Wrong key")
 
-    plain = zlib.decompress(compressed)
-    if len(plain) == orig_size:
-        return plain
-
 
 class LargeBlobs(object):
     """Implementation of the CTAP2.1 Large Blobs API.
+
+    Getting a largeBlobKey for a credential is done via the LargeBlobKey extension.
 
     :param ctap: An instance of a CTAP2 object.
     :param pin_uv_protocol: An instance of a PinUvAuthProtocol.
