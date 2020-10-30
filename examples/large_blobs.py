@@ -41,35 +41,36 @@ from getpass import getpass
 import sys
 
 
+try:
+    from fido2.pcsc import CtapPcscDevice
+except ImportError:
+    CtapPcscDevice = None
+
+
+def enumerate_devices():
+    for dev in CtapHidDevice.list_devices():
+        yield dev
+    if CtapPcscDevice:
+        for dev in CtapPcscDevice.list_devices():
+            yield dev
+
+
+# Locate a device
+for dev in enumerate_devices():
+    client = Fido2Client(dev, "https://example.com")
+    if "largeBlobKey" in client.info.extensions:
+        break
+else:
+    print("No Authenticator with the largeBlobKey extension found!")
+    sys.exit(1)
+
+use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
+
 pin = None
 uv = "discouraged"
 
-# Locate a device
-dev = next(CtapHidDevice.list_devices(), None)
-if dev is not None:
-    print("Use USB HID channel.")
-else:
-    try:
-        from fido2.pcsc import CtapPcscDevice
-
-        dev = next(CtapPcscDevice.list_devices(), None)
-        print("Use NFC channel.")
-    except Exception as e:
-        print("NFC channel search error:", e)
-
-if not dev:
-    print("No FIDO device found")
-    sys.exit(1)
-
-# Set up a FIDO 2 client using the origin https://example.com
-client = Fido2Client(dev, "https://example.com")
-
 if not client.info.options.get("largeBlobs"):
     print("Authenticator does not support large blobs!")
-    sys.exit(1)
-
-if "largeBlobKey" not in client.info.extensions:
-    print("Authenticator does not support the largeBlobKey extension!")
     sys.exit(1)
 
 
@@ -103,11 +104,13 @@ options.extensions = {"largeBlobKey": True}
 # Create a credential
 print("\nTouch your authenticator device now...\n")
 
-attestation_object, client_data = client.make_credential(options, pin=pin)
-key = attestation_object.large_blob_key
+result = client.make_credential(options, pin=pin)
+key = result.attestation_object.large_blob_key
 
 # Complete registration
-auth_data = server.register_complete(state, client_data, attestation_object)
+auth_data = server.register_complete(
+    state, result.client_data, result.attestation_object
+)
 credentials = [auth_data.credential_data]
 
 print("New credential created!")
@@ -134,8 +137,9 @@ options.extensions = {"largeBlobKey": True}
 # Authenticate the credential
 print("\nTouch your authenticator device now...\n")
 
-assertions, client_data = client.get_assertion(options, pin=pin)
-assertion = assertions[0]  # Only one cred in allowCredentials, only one response.
+selection = client.get_assertion(options, pin=pin)
+# Only one cred in allowCredentials, only one response.
+assertion = selection.get_assertions()[0]
 
 # This should match the key from MakeCredential.
 key = assertion.large_blob_key

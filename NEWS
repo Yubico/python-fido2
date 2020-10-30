@@ -1,4 +1,13 @@
 * Version 0.9.0 (unreleased)
+ ** Client: API changes to better support extensions.
+  *** Fido2Client can be configured with Ctap2Extensions to support.
+  *** Client.make_credential now returns a AuthenticatorAttestationResponse,
+      which holds the AttestationObject and ClientData, as well as any client
+      extension results for the credential.
+  *** Client.get_assertion now returns an AssertionSelection object, which is
+      used to select between multiple assertions, resulting in an
+      AuthenticatorAssertionResponse, which holds the ClientData, assertion
+      values, as well as any client extension results for the assertion.
  ** Renames: The CTAP1 and CTAP2 classes have been renamed to Ctap1 and Ctap2,
     respectively. The old names currently work, but will be removed in the
     future.

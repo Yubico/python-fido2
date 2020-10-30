@@ -37,11 +37,14 @@ from .ctap2 import (
     Info,
     ClientPin,
 )
+from .ctap2.extensions import Ctap2Extension
 from .webauthn import (
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
     UserVerificationRequirement,
+    AuthenticatorAttestationResponse,
+    AuthenticatorAssertionResponse,
 )
 from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
@@ -310,6 +313,55 @@ class _BaseClient(object):
         )
 
 
+class AssertionSelection(object):
+    """GetAssertion result holding one or more assertions.
+
+    Since multiple assertions may be retured by Fido2Client.get_assertion, this result
+    is returned which can be used to select a specific response to get.
+    """
+
+    def __init__(self, client_data, assertions):
+        self._client_data = client_data
+        self._assertions = assertions
+
+    def get_assertions(self):
+        return self._assertions
+
+    def _get_extension_results(self, assertion):
+        return {}
+
+    def get_response(self, index):
+        assertion = self._assertions[index]
+
+        return AuthenticatorAssertionResponse(
+            self._client_data,
+            assertion.auth_data,
+            assertion.signature,
+            assertion.user["id"] if assertion.user else None,
+            assertion.credential["id"],
+            self._get_extension_results(assertion),
+        )
+
+
+class Fido2ClientAssertionSelection(AssertionSelection):
+    def __init__(self, client_data, assertions, extensions):
+        super(Fido2ClientAssertionSelection, self).__init__(client_data, assertions)
+        self._extensions = extensions
+
+    def _get_extension_results(self, assertion):
+        # Process extenstion outputs
+        extension_outputs = {}
+        for ext in self._extensions:
+            output = ext.process_get_output(assertion.auth_data)
+            if output is not None:
+                extension_outputs.update(output)
+        return extension_outputs
+
+
+def _default_extensions():
+    return [cls for cls in Ctap2Extension.__subclasses__() if hasattr(cls, "NAME")]
+
+
 _CTAP1_INFO = Info.create(["U2F_V2"])
 
 
@@ -324,9 +376,10 @@ class Fido2Client(_BaseClient):
     :param verify: Function to verify an RP ID for a given origin.
     """
 
-    def __init__(self, device, origin, verify=verify_rp_id):
+    def __init__(self, device, origin, verify=verify_rp_id, extension_types=None):
         super(Fido2Client, self).__init__(origin, verify)
 
+        self.extensions = extension_types or _default_extensions()
         self.ctap1_poll_delay = 0.25
         try:
             self.ctap2 = Ctap2(device)
@@ -397,21 +450,21 @@ class Fido2Client(_BaseClient):
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
 
         try:
-            return (
-                self._do_make_credential(
-                    client_data,
-                    options.rp,
-                    options.user,
-                    options.pub_key_cred_params,
-                    options.exclude_credentials,
-                    options.extensions,
-                    selection.require_resident_key,
-                    self._get_ctap_uv(selection.user_verification, pin is not None),
-                    pin,
-                    event,
-                    kwargs.get("on_keepalive"),
-                ),
+            att_obj, extension_outputs = self._do_make_credential(
                 client_data,
+                options.rp,
+                options.user,
+                options.pub_key_cred_params,
+                options.exclude_credentials,
+                options.extensions,
+                selection.require_resident_key,
+                self._get_ctap_uv(selection.user_verification, pin is not None),
+                pin,
+                event,
+                kwargs.get("on_keepalive"),
+            )
+            return AuthenticatorAttestationResponse(
+                client_data, att_obj, extension_outputs,
             )
         except CtapError as e:
             raise _ctap2client_err(e)
@@ -466,19 +519,39 @@ class Fido2Client(_BaseClient):
             if max_creds and len(exclude_list) > max_creds:
                 raise ClientError.ERR.BAD_REQUEST("exclude_list too long")
 
-        return self.ctap2.make_credential(
+        # Process extensions
+        client_inputs = extensions or {}
+        extension_inputs = {}
+        used_extensions = []
+        for ext in [cls(self.ctap2) for cls in self.extensions]:
+            auth_input = ext.process_create_input(client_inputs)
+            if auth_input is not None:
+                used_extensions.append(ext)
+                extension_inputs[ext.NAME] = auth_input
+        # TODO: Passthrough extension data if key is supported extension?
+
+        att_obj = self.ctap2.make_credential(
             client_data.hash,
             rp,
             user,
             key_params,
-            exclude_list if exclude_list else None,
-            extensions,
+            exclude_list or None,
+            extension_inputs or None,
             options,
             pin_auth,
             pin_protocol,
             event,
             on_keepalive,
         )
+
+        # Process extenstion outputs
+        extension_outputs = {}
+        for ext in used_extensions:
+            output = ext.process_create_output(att_obj.auth_data)
+            if output is not None:
+                extension_outputs.update(output)
+
+        return att_obj, extension_outputs
 
     def _ctap1_make_credential(
         self,
@@ -517,16 +590,19 @@ class Fido2Client(_BaseClient):
                     )
                     raise ClientError.ERR.DEVICE_INELIGIBLE()
 
-        return AttestationObject.from_ctap1(
-            app_param,
-            _call_polling(
-                self.ctap1_poll_delay,
-                event,
-                on_keepalive,
-                self.ctap1.register,
-                client_data.hash,
+        return (
+            AttestationObject.from_ctap1(
                 app_param,
+                _call_polling(
+                    self.ctap1_poll_delay,
+                    event,
+                    on_keepalive,
+                    self.ctap1.register,
+                    client_data.hash,
+                    app_param,
+                ),
             ),
+            {},
         )
 
     def get_assertion(self, options, **kwargs):
@@ -553,18 +629,18 @@ class Fido2Client(_BaseClient):
         )
 
         try:
-            return (
-                self._do_get_assertion(
-                    client_data,
-                    options.rp_id,
-                    options.allow_credentials,
-                    options.extensions,
-                    self._get_ctap_uv(options.user_verification, pin is not None),
-                    pin,
-                    event,
-                    kwargs.get("on_keepalive"),
-                ),
+            assertions, used_extensions = self._do_get_assertion(
                 client_data,
+                options.rp_id,
+                options.allow_credentials,
+                options.extensions,
+                self._get_ctap_uv(options.user_verification, pin is not None),
+                pin,
+                event,
+                kwargs.get("on_keepalive"),
+            )
+            return Fido2ClientAssertionSelection(
+                client_data, assertions, used_extensions,
             )
         except CtapError as e:
             raise _ctap2client_err(e)
@@ -606,17 +682,30 @@ class Fido2Client(_BaseClient):
             if max_creds and len(allow_list) > max_creds:
                 raise ClientError.ERR.BAD_REQUEST("allow_list too long")
 
-        return self.ctap2.get_assertions(
+        # Process extensions
+        client_inputs = extensions or {}
+        extension_inputs = {}
+        used_extensions = []
+        for ext in [cls(self.ctap2) for cls in self.extensions]:
+            auth_input = ext.process_get_input(client_inputs)
+            if auth_input is not None:
+                used_extensions.append(ext)
+                extension_inputs[ext.NAME] = auth_input
+        # TODO: Passthrough extension data if key is supported extension?
+
+        assertions = self.ctap2.get_assertions(
             rp_id,
             client_data.hash,
-            allow_list if allow_list else None,
-            extensions,
+            allow_list or None,
+            extension_inputs or None,
             options,
             pin_auth,
             pin_protocol,
             event,
             on_keepalive,
         )
+
+        return assertions, used_extensions
 
     def _ctap1_get_assertion(
         self, client_data, rp_id, allow_list, extensions, uv, pin, event, on_keepalive
@@ -637,7 +726,8 @@ class Fido2Client(_BaseClient):
                     app_param,
                     cred["id"],
                 )
-                return [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
+                assertions = [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
+                return assertions, []
             except ClientError as e:
                 if e.code == ClientError.ERR.TIMEOUT:
                     raise  # Other errors are ignored so we move to the next.
@@ -726,7 +816,9 @@ class WindowsClient(_BaseClient):
         except OSError as e:
             raise ClientError.ERR.OTHER_ERROR(e)
 
-        return AttestationObject(result), client_data
+        return AuthenticatorAttestationResponse(
+            client_data, AttestationObject(result), {}
+        )
 
     def get_assertion(self, options, **kwargs):
         """Get assertion using Windows WebAuthN APIs.
@@ -760,7 +852,7 @@ class WindowsClient(_BaseClient):
             raise ClientError.ERR.OTHER_ERROR(e)
 
         user = {"id": user_id} if user_id else None
-        return (
-            [AssertionResponse.create(credential, auth_data, signature, user)],
+        return AssertionSelection(
             client_data,
+            [AssertionResponse.create(credential, auth_data, signature, user)],
         )

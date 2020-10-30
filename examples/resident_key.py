@@ -96,18 +96,19 @@ create_options, state = server.register_begin(
 if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
-attestation_object, client_data = client.make_credential(
-    create_options["publicKey"], pin=pin
-)
+result = client.make_credential(create_options["publicKey"], pin=pin)
+
 
 # Complete registration
-auth_data = server.register_complete(state, client_data, attestation_object)
+auth_data = server.register_complete(
+    state, result.client_data, result.attestation_object
+)
 credentials = [auth_data.credential_data]
 
 print("New credential created!")
 
-print("CLIENT DATA:", client_data)
-print("ATTESTATION OBJECT:", attestation_object)
+print("CLIENT DATA:", result.client_data)
+print("ATTESTATION OBJECT:", result.attestation_object)
 print()
 print("CREDENTIAL DATA:", auth_data.credential_data)
 
@@ -119,21 +120,23 @@ request_options, state = server.authenticate_begin(user_verification=uv)
 if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
-assertions, client_data = client.get_assertion(request_options["publicKey"], pin=pin)
-assertion = assertions[0]  # Only one cred in allowCredentials, only one response.
+selection = client.get_assertion(request_options["publicKey"], pin=pin)
+result = selection.get_response(0)  # One cred in allowCredentials, single response.
+
+print("CLIENT DATA %r" % result.client_data)
 
 # Complete authenticator
 server.authenticate_complete(
     state,
     credentials,
-    assertion.credential["id"],
-    client_data,
-    assertion.auth_data,
-    assertion.signature,
+    result.credential_id,
+    result.client_data,
+    result.authenticator_data,
+    result.signature,
 )
 
 print("Credential authenticated!")
 
-print("CLIENT DATA:", client_data)
+print("CLIENT DATA:", result.client_data)
 print()
-print("ASSERTION DATA:", assertion)
+print("AUTHENTICATOR DATA:", result.authenticator_data)

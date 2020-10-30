@@ -389,7 +389,7 @@ class TestFido2Client(unittest.TestCase):
         PatchedCtap2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
 
-        attestation, client_data = client.make_credential(
+        response = client.make_credential(
             PublicKeyCredentialCreationOptions(
                 rp,
                 user,
@@ -400,11 +400,11 @@ class TestFido2Client(unittest.TestCase):
             )
         )
 
-        self.assertIsInstance(attestation, AttestationObject)
-        self.assertIsInstance(client_data, ClientData)
+        self.assertIsInstance(response.attestation_object, AttestationObject)
+        self.assertIsInstance(response.client_data, ClientData)
 
         ctap2.make_credential.assert_called_with(
-            client_data.hash,
+            response.client_data.hash,
             rp,
             user,
             [{"type": "public-key", "alg": -7}],
@@ -417,9 +417,9 @@ class TestFido2Client(unittest.TestCase):
             None,
         )
 
-        self.assertEqual(client_data.get("origin"), APP_ID)
-        self.assertEqual(client_data.get("type"), "webauthn.create")
-        self.assertEqual(client_data.challenge, challenge)
+        self.assertEqual(response.client_data.get("origin"), APP_ID)
+        self.assertEqual(response.client_data.get("type"), "webauthn.create")
+        self.assertEqual(response.client_data.challenge, challenge)
 
     def test_make_credential_ctap1(self):
         dev = mock.Mock()
@@ -430,14 +430,15 @@ class TestFido2Client(unittest.TestCase):
         client.ctap1.get_version.return_value = "U2F_V2"
         client.ctap1.register.return_value = REG_DATA
 
-        attestation, client_data = client.make_credential(
+        response = client.make_credential(
             PublicKeyCredentialCreationOptions(
                 rp, user, challenge, [{"type": "public-key", "alg": -7}]
             )
         )
 
-        self.assertIsInstance(attestation, AttestationObject)
-        self.assertIsInstance(client_data, ClientData)
+        self.assertIsInstance(response.attestation_object, AttestationObject)
+        self.assertIsInstance(response.client_data, ClientData)
+        client_data = response.client_data
 
         client.ctap1.register.assert_called_with(
             client_data.hash, sha256(rp["id"].encode())
@@ -447,4 +448,4 @@ class TestFido2Client(unittest.TestCase):
         self.assertEqual(client_data.get("type"), "webauthn.create")
         self.assertEqual(client_data.challenge, challenge)
 
-        self.assertEqual(attestation.fmt, "fido-u2f")
+        self.assertEqual(response.attestation_object.fmt, "fido-u2f")

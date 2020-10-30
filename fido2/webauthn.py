@@ -234,3 +234,32 @@ class PublicKeyCredentialRequestOptions(_DataObject):
             user_verification=UserVerificationRequirement._wrap(user_verification),
             extensions=extensions,
         )
+
+
+class AuthenticatorAttestationResponse(_DataObject):
+    def __init__(self, client_data, attestation_object, extension_results=None):
+        super(AuthenticatorAttestationResponse, self).__init__(
+            client_data=client_data,
+            attestation_object=attestation_object,
+            extension_results=extension_results,
+        )
+
+
+class AuthenticatorAssertionResponse(_DataObject):
+    def __init__(
+        self,
+        client_data,
+        authenticator_data,
+        signature,
+        user_handle,
+        credential_id,
+        extension_results=None,
+    ):
+        super(AuthenticatorAssertionResponse, self).__init__(
+            client_data=client_data,
+            authenticator_data=authenticator_data,
+            signature=signature,
+            user_handle=user_handle,
+            credential_id=credential_id,
+            extension_results=extension_results,
+        )

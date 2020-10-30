@@ -1,4 +1,4 @@
-# Copyright (c) 2018 Yubico AB
+# Copyright (c) 2020 Yubico AB
 # All rights reserved.
 #
 #   Redistribution and use in source and binary forms, with or
@@ -26,16 +26,15 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """
-Connects to the first FIDO device found which supports the HmacSecret extension,
-creates a new credential for it with the extension enabled, and uses it to
-derive two separate secrets.
+Connects to the first FIDO device found which supports the CredBlob extension,
+creates a new credential for it with the extension enabled, and stores some data.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client
+from fido2.server import Fido2Server
 from getpass import getpass
-from binascii import b2a_hex
 import sys
 import os
 
@@ -56,18 +55,22 @@ def enumerate_devices():
 # Locate a device
 for dev in enumerate_devices():
     client = Fido2Client(dev, "https://example.com")
-    if "hmac-secret" in client.info.extensions:
+    if "credBlob" in client.info.extensions:
         break
 else:
-    print("No Authenticator with the HmacSecret extension found!")
+    print("No Authenticator with the CredBlob extension found!")
     sys.exit(1)
 
 use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
 
 # Prepare parameters for makeCredential
-rp = {"id": "example.com", "name": "Example RP"}
+server = Fido2Server({"id": "example.com", "name": "Example RP"})
 user = {"id": b"user_id", "name": "A. User"}
-challenge = b"Y2hhbGxlbmdl"
+create_options, state = server.register_begin(user, resident_key=True)
+
+# Add CredBlob extension, attach data
+blob = os.urandom(32)  # 32 random bytes
+create_options["publicKey"]["extensions"] = {"credBlob": blob}
 
 # Prompt for PIN if needed
 pin = None
@@ -76,77 +79,46 @@ if client.info.options.get("clientPin"):
 else:
     print("no pin")
 
-# Create a credential with a HmacSecret
+# Create a credential
 if not use_nfc:
     print("\nTouch your authenticator device now...\n")
-result = client.make_credential(
-    {
-        "rp": rp,
-        "user": user,
-        "challenge": challenge,
-        "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
-        "extensions": {"hmacCreateSecret": True},
-    },
-    pin=pin,
-)
 
-# HmacSecret result:
-if not result.extension_results.get("hmacCreateSecret"):
-    print("Failed to create credential with HmacSecret")
+result = client.make_credential(create_options["publicKey"], pin=pin)
+
+# Complete registration
+auth_data = server.register_complete(
+    state, result.client_data, result.attestation_object
+)
+credentials = [auth_data.credential_data]
+
+
+# CredBlob result:
+if not auth_data.extensions.get("credBlob"):
+    print("Credential was registered, but credBlob was NOT saved.")
     sys.exit(1)
 
-credential = result.attestation_object.auth_data.credential_data
-print("New credential created, with the HmacSecret extension.")
+print("New credential created, with the CredBlob extension.")
 
 # Prepare parameters for getAssertion
-challenge = b"Q0hBTExFTkdF"  # Use a new challenge for each call.
-allow_list = [{"type": "public-key", "id": credential.credential_id}]
-
-# Generate a salt for HmacSecret:
-salt = os.urandom(32)
-print("Authenticate with salt:", b2a_hex(salt))
+request_options, state = server.authenticate_begin()
+request_options["publicKey"]["extensions"] = {
+    "getCredBlob": True,
+}
 
 # Authenticate the credential
 if not use_nfc:
     print("\nTouch your authenticator device now...\n")
 
-result = client.get_assertion(
-    {
-        "rpId": rp["id"],
-        "challenge": challenge,
-        "allowCredentials": allow_list,
-        "extensions": {"hmacGetSecret": {"salt1": salt}},
-    },
-    pin=pin,
-).get_response(
-    0
-)  # Only one cred in allowList, only one response.
+# Only one cred in allowCredentials, only one response.
+result = client.get_assertion(request_options["publicKey"], pin=pin).get_response(0)
 
-output1 = result.extension_results["hmacGetSecret"]["output1"]
-print("Authenticated, secret:", b2a_hex(output1))
+blob_res = result.authenticator_data.extensions.get("credBlob")
 
-# Authenticate again, using two salts to generate two secrets:
-
-# Generate a second salt for HmacSecret:
-salt2 = os.urandom(32)
-print("Authenticate with second salt:", b2a_hex(salt2))
-
-if not use_nfc:
-    print("\nTouch your authenticator device now...\n")
-
-# The first salt is reused, which should result in the same secret.
-result = client.get_assertion(
-    {
-        "rpId": rp["id"],
-        "challenge": challenge,
-        "allowCredentials": allow_list,
-        "extensions": {"hmacGetSecret": {"salt1": salt, "salt2": salt2}},
-    },
-    pin=pin,
-).get_response(
-    0
-)  # One cred in allowCredentials, single response.
-
-output = result.extension_results["hmacGetSecret"]
-print("Old secret:", b2a_hex(output["output1"]))
-print("New secret:", b2a_hex(output["output2"]))
+if blob == blob_res:
+    print("Authenticated, got correct blob:", blob.hex())
+else:
+    print(
+        "Authenticated, got incorrect blob! (was %s, expected %s)"
+        % (blob_res.hex(), blob.hex())
+    )
+    sys.exit(1)
