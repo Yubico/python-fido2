@@ -338,7 +338,7 @@ def list_descriptors():
             except ValueError:
                 continue
             except Exception as e:
-                logger.debug("Failed opening HID device", exc_info=e)
+                logger.debug("Failed reading HID descriptor: %s", e)
                 continue
     finally:
         setupapi.SetupDiDestroyDeviceInfoList(collection)
