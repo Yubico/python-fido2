@@ -325,12 +325,14 @@ class AssertionSelection(object):
         self._assertions = assertions
 
     def get_assertions(self):
+        """Get the raw AssertionResponses available to inspect before selecting one."""
         return self._assertions
 
     def _get_extension_results(self, assertion):
         return {}
 
     def get_response(self, index):
+        """Get a single response."""
         assertion = self._assertions[index]
 
         return AuthenticatorAssertionResponse(
@@ -338,7 +340,7 @@ class AssertionSelection(object):
             assertion.auth_data,
             assertion.signature,
             assertion.user["id"] if assertion.user else None,
-            assertion.credential["id"],
+            assertion.credential["id"] if assertion.credential else None,
             self._get_extension_results(assertion),
         )
 
@@ -528,7 +530,6 @@ class Fido2Client(_BaseClient):
             if auth_input is not None:
                 used_extensions.append(ext)
                 extension_inputs[ext.NAME] = auth_input
-        # TODO: Passthrough extension data if key is supported extension?
 
         att_obj = self.ctap2.make_credential(
             client_data.hash,
@@ -691,7 +692,6 @@ class Fido2Client(_BaseClient):
             if auth_input is not None:
                 used_extensions.append(ext)
                 extension_inputs[ext.NAME] = auth_input
-        # TODO: Passthrough extension data if key is supported extension?
 
         assertions = self.ctap2.get_assertions(
             rp_id,

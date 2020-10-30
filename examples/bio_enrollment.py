@@ -35,28 +35,27 @@ Consider this highly experimental.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import CTAP2, ClientPin, FPBioEnrollment, CaptureError
+from fido2.ctap2 import Ctap2, ClientPin, FPBioEnrollment, CaptureError
 from getpass import getpass
 import sys
 
 pin = None
 uv = "discouraged"
 
-dev = next(CtapHidDevice.list_devices(), None)
-if not dev:
-    print("No FIDO device found")
+for dev in CtapHidDevice.list_devices():
+    try:
+        ctap = Ctap2(dev)
+        if "bioEnroll" in ctap.info.options:
+            break
+    except Exception:  # nosec
+        continue
+else:
+    print("No Authenticator supporting bioEnroll found")
     sys.exit(1)
 
-ctap = CTAP2(dev)
-info = ctap.get_info()
-if not info.options.get("clientPin"):
+if not ctap.info.options.get("clientPin"):
     print("PIN not set for the device!")
     sys.exit(1)
-
-if "bioEnroll" not in info.options:
-    if "userVerificationMgmtPreview" not in info.options:  # TODO: Remove later
-        print("Device does not support bio enrollment!")
-        sys.exit(1)
 
 # Authenticate with PIN
 print("Preparing to enroll a new fingerprint.")

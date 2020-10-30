@@ -40,6 +40,20 @@ from getpass import getpass
 import sys
 import ctypes
 
+try:
+    from fido2.pcsc import CtapPcscDevice
+except ImportError:
+    CtapPcscDevice = None
+
+
+def enumerate_devices():
+    for dev in CtapHidDevice.list_devices():
+        yield dev
+    if CtapPcscDevice:
+        for dev in CtapPcscDevice.list_devices():
+            yield dev
+
+
 use_prompt = False
 pin = None
 uv = "discouraged"
@@ -49,25 +63,14 @@ if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
     client = WindowsClient("https://example.com")
 else:
     # Locate a device
-    dev = next(CtapHidDevice.list_devices(), None)
-    if dev is not None:
-        print("Use USB HID channel.")
-        use_prompt = True
+    for dev in enumerate_devices():
+        client = Fido2Client(dev, "https://example.com")
+        if client.info.options.get("rk"):
+            use_prompt = not (CtapPcscDevice and isinstance(dev, CtapPcscDevice))
+            break
     else:
-        try:
-            from fido2.pcsc import CtapPcscDevice
-
-            dev = next(CtapPcscDevice.list_devices(), None)
-            print("Use NFC channel.")
-        except Exception as e:
-            print("NFC channel search error:", e)
-
-    if not dev:
-        print("No FIDO device found")
+        print("No Authenticator with support for resident key found!")
         sys.exit(1)
-
-    # Set up a FIDO 2 client using the origin https://example.com
-    client = Fido2Client(dev, "https://example.com")
 
     # Prefer UV if supported
     if client.info.options.get("uv"):
@@ -121,9 +124,9 @@ if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
 selection = client.get_assertion(request_options["publicKey"], pin=pin)
-result = selection.get_response(0)  # One cred in allowCredentials, single response.
+result = selection.get_response(0)  # There may be multiple responses, get the first.
 
-print("CLIENT DATA %r" % result.client_data)
+print("USER ID:", result.user_handle)
 
 # Complete authenticator
 server.authenticate_complete(
