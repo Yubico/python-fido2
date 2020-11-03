@@ -173,19 +173,19 @@ class CtapHidDevice(CtapDevice):
 
             recv = self._connection.read_packet()
             logger.debug("RECV: %s", b2a_hex(recv))
+
             r_channel = struct.unpack_from(">I", recv)[0]
             recv = recv[4:]
             if r_channel != self._channel_id:
                 raise Exception("Wrong channel")
-            if response is None:
-                r_cmd = struct.unpack_from(">B", recv)[0]
-                recv = recv[1:]
+
+            if response is None:  # Initialization packet
+                r_cmd, r_len = struct.unpack_from(">BH", recv)
+                recv = recv[3:]
                 if r_cmd == TYPE_INIT | cmd:
                     response = b""
-                    r_len = struct.unpack_from(">H", recv)[0]
-                    recv = recv[2:]
                 elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
-                    ka_status = struct.unpack_from(">B", recv[2:])[0]
+                    ka_status = struct.unpack_from(">B", recv)[0]
                     logger.debug("Got keepalive status: %02x" % ka_status)
                     if on_keepalive and ka_status != last_ka:
                         try:
@@ -199,12 +199,13 @@ class CtapHidDevice(CtapDevice):
                     raise CtapError(struct.unpack_from(">B", recv)[0])
                 else:
                     raise CtapError(CtapError.ERR.INVALID_COMMAND)
-            else:
+            else:  # Continuation packet
                 r_seq = struct.unpack_from(">B", recv)[0]
                 recv = recv[1:]
                 if r_seq != seq:
                     raise Exception("Wrong sequence number")
                 seq += 1
+
             response += recv
             if len(response) >= r_len:
                 break
