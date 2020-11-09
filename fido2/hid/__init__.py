@@ -158,59 +158,68 @@ class CtapHidDevice(CtapDevice):
             header = struct.pack(">IB", self._channel_id, 0x7F & seq)
             seq += 1
 
-        # Read response
-        seq = 0
-        response = None
-        last_ka = None
-        while True:
-            if event.is_set():
-                # Cancel
-                logger.debug("Sending cancel...")
-                packet = struct.pack(
-                    ">IB", self._channel_id, TYPE_INIT | CTAPHID.CANCEL
-                ).ljust(size, b"\0")
-                self._connection.write_packet(packet)
+        try:
+            # Read response
+            seq = 0
+            response = None
+            last_ka = None
+            while True:
+                if event.is_set():
+                    # Cancel
+                    logger.debug("Sending cancel...")
+                    packet = struct.pack(
+                        ">IB", self._channel_id, TYPE_INIT | CTAPHID.CANCEL
+                    ).ljust(packet_size, b"\0")
+                    self._connection.write_packet(packet)
 
-            recv = self._connection.read_packet()
-            logger.debug("RECV: %s", b2a_hex(recv))
+                recv = self._connection.read_packet()
+                logger.debug("RECV: %s", b2a_hex(recv))
 
-            r_channel = struct.unpack_from(">I", recv)[0]
-            recv = recv[4:]
-            if r_channel != self._channel_id:
-                raise Exception("Wrong channel")
+                r_channel = struct.unpack_from(">I", recv)[0]
+                recv = recv[4:]
+                if r_channel != self._channel_id:
+                    raise Exception("Wrong channel")
 
-            if response is None:  # Initialization packet
-                r_cmd, r_len = struct.unpack_from(">BH", recv)
-                recv = recv[3:]
-                if r_cmd == TYPE_INIT | cmd:
-                    response = b""
-                elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
-                    ka_status = struct.unpack_from(">B", recv)[0]
-                    logger.debug("Got keepalive status: %02x" % ka_status)
-                    if on_keepalive and ka_status != last_ka:
-                        try:
-                            ka_status = STATUS(ka_status)
-                        except ValueError:
-                            pass  # Unknown status value
-                        last_ka = ka_status
-                        on_keepalive(ka_status)
-                    continue
-                elif r_cmd == TYPE_INIT | CTAPHID.ERROR:
-                    raise CtapError(struct.unpack_from(">B", recv)[0])
-                else:
-                    raise CtapError(CtapError.ERR.INVALID_COMMAND)
-            else:  # Continuation packet
-                r_seq = struct.unpack_from(">B", recv)[0]
-                recv = recv[1:]
-                if r_seq != seq:
-                    raise Exception("Wrong sequence number")
-                seq += 1
+                if response is None:  # Initialization packet
+                    r_cmd, r_len = struct.unpack_from(">BH", recv)
+                    recv = recv[3:]
+                    if r_cmd == TYPE_INIT | cmd:
+                        response = b""
+                    elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
+                        ka_status = struct.unpack_from(">B", recv)[0]
+                        logger.debug("Got keepalive status: %02x" % ka_status)
+                        if on_keepalive and ka_status != last_ka:
+                            try:
+                                ka_status = STATUS(ka_status)
+                            except ValueError:
+                                pass  # Unknown status value
+                            last_ka = ka_status
+                            on_keepalive(ka_status)
+                        continue
+                    elif r_cmd == TYPE_INIT | CTAPHID.ERROR:
+                        raise CtapError(struct.unpack_from(">B", recv)[0])
+                    else:
+                        raise CtapError(CtapError.ERR.INVALID_COMMAND)
+                else:  # Continuation packet
+                    r_seq = struct.unpack_from(">B", recv)[0]
+                    recv = recv[1:]
+                    if r_seq != seq:
+                        raise Exception("Wrong sequence number")
+                    seq += 1
 
-            response += recv
-            if len(response) >= r_len:
-                break
+                response += recv
+                if len(response) >= r_len:
+                    break
 
-        return response[:r_len]
+            return response[:r_len]
+        except KeyboardInterrupt:
+            logger.debug("Keyboard interrupt, sending cancel...")
+            packet = struct.pack(
+                ">IB", self._channel_id, TYPE_INIT | CTAPHID.CANCEL
+            ).ljust(packet_size, b"\0")
+            self._connection.write_packet(packet)
+
+            raise
 
     def wink(self):
         """Causes the authenticator to blink."""
