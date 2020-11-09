@@ -288,7 +288,7 @@ class FPBioEnrollment(BioEnrollment):
             }
         except CtapError as e:
             if e.code == CtapError.ERR.INVALID_OPTION:
-                return []
+                return {}
             raise
 
     def set_name(self, template_id, name):
