@@ -74,6 +74,10 @@ class HmacSecretExtension(Ctap2Extension):
     NAME = "hmac-secret"
     SALT_LEN = 32
 
+    def __init__(self, ctap, pin_protocol=None):
+        super(HmacSecretExtension, self).__init__(ctap)
+        self.pin_protocol = pin_protocol
+
     def process_create_input(self, inputs):
         if self.is_supported() and inputs.get("hmacCreateSecret") is True:
             return True
@@ -95,9 +99,10 @@ class HmacSecretExtension(Ctap2Extension):
         ):
             raise ValueError("Invalid salt length")
 
-        client_pin = ClientPin(self.ctap)
+        client_pin = ClientPin(self.ctap, self.pin_protocol)
         key_agreement, self.shared_secret = client_pin._get_shared_secret()
-        self.pin_protocol = client_pin.protocol
+        if self.pin_protocol is None:
+            self.pin_protocol = client_pin.protocol
 
         salt_enc = self.pin_protocol.encrypt(self.shared_secret, salt1 + salt2)
         salt_auth = self.pin_protocol.authenticate(self.shared_secret, salt_enc)
