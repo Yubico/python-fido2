@@ -488,6 +488,7 @@ class Fido2Client(_BaseClient):
         event,
         on_keepalive,
     ):
+        self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
         pin_auth = None
         pin_protocol = None
         if pin:
@@ -652,6 +653,7 @@ class Fido2Client(_BaseClient):
     def _ctap2_get_assertion(
         self, client_data, rp_id, allow_list, extensions, uv, pin, event, on_keepalive
     ):
+        self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
         pin_auth = None
         pin_protocol = None
         if pin:
