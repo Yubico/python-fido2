@@ -358,7 +358,8 @@ class TestFido2Client(unittest.TestCase):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
         ctap2 = mock.MagicMock()
-        ctap2.info = Info(_INFO_NO_PIN)
+        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        ctap2.info = ctap2.get_info()
         ctap2.make_credential.side_effect = CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
         PatchedCtap2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
@@ -384,7 +385,8 @@ class TestFido2Client(unittest.TestCase):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
         ctap2 = mock.MagicMock()
-        ctap2.info = Info(_INFO_NO_PIN)
+        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        ctap2.info = ctap2.get_info()
         ctap2.make_credential.return_value = AttestationObject(_MC_RESP)
         PatchedCtap2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
