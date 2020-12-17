@@ -225,10 +225,7 @@ class Ctap1(object):
         :return: The response APDU data of a successful request.
         :raise: ApduError
         """
-        size = len(data)
-        size_h = size >> 16 & 0xFF
-        size_l = size & 0xFFFF
-        apdu = struct.pack(">BBBBBH", cla, ins, p1, p2, size_h, size_l) + data + b"\0\0"
+        apdu = struct.pack(">BBBBBH", cla, ins, p1, p2, 0, len(data)) + data + b"\0\0"
 
         response = self.device.call(CTAPHID.MSG, apdu)
         status = struct.unpack(">H", response[-2:])[0]

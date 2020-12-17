@@ -159,6 +159,8 @@ class CtapPcscDevice(CtapDevice):
             # Extended APDU
             data_len = struct.unpack("!H", apdu[5:7])[0]
             data = apdu[7 : 7 + data_len]
+        elif len(apdu) == 4:
+            data = b""
         else:
             # Short APDU
             data_len = six.indexbytes(apdu, 4)
