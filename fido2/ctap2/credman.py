@@ -186,7 +186,7 @@ class CredentialManagement(object):
     def delete_cred(self, cred_id):
         """Delete a resident credential.
 
-        :param cred_id: The ID of the credential to delete.
+        :param cred_id: The PublicKeyCredentialDescriptor of the credential to delete.
         """
         return self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
@@ -196,13 +196,13 @@ class CredentialManagement(object):
     def update_user_info(self, cred_id, user_info):
         """Update the user entity of a resident key.
 
-        :param cred_id: The ID of the credential to update.
+        :param cred_id: The PublicKeyCredentialDescriptor of the credential to update.
         :param user_info: The user info update.
         """
         return self._call(
             CredentialManagement.CMD.UPDATE_USER_INFO,
             {
                 CredentialManagement.PARAM.CREDENTIAL_ID: cred_id,
-                CredentialManagement.PARAM.USER: user_info
+                CredentialManagement.PARAM.USER: user_info,
             },
         )
