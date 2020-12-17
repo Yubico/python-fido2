@@ -90,11 +90,15 @@ class Info(bytes):
         TRANSPORTS = 0x09
         ALGORITHMS = 0x0A
         MAX_LARGE_BLOB = 0x0B
+        FORCE_PIN_CHANGE = 0x0C
         MIN_PIN_LENGTH = 0x0D
         FIRMWARE_VERSION = 0x0E
         MAX_CRED_BLOB_LENGTH = 0x0F
         MAX_RPIDS_FOR_MIN_PIN = 0x10
+        PREFERRED_PLATFORM_UV_ATTEMPTS = 0x11
         UV_MODALITY = 0x12
+        CERTIFICATIONS = 0x13
+        REMAINING_DISC_CREDS = 0x14
 
         @classmethod
         def get(cls, key):
@@ -102,6 +106,9 @@ class Info(bytes):
                 return cls(key)
             except ValueError:
                 return key
+
+        def __repr__(self):
+            return "<%s: 0x%02X>" % (self.name, self)
 
     def __init__(self, _):
         super(Info, self).__init__()
@@ -118,32 +125,18 @@ class Info(bytes):
         self.transports = data.get(Info.KEY.TRANSPORTS, [])
         self.algorithms = data.get(Info.KEY.ALGORITHMS)
         self.max_large_blob = data.get(Info.KEY.MAX_LARGE_BLOB)
+        self.force_pin_change = data.get(Info.KEY.FORCE_PIN_CHANGE, False)
         self.min_pin_length = data.get(Info.KEY.MIN_PIN_LENGTH, 4)
         self.firmware_version = data.get(Info.KEY.FIRMWARE_VERSION)
         self.max_cred_blob_length = data.get(Info.KEY.MAX_CRED_BLOB_LENGTH)
         self.max_rpids_for_min_pin = data.get(Info.KEY.MAX_RPIDS_FOR_MIN_PIN, 0)
         self.uv_modality = data.get(Info.KEY.UV_MODALITY)
+        self.certifications = data.get(Info.KEY.CERTIFICATIONS, {})
+        self.remaining_disc_creds = data.get(Info.KEY.REMAINING_DISC_CREDS)
         self.data = data
 
     def __repr__(self):
-        r = "Info(versions: %r" % self.versions
-        if self.extensions:
-            r += ", extensions: %r" % self.extensions
-        r += ", aaguid: %s" % hexstr(self.aaguid)
-        if self.options:
-            r += ", options: %r" % self.options
-        r += ", max_message_size: %d" % self.max_msg_size
-        if self.pin_uv_protocols:
-            r += ", pin_uv_protocols: %r" % self.pin_uv_protocols
-        if self.max_creds_in_list:
-            r += ", max_credential_count_in_list: %d" % self.max_creds_in_list
-        if self.max_cred_id_length:
-            r += ", max_credential_id_length: %d" % self.max_cred_id_length
-        if self.transports:
-            r += ", transports: %r" % self.transports
-        if self.algorithms:
-            r += ", algorithms: %r" % self.algorithms
-        return r + ")"
+        return "%s" % self.data
 
     def __str__(self):
         return self.__repr__()
