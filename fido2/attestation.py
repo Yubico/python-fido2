@@ -190,9 +190,12 @@ def _validate_cert_common(cert):
     if cert.version != x509.Version.v3:
         raise InvalidData("Attestation certificate must use version 3!")
 
-    bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
-    if bc.value.ca:
-        raise InvalidData("Attestation certificate must have CA=false!")
+    try:
+        bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
+        if bc.value.ca:
+            raise InvalidData("Attestation certificate must have CA=false!")
+    except x509.ExtensionNotFound:
+        raise InvalidData("Attestation certificate must have Basic Constraints!")
 
 
 def _validate_packed_cert(cert, aaguid):
