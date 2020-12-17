@@ -51,11 +51,13 @@ class CredentialManagement(object):
         ENUMERATE_CREDS_BEGIN = 0x04
         ENUMERATE_CREDS_NEXT = 0x05
         DELETE_CREDENTIAL = 0x06
+        UPDATE_USER_INFO = 0x07
 
     @unique
     class PARAM(IntEnum):
         RP_ID_HASH = 0x01
         CREDENTIAL_ID = 0x02
+        USER = 0x03
 
     @unique
     class RESULT(IntEnum):
@@ -189,4 +191,18 @@ class CredentialManagement(object):
         return self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
             {CredentialManagement.PARAM.CREDENTIAL_ID: cred_id},
+        )
+
+    def update_user_info(self, cred_id, user_info):
+        """Update the user entity of a resident key.
+
+        :param cred_id: The ID of the credential to update.
+        :param user_info: The user info update.
+        """
+        return self._call(
+            CredentialManagement.CMD.UPDATE_USER_INFO,
+            {
+                CredentialManagement.PARAM.CREDENTIAL_ID: cred_id,
+                CredentialManagement.PARAM.USER: user_info
+            },
         )
