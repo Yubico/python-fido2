@@ -31,6 +31,7 @@ from __future__ import absolute_import, unicode_literals
 from fido2.ctap2 import AuthenticatorData
 from fido2.attestation import (
     Attestation,
+    AttestationType,
     UnsupportedAttestation,
     FidoU2FAttestation,
     PackedAttestation,
@@ -44,6 +45,12 @@ from fido2.attestation import (
 from binascii import a2b_hex
 
 import unittest
+
+
+# GS Root R2 (https://pki.goog/)
+_GSR2_DER = a2b_hex(
+    b"308203ba308202a2a003020102020b0400000000010f8626e60d300d06092a864886f70d0101050500304c3120301e060355040b1317476c6f62616c5369676e20526f6f74204341202d20523231133011060355040a130a476c6f62616c5369676e311330110603550403130a476c6f62616c5369676e301e170d3036313231353038303030305a170d3231313231353038303030305a304c3120301e060355040b1317476c6f62616c5369676e20526f6f74204341202d20523231133011060355040a130a476c6f62616c5369676e311330110603550403130a476c6f62616c5369676e30820122300d06092a864886f70d01010105000382010f003082010a0282010100a6cf240ebe2e6f28994542c4ab3e21549b0bd37f8470fa12b3cbbf875fc67f86d3b2305cd6fdadf17bdce5f86096099210f5d053defb7b7e7388ac52887b4aa6ca49a65ea8a78c5a11bc7a82ebbe8ce9b3ac962507974a992a072fb41e77bf8a0fb5027c1b96b8c5b93a2cbcd612b9eb597de2d006865f5e496ab5395e8834ecbc780c0898846ca8cd4bb4a07d0c794df0b82dcb21cad56c5b7de1a02984a1f9d39449cb24629120bcdd0bd5d9ccf9ea270a2b7391c69d1bacc8cbe8e0a0f42f908b4dfbb0361bf6197a85e06df26113885c9fe0930a51978a5aceafabd5f7aa09aa60bddcd95fdf72a960135e0001c94afa3fa4ea070321028e82ca03c29b8f0203010001a3819c308199300e0603551d0f0101ff040403020106300f0603551d130101ff040530030101ff301d0603551d0e041604149be20757671c1ec06a06de59b49a2ddfdc19862e30360603551d1f042f302d302ba029a0278625687474703a2f2f63726c2e676c6f62616c7369676e2e6e65742f726f6f742d72322e63726c301f0603551d230418301680149be20757671c1ec06a06de59b49a2ddfdc19862e300d06092a864886f70d01010505000382010100998153871c68978691ece04ab8440bab81ac274fd6c1b81c4378b30c9afcea2c3c6e611b4d4b29f59f051d26c1b8e983006245b6a90893b9a9334b189ac2f887884edbdd71341ac154da463fe0d32aab6d5422f53a62cd206fba2989d7dd91eed35ca23ea15b41f5dfe564432de9d539abd2a2dfb78bd0c080191c45c02d8ce8f82da4745649c505b54f15de6e44783987a87ebbf3791891bbf46f9dc1f08c358c5d01fbc36db9ef446d7946317e0afea982c1ffefab6e20c450c95f9d4d9b178c0ce501c9a0416a7353faa550b46e250ffb4c18f4fd52d98e69b1e8110fde88d8fb1d49f7aade95cf2078c26012db25408c6afc7e4238406412f79e81e1932e"  # noqa E501
+)
 
 
 class TestAttestationObject(unittest.TestCase):
@@ -63,7 +70,10 @@ class TestAttestationObject(unittest.TestCase):
                 b"0021F5FC0B85CD22E60623BCD7D1CA48948909249B4776EB515154E57B66AE12410000002BF8A011F38C0A4D15800617111F9EDC7D0040A17370D9C1759005700C8DE77E7DFD3A0A5300E0A26E5213AA40D6DF10EE4028B58B5F34167035D840BEBAE0C5CE8FD05AD9BD33E3BE7D1C558D81AB4803570BA5010203262001215820A5FD5CE1B1C458C530A54FA61B31BF6B04BE8B97AFDE54DD8CBB69275A8A1BE1225820FA3A3231DD9DEED9D1897BE5A6228C59501E4BCD12975D3DFF730F01278EA61C"  # noqa E501
             )
         )
-        attestation.verify({}, auth_data, b"deadbeef" * 8)
+        res = attestation.verify({}, auth_data, b"deadbeef" * 8)
+        self.assertEqual(res.attestation_type, AttestationType.NONE)
+        self.assertEqual(res.trust_path, [])
+        res.verify_trust_path()
 
         with self.assertRaises(InvalidData):
             attestation.verify({"not": "empty"}, auth_data, b"deadbeef" * 8)
@@ -77,7 +87,10 @@ class TestAttestationObject(unittest.TestCase):
                 b"54ce651ed715b4aaa755eecebd4ea0950815b334bd07d109893e963018cddbd945000000006028b017b1d44c02b4b3afcdafc96bb200201decfcd6d6a05c2826d52348afdc70a9800df007845047b1a23706aa6e2f315ca401030339010020590100af59f4ad4f71da800bb91045b267e240e06317f7b2b1d76f78e239a433811faeca58a1869fb00225eb2727f81b6b20cbc18c0ad8d38fa450e8df11b4ad3bc3ee5d13c77ed172fa3af0195ec6ac0c4bac8c950115dfce6d38737cbafefbe117d8401cd56c638043a0d585131bc48a153b17a8dcb96671e15a90ba1b4ff810b138b77ac0a050b039b87b6089dd8dfa45611b992109d554aad3e6b72ac82d801496e4d2d230aa466090bbbf4f5632fe4b588e4f571462378fa6f514a536a5945b223c8d98f730b7cf85de86b98c217090f9e9ebf9643cf3feceeacb837d7a18542e03271cd8c70cf81186cdb63e4cbf4efc0cbbd3c93231b06f19580d0a980264d12143010001"  # noqa
             )
         )  # noqa
-        attestation.verify({}, auth_data, b"deadbeef" * 8)
+        res = attestation.verify({}, auth_data, b"deadbeef" * 8)
+        self.assertEqual(res.attestation_type, AttestationType.NONE)
+        self.assertEqual(res.trust_path, [])
+        res.verify_trust_path()
 
         with self.assertRaises(InvalidData):
             attestation.verify({"not": "empty"}, auth_data, b"deadbeef" * 8)
@@ -213,7 +226,9 @@ ee18128ed50dd7a855e54d2459db005""".replace(
             b"057a0ecbe7e3e99e8926941614f6af078c802b110be89eb221d69be2e17a1ba4"
         )
 
-        attestation.verify(statement, auth_data, client_param)
+        res = attestation.verify(statement, auth_data, client_param)
+        self.assertEqual(res.attestation_type, AttestationType.ATT_CA)
+        res.verify_trust_path()
 
     def test_fido_u2f_attestation(self):
         attestation = Attestation.for_type("fido-u2f")()
@@ -238,7 +253,10 @@ ee18128ed50dd7a855e54d2459db005""".replace(
             b"687134968222EC17202E42505F8ED2B16AE22F16BB05B88C25DB9E602645F141"
         )
 
-        attestation.verify(statement, auth_data, client_param)
+        res = attestation.verify(statement, auth_data, client_param)
+        self.assertEqual(res.attestation_type, AttestationType.BASIC)
+        self.assertEqual(len(res.trust_path), 1)
+        res.verify_trust_path()
 
         statement["sig"] = b"a" * len(statement["sig"])
         with self.assertRaises(InvalidSignature):
@@ -268,7 +286,10 @@ ee18128ed50dd7a855e54d2459db005""".replace(
             b"985B6187D042FB1258892ED637CEC88617DDF5F6632351A545617AA2B75261BF"
         )
 
-        attestation.verify(statement, auth_data, client_param)
+        res = attestation.verify(statement, auth_data, client_param)
+        self.assertEqual(res.attestation_type, AttestationType.BASIC)
+        self.assertEqual(len(res.trust_path), 1)
+        res.verify_trust_path()
 
         statement["sig"] = b"a" * len(statement["sig"])
         with self.assertRaises(InvalidSignature):
@@ -292,4 +313,6 @@ ee18128ed50dd7a855e54d2459db005""".replace(
             b"8422c80f3428e4e6465f76ebc8a4a93759a0a2e1fb845ee5eea7a02027408520"
         )
 
-        attestation.verify(statement, auth_data, client_param)
+        res = attestation.verify(statement, auth_data, client_param)
+        self.assertEqual(res.attestation_type, AttestationType.BASIC)
+        res.verify_trust_path(_GSR2_DER)

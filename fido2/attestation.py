@@ -30,7 +30,7 @@ from __future__ import absolute_import, unicode_literals
 from .cose import CoseKey, ES256
 from ._tpm import TpmAttestationFormat, TpmPublicFormat
 from .utils import sha256, websafe_decode
-from binascii import a2b_hex
+from enum import Enum, auto
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -62,6 +62,46 @@ class UnsupportedType(InvalidAttestation):
         )
         self.auth_data = auth_data
         self.fmt = fmt
+
+
+class AttestationResult(object):
+    def __init__(self, attestation_type, trust_path):
+        self.attestation_type = attestation_type
+        self.trust_path = trust_path
+
+    def verify_trust_path(self, ca=None):
+        if not self.trust_path and not ca:
+            return
+        certs = [
+            x509.load_der_x509_certificate(der, default_backend())
+            for der in self.trust_path + ([ca] if ca else [])
+        ]
+        cert = certs.pop(0)
+        while certs:
+            child = cert
+            cert = certs.pop(0)
+            pub = cert.public_key()
+            if isinstance(pub, rsa.RSAPublicKey):
+                pub.verify(
+                    child.signature,
+                    child.tbs_certificate_bytes,
+                    padding.PKCS1v15(),
+                    child.signature_hash_algorithm,
+                )
+            elif isinstance(pub, ec.EllipticCurvePublicKey):
+                pub.verify(
+                    child.signature,
+                    child.tbs_certificate_bytes,
+                    ec.ECDSA(child.signature_hash_algorithm),
+                )
+
+
+class AttestationType(Enum):
+    BASIC = auto()
+    SELF = auto()
+    ATT_CA = auto()
+    ANON_CA = auto()
+    NONE = auto
 
 
 class Attestation(abc.ABC):
@@ -96,6 +136,7 @@ class NoneAttestation(Attestation):
     def verify(self, statement, auth_data, client_data_hash):
         if statement != {}:
             raise InvalidData("None Attestation requires empty statement.")
+        return AttestationResult(AttestationType.NONE, [])
 
 
 class FidoU2FAttestation(Attestation):
@@ -104,14 +145,16 @@ class FidoU2FAttestation(Attestation):
     def verify(self, statement, auth_data, client_data_hash):
         cd = auth_data.credential_data
         pk = b"\x04" + cd.public_key[-2] + cd.public_key[-3]
+        x5c = statement["x5c"]
         FidoU2FAttestation.verify_signature(
             auth_data.rp_id_hash,
             client_data_hash,
             cd.credential_id,
             pk,
-            statement["x5c"][0],
+            x5c[0],
             statement["sig"],
         )
+        return AttestationResult(AttestationType.BASIC, x5c)
 
     @staticmethod
     def verify_signature(
@@ -125,18 +168,11 @@ class FidoU2FAttestation(Attestation):
             raise InvalidSignature()
 
 
-# GS Root R2 (https://pki.goog/)
-_GSR2_DER = a2b_hex(
-    b"308203ba308202a2a003020102020b0400000000010f8626e60d300d06092a864886f70d0101050500304c3120301e060355040b1317476c6f62616c5369676e20526f6f74204341202d20523231133011060355040a130a476c6f62616c5369676e311330110603550403130a476c6f62616c5369676e301e170d3036313231353038303030305a170d3231313231353038303030305a304c3120301e060355040b1317476c6f62616c5369676e20526f6f74204341202d20523231133011060355040a130a476c6f62616c5369676e311330110603550403130a476c6f62616c5369676e30820122300d06092a864886f70d01010105000382010f003082010a0282010100a6cf240ebe2e6f28994542c4ab3e21549b0bd37f8470fa12b3cbbf875fc67f86d3b2305cd6fdadf17bdce5f86096099210f5d053defb7b7e7388ac52887b4aa6ca49a65ea8a78c5a11bc7a82ebbe8ce9b3ac962507974a992a072fb41e77bf8a0fb5027c1b96b8c5b93a2cbcd612b9eb597de2d006865f5e496ab5395e8834ecbc780c0898846ca8cd4bb4a07d0c794df0b82dcb21cad56c5b7de1a02984a1f9d39449cb24629120bcdd0bd5d9ccf9ea270a2b7391c69d1bacc8cbe8e0a0f42f908b4dfbb0361bf6197a85e06df26113885c9fe0930a51978a5aceafabd5f7aa09aa60bddcd95fdf72a960135e0001c94afa3fa4ea070321028e82ca03c29b8f0203010001a3819c308199300e0603551d0f0101ff040403020106300f0603551d130101ff040530030101ff301d0603551d0e041604149be20757671c1ec06a06de59b49a2ddfdc19862e30360603551d1f042f302d302ba029a0278625687474703a2f2f63726c2e676c6f62616c7369676e2e6e65742f726f6f742d72322e63726c301f0603551d230418301680149be20757671c1ec06a06de59b49a2ddfdc19862e300d06092a864886f70d01010505000382010100998153871c68978691ece04ab8440bab81ac274fd6c1b81c4378b30c9afcea2c3c6e611b4d4b29f59f051d26c1b8e983006245b6a90893b9a9334b189ac2f887884edbdd71341ac154da463fe0d32aab6d5422f53a62cd206fba2989d7dd91eed35ca23ea15b41f5dfe564432de9d539abd2a2dfb78bd0c080191c45c02d8ce8f82da4745649c505b54f15de6e44783987a87ebbf3791891bbf46f9dc1f08c358c5d01fbc36db9ef446d7946317e0afea982c1ffefab6e20c450c95f9d4d9b178c0ce501c9a0416a7353faa550b46e250ffb4c18f4fd52d98e69b1e8110fde88d8fb1d49f7aade95cf2078c26012db25408c6afc7e4238406412f79e81e1932e"  # noqa E501
-)
-
-
 class AndroidSafetynetAttestation(Attestation):
     FORMAT = "android-safetynet"
 
-    def __init__(self, allow_rooted=False, ca=_GSR2_DER):
+    def __init__(self, allow_rooted=False):
         self.allow_rooted = allow_rooted
-        self._ca = x509.load_der_x509_certificate(ca, default_backend())
 
     def verify(self, statement, auth_data, client_data_hash):
         jwt = statement["response"]
@@ -149,13 +185,9 @@ class AndroidSafetynetAttestation(Attestation):
             raise InvalidData("Nonce does not match!")
 
         data = json.loads(header.decode("utf8"))
-        certs = [
-            x509.load_der_x509_certificate(websafe_decode(x), default_backend())
-            for x in data["x5c"]
-        ]
-        certs.append(self._ca)
+        x5c = [websafe_decode(x) for x in data["x5c"]]
+        cert = x509.load_der_x509_certificate(x5c[0], default_backend())
 
-        cert = certs.pop(0)
         cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
         if cn[0].value != "attest.android.com":
             raise InvalidData("Certificate not issued to attest.android.com!")
@@ -163,24 +195,7 @@ class AndroidSafetynetAttestation(Attestation):
         CoseKey.for_name(data["alg"]).from_cryptography_key(cert.public_key()).verify(
             jwt.rsplit(b".", 1)[0], sig
         )
-
-        while certs:
-            child = cert
-            cert = certs.pop(0)
-            pub = cert.public_key()
-            if isinstance(pub, rsa.RSAPublicKey):
-                pub.verify(
-                    child.signature,
-                    child.tbs_certificate_bytes,
-                    padding.PKCS1v15(),
-                    child.signature_hash_algorithm,
-                )
-            elif isinstance(pub, ec.EllipticCurvePublicKey):
-                pub.verify(
-                    child.signature,
-                    child.tbs_certificate_bytes,
-                    ec.ECDSA(child.signature_hash_algorithm),
-                )
+        return AttestationResult(AttestationType.BASIC, x5c)
 
 
 OID_AAGUID = x509.ObjectIdentifier("1.3.6.1.4.1.45724.1.1.4")
@@ -246,12 +261,15 @@ class PackedAttestation(Attestation):
             _validate_packed_cert(cert, auth_data.credential_data.aaguid)
 
             pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
+            att_type = AttestationType.BASIC
         else:
             pub_key = CoseKey.parse(auth_data.credential_data.public_key)
             if pub_key.ALGORITHM != alg:
                 raise InvalidData("Wrong algorithm of public key!")
+            att_type = AttestationType.SELF
         try:
             pub_key.verify(auth_data + client_data_hash, statement["sig"])
+            return AttestationResult(att_type, x5c or [])
         except _InvalidSignature:
             raise InvalidSignature()
 
@@ -287,18 +305,12 @@ class TpmAttestation(Attestation):
         if "ecdaaKeyId" in statement:
             raise NotImplementedError("ECDAA not implemented")
         alg = statement["alg"]
-        x5c = statement.get("x5c")
+        x5c = statement["x5c"]
         cert_info = statement["certInfo"]
-        if x5c:
-            cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+        cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+        _validate_tpm_cert(cert)
 
-            _validate_tpm_cert(cert)
-
-            pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
-        else:
-            pub_key = CoseKey.parse(auth_data.credential_data.public_key)
-            if pub_key.ALGORITHM != alg:
-                raise InvalidData("Wrong algorithm of public key!")
+        pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
 
         try:
             pub_area = TpmPublicFormat.parse(statement["pubArea"])
@@ -351,5 +363,6 @@ class TpmAttestation(Attestation):
                 )
 
             pub_key.verify(cert_info, statement["sig"])
+            return AttestationResult(AttestationType.ATT_CA, x5c)
         except _InvalidSignature:
             raise InvalidSignature("signature of certInfo does not match")
