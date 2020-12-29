@@ -366,3 +366,20 @@ class TpmAttestation(Attestation):
             return AttestationResult(AttestationType.ATT_CA, x5c)
         except _InvalidSignature:
             raise InvalidSignature("signature of certInfo does not match")
+
+
+OID_APPLE = x509.ObjectIdentifier("1.2.840.113635.100.8.2")
+
+
+class AppleAttestation(Attestation):
+    FORMAT = "apple"
+
+    def verify(self, statement, auth_data, client_data_hash):
+        x5c = statement["x5c"]
+        expected_nonce = sha256(auth_data + client_data_hash)
+        cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+        ext = cert.extensions.get_extension_for_oid(OID_APPLE)
+        ext_nonce = ext.value.value[6:]  # Sequence of single element of octet string
+        if not bytes_eq(expected_nonce, ext_nonce):
+            raise InvalidData("Nonce does not match!")
+        return AttestationResult(AttestationType.ANON_CA, x5c)
