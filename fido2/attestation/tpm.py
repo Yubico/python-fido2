@@ -27,16 +27,29 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import struct
-import six
+from __future__ import absolute_import, unicode_literals
+
+from .base import (
+    Attestation,
+    AttestationType,
+    AttestationResult,
+    InvalidData,
+    InvalidSignature,
+    _validate_cert_common,
+)
+from ..cose import CoseKey
+from ..utils import bytes2int, ByteBuffer
 
 from enum import IntEnum
 from collections import namedtuple
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives import hashes
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
 
-from .utils import bytes2int, ByteBuffer
+import struct
+import six
 
 
 if six.PY2:
@@ -50,6 +63,7 @@ if six.PY2:
 
 
 TPM_ALG_NULL = 0x0010
+OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
 
 
 class TpmRsaScheme(IntEnum):
@@ -185,7 +199,7 @@ class TpmAttestationFormat(object):
 
 
 class TpmsRsaParms(object):
-    """ Parse TPMS_RSA_PARMS struct
+    """Parse TPMS_RSA_PARMS struct
 
     See:
     https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
@@ -521,3 +535,94 @@ class TpmPublicFormat(object):
         output += digest.finalize()
 
         return output
+
+
+def _validate_tpm_cert(cert):
+    # https://www.w3.org/TR/webauthn/#tpm-cert-requirements
+    _validate_cert_common(cert)
+
+    s = cert.subject.get_attributes_for_oid(x509.NameOID)
+    if s:
+        raise InvalidData("Certificate should not have Subject")
+
+    s = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+    if not s:
+        raise InvalidData("Certificate should have SubjectAlternativeName")
+    ext = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
+    has_aik = [x == OID_AIK_CERTIFICATE for x in ext.value]
+    if True not in has_aik:
+        raise InvalidData(
+            'Extended key usage MUST contain the "joint-iso-itu-t(2) '
+            "internationalorganizations(23) 133 tcg-kp(8) "
+            'tcg-kp-AIKCertificate(3)" OID.'
+        )
+
+
+class TpmAttestation(Attestation):
+    FORMAT = "tpm"
+
+    def verify(self, statement, auth_data, client_data_hash):
+        if "ecdaaKeyId" in statement:
+            raise NotImplementedError("ECDAA not implemented")
+        alg = statement["alg"]
+        x5c = statement["x5c"]
+        cert_info = statement["certInfo"]
+        cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+        _validate_tpm_cert(cert)
+
+        pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
+
+        try:
+            pub_area = TpmPublicFormat.parse(statement["pubArea"])
+        except Exception as e:
+            raise InvalidData("unable to parse pubArea", e)
+
+        # Verify that the public key specified by the parameters and unique
+        # fields of pubArea is identical to the credentialPublicKey in the
+        # attestedCredentialData in authenticatorData.
+        if (
+            auth_data.credential_data.public_key.from_cryptography_key(
+                pub_area.public_key()
+            )
+            != auth_data.credential_data.public_key
+        ):
+            raise InvalidSignature(
+                "attestation pubArea does not match attestedCredentialData"
+            )
+
+        try:
+            # TpmAttestationFormat.parse is reponsible for:
+            #   Verify that magic is set to TPM_GENERATED_VALUE.
+            #   Verify that type is set to TPM_ST_ATTEST_CERTIFY.
+            tpm = TpmAttestationFormat.parse(cert_info)
+
+            # Verify that extraData is set to the hash of attToBeSigned
+            # using the hash algorithm employed in "alg".
+            att_to_be_signed = auth_data + client_data_hash
+            digest = hashes.Hash(pub_key._HASH_ALG, backend=default_backend())
+            digest.update(att_to_be_signed)
+            data = digest.finalize()
+
+            if tpm.data != data:
+                raise InvalidSignature(
+                    "attestation does not sign for authData and ClientData"
+                )
+
+            # Verify that attested contains a TPMS_CERTIFY_INFO structure as
+            # specified in [TPMv2-Part2] section 10.12.3, whose name field
+            # contains a valid Name for pubArea, as computed using the
+            # algorithm in the nameAlg field of pubArea using the procedure
+            # specified in [TPMv2-Part1] section 16.
+            # [TPMv2-Part2]:
+            # https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+            # [TPMv2-Part1]:
+            # https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
+            if tpm.attested.name != pub_area.name():
+                raise InvalidData(
+                    "TPMS_CERTIFY_INFO does not include a valid name for pubArea"
+                )
+
+            pub_key.verify(cert_info, statement["sig"])
+            return AttestationResult(AttestationType.ATT_CA, x5c)
+        except _InvalidSignature:
+            raise InvalidSignature("signature of certInfo does not match")
