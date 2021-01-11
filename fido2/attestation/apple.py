@@ -32,6 +32,7 @@ from .base import (
     AttestationType,
     AttestationResult,
     InvalidData,
+    catch_builtins,
 )
 from ..utils import sha256
 
@@ -46,6 +47,7 @@ OID_APPLE = x509.ObjectIdentifier("1.2.840.113635.100.8.2")
 class AppleAttestation(Attestation):
     FORMAT = "apple"
 
+    @catch_builtins
     def verify(self, statement, auth_data, client_data_hash):
         x5c = statement["x5c"]
         expected_nonce = sha256(auth_data + client_data_hash)

@@ -33,6 +33,7 @@ from .base import (
     AttestationResult,
     InvalidData,
     InvalidSignature,
+    catch_builtins,
     _validate_cert_common,
 )
 from ..cose import CoseKey
@@ -83,6 +84,7 @@ def _validate_packed_cert(cert, aaguid):
 class PackedAttestation(Attestation):
     FORMAT = "packed"
 
+    @catch_builtins
     def verify(self, statement, auth_data, client_data_hash):
         if "ecdaaKeyId" in statement:
             raise NotImplementedError("ECDAA not implemented")

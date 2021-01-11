@@ -32,6 +32,7 @@ from .base import (
     AttestationType,
     AttestationResult,
     InvalidData,
+    catch_builtins,
 )
 from ..cose import CoseKey
 from ..utils import sha256, websafe_decode
@@ -49,6 +50,7 @@ class AndroidSafetynetAttestation(Attestation):
     def __init__(self, allow_rooted=False):
         self.allow_rooted = allow_rooted
 
+    @catch_builtins
     def verify(self, statement, auth_data, client_data_hash):
         jwt = statement["response"]
         header, payload, sig = (websafe_decode(x) for x in jwt.split(b"."))

@@ -42,6 +42,7 @@ from fido2.attestation import (
     InvalidData,
     InvalidSignature,
     UnsupportedType,
+    verify_x509_chain,
 )
 from binascii import a2b_hex
 
@@ -74,7 +75,6 @@ class TestAttestationObject(unittest.TestCase):
         res = attestation.verify({}, auth_data, b"deadbeef" * 8)
         self.assertEqual(res.attestation_type, AttestationType.NONE)
         self.assertEqual(res.trust_path, [])
-        res.verify_trust_path()
 
         with self.assertRaises(InvalidData):
             attestation.verify({"not": "empty"}, auth_data, b"deadbeef" * 8)
@@ -91,7 +91,6 @@ class TestAttestationObject(unittest.TestCase):
         res = attestation.verify({}, auth_data, b"deadbeef" * 8)
         self.assertEqual(res.attestation_type, AttestationType.NONE)
         self.assertEqual(res.trust_path, [])
-        res.verify_trust_path()
 
         with self.assertRaises(InvalidData):
             attestation.verify({"not": "empty"}, auth_data, b"deadbeef" * 8)
@@ -229,7 +228,7 @@ ee18128ed50dd7a855e54d2459db005""".replace(
 
         res = attestation.verify(statement, auth_data, client_param)
         self.assertEqual(res.attestation_type, AttestationType.ATT_CA)
-        res.verify_trust_path()
+        verify_x509_chain(res.trust_path)
 
     def test_fido_u2f_attestation(self):
         attestation = Attestation.for_type("fido-u2f")()
@@ -257,7 +256,6 @@ ee18128ed50dd7a855e54d2459db005""".replace(
         res = attestation.verify(statement, auth_data, client_param)
         self.assertEqual(res.attestation_type, AttestationType.BASIC)
         self.assertEqual(len(res.trust_path), 1)
-        res.verify_trust_path()
 
         statement["sig"] = b"a" * len(statement["sig"])
         with self.assertRaises(InvalidSignature):
@@ -290,7 +288,6 @@ ee18128ed50dd7a855e54d2459db005""".replace(
         res = attestation.verify(statement, auth_data, client_param)
         self.assertEqual(res.attestation_type, AttestationType.BASIC)
         self.assertEqual(len(res.trust_path), 1)
-        res.verify_trust_path()
 
         statement["sig"] = b"a" * len(statement["sig"])
         with self.assertRaises(InvalidSignature):
@@ -316,7 +313,7 @@ ee18128ed50dd7a855e54d2459db005""".replace(
 
         res = attestation.verify(statement, auth_data, client_param)
         self.assertEqual(res.attestation_type, AttestationType.BASIC)
-        res.verify_trust_path(_GSR2_DER)
+        verify_x509_chain(res.trust_path + [_GSR2_DER])
 
     def test_apple_attestation(self):
         attestation = Attestation.for_type("apple")()
@@ -346,4 +343,4 @@ ee18128ed50dd7a855e54d2459db005""".replace(
         res = attestation.verify(statement, auth_data, client_param)
         self.assertEqual(res.attestation_type, AttestationType.ANON_CA)
         self.assertEqual(len(res.trust_path), 2)
-        res.verify_trust_path()
+        verify_x509_chain(res.trust_path)

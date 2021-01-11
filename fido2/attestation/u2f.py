@@ -32,6 +32,7 @@ from .base import (
     AttestationType,
     AttestationResult,
     InvalidSignature,
+    catch_builtins,
 )
 from ..cose import ES256
 
@@ -43,6 +44,7 @@ from cryptography.exceptions import InvalidSignature as _InvalidSignature
 class FidoU2FAttestation(Attestation):
     FORMAT = "fido-u2f"
 
+    @catch_builtins
     def verify(self, statement, auth_data, client_data_hash):
         cd = auth_data.credential_data
         pk = b"\x04" + cd.public_key[-2] + cd.public_key[-3]

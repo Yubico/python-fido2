@@ -36,6 +36,8 @@ from .base import (  # noqa: F401
     InvalidSignature,
     UnsupportedType,
     UnsupportedAttestation,
+    UntrustedAttestation,
+    verify_x509_chain,
 )
 from .apple import AppleAttestation  # noqa: F401
 from .android import AndroidSafetynetAttestation  # noqa: F401

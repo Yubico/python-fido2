@@ -29,6 +29,8 @@ from enum import Enum, auto
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from functools import wraps
 
 import abc
 
@@ -42,6 +44,10 @@ class InvalidData(InvalidAttestation):
 
 
 class InvalidSignature(InvalidAttestation):
+    pass
+
+
+class UntrustedAttestation(InvalidAttestation):
     pass
 
 
@@ -61,18 +67,35 @@ class AttestationResult(object):
         self.attestation_type = attestation_type
         self.trust_path = trust_path
 
-    def verify_trust_path(self, ca=None):
-        if not self.trust_path and not ca:
-            return
-        certs = [
-            x509.load_der_x509_certificate(der, default_backend())
-            for der in self.trust_path + ([ca] if ca else [])
-        ]
+
+class AttestationType(Enum):
+    BASIC = auto()
+    SELF = auto()
+    ATT_CA = auto()
+    ANON_CA = auto()
+    NONE = auto
+
+
+def catch_builtins(f):
+    @wraps(f)
+    def inner(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except (ValueError, KeyError, IndexError) as e:
+            raise InvalidData(e)
+
+    return inner
+
+
+@catch_builtins
+def verify_x509_chain(chain):
+    certs = [x509.load_der_x509_certificate(der, default_backend()) for der in chain]
+    cert = certs.pop(0)
+    while certs:
+        child = cert
         cert = certs.pop(0)
-        while certs:
-            child = cert
-            cert = certs.pop(0)
-            pub = cert.public_key()
+        pub = cert.public_key()
+        try:
             if isinstance(pub, rsa.RSAPublicKey):
                 pub.verify(
                     child.signature,
@@ -86,14 +109,8 @@ class AttestationResult(object):
                     child.tbs_certificate_bytes,
                     ec.ECDSA(child.signature_hash_algorithm),
                 )
-
-
-class AttestationType(Enum):
-    BASIC = auto()
-    SELF = auto()
-    ATT_CA = auto()
-    ANON_CA = auto()
-    NONE = auto
+        except _InvalidSignature:
+            raise InvalidSignature()
 
 
 class Attestation(abc.ABC):

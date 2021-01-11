@@ -35,6 +35,7 @@ from .base import (
     AttestationResult,
     InvalidData,
     InvalidSignature,
+    catch_builtins,
     _validate_cert_common,
 )
 from ..cose import CoseKey
@@ -561,6 +562,7 @@ def _validate_tpm_cert(cert):
 class TpmAttestation(Attestation):
     FORMAT = "tpm"
 
+    @catch_builtins
     def verify(self, statement, auth_data, client_data_hash):
         if "ecdaaKeyId" in statement:
             raise NotImplementedError("ECDAA not implemented")

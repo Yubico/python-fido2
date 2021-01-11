@@ -31,7 +31,13 @@ from .rpid import verify_rp_id, verify_app_id
 from .cose import CoseKey
 from .ctap2 import AttestedCredentialData
 from .client import WEBAUTHN_TYPE
-from .attestation import Attestation, FidoU2FAttestation, UnsupportedAttestation
+from .attestation import (
+    Attestation,
+    UnsupportedAttestation,
+    UntrustedAttestation,
+    InvalidSignature,
+    verify_x509_chain,
+)
 from .utils import websafe_encode, websafe_decode
 from .webauthn import (
     AttestationConveyancePreference,
@@ -47,20 +53,13 @@ from .webauthn import (
 
 
 import os
+import abc
 from cryptography.hazmat.primitives import constant_time
-from cryptography.exceptions import InvalidSignature
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
 
 
 def _verify_origin_for_rp(rp_id):
     return lambda o: verify_rp_id(rp_id, o)
-
-
-def _default_attestations():
-    return [
-        cls()
-        for cls in Attestation.__subclasses__()
-        if getattr(cls, "FORMAT", "none") != "none"
-    ]
 
 
 def _validata_challenge(challenge):
@@ -100,20 +99,86 @@ def _wrap_credentials(creds):
     ]
 
 
+def _ignore_attestation(attestation_object, client_data_hash):
+    """Ignore attestation."""
+
+
+def _default_attestations():
+    return [
+        cls()
+        for cls in Attestation.__subclasses__()
+        if getattr(cls, "FORMAT", "none") != "none"
+    ]
+
+
+class AttestationVerifier(abc.ABC):
+    """Base class for verifying attestation.
+
+    Override the ca_lookup method to provide a trusted root certificate (or chain) used
+    to verify the trust path from the attestation.
+    """
+
+    def __init__(self, attestation_types=None):
+        self._attestation_types = attestation_types or _default_attestations()
+
+    @abc.abstractmethod
+    def ca_lookup(self, attestation_result, auth_data):
+        """Lookup a CA certificate to be used to verify a trust path.
+
+        :param attestation_result: The result of the attestation
+        """
+        raise NotImplementedError()
+
+    def verify_attestation(self, attestation_object, client_data_hash):
+        """Verify attestation.
+
+        :param attestation_object: dict containing attestation data.
+        :param client_data_hash: SHA256 hash of the ClientData bytes.
+        """
+        att_verifier = UnsupportedAttestation(attestation_object.fmt)
+        for at in self._attestation_types:
+            if getattr(at, "FORMAT", None) == attestation_object.fmt:
+                att_verifier = at
+                break
+        # An unsupported format causes an exception to be thrown, which
+        # includes the auth_data. The caller may choose to handle this case
+        # and allow the registration.
+        result = att_verifier.verify(
+            attestation_object.att_statement,
+            attestation_object.auth_data,
+            client_data_hash,
+        )
+
+        # Lookup CA to use for trust path verification
+        ca = self.ca_lookup(result, attestation_object.auth_data)
+        if ca is None:
+            raise UntrustedAttestation("No root found for Authneticator")
+
+        # Validate the trust chain
+        try:
+            verify_x509_chain(result.trust_path + ca)
+        except InvalidSignature as e:
+            raise UntrustedAttestation(e)
+
+    def __call__(self, *args):
+        """Allows passing an instance to Fido2Server as verify_attestation"""
+        self.verify_attestation(*args)
+
+
 class Fido2Server(object):
-    """FIDO2 server
+    """FIDO2 server.
 
     :param rp: Relying party data as `PublicKeyCredentialRpEntity` instance.
     :param attestation: (optional) Requirement on authenticator attestation.
     :param verify_origin: (optional) Alternative function to validate an origin.
-    :param attestation_types: (optional) List of `Attestation` subclasses to use
-        to verify attestation. By default, all available subclasses of
-        `Attestation` will be used, excluding the NoneAttestation format. This
-        parameter is ignored if `attestation` is set to `none`.
+    :param verify_attestation: (optional) function to validate attestation, which is
+        invoked with attestation_object and client_data_hash. It should return nothing
+        and raise an exception on failure. By default, attestation is ignored.
+        Attestation is also ignored if `attestation` is set to `none`.
     """
 
     def __init__(
-        self, rp, attestation=None, verify_origin=None, attestation_types=None
+        self, rp, attestation=None, verify_origin=None, verify_attestation=None
     ):
         self.rp = PublicKeyCredentialRpEntity._wrap(rp)
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
@@ -123,7 +188,7 @@ class Fido2Server(object):
             PublicKeyCredentialParameters("public-key", alg)
             for alg in CoseKey.supported_algorithms()
         ]
-        self._attestation_types = attestation_types or _default_attestations()
+        self._verify_attestation = verify_attestation or _ignore_attestation
 
     def register_begin(
         self,
@@ -208,19 +273,7 @@ class Fido2Server(object):
             )
 
         if self.attestation not in (None, AttestationConveyancePreference.NONE):
-            att_verifier = UnsupportedAttestation(attestation_object.fmt)
-            for at in self._attestation_types:
-                if getattr(at, "FORMAT", None) == attestation_object.fmt:
-                    att_verifier = at
-                    break
-            # An unsupported format causes an exception to be thrown, which
-            # includes the auth_data. The caller may choose to handle this case
-            # and allow the registration.
-            att_verifier.verify(
-                attestation_object.att_statement,
-                attestation_object.auth_data,
-                client_data.hash,
-            )
+            self._verify_attestation(attestation_object, client_data.hash)
         # We simply ignore attestation if self.attestation == 'none', as not all
         # clients strip the attestation.
 
@@ -292,7 +345,7 @@ class Fido2Server(object):
             if cred.credential_id == credential_id:
                 try:
                     cred.public_key.verify(auth_data + client_data.hash, signature)
-                except InvalidSignature:
+                except _InvalidSignature:
                     raise ValueError("Invalid signature.")
                 return cred
         raise ValueError("Unknown credential ID.")
@@ -320,7 +373,6 @@ class U2FFido2Server(Fido2Server):
 
     def __init__(self, app_id, rp, verify_u2f_origin=None, *args, **kwargs):
         super(U2FFido2Server, self).__init__(rp, *args, **kwargs)
-        kwargs["attestation_types"] = [FidoU2FAttestation()]
         if verify_u2f_origin:
             kwargs["verify_origin"] = verify_u2f_origin
         else:
