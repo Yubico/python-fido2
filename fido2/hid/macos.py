@@ -117,8 +117,15 @@ K_CF_RUN_LOOP_RUN_TIMED_OUT = 3
 K_CF_RUN_LOOP_RUN_HANDLED_SOURCE = 4
 
 # Load relevant libraries
-iokit = ctypes.cdll.LoadLibrary(ctypes.util.find_library("IOKit"))
-cf = ctypes.cdll.LoadLibrary(ctypes.util.find_library("CoreFoundation"))
+# NOTE: find_library doesn't currently work on Big Sur, requiring the hardcoded paths
+iokit = ctypes.cdll.LoadLibrary(
+    ctypes.util.find_library("IOKit")
+    or "/System/Library/Frameworks/IOKit.framework/IOKit"
+)
+cf = ctypes.cdll.LoadLibrary(
+    ctypes.util.find_library("CoreFoundation")
+    or "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+)
 
 # Exported constants
 K_CF_RUNLOOP_DEFAULT_MODE = CF_STRING_REF.in_dll(cf, "kCFRunLoopDefaultMode")
@@ -215,12 +222,12 @@ REMOVAL_CALLBACK = IO_HID_CALLBACK(_hid_removal_callback)
 def _dev_read_thread(hid_device):
     """Binds a device to the thread's run loop, then starts the run loop.
 
-  Args:
+    Args:
     hid_device: The MacOsHidDevice object
 
-  The HID manager requires a run loop to handle Report reads. This thread
-  function serves that purpose.
-  """
+    The HID manager requires a run loop to handle Report reads. This thread
+    function serves that purpose.
+    """
 
     # Schedule device events with run loop
     hid_device.run_loop_ref = cf.CFRunLoopGetCurrent()
