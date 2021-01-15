@@ -410,9 +410,8 @@ def list_descriptors():
             for handle in devices:
                 try:
                     descriptors.append(_get_descriptor_from_handle(handle))
-                except Exception as e:
-                    logger.debug("Failed opening HID device", exc_info=e)
-                    continue
+                except ValueError:
+                    continue  # Not a CTAP device, ignore it
             return descriptors
         finally:
             cf.CFRelease(device_set_ref)
