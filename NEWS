@@ -1,4 +1,7 @@
 * Version 0.9.0 (unreleased)
+ ** Server: Attestation is now done in two parts (to align better with the spec):
+    First, type-specific validation is done to provide a trust chain.
+    Second, validation of the trust chain is done.
  ** Client: API changes to better support extensions.
   *** Fido2Client can be configured with Ctap2Extensions to support.
   *** Client.make_credential now returns a AuthenticatorAttestationResponse,
