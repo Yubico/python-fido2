@@ -94,15 +94,15 @@ https://github.com/LudovicRousseau/pyscard/blob/master/INSTALL.md.
 
 
 === Development
-For development of the library, we recommend using `pipenv`. To set up the dev
+For development of the library, we recommend using `poetry`. To set up the dev
 environment, run this command in the root directory of the repository:
 
-  pipenv install --dev
+  poetry install
 
 
 ==== Running tests
 While many tests can run on their own, some require a connected U2F or FIDO2
 device to run.
 
-  pipenv run test
+  poetry run pytest
 
