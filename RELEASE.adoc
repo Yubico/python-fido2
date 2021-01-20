@@ -45,9 +45,10 @@
 
   __version__ = 'x.y.q-dev0'
 
-* Bump the version in debian/changelog by appending `+git` to it.
+* Bump the version in debian/changelog by appending `+git` to it (don't
+  increment PATCH).
 
-  (x.y.q+git)
+  (x.y.z+git)
 
 * Commit and push the change:
 
