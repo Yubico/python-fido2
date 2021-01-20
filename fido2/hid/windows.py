@@ -22,7 +22,8 @@ from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
 
 import ctypes
 import platform
-from ctypes import wintypes, LibraryLoader, WinDLL
+from ctypes import WinDLL  # type: ignore
+from ctypes import wintypes, LibraryLoader
 
 import logging
 
