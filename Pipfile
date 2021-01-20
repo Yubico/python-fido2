@@ -6,9 +6,10 @@ url = "https://pypi.org/simple"
 [dev-packages]
 "mock" = "<4"
 pyfakefs = {markers = "platform_system == 'Linux'",version = ">=3.4"}
+fido2 = {editable = true, path = "."}
 
 [packages]
-fido2 = {editable = true,path = "."}
+fido2 = {editable = true, path = "."}
 
 [scripts]
 test = "python -m unittest discover -v"
