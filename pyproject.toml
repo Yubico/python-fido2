@@ -1,8 +1,26 @@
 [tool.poetry]
 name = "fido2"
 version = "1.0.0-dev0"
-description = ""
+description = "FIDO2/WebAuthn library for implementing clients and servers."
 authors = ["Dain Nilsson <dain@yubico.com>"]
+homepage = "https://github.com/Yubico/python-fido2"
+repository = "https://github.com/Yubico/python-fido2"
+keywords = ["fido2", "webauthn", "ctap", "u2f"]
+classifiers = [
+    "License :: OSI Approved :: BSD License",
+    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Topic :: Internet",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+include = ["COPYING", "COPYING.MPLv2", "COPYING.APLv2", "NEWS", "README.adoc"]
 
 [tool.poetry.dependencies]
 python = "^3.6"
