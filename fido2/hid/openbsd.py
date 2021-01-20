@@ -115,6 +115,7 @@ def list_descriptors():
         path = os.path.join(FIDO_DEVS, dev)
         try:
             descriptors.append(get_descriptor(path))
+            logger.debug("Found CTAP device: %s", path)
         except Exception as e:
             logger.debug("Failed opening FIDO device", exc_info=e)
     return descriptors

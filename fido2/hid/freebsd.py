@@ -56,6 +56,9 @@ def list_descriptors():
             descriptors.append(
                 _read_descriptor(dev["vendor_id"], dev["product_id"], dev["path"])
             )
+            logger.debug("Found CTAP device: %s", dev["path"])
+        except ValueError:
+            pass  # Not a CTAP device, ignore
         except Exception as e:
             logger.debug("Failed opening HID device", exc_info=e)
 

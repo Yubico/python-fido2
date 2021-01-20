@@ -58,8 +58,8 @@ def get_descriptor(path):
         size = struct.unpack("<I", buf)[0]
         buf += array("B", [0] * size)
         fcntl.ioctl(f, HIDIOCGRDESC, buf, True)
-        data = bytearray(buf[4:])
 
+    data = bytearray(buf[4:])
     max_in_size, max_out_size = parse_report_descriptor(data)
     return HidDescriptor(path, vid, pid, max_in_size, max_out_size)
 
@@ -69,7 +69,11 @@ def list_descriptors():
     for hidraw in glob.glob("/dev/hidraw*"):
         try:
             devices.append(get_descriptor(hidraw))
+            logger.debug("Found CTAP device: %s", hidraw)
+        except ValueError:
+            pass  # Not a CTAP device, ignore.
+        except PermissionError as e:
+            logger.debug("Skip device: %s", e)
         except Exception as e:
-            logger.debug("Failed opening HID device", exc_info=e)
-            continue
+            logger.debug("Failed opening device", exc_info=e)
     return devices

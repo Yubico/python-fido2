@@ -335,11 +335,11 @@ def list_descriptors():
 
             try:
                 descriptors.append(get_descriptor(path))
+                logger.debug("Found CTAP device: %s", path)
             except ValueError:
-                continue
+                pass
             except Exception as e:
                 logger.debug("Failed reading HID descriptor: %s", e)
-                continue
     finally:
         setupapi.SetupDiDestroyDeviceInfoList(collection)
 
