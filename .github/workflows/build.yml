@@ -112,9 +112,6 @@ jobs:
 
       - name: Install .deb
         run: |
-          ! python2 -c "import fido2"
-          sudo dpkg -i dist/python-fido2_*.deb
-          python2 -c "import fido2"
           ! python3 -c "import fido2"
           sudo dpkg -i dist/python3-fido2_*.deb
           python3 -c "import fido2"
@@ -122,5 +119,5 @@ jobs:
       - name: Upload Debian packages
         uses: actions/upload-artifact@v1
         with:
-          name: python2-deb-files
+          name: python-deb-files
           path: dist
