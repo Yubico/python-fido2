@@ -9,17 +9,13 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python: [2.7, 3.5, 3.6, 3.7, 3.8, pypy2, pypy3]
+        python: [3.6, 3.7, 3.8, 3.9, pypy3]
         architecture: [x86, x64]
         exclude:
           - os: ubuntu-latest
             architecture: x86
           - os: macos-latest
             architecture: x86
-          - os: windows-latest
-            python: pypy2
-          - os: macos-latest
-            python: pypy2
           - os: windows-latest
             python: pypy3
           - os: macos-latest
@@ -37,17 +33,17 @@ jobs:
 
       - name: Install python dependencies
         run: |
-          python -m pip install --upgrade pip setuptools pipenv
-          pipenv install --skip-lock --dev
+          python -m pip install --upgrade pip setuptools poetry
+          poetry update
 
       - name: Run pre-commit
-        if: "!startsWith(matrix.python, 'pypy') && matrix.python != '3.5'"
+        if: "!startsWith(matrix.python, 'pypy')"
         run: |
           python -m pip install pre-commit
           pre-commit run --all-files
 
       - name: Run unit tests
-        run: pipenv run test
+        run: poetry run pytest
 
   build:
     #needs: test
@@ -64,8 +60,8 @@ jobs:
 
       - name: Build source package
         run: |
-          python -m pip install --upgrade pip setuptools
-          python setup.py sdist
+          python -m pip install --upgrade pip setuptools poetry
+          poetry build
 
       - name: Upload source package
         uses: actions/upload-artifact@v1
@@ -108,14 +104,10 @@ jobs:
           yes | sudo mk-build-deps -i debian/control
           debuild -us -uc
           mkdir dist
-          mv ../python-fido2_* ../python3-fido2_* dist/
+          mv ../python3-fido2_* dist/
 
       - name: Install .deb
         run: |
-          sudo apt install python
-          ! python2 -c "import fido2"
-          sudo dpkg -i dist/python-fido2_*.deb
-          python2 -c "import fido2"
           ! python3 -c "import fido2"
           sudo dpkg -i dist/python3-fido2_*.deb
           python3 -c "import fido2"
@@ -123,5 +115,5 @@ jobs:
       - name: Upload Debian packages
         uses: actions/upload-artifact@v1
         with:
-          name: python2-deb-files
+          name: python-deb-files
           path: dist
