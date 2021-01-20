@@ -72,7 +72,7 @@ def list_descriptors():
             logger.debug("Found CTAP device: %s", hidraw)
         except ValueError:
             pass  # Not a CTAP device, ignore.
-        except PermissionError as e:
+        except OSError as e:
             logger.debug("Skip device: %s", e)
         except Exception as e:
             logger.debug("Failed opening device", exc_info=e)
