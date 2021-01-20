@@ -30,6 +30,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from collections import namedtuple
 from functools import wraps
 
 import abc
@@ -62,10 +63,7 @@ class UnsupportedType(InvalidAttestation):
         self.fmt = fmt
 
 
-class AttestationResult(object):
-    def __init__(self, attestation_type, trust_path):
-        self.attestation_type = attestation_type
-        self.trust_path = trust_path
+AttestationResult = namedtuple("AttestationResult", ["attestation_type", "trust_path"])
 
 
 class AttestationType(Enum):
@@ -116,7 +114,10 @@ def verify_x509_chain(chain):
 class Attestation(abc.ABC):
     @abc.abstractmethod
     def verify(self, statement, auth_data, client_data_hash):
-        pass
+        """Verifies attestation statement.
+
+        :return: An AttestationResult if successful.
+        """
 
     @staticmethod
     def for_type(fmt):
