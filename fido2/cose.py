@@ -35,7 +35,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
 try:
     from cryptography.hazmat.primitives.asymmetric import ed25519
 except ImportError:  # EdDSA requires Cryptography >= 2.6.
-    ed25519 = None
+    ed25519 = None  # type: ignore
 
 
 class CoseKey(dict):
@@ -45,7 +45,7 @@ class CoseKey(dict):
     :cvar ALGORITHM: COSE algorithm identifier.
     """
 
-    ALGORITHM = None
+    ALGORITHM: int = None  # type: ignore
 
     def verify(self, message, signature):
         """Validates a digital signature over a given message.

@@ -559,7 +559,8 @@ class WebAuthNCTAPTransport(IntEnum):
         return getattr(cls, value.upper().replace("-", "_"))
 
 
-WEBAUTHN = ctypes.windll.webauthn
+HRESULT = ctypes.HRESULT  # type: ignore
+WEBAUTHN = ctypes.windll.webauthn  # type: ignore
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
 # The following is derived from
 # https://github.com/microsoft/webauthn/blob/master/webauthn.h#L37
@@ -567,7 +568,7 @@ WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
 WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.argtypes = [
     ctypes.POINTER(ctypes.c_bool)
 ]
-WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.restype = ctypes.HRESULT
+WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.restype = HRESULT
 
 WEBAUTHN.WebAuthNAuthenticatorMakeCredential.argtypes = [
     HWND,
@@ -578,7 +579,7 @@ WEBAUTHN.WebAuthNAuthenticatorMakeCredential.argtypes = [
     ctypes.POINTER(WebAuthNMakeCredentialOptions),
     ctypes.POINTER(ctypes.POINTER(WebAuthNCredentialAttestation)),
 ]
-WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = ctypes.HRESULT
+WEBAUTHN.WebAuthNAuthenticatorMakeCredential.restype = HRESULT
 
 WEBAUTHN.WebAuthNAuthenticatorGetAssertion.argtypes = [
     HWND,
@@ -587,7 +588,7 @@ WEBAUTHN.WebAuthNAuthenticatorGetAssertion.argtypes = [
     ctypes.POINTER(WebAuthNGetAssertionOptions),
     ctypes.POINTER(ctypes.POINTER(WebAuthNAssertion)),
 ]
-WEBAUTHN.WebAuthNAuthenticatorGetAssertion.restype = ctypes.HRESULT
+WEBAUTHN.WebAuthNAuthenticatorGetAssertion.restype = HRESULT
 
 WEBAUTHN.WebAuthNFreeCredentialAttestation.argtypes = [
     ctypes.POINTER(WebAuthNCredentialAttestation)
@@ -595,12 +596,12 @@ WEBAUTHN.WebAuthNFreeCredentialAttestation.argtypes = [
 WEBAUTHN.WebAuthNFreeAssertion.argtypes = [ctypes.POINTER(WebAuthNAssertion)]
 
 WEBAUTHN.WebAuthNGetCancellationId.argtypes = [ctypes.POINTER(GUID)]
-WEBAUTHN.WebAuthNGetCancellationId.restype = ctypes.HRESULT
+WEBAUTHN.WebAuthNGetCancellationId.restype = HRESULT
 
 WEBAUTHN.WebAuthNCancelCurrentOperation.argtypes = [ctypes.POINTER(GUID)]
-WEBAUTHN.WebAuthNCancelCurrentOperation.restype = ctypes.HRESULT
+WEBAUTHN.WebAuthNCancelCurrentOperation.restype = HRESULT
 
-WEBAUTHN.WebAuthNGetErrorName.argtypes = [ctypes.HRESULT]
+WEBAUTHN.WebAuthNGetErrorName.argtypes = [HRESULT]
 WEBAUTHN.WebAuthNGetErrorName.restype = PCWSTR
 
 
