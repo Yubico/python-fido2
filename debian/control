@@ -8,33 +8,11 @@ Priority: optional
 Standards-Version: 4.1.1
 Build-Depends: debhelper (>= 9),
                dh-python,
-               python-all,
                python3-all,
-               python-cryptography,
                python3-cryptography,
-               python-enum34,
-               python-setuptools,
                python3-setuptools
 Homepage: https://www.github.com/python-fido2/
-X-Python-Version: >= 2.7
 X-Python3-Version: >= 3.4
-
-Package: python-fido2
-Architecture: all
-Section: python
-Depends: ${misc:Depends},
-         python,
-         python-cryptography,
-         python-setuptools,
-         python-six,
-Recommends: libu2f-udev,
-            python-pyscard,
-Description: Python library for implementing FIDO 2.0
- A Python library for communicating with a FIDO device over USB HID as
- well as verifying attestation and assertion signatures.
- Supports FIDO U2F and FIDO 2.0.
- This is the Python 2 version of the package.
-
 
 Package: python3-fido2
 Architecture: all
@@ -49,4 +27,3 @@ Recommends: libu2f-udev,
 Description: Python library for implementing FIDO 2.0
  A Python library for communicating with a FIDO device over USB HID as
  well as verifying attestation and assertion signatures.
- This is the Python 3 version of the package.
