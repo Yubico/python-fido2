@@ -295,7 +295,11 @@ class MacCtapHidConnection(CtapHidConnection):
 
     def write_packet(self, packet):
         result = iokit.IOHIDDeviceSetReport(
-            self.handle, K_IO_HID_REPORT_TYPE_OUTPUT, 0, packet, len(packet),
+            self.handle,
+            K_IO_HID_REPORT_TYPE_OUTPUT,
+            0,
+            packet,
+            len(packet),
         )
 
         # Non-zero status indicates failure

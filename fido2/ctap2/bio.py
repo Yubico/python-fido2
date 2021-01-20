@@ -66,7 +66,7 @@ class BioEnrollment(object):
         self.ctap = ctap
         self.modality = self.get_modality()
         if modality != self.modality:
-            raise ValueError("Device does not support {%s}".format(modality))
+            raise ValueError("Device does not support %s" % modality)
 
     def get_modality(self):
         """Get bio modality.
