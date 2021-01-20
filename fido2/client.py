@@ -521,7 +521,9 @@ class Fido2Client(_BaseClient):
                 kwargs.get("on_keepalive"),
             )
             return AuthenticatorAttestationResponse(
-                client_data, att_obj, extension_outputs,
+                client_data,
+                att_obj,
+                extension_outputs,
             )
         except CtapError as e:
             raise _ctap2client_err(e)
@@ -698,7 +700,9 @@ class Fido2Client(_BaseClient):
                 kwargs.get("on_keepalive"),
             )
             return Fido2ClientAssertionSelection(
-                client_data, assertions, used_extensions,
+                client_data,
+                assertions,
+                used_extensions,
             )
         except CtapError as e:
             raise _ctap2client_err(e)

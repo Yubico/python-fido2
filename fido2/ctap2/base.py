@@ -887,7 +887,8 @@ class Ctap2(object):
                 "Credential Management not supported by this Authenticator"
             )
         return self.send_cbor(
-            cmd, args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
+            cmd,
+            args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
         )
 
     def bio_enrollment(
