@@ -5,6 +5,7 @@
 
 * Update the version in fido/__init__.py and make sure the NEWS file has an
   entry for it, and the correct release date.
+* Update the debian/changelog file with the correct version.
 * Commit the changes, and push the new branch.
 
   $ git push -u origin release/x.y.z
@@ -43,6 +44,10 @@
   in fido2/__init__.py and add a new entry (unreleased) to the NEWS file.
 
   __version__ = 'x.y.q-dev0'
+
+* Bump the version in debian/changelog by appending `+git` to it.
+
+  (x.y.q+git)
 
 * Commit and push the change:
 

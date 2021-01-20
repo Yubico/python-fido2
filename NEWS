@@ -1,4 +1,4 @@
-* Version 0.9.0 (unreleased)
+* Version 0.9.0 (released 2021-01-20)
  ** Server: Attestation is now done in two parts (to align better with the spec):
     First, type-specific validation is done to provide a trust chain.
     Second, validation of the trust chain is done.
