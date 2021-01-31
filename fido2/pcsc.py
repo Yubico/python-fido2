@@ -26,8 +26,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .ctap import CtapDevice, CtapError, STATUS
 from .hid import CAPABILITY, CTAPHID
 from smartcard import System

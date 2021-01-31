@@ -25,8 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from ..utils import sha256, hmac_sha256, bytes2int, int2bytes
 
 from cryptography.hazmat.backends import default_backend

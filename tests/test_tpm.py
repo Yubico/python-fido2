@@ -25,9 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-
-from __future__ import absolute_import, unicode_literals
-
 from fido2.attestation.tpm import TpmAttestationFormat, TpmPublicFormat
 from binascii import a2b_hex
 

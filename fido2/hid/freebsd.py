@@ -15,9 +15,6 @@
 # Modified work Copyright 2020 Yubico AB. All Rights Reserved.
 # This file, with modifications, is licensed under the above Apache License.
 
-
-from __future__ import absolute_import
-
 import os
 import uhid_freebsd
 

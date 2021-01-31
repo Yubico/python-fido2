@@ -25,9 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-
-from __future__ import absolute_import
-
 from ..ctap import CtapDevice, CtapError, STATUS
 from threading import Event
 from enum import IntEnum, unique

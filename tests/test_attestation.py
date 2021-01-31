@@ -25,9 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-
-from __future__ import absolute_import, unicode_literals
-
 from fido2.ctap2 import AuthenticatorData
 from fido2.attestation import (
     Attestation,

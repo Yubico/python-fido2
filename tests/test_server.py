@@ -1,5 +1,3 @@
-from __future__ import absolute_import, unicode_literals
-
 import json
 import unittest
 from binascii import a2b_hex

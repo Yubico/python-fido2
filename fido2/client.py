@@ -25,8 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals, division
-
 from .hid import STATUS
 from .ctap import CtapError
 from .ctap1 import Ctap1, APDU, ApduError

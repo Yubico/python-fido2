@@ -35,8 +35,6 @@ Advanced APP_ID values pointing to JSON files containing valid facets are not
 supported by this implementation.
 """
 
-from __future__ import absolute_import, unicode_literals
-
 import os
 from urllib.parse import urlparse
 

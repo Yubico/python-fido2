@@ -37,8 +37,6 @@ https://github.com/microsoft/webauthn
 #
 # pylint: disable=invalid-name, super-init-not-called, too-few-public-methods
 
-from __future__ import absolute_import, unicode_literals
-
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND
 from threading import Thread

@@ -25,8 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .hid import CTAPHID
 from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
 from .cose import ES256
