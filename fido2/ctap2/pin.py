@@ -49,7 +49,7 @@ def _pad_pin(pin: str) -> bytes:
     return pin_padded
 
 
-class PinProtocolV1(object):
+class PinProtocolV1:
     """Implementation of the CTAP2 PIN/UV protocol v1.
 
     :param ctap: An instance of a CTAP2 object.
@@ -164,7 +164,7 @@ class PinProtocolV2(PinProtocolV1):
         return token
 
 
-class ClientPin(object):
+class ClientPin:
     """Implementation of the CTAP2 Client PIN API.
 
     :param ctap: An instance of a CTAP2 object.

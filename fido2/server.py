@@ -163,7 +163,7 @@ class AttestationVerifier(abc.ABC):
         self.verify_attestation(*args)
 
 
-class Fido2Server(object):
+class Fido2Server:
     """FIDO2 server.
 
     :param rp: Relying party data as `PublicKeyCredentialRpEntity` instance.

@@ -192,7 +192,7 @@ class SignatureData(bytes):
         return cls(websafe_decode(data))
 
 
-class Ctap1(object):
+class Ctap1:
     """Implementation of the CTAP1 specification.
 
     :param device: A CtapHidDevice handle supporting CTAP1.

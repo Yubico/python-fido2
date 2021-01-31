@@ -30,8 +30,9 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from collections import namedtuple
+from dataclasses import dataclass
 from functools import wraps
+from typing import List, Type
 
 import abc
 
@@ -63,15 +64,18 @@ class UnsupportedType(InvalidAttestation):
         self.fmt = fmt
 
 
-AttestationResult = namedtuple("AttestationResult", ["attestation_type", "trust_path"])
-
-
 class AttestationType(Enum):
     BASIC = auto()
     SELF = auto()
     ATT_CA = auto()
     ANON_CA = auto()
     NONE = auto
+
+
+@dataclass
+class AttestationResult:
+    attestation_type: AttestationType
+    trust_path: List[bytes]
 
 
 def catch_builtins(f):
@@ -86,7 +90,7 @@ def catch_builtins(f):
 
 
 @catch_builtins
-def verify_x509_chain(chain):
+def verify_x509_chain(chain: List[bytes]) -> None:
     certs = [x509.load_der_x509_certificate(der, default_backend()) for der in chain]
     cert = certs.pop(0)
     while certs:
@@ -113,14 +117,16 @@ def verify_x509_chain(chain):
 
 class Attestation(abc.ABC):
     @abc.abstractmethod
-    def verify(self, statement, auth_data, client_data_hash):
+    def verify(
+        self, statement, auth_data, client_data_hash: bytes
+    ) -> AttestationResult:
         """Verifies attestation statement.
 
         :return: An AttestationResult if successful.
         """
 
     @staticmethod
-    def for_type(fmt):
+    def for_type(fmt: str) -> Type["Attestation"]:
         for cls in Attestation.__subclasses__():
             if getattr(cls, "FORMAT", None) == fmt:
                 return cls

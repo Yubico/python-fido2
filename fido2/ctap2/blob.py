@@ -74,7 +74,7 @@ def _lb_unpack(key, entry):
         raise ValueError("Wrong key")
 
 
-class LargeBlobs(object):
+class LargeBlobs:
     """Implementation of the CTAP2.1 Large Blobs API.
 
     Getting a largeBlobKey for a credential is done via the LargeBlobKey extension.

@@ -31,7 +31,7 @@ from enum import IntEnum, unique
 import struct
 
 
-class Config(object):
+class Config:
     """Implementation of the CTAP2.1 Authenticator Config API.
 
     :param ctap: An instance of a CTAP2 object.

@@ -176,7 +176,7 @@ class U2F_TYPE(str, Enum):
     SIGN = "navigator.id.getAssertion"
 
 
-class U2fClient(object):
+class U2fClient:
     """U2F-like client implementation.
 
     The client allows registration and authentication of U2F credentials against
@@ -288,7 +288,7 @@ class WEBAUTHN_TYPE(str, Enum):
     GET_ASSERTION = "webauthn.get"
 
 
-class _BaseClient(object):
+class _BaseClient:
     def __init__(self, origin, verify):
         self.origin = origin
         self._verify = verify
@@ -310,7 +310,7 @@ class _BaseClient(object):
         )
 
 
-class AssertionSelection(object):
+class AssertionSelection:
     """GetAssertion result holding one or more assertions.
 
     Since multiple assertions may be retured by Fido2Client.get_assertion, this result

@@ -32,7 +32,7 @@ from enum import IntEnum, unique
 import struct
 
 
-class CredentialManagement(object):
+class CredentialManagement:
     """Implementation of a draft specification of the Credential Management API.
     WARNING: This specification is not final and this class is likely to change.
 

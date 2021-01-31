@@ -32,7 +32,7 @@ from enum import IntEnum, unique
 import struct
 
 
-class BioEnrollment(object):
+class BioEnrollment:
     @unique
     class RESULT(IntEnum):
         MODALITY = 0x01
@@ -82,7 +82,7 @@ class CaptureError(Exception):
         super(CaptureError, self).__init__("Fingerprint capture error: %s" % code)
 
 
-class FPEnrollmentContext(object):
+class FPEnrollmentContext:
     """Helper object to perform fingerprint enrollment.
 
     :param bio: An instance of FPBioEnrollment.

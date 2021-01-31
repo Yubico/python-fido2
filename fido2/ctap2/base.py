@@ -33,11 +33,12 @@ from ..utils import ByteBuffer
 from ..attestation import FidoU2FAttestation
 
 from enum import IntEnum, unique
+from typing import Dict, Any
 import struct
 import re
 
 
-def args(*params):
+def args(*params) -> Dict[int, Any]:
     """Constructs a dict from a list of arguments for sending a CBOR command.
     None elements will be omitted.
 
@@ -88,7 +89,7 @@ class Info(bytes):
         REMAINING_DISC_CREDS = 0x14
 
         @classmethod
-        def get(cls, key):
+        def get(cls, key) -> "Info.KEY":
             try:
                 return cls(key)
             except ValueError:
@@ -597,7 +598,7 @@ class AssertionResponse(bytes):
         )
 
 
-class Ctap2(object):
+class Ctap2:
     """Implementation of the CTAP2 specification.
 
     :param device: A CtapHidDevice handle supporting CTAP2.
