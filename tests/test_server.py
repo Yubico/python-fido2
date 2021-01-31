@@ -3,7 +3,6 @@ from __future__ import absolute_import, unicode_literals
 import json
 import unittest
 from binascii import a2b_hex
-import six
 
 from fido2.client import WEBAUTHN_TYPE, ClientData
 from fido2.ctap2 import AttestedCredentialData, AuthenticatorData
@@ -87,7 +86,7 @@ class TestFido2Server(unittest.TestCase):
         _AUTH_DATA = a2b_hex(
             "A379A6F6EEAFB9A55E378C118034E2751E682FAB9F2D30AB13D2125586CE1947010000001D"
         )
-        with six.assertRaisesRegex(self, ValueError, "Invalid signature."):
+        with self.assertRaisesRegex(ValueError, "Invalid signature."):
             server.authenticate_complete(
                 state,
                 [AttestedCredentialData(_ATT_CRED_DATA)],
@@ -181,9 +180,7 @@ class TestU2FFido2Server(unittest.TestCase):
 
         authenticator_data, signature = device.sign(client_data)
 
-        with six.assertRaisesRegex(
-            self, ValueError, "Invalid origin in " "ClientData."
-        ):
+        with self.assertRaisesRegex(ValueError, "Invalid origin in " "ClientData."):
             server.authenticate_complete(
                 state,
                 [auth_data],

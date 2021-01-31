@@ -1,4 +1,3 @@
-import six
 from binascii import a2b_hex
 
 from cryptography.hazmat.backends import default_backend
@@ -17,8 +16,8 @@ class U2FDevice(object):
     )
 
     def __init__(self, credential_id, app_id):
-        assert isinstance(credential_id, six.binary_type)
-        assert isinstance(app_id, six.binary_type)
+        assert isinstance(credential_id, bytes)
+        assert isinstance(app_id, bytes)
         # Note: do not use in production, no garantees is provided this is
         # cryptographically safe to use.
         priv_key_params = ConcatKDFHash(

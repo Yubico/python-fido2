@@ -29,7 +29,6 @@ from __future__ import absolute_import, unicode_literals
 
 from .utils import sha256
 from enum import Enum, unique
-import six
 import re
 
 """
@@ -39,7 +38,7 @@ See the specification for a description and details on their usage.
 """
 
 
-class _StringEnum(six.text_type, Enum):
+class _StringEnum(str, Enum):
     @classmethod
     def _wrap(cls, value):
         if value is None:

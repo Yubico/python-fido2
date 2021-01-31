@@ -34,7 +34,6 @@ from .attestation import FidoU2FAttestation
 from enum import IntEnum, unique
 from binascii import b2a_hex
 import struct
-import six
 
 
 @unique
@@ -79,15 +78,15 @@ class RegistrationData(bytes):
     def __init__(self, _):
         super(RegistrationData, self).__init__()
 
-        if six.indexbytes(self, 0) != 0x05:
+        if self[0] != 0x05:
             raise ValueError("Reserved byte != 0x05")
 
         self.public_key = self[1:66]
-        kh_len = six.indexbytes(self, 66)
+        kh_len = self[66]
         self.key_handle = self[67 : 67 + kh_len]
 
         cert_offs = 67 + kh_len
-        cert_len = six.indexbytes(self, cert_offs + 1)
+        cert_len = self[cert_offs + 1]
         if cert_len > 0x80:
             n_bytes = cert_len - 0x80
             cert_len = (

@@ -58,17 +58,6 @@ class TestAppId(unittest.TestCase):
             )
         )
 
-    def test_valid_ids_mixed_type(self):
-        self.assertTrue(
-            verify_app_id(b"https://example.com", "https://register.example.com")
-        )
-        self.assertTrue(
-            verify_app_id("https://example.com", b"https://fido.example.com")
-        )
-        self.assertTrue(
-            verify_app_id(b"https://example.com", b"https://www.example.com:444")
-        )
-
     def test_invalid_ids(self):
         self.assertFalse(verify_app_id("https://example.com", "http://example.com"))
         self.assertFalse(verify_app_id("https://example.com", "http://www.example.com"))
@@ -88,15 +77,6 @@ class TestAppId(unittest.TestCase):
             )
         )
 
-    def test_invalid_ids_mixed_type(self):
-        self.assertFalse(verify_app_id(b"https://example.com", "http://example.com"))
-        self.assertFalse(
-            verify_app_id("https://example.com", b"http://www.example.com")
-        )
-        self.assertFalse(
-            verify_app_id(b"https://example.com", b"https://example-test.com")
-        )
-
     def test_effective_tld_names(self):
         self.assertFalse(
             verify_app_id("https://appspot.com", "https://foo.appspot.com")
@@ -109,11 +89,6 @@ class TestRpId(unittest.TestCase):
         self.assertTrue(verify_rp_id("example.com", "https://register.example.com"))
         self.assertTrue(verify_rp_id("example.com", "https://fido.example.com"))
         self.assertTrue(verify_rp_id("example.com", "https://www.example.com:444"))
-
-    def test_valid_ids_mixed_type(self):
-        self.assertTrue(verify_rp_id(b"example.com", "https://register.example.com"))
-        self.assertTrue(verify_rp_id("example.com", b"https://fido.example.com"))
-        self.assertTrue(verify_rp_id(b"example.com", b"https://www.example.com:444"))
 
     def test_invalid_ids(self):
         self.assertFalse(verify_rp_id("example.com", "http://example.com"))
@@ -129,15 +104,10 @@ class TestRpId(unittest.TestCase):
             )
         )
 
-    def test_invalid_ids_mixed_type(self):
-        self.assertFalse(verify_rp_id(b"example.com", "http://example.com"))
-        self.assertFalse(verify_rp_id("example.com", b"http://www.example.com"))
-        self.assertFalse(verify_rp_id(b"example.com", b"https://example-test.com"))
-
     def test_suffix_list(self):
-        self.assertFalse(verify_rp_id(b"co.uk", "https://foobar.co.uk"))
-        self.assertTrue(verify_rp_id(b"foobar.co.uk", "https://site.foobar.co.uk"))
-        self.assertFalse(verify_rp_id(b"appspot.com", "https://example.appspot.com"))
+        self.assertFalse(verify_rp_id("co.uk", "https://foobar.co.uk"))
+        self.assertTrue(verify_rp_id("foobar.co.uk", "https://site.foobar.co.uk"))
+        self.assertFalse(verify_rp_id("appspot.com", "https://example.appspot.com"))
         self.assertTrue(
-            verify_rp_id(b"example.appspot.com", "https://example.appspot.com")
+            verify_rp_id("example.appspot.com", "https://example.appspot.com")
         )

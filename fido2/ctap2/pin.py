@@ -36,20 +36,19 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from enum import IntEnum, unique
-import six
 import os
 
 
-def _pad_pin(pin):
-    if not isinstance(pin, six.string_types):
-        raise ValueError("PIN of wrong type, expecting %s" % six.string_types)
+def _pad_pin(pin: str) -> bytes:
+    if not isinstance(pin, str):
+        raise ValueError("PIN of wrong type, expecting %s" % str)
     if len(pin) < 4:
         raise ValueError("PIN must be >= 4 characters")
-    pin = pin.encode("utf8").ljust(64, b"\0")
-    pin += b"\0" * (-(len(pin) - 16) % 16)
-    if len(pin) > 255:
+    pin_padded = pin.encode().ljust(64, b"\0")
+    pin_padded += b"\0" * (-(len(pin_padded) - 16) % 16)
+    if len(pin_padded) > 255:
         raise ValueError("PIN must be <= 255 bytes")
-    return pin
+    return pin_padded
 
 
 class PinProtocolV1(object):

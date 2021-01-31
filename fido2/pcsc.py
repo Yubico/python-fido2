@@ -37,7 +37,6 @@ from smartcard.pcsc.PCSCContext import PCSCContext
 from binascii import b2a_hex as _b2a_hex
 from threading import Event
 import struct
-import six
 import logging
 
 
@@ -103,8 +102,8 @@ class CtapPcscDevice(CtapDevice):
         """
 
         logger.debug("SEND: %s", b2a_hex(apdu))
-        resp, sw1, sw2 = self._conn.transmit(list(six.iterbytes(apdu)), protocol)
-        response = bytes(bytearray(resp))
+        resp, sw1, sw2 = self._conn.transmit(list(apdu), protocol)
+        response = bytes(resp)
         logger.debug("RECV: %s SW=%04X", b2a_hex(response), sw1 << 8 + sw2)
 
         return response, sw1, sw2
@@ -118,8 +117,8 @@ class CtapPcscDevice(CtapDevice):
         """
 
         logger.debug("control %s", b2a_hex(control_data))
-        response = self._conn.control(control_code, list(six.iterbytes(control_data)))
-        response = bytes(bytearray(response))
+        response = self._conn.control(control_code, list(control_data))
+        response = bytes(response)
         logger.debug("response %s", b2a_hex(response))
 
         return response
@@ -155,7 +154,7 @@ class CtapPcscDevice(CtapDevice):
             return resp, sw1, sw2
 
     def _call_apdu(self, apdu):
-        if len(apdu) >= 7 and six.indexbytes(apdu, 4) == 0:
+        if len(apdu) >= 7 and apdu[4] == 0:
             # Extended APDU
             data_len = struct.unpack("!H", apdu[5:7])[0]
             data = apdu[7 : 7 + data_len]
@@ -163,9 +162,9 @@ class CtapPcscDevice(CtapDevice):
             data = b""
         else:
             # Short APDU
-            data_len = six.indexbytes(apdu, 4)
+            data_len = apdu[4]
             data = apdu[5 : 5 + data_len]
-        (cla, ins, p1, p2) = six.iterbytes(apdu[:4])
+        (cla, ins, p1, p2) = apdu[:4]
 
         resp, sw1, sw2 = self._chain_apdus(cla, ins, p1, p2, data)
         return resp + struct.pack("!BB", sw1, sw2)
@@ -178,7 +177,7 @@ class CtapPcscDevice(CtapDevice):
 
         while not event.is_set():
             while (sw1, sw2) == SW_UPDATE:
-                ka_status = six.indexbytes(resp, 0)
+                ka_status = resp[0]
                 if on_keepalive and last_ka != ka_status:
                     try:
                         ka_status = STATUS(ka_status)

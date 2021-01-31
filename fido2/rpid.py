@@ -38,8 +38,7 @@ supported by this implementation.
 from __future__ import absolute_import, unicode_literals
 
 import os
-import six
-from six.moves.urllib.parse import urlparse
+from urllib.parse import urlparse
 
 
 tld_fname = os.path.join(os.path.dirname(__file__), "public_suffix_list.dat")
@@ -51,19 +50,15 @@ with open(tld_fname, "rb") as f:
     ]
 
 
-def verify_rp_id(rp_id, origin):
+def verify_rp_id(rp_id: str, origin: str) -> bool:
     """Checks if a Webauthn RP ID is usable for a given origin.
 
     :param rp_id: The RP ID to validate.
     :param origin: The origin of the request.
     :return: True if the RP ID is usable by the origin, False if not.
     """
-    if isinstance(rp_id, six.binary_type):
-        rp_id = rp_id.decode()
     if not rp_id:
         return False
-    if isinstance(origin, six.binary_type):
-        origin = origin.decode()
 
     url = urlparse(origin)
     if url.scheme != "https":
@@ -71,21 +66,22 @@ def verify_rp_id(rp_id, origin):
     host = url.hostname
     if host == rp_id:
         return True
-    if host.endswith("." + rp_id) and rp_id not in suffixes:
+    if host and host.endswith("." + rp_id) and rp_id not in suffixes:
         return True
     return False
 
 
-def verify_app_id(app_id, origin):
+def verify_app_id(app_id: str, origin: str) -> bool:
     """Checks if a FIDO U2F App ID is usable for a given origin.
 
     :param app_id: The App ID to validate.
     :param origin: The origin of the request.
     :return: True if the App ID is usable by the origin, False if not.
     """
-    if isinstance(app_id, six.binary_type):
-        app_id = app_id.decode()
     url = urlparse(app_id)
     if url.scheme != "https":
         return False
-    return verify_rp_id(url.hostname, origin)
+    hostname = url.hostname
+    if not hostname:
+        return False
+    return verify_rp_id(hostname, origin)

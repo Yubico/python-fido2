@@ -32,7 +32,6 @@ required for FIDO 2 CTAP.
 """
 
 import struct
-import six
 
 
 def dump_int(data, mt=0):
@@ -64,7 +63,7 @@ def dump_list(data):
 
 def _sort_keys(entry):
     key = entry[0]
-    return six.indexbytes(key, 0), len(key), key
+    return key[0], len(key), key
 
 
 def dump_dict(data):
@@ -84,11 +83,11 @@ def dump_text(data):
 
 _SERIALIZERS = [
     (bool, dump_bool),
-    (six.integer_types, dump_int),
+    (int, dump_int),
     (dict, dump_dict),
     (list, dump_list),
-    (six.text_type, dump_text),
-    (six.binary_type, dump_bytes),
+    (str, dump_text),
+    (bytes, dump_bytes),
 ]
 
 
@@ -103,7 +102,7 @@ def load_int(ai, data):
     if ai < 24:
         return ai, data
     elif ai == 24:
-        return six.indexbytes(data, 0), data[1:]
+        return data[0], data[1:]
     elif ai == 25:
         return struct.unpack_from(">H", data)[0], data[2:]
     elif ai == 26:
@@ -163,7 +162,7 @@ _DESERIALIZERS = {
 
 
 def decode_from(data):
-    fb = six.indexbytes(data, 0)
+    fb = data[0]
     return _DESERIALIZERS[fb >> 5](fb & 0b11111, data[1:])
 
 

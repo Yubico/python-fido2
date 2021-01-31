@@ -53,7 +53,6 @@ from enum import Enum, IntEnum, unique
 from threading import Timer, Event
 
 import json
-import six
 import platform
 
 
@@ -174,7 +173,7 @@ def _call_polling(poll_delay, event, on_keepalive, func, *args, **kwargs):
 
 
 @unique
-class U2F_TYPE(six.text_type, Enum):
+class U2F_TYPE(str, Enum):
     REGISTER = "navigator.id.finishEnrollment"
     SIGN = "navigator.id.getAssertion"
 
@@ -286,7 +285,7 @@ class U2fClient(object):
 
 
 @unique
-class WEBAUTHN_TYPE(six.text_type, Enum):
+class WEBAUTHN_TYPE(str, Enum):
     MAKE_CREDENTIAL = "webauthn.create"
     GET_ASSERTION = "webauthn.get"
 

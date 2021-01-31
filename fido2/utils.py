@@ -35,7 +35,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from binascii import b2a_hex
 from io import BytesIO
-import six
+from typing import Union
 import struct
 
 __all__ = [
@@ -96,21 +96,21 @@ def int2bytes(value, minlen=-1):
     return bytes(bytearray(reversed(ba)))
 
 
-def websafe_decode(data):
-    """Decodes a websafe-base64 encoded string (bytes or str).
+def websafe_decode(data: Union[str, bytes]) -> bytes:
+    """Decodes a websafe-base64 encoded string.
     See: "Base 64 Encoding with URL and Filename Safe Alphabet" from Section 5
     in RFC4648 without padding.
 
     :param data: The input to decode.
     :return: The decoded bytes.
     """
-    if isinstance(data, six.text_type):
+    if isinstance(data, str):
         data = data.encode("ascii")
     data += b"=" * (-len(data) % 4)
     return urlsafe_b64decode(data)
 
 
-def websafe_encode(data):
+def websafe_encode(data: bytes) -> str:
     """Encodes a byte string into websafe-base64 encoding.
 
     :param data: The input to encode.
@@ -122,7 +122,7 @@ def websafe_encode(data):
 class ByteBuffer(BytesIO):
     """BytesIO-like object with the ability to unpack values."""
 
-    def unpack(self, fmt):
+    def unpack(self, fmt: str):
         """Reads and unpacks a value from the buffer.
 
         :param fmt: A struct format string yielding a single value.

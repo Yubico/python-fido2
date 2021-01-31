@@ -37,7 +37,6 @@ from ..attestation import FidoU2FAttestation
 from binascii import b2a_hex
 from enum import IntEnum, unique
 import struct
-import six
 import re
 
 
@@ -670,7 +669,7 @@ class Ctap2(object):
         if data is not None:
             request += cbor.encode(data)
         response = self.device.call(CTAPHID.CBOR, request, event, on_keepalive)
-        status = six.indexbytes(response, 0)
+        status = response[0]
         if status != 0x00:
             raise CtapError(status)
         if len(response) == 1:

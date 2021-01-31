@@ -23,7 +23,7 @@ from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
 import ctypes
 import ctypes.util
 import threading
-from six.moves.queue import Queue, Empty
+from queue import Queue, Empty
 
 import logging
 
