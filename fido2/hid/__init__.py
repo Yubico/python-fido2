@@ -28,7 +28,6 @@
 from ..ctap import CtapDevice, CtapError, STATUS
 from threading import Event
 from enum import IntEnum, unique
-from binascii import b2a_hex as _b2a_hex
 import struct
 import sys
 import os
@@ -49,10 +48,6 @@ elif sys.platform.startswith("openbsd"):
     from . import openbsd as backend
 else:
     raise Exception("Unsupported platform")
-
-
-def b2a_hex(data):
-    return _b2a_hex(data).decode("ascii")
 
 
 list_descriptors = backend.list_descriptors
@@ -150,7 +145,7 @@ class CtapHidDevice(CtapDevice):
             size = min(len(remaining), packet_size - len(header))
             body, remaining = remaining[:size], remaining[size:]
             packet = header + body
-            logger.debug("SEND: %s", b2a_hex(packet))
+            logger.debug("SEND: %s", packet.hex())
             self._connection.write_packet(packet.ljust(packet_size, b"\0"))
             header = struct.pack(">IB", self._channel_id, 0x7F & seq)
             seq += 1
@@ -170,7 +165,7 @@ class CtapHidDevice(CtapDevice):
                     self._connection.write_packet(packet)
 
                 recv = self._connection.read_packet()
-                logger.debug("RECV: %s", b2a_hex(recv))
+                logger.debug("RECV: %s", recv.hex())
 
                 r_channel = struct.unpack_from(">I", recv)[0]
                 recv = recv[4:]

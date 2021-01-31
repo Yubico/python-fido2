@@ -32,7 +32,6 @@ from ..hid import CTAPHID, CAPABILITY
 from ..utils import ByteBuffer
 from ..attestation import FidoU2FAttestation
 
-from binascii import b2a_hex
 from enum import IntEnum, unique
 import struct
 import re
@@ -46,15 +45,6 @@ def args(*params):
     :return: The input parameters as a dict.
     """
     return dict((i, v) for i, v in enumerate(params, 1) if v is not None)
-
-
-def hexstr(bs):
-    """Formats a byte string as a human readable hex string.
-
-    :param bs: The bytes to format.
-    :return: A readable string representation of the input.
-    """
-    return "h'%s'" % b2a_hex(bs).decode()
 
 
 class Info(bytes):
@@ -195,8 +185,8 @@ class AttestedCredentialData(bytes):
 
     def __repr__(self):
         return (
-            "AttestedCredentialData(aaguid: %s, credential_id: %s, " "public_key: %s"
-        ) % (hexstr(self.aaguid), hexstr(self.credential_id), self.public_key)
+            "AttestedCredentialData(aaguid: h'%s', credential_id: h'%s', public_key: %s"
+        ) % (self.aaguid.hex(), self.credential_id.hex(), self.public_key)
 
     def __str__(self):
         return self.__repr__()
@@ -358,8 +348,8 @@ class AuthenticatorData(bytes):
         return bool(self.flags & AuthenticatorData.FLAG.EXTENSION_DATA)
 
     def __repr__(self):
-        r = "AuthenticatorData(rp_id_hash: %s, flags: 0x%02x, counter: %d" % (
-            hexstr(self.rp_id_hash),
+        r = "AuthenticatorData(rp_id_hash: h'%s', flags: 0x%02x, counter: %d" % (
+            self.rp_id_hash.hex(),
             self.flags,
             self.counter,
         )
@@ -552,10 +542,10 @@ class AssertionResponse(bytes):
         self.data = data
 
     def __repr__(self):
-        r = "AssertionResponse(credential: %r, auth_data: %r, signature: %s" % (
+        r = "AssertionResponse(credential: %r, auth_data: %r, signature: h'%s'" % (
             self.credential,
             self.auth_data,
-            hexstr(self.signature),
+            self.signature.hex(),
         )
         if self.user:
             r += ", user: %s" % self.user
@@ -676,8 +666,8 @@ class Ctap2(object):
         if self._strict_cbor:
             expected = cbor.encode(cbor.decode(enc))
             if expected != enc:
-                enc_h = b2a_hex(enc)
-                exp_h = b2a_hex(expected)
+                enc_h = enc.hex()
+                exp_h = expected.hex()
                 raise ValueError(
                     "Non-canonical CBOR from Authenticator.\n"
                     "Got: {}\n".format(enc_h) + "Expected: {}".format(exp_h)
@@ -877,8 +867,7 @@ class Ctap2(object):
                 "Credential Management not supported by this Authenticator"
             )
         return self.send_cbor(
-            cmd,
-            args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
+            cmd, args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param)
         )
 
     def bio_enrollment(

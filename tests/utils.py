@@ -1,5 +1,3 @@
-from binascii import a2b_hex
-
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.kdf.concatkdf import ConcatKDFHash
@@ -11,7 +9,7 @@ from fido2.ctap2 import AuthenticatorData
 
 
 class U2FDevice(object):
-    _priv_key_bytes = a2b_hex(
+    _priv_key_bytes = bytes.fromhex(
         "308184020100301006072a8648ce3d020106052b8104000a046d306b02010104201672f5ceb963e07d475f5db9a975b7ad42ac3bf71ccddfb6539cc651a1156a6ba144034200045a4be44eb94eebff3ed665dde31deb74a060fabd214c5f5713aa043efa805dac8f45e0e17afe2eafbd1802c413c1e485fd854af9f06ef20938398f6795f12e0e"  # noqa E501
     )
 

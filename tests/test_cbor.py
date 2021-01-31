@@ -28,7 +28,6 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from fido2 import cbor
-from binascii import a2b_hex, b2a_hex
 import unittest
 
 
@@ -151,7 +150,7 @@ _TEST_VECTORS = [
 
 
 def cbor2hex(data):
-    return b2a_hex(cbor.encode(data)).decode()
+    return cbor.encode(data).hex()
 
 
 class TestCborTestVectors(unittest.TestCase):
@@ -163,8 +162,8 @@ class TestCborTestVectors(unittest.TestCase):
     def test_vectors(self):
         for (data, value) in _TEST_VECTORS:
             try:
-                self.assertEqual(cbor.decode_from(a2b_hex(data)), (value, b""))
-                self.assertEqual(cbor.decode(a2b_hex(data)), value)
+                self.assertEqual(cbor.decode_from(bytes.fromhex(data)), (value, b""))
+                self.assertEqual(cbor.decode(bytes.fromhex(data)), value)
                 self.assertEqual(cbor2hex(value), data)
             except Exception:
                 print("\nERROR in test vector, %s" % data)

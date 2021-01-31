@@ -1,6 +1,5 @@
 import json
 import unittest
-from binascii import a2b_hex
 
 from fido2.client import WEBAUTHN_TYPE, ClientData
 from fido2.ctap2 import AttestedCredentialData, AuthenticatorData
@@ -81,7 +80,7 @@ class TestFido2Server(unittest.TestCase):
             "type": WEBAUTHN_TYPE.GET_ASSERTION,
         }
         client_data = ClientData(json.dumps(client_data_dict).encode("utf-8"))
-        _AUTH_DATA = a2b_hex(
+        _AUTH_DATA = bytes.fromhex(
             "A379A6F6EEAFB9A55E378C118034E2751E682FAB9F2D30AB13D2125586CE1947010000001D"
         )
         with self.assertRaisesRegex(ValueError, "Invalid signature."):

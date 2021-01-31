@@ -30,7 +30,6 @@ from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
 from .cose import ES256
 from .attestation import FidoU2FAttestation
 from enum import IntEnum, unique
-from binascii import b2a_hex
 import struct
 
 
@@ -120,7 +119,7 @@ class RegistrationData(bytes):
             "RegistrationData(public_key: h'%s', key_handle: h'%s', "
             "certificate: h'%s', signature: h'%s')"
         ) % tuple(
-            b2a_hex(x).decode()
+            (x).hex()
             for x in (
                 self.public_key,
                 self.key_handle,
@@ -178,7 +177,7 @@ class SignatureData(bytes):
     def __repr__(self):
         return (
             "SignatureData(user_presence: 0x%02x, counter: %d, " "signature: h'%s'"
-        ) % (self.user_presence, self.counter, b2a_hex(self.signature))
+        ) % (self.user_presence, self.counter, self.signature.hex())
 
     def __str__(self):
         return "%r" % self

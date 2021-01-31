@@ -33,7 +33,6 @@ This module contains various functions used throughout the rest of the project.
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
-from binascii import b2a_hex
 from io import BytesIO
 from typing import Union
 import struct
@@ -48,7 +47,7 @@ __all__ = [
 ]
 
 
-def sha256(data):
+def sha256(data: bytes) -> bytes:
     """Produces a SHA256 hash of the input.
 
     :param data: The input data to hash.
@@ -71,16 +70,16 @@ def hmac_sha256(key, data):
     return h.finalize()
 
 
-def bytes2int(value):
+def bytes2int(value: bytes) -> int:
     """Parses an arbitrarily sized integer from a byte string.
 
     :param value: A byte string encoding a big endian unsigned integer.
     :return: The parsed int.
     """
-    return int(b2a_hex(value), 16)
+    return int.from_bytes(value, "big")
 
 
-def int2bytes(value, minlen=-1):
+def int2bytes(value: int, minlen: int = -1) -> bytes:
     """Encodes an int as a byte string.
 
     :param value: The integer value to encode.
@@ -93,7 +92,7 @@ def int2bytes(value, minlen=-1):
         value >>= 8
     ba.append(value)
     ba.extend([0] * (minlen - len(ba)))
-    return bytes(bytearray(reversed(ba)))
+    return bytes(reversed(ba))
 
 
 def websafe_decode(data: Union[str, bytes]) -> bytes:
