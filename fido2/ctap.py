@@ -73,6 +73,19 @@ class CtapDevice(abc.ABC):
 
 
 class CtapError(Exception):
+    class UNKNOWN_ERR(int):
+        name = "UNKNOWN_ERR"
+
+        @property
+        def value(self):
+            return int(self)
+
+        def __repr__(self):
+            return "<ERR.UNKNOWN: %d>" % self
+
+        def __str__(self):
+            return "0x%02X - UNKNOWN" % self
+
     @unique
     class ERR(IntEnum):
         SUCCESS = 0x00
@@ -89,6 +102,8 @@ class CtapError(Exception):
         MISSING_PARAMETER = 0x14
         LIMIT_EXCEEDED = 0x15
         UNSUPPORTED_EXTENSION = 0x16
+        FP_DATABASE_FULL = 0x17
+        LARGE_BLOB_STORAGE_FULL = 0x18
         CREDENTIAL_EXCLUDED = 0x19
         PROCESSING = 0x21
         INVALID_CREDENTIAL = 0x22
@@ -117,6 +132,11 @@ class CtapError(Exception):
         REQUEST_TOO_LARGE = 0x39
         ACTION_TIMEOUT = 0x3A
         UP_REQUIRED = 0x3B
+        UV_BLOCKD = 0x3C
+        INTEGRITY_FAILURE = 0x3D
+        INVALID_SUBCOMMAND = 0x3E
+        UV_INVALID = 0x3F
+        UNAUTHORIZED_PERMISSION = 0x40
         OTHER = 0x7F
         SPEC_LAST = 0xDF
         EXTENSION_FIRST = 0xE0
@@ -130,8 +150,7 @@ class CtapError(Exception):
     def __init__(self, code):
         try:
             code = CtapError.ERR(code)
-            message = "CTAP error: %s" % code
         except ValueError:
-            message = "CTAP error: 0x%02X" % code
+            code = CtapError.UNKNOWN_ERR(code)
         self.code = code
-        super(CtapError, self).__init__(message)
+        super(CtapError, self).__init__("CTAP error: %s" % code)
