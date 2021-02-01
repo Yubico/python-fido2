@@ -49,13 +49,13 @@ _INFO = bytes.fromhex(
     "a60182665532465f5632684649444f5f325f3002826375766d6b686d61632d7365637265740350f8a011f38c0a4d15800617111f9edc7d04a462726bf5627570f564706c6174f469636c69656e7450696ef4051904b0068101"  # noqa E501
 )
 _INFO_EXTRA_KEY = bytes.fromhex(
-    "A70182665532465F5632684649444F5F325F3002826375766D6B686D61632D7365637265740350F8A011F38C0A4D15800617111F9EDC7D04A462726BF5627570F564706C6174F469636C69656E7450696EF4051904B00681010708"  # noqa E501
+    "A70182665532465F5632684649444F5F325F3002826375766D6B686D61632D7365637265740350F8A011F38C0A4D15800617111F9EDC7D04A462726BF5627570F564706C6174F469636C69656E7450696EF4051904B006810118631904D2"  # noqa E501
 )
 
 
 class TestInfo(unittest.TestCase):
     def test_parse_bytes(self):
-        info = Info(_INFO)
+        info = Info.parse(_INFO)
 
         self.assertEqual(info.versions, ["U2F_V2", "FIDO_2_0"])
         self.assertEqual(info.extensions, ["uvm", "hmac-secret"])
@@ -66,26 +66,26 @@ class TestInfo(unittest.TestCase):
         self.assertEqual(info.max_msg_size, 1200)
         self.assertEqual(info.pin_uv_protocols, [1])
         self.assertEqual(
-            info.data,
+            dict(info),
             {
-                Info.KEY.VERSIONS: ["U2F_V2", "FIDO_2_0"],
-                Info.KEY.EXTENSIONS: ["uvm", "hmac-secret"],
-                Info.KEY.AAGUID: _AAGUID,
-                Info.KEY.OPTIONS: {
+                0x01: ["U2F_V2", "FIDO_2_0"],
+                0x02: ["uvm", "hmac-secret"],
+                0x03: _AAGUID,
+                0x04: {
                     "clientPin": False,
                     "plat": False,
                     "rk": True,
                     "up": True,
                 },
-                Info.KEY.MAX_MSG_SIZE: 1200,
-                Info.KEY.PIN_UV_PROTOCOLS: [1],
+                0x05: 1200,
+                0x06: [1],
             },
         )
 
     def test_info_with_extra_field(self):
-        info = Info(_INFO_EXTRA_KEY)
+        info = Info.parse(_INFO_EXTRA_KEY)
         self.assertEqual(info.versions, ["U2F_V2", "FIDO_2_0"])
-        self.assertEqual(info.data[7], 8)
+        self.assertEqual(info[99], 1234)
 
 
 _ATT_CRED_DATA = bytes.fromhex(
@@ -164,11 +164,6 @@ _SIGNATURE = bytes.fromhex(
 
 
 class TestAttestationObject(unittest.TestCase):
-    def test_string_keys(self):
-        self.assertEqual(AttestationObject.KEY.FMT.string_key, "fmt")
-        self.assertEqual(AttestationObject.KEY.AUTH_DATA.string_key, "authData")
-        self.assertEqual(AttestationObject.KEY.ATT_STMT.string_key, "attStmt")
-
     def test_fido_u2f_attestation(self):
         att = AttestationObject.from_ctap1(
             bytes.fromhex(
@@ -189,7 +184,7 @@ class TestAttestationObject(unittest.TestCase):
         )
 
     def test_packed_attestation(self):
-        att = AttestationObject(
+        att = AttestationObject.parse(
             bytes.fromhex(
                 "a301667061636b65640258c40021f5fc0b85cd22e60623bcd7d1ca48948909249b4776eb515154e57b66ae124100000003f8a011f38c0a4d15800617111f9edc7d004060a386206a3aacecbdbb22d601853d955fdc5d11adfbd1aa6a950d966b348c7663d40173714a9f987df6461beadfb9cd6419ffdfe4d4cf2eec1aa605a4f59bdaa50102032620012158200edb27580389494d74d2373b8f8c2e8b76fa135946d4f30d0e187e120b423349225820e03400d189e85a55de9ab0f538ed60736eb750f5f0306a80060fe1b13010560d03a363616c6726637369675847304502200d15daf337d727ab4719b4027114a2ac43cd565d394ced62c3d9d1d90825f0b3022100989615e7394c87f4ad91f8fdae86f7a3326df332b3633db088aac76bffb9a46b63783563815902bb308202b73082019fa00302010202041d31330d300d06092a864886f70d01010b0500302a3128302606035504030c1f59756269636f2050726576696577204649444f204174746573746174696f6e301e170d3138303332383036333932345a170d3139303332383036333932345a306e310b300906035504061302534531123010060355040a0c0959756269636f20414231223020060355040b0c1941757468656e74696361746f72204174746573746174696f6e3127302506035504030c1e59756269636f205532462045452053657269616c203438393736333539373059301306072a8648ce3d020106082a8648ce3d030107034200047d71e8367cafd0ea6cf0d61e4c6a416ba5bb6d8fad52db2389ad07969f0f463bfdddddc29d39d3199163ee49575a3336c04b3309d607f6160c81e023373e0197a36c306a302206092b0601040182c40a020415312e332e362e312e342e312e34313438322e312e323013060b2b0601040182e51c0201010404030204303021060b2b0601040182e51c01010404120410f8a011f38c0a4d15800617111f9edc7d300c0603551d130101ff04023000300d06092a864886f70d01010b050003820101009b904ceadbe1f1985486fead02baeaa77e5ab4e6e52b7e6a2666a4dc06e241578169193b63dadec5b2b78605a128b2e03f7fe2a98eaeb4219f52220995f400ce15d630cf0598ba662d7162459f1ad1fc623067376d4e4091be65ac1a33d8561b9996c0529ec1816d1710786384d5e8783aa1f7474cb99fe8f5a63a79ff454380361c299d67cb5cc7c79f0d8c09f8849b0500f6d625408c77cbbc26ddee11cb581beb7947137ad4f05aaf38bd98da10042ddcac277604a395a5b3eaa88a5c8bb27ab59c8127d59d6bbba5f11506bf7b75fda7561a0837c46f025fd54dcf1014fc8d17c859507ac57d4b1dea99485df0ba8f34d00103c3eef2ef3bbfec7a6613de"  # noqa E501
             )
@@ -201,26 +196,6 @@ class TestAttestationObject(unittest.TestCase):
                 "985B6187D042FB1258892ED637CEC88617DDF5F6632351A545617AA2B75261BF"
             ),
         )
-
-    def test_different_keys(self):
-        att = AttestationObject(
-            bytes.fromhex(
-                "a363666d74667061636b65646761747453746d74a363616c6726637369675847304502200d15daf337d727ab4719b4027114a2ac43cd565d394ced62c3d9d1d90825f0b3022100989615e7394c87f4ad91f8fdae86f7a3326df332b3633db088aac76bffb9a46b63783563815902bb308202b73082019fa00302010202041d31330d300d06092a864886f70d01010b0500302a3128302606035504030c1f59756269636f2050726576696577204649444f204174746573746174696f6e301e170d3138303332383036333932345a170d3139303332383036333932345a306e310b300906035504061302534531123010060355040a0c0959756269636f20414231223020060355040b0c1941757468656e74696361746f72204174746573746174696f6e3127302506035504030c1e59756269636f205532462045452053657269616c203438393736333539373059301306072a8648ce3d020106082a8648ce3d030107034200047d71e8367cafd0ea6cf0d61e4c6a416ba5bb6d8fad52db2389ad07969f0f463bfdddddc29d39d3199163ee49575a3336c04b3309d607f6160c81e023373e0197a36c306a302206092b0601040182c40a020415312e332e362e312e342e312e34313438322e312e323013060b2b0601040182e51c0201010404030204303021060b2b0601040182e51c01010404120410f8a011f38c0a4d15800617111f9edc7d300c0603551d130101ff04023000300d06092a864886f70d01010b050003820101009b904ceadbe1f1985486fead02baeaa77e5ab4e6e52b7e6a2666a4dc06e241578169193b63dadec5b2b78605a128b2e03f7fe2a98eaeb4219f52220995f400ce15d630cf0598ba662d7162459f1ad1fc623067376d4e4091be65ac1a33d8561b9996c0529ec1816d1710786384d5e8783aa1f7474cb99fe8f5a63a79ff454380361c299d67cb5cc7c79f0d8c09f8849b0500f6d625408c77cbbc26ddee11cb581beb7947137ad4f05aaf38bd98da10042ddcac277604a395a5b3eaa88a5c8bb27ab59c8127d59d6bbba5f11506bf7b75fda7561a0837c46f025fd54dcf1014fc8d17c859507ac57d4b1dea99485df0ba8f34d00103c3eef2ef3bbfec7a6613de68617574684461746158c40021f5fc0b85cd22e60623bcd7d1ca48948909249b4776eb515154e57b66ae124100000003f8a011f38c0a4d15800617111f9edc7d004060a386206a3aacecbdbb22d601853d955fdc5d11adfbd1aa6a950d966b348c7663d40173714a9f987df6461beadfb9cd6419ffdfe4d4cf2eec1aa605a4f59bdaa50102032620012158200edb27580389494d74d2373b8f8c2e8b76fa135946d4f30d0e187e120b423349225820e03400d189e85a55de9ab0f538ed60736eb750f5f0306a80060fe1b13010560d"  # noqa E501
-            )
-        )
-        Attestation.for_type(att.fmt)().verify(
-            att.att_statement,
-            att.auth_data,
-            bytes.fromhex(
-                "985B6187D042FB1258892ED637CEC88617DDF5F6632351A545617AA2B75261BF"
-            ),
-        )
-
-        att2 = att.with_int_keys()
-        self.assertNotEqual(att, att2)
-        self.assertEqual(att.data, att2.data)
-        self.assertEqual(att.with_int_keys(), att2)
-        self.assertEqual(att, att2.with_string_keys())
 
 
 class TestCtap2(unittest.TestCase):
@@ -255,7 +230,7 @@ class TestCtap2(unittest.TestCase):
         )
 
         self.assertIsInstance(resp, AttestationObject)
-        self.assertEqual(resp, _MC_RESP)
+        self.assertEqual(resp, AttestationObject.parse(_MC_RESP))
         self.assertEqual(resp.fmt, "packed")
         self.assertEqual(resp.auth_data, _AUTH_DATA_MC)
         self.assertSetEqual(set(resp.att_statement.keys()), {"alg", "sig", "x5c"})
@@ -270,7 +245,7 @@ class TestCtap2(unittest.TestCase):
         )
 
         self.assertIsInstance(resp, AssertionResponse)
-        self.assertEqual(resp, _GA_RESP)
+        self.assertEqual(resp, AssertionResponse.parse(_GA_RESP))
         self.assertEqual(resp.credential, _CRED)
         self.assertEqual(resp.auth_data, _AUTH_DATA_GA)
         self.assertEqual(resp.signature, _SIGNATURE)

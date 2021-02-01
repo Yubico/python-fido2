@@ -26,16 +26,17 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from .. import cbor
-from ..ctap import CtapError
+from ..ctap import CtapDevice, CtapError
 from ..cose import CoseKey, ES256
 from ..hid import CTAPHID, CAPABILITY
 from ..utils import ByteBuffer
 from ..attestation import FidoU2FAttestation
 
-from enum import IntEnum, unique
-from typing import Dict, Any
+from enum import IntEnum, IntFlag, unique
+from dataclasses import dataclass, field, fields, MISSING
+from threading import Event
+from typing import Mapping, Dict, Any, List, Optional, Tuple, Type, TypeVar, Callable
 import struct
-import re
 
 
 def args(*params) -> Dict[int, Any]:
@@ -48,7 +49,64 @@ def args(*params) -> Dict[int, Any]:
     return dict((i, v) for i, v in enumerate(params, 1) if v is not None)
 
 
-class Info(bytes):
+_T = TypeVar("_T", bound="_CborDataObject")
+
+
+@dataclass(init=False)
+class _CborDataObject(Mapping[int, Any]):
+    def __init__(self, data: Mapping[int, Any]):
+        self._data = dict(data)
+        for f in fields(self):
+            k = f.metadata.get("cbor_field")
+            if k:
+                transform = f.metadata["transform"]
+                if k in data:
+                    v = data[k]
+                elif f.default is not MISSING:
+                    v = f.default
+                elif f.default_factory is not MISSING:  # type: ignore
+                    v = f.default_factory()  # type: ignore
+                    # see https://github.com/python/mypy/issues/6910
+                else:
+                    raise TypeError(
+                        "Input data missing required field %s: %s" % (k, f.name)
+                    )
+                setattr(self, f.name, transform(v))
+
+    @classmethod
+    def parse(cls: Type[_T], binary: bytes) -> _T:
+        decoded = cbor.decode(binary)
+        if isinstance(decoded, Mapping):
+            return cls(decoded)  # type: ignore
+        raise TypeError("Decoded value of incorrect type!")
+
+    @classmethod
+    def create(cls: Type[_T], **kwargs) -> _T:
+        data = {}
+        fs = {f.name: f.metadata for f in fields(cls)}
+        for name, v in kwargs.items():
+            k = fs[name]["cbor_field"]
+            data[k] = v
+        return cls(data)
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+
+def cbor_field(key: int, *, transform=lambda x: x, **kwargs):
+    return field(
+        init=False, metadata={"cbor_field": key, "transform": transform}, **kwargs
+    )
+
+
+@dataclass(init=False)
+class Info(_CborDataObject):
     """Binary CBOR encoded response data returned by the CTAP2 GET_INFO command.
 
     :param _: The binary content of the Info data.
@@ -65,135 +123,49 @@ class Info(bytes):
     :ivar data: The Info members, in the form of a dict.
     """
 
-    @unique
-    class KEY(IntEnum):
-        VERSIONS = 0x01
-        EXTENSIONS = 0x02
-        AAGUID = 0x03
-        OPTIONS = 0x04
-        MAX_MSG_SIZE = 0x05
-        PIN_UV_PROTOCOLS = 0x06
-        MAX_CREDS_IN_LIST = 0x07
-        MAX_CRED_ID_LENGTH = 0x08
-        TRANSPORTS = 0x09
-        ALGORITHMS = 0x0A
-        MAX_LARGE_BLOB = 0x0B
-        FORCE_PIN_CHANGE = 0x0C
-        MIN_PIN_LENGTH = 0x0D
-        FIRMWARE_VERSION = 0x0E
-        MAX_CRED_BLOB_LENGTH = 0x0F
-        MAX_RPIDS_FOR_MIN_PIN = 0x10
-        PREFERRED_PLATFORM_UV_ATTEMPTS = 0x11
-        UV_MODALITY = 0x12
-        CERTIFICATIONS = 0x13
-        REMAINING_DISC_CREDS = 0x14
-
-        @classmethod
-        def get(cls, key) -> "Info.KEY":
-            try:
-                return cls(key)
-            except ValueError:
-                return key
-
-        def __repr__(self):
-            return "<%s: 0x%02X>" % (self.name, self)
-
-    def __init__(self, _):
-        super(Info, self).__init__()
-
-        data = dict((Info.KEY.get(k), v) for (k, v) in cbor.decode(self).items())
-        self.versions = data[Info.KEY.VERSIONS]
-        self.extensions = data.get(Info.KEY.EXTENSIONS, [])
-        self.aaguid = data[Info.KEY.AAGUID]
-        self.options = data.get(Info.KEY.OPTIONS, {})
-        self.max_msg_size = data.get(Info.KEY.MAX_MSG_SIZE, 1024)
-        self.pin_uv_protocols = data.get(Info.KEY.PIN_UV_PROTOCOLS, [])
-        self.max_creds_in_list = data.get(Info.KEY.MAX_CREDS_IN_LIST)
-        self.max_cred_id_length = data.get(Info.KEY.MAX_CRED_ID_LENGTH)
-        self.transports = data.get(Info.KEY.TRANSPORTS, [])
-        self.algorithms = data.get(Info.KEY.ALGORITHMS)
-        self.max_large_blob = data.get(Info.KEY.MAX_LARGE_BLOB)
-        self.force_pin_change = data.get(Info.KEY.FORCE_PIN_CHANGE, False)
-        self.min_pin_length = data.get(Info.KEY.MIN_PIN_LENGTH, 4)
-        self.firmware_version = data.get(Info.KEY.FIRMWARE_VERSION)
-        self.max_cred_blob_length = data.get(Info.KEY.MAX_CRED_BLOB_LENGTH)
-        self.max_rpids_for_min_pin = data.get(Info.KEY.MAX_RPIDS_FOR_MIN_PIN, 0)
-        self.uv_modality = data.get(Info.KEY.UV_MODALITY)
-        self.certifications = data.get(Info.KEY.CERTIFICATIONS, {})
-        self.remaining_disc_creds = data.get(Info.KEY.REMAINING_DISC_CREDS)
-        self.data = data
-
-    def __repr__(self):
-        return "%s" % self.data
-
-    def __str__(self):
-        return self.__repr__()
-
-    @classmethod
-    def create(
-        cls,
-        versions,
-        extensions=None,
-        aaguid=b"\0" * 16,
-        options=None,
-        max_msg_size=None,
-        pin_uv_protocols=None,
-        max_creds_in_list=None,
-        max_cred_id_length=None,
-        transports=None,
-        algorithms=None,
-    ):
-        """Create an Info by providing its components.
-
-        See class docstring for parameter descriptions.
-        """
-        return cls(
-            cbor.encode(
-                args(
-                    versions,
-                    extensions,
-                    aaguid,
-                    options,
-                    max_msg_size,
-                    pin_uv_protocols,
-                    max_creds_in_list,
-                    max_cred_id_length,
-                    transports,
-                    algorithms,
-                )
-            )
-        )
+    versions: List[str] = cbor_field(0x01)
+    extensions: List[str] = cbor_field(0x02, default_factory=list)
+    aaguid: bytes = cbor_field(0x03)
+    options: Dict[str, bool] = cbor_field(0x04, default_factory=dict)
+    max_msg_size: int = cbor_field(0x05, default=1024)
+    pin_uv_protocols: List[int] = cbor_field(0x06, default_factory=list)
+    max_creds_in_list: Optional[int] = cbor_field(0x07, default=None)
+    max_cred_id_length: Optional[int] = cbor_field(0x08, default=None)
+    transports: List[str] = cbor_field(0x09, default_factory=list)
+    algorithms: Optional[List[int]] = cbor_field(0x0A, default=None)
+    max_large_blob: Optional[int] = cbor_field(0x0B, default=None)
+    force_pin_change: bool = cbor_field(0x0C, default=False)
+    min_pin_length: int = cbor_field(0x0D, default=4)
+    firmware_version: Optional[int] = cbor_field(0x0E, default=None)
+    max_cred_blob_length: Optional[int] = cbor_field(0x0F, default=None)
+    max_rpids_for_min_pin: int = cbor_field(0x10, default=0)
+    preferred_platform_uv_attempts: int = cbor_field(0x11, default=None)
+    uv_modality: Optional[int] = cbor_field(0x12, default=None)
+    certifications: Optional[Dict] = cbor_field(0x13, default=None)
+    remaining_disc_creds: Optional[int] = cbor_field(0x14, default=None)
 
 
+@dataclass(init=False)
 class AttestedCredentialData(bytes):
-    """Binary encoding of the attested credential data.
-
-    :param _: The binary representation of the attested credential data.
-    :ivar aaguid: The AAGUID of the authenticator.
-    :ivar credential_id: The binary ID of the credential.
-    :ivar public_key: The public key of the credential.
-    """
+    aaguid: bytes
+    credential_id: bytes
+    public_key: CoseKey
 
     def __init__(self, _):
         super(AttestedCredentialData, self).__init__()
 
-        parsed = AttestedCredentialData.parse(self)
+        parsed = AttestedCredentialData._parse(self)
         self.aaguid = parsed[0]
         self.credential_id = parsed[1]
         self.public_key = parsed[2]
         if parsed[3]:
             raise ValueError("Wrong length")
 
-    def __repr__(self):
-        return (
-            "AttestedCredentialData(aaguid: h'%s', credential_id: h'%s', public_key: %s"
-        ) % (self.aaguid.hex(), self.credential_id.hex(), self.public_key)
-
-    def __str__(self):
-        return self.__repr__()
+    def __str__(self):  # Override default implementation from bytes.
+        return repr(self)
 
     @staticmethod
-    def parse(data):
+    def _parse(data: bytes) -> Tuple[bytes, bytes, CoseKey, bytes]:
         """Parse the components of an AttestedCredentialData from a binary
         string, and return them.
 
@@ -207,7 +179,9 @@ class AttestedCredentialData(bytes):
         return aaguid, cred_id, CoseKey.parse(pub_key), rest
 
     @classmethod
-    def create(cls, aaguid, credential_id, public_key):
+    def create(
+        cls, aaguid: bytes, credential_id: bytes, public_key: CoseKey
+    ) -> "AttestedCredentialData":
         """Create an AttestedCredentialData by providing its components.
 
         :param aaguid: The AAGUID of the authenticator.
@@ -223,7 +197,7 @@ class AttestedCredentialData(bytes):
         )
 
     @classmethod
-    def unpack_from(cls, data):
+    def unpack_from(cls, data: bytes) -> Tuple["AttestedCredentialData", bytes]:
         """Unpack an AttestedCredentialData from a byte string, returning it and
         any remaining data.
 
@@ -231,13 +205,14 @@ class AttestedCredentialData(bytes):
         :return: The parsed AttestedCredentialData, and any remaining data from
             the input.
         """
-        parts = cls.parse(data)
+        parts = cls._parse(data)
         return cls.create(*parts[:-1]), parts[-1]
 
     @classmethod
-    def from_ctap1(cls, key_handle, public_key):
-        """Create an AttestatedCredentialData from a CTAP1 RegistrationData
-        instance.
+    def from_ctap1(
+        cls, key_handle: bytes, public_key: bytes
+    ) -> "AttestedCredentialData":
+        """Create an AttestatedCredentialData from a CTAP1 RegistrationData instance.
 
         :param key_handle: The CTAP1 credential key_handle.
         :type key_handle: bytes
@@ -251,20 +226,21 @@ class AttestedCredentialData(bytes):
         )
 
 
+@dataclass(init=False)
 class AuthenticatorData(bytes):
     """Binary encoding of the authenticator data.
 
     :param _: The binary representation of the authenticator data.
     :ivar rp_id_hash: SHA256 hash of the RP ID.
     :ivar flags: The flags of the authenticator data, see
-        AuthenticatorData.FLAG.
+        AuthenticatorData.FLAGS.
     :ivar counter: The signature counter of the authenticator.
     :ivar credential_data: Attested credential data, if available.
     :ivar extensions: Authenticator extensions, if available.
     """
 
     @unique
-    class FLAG(IntEnum):
+    class FLAGS(IntFlag):
         """Authenticator data flags
 
         See https://www.w3.org/TR/webauthn/#sec-authenticator-data for details
@@ -275,6 +251,12 @@ class AuthenticatorData(bytes):
         ATTESTED = 0x40
         EXTENSION_DATA = 0x80
 
+    rp_id_hash: bytes
+    flags: "AuthenticatorData.FLAGS"
+    counter: int
+    credential_data: Optional[AttestedCredentialData]
+    extensions: Optional[Mapping]
+
     def __init__(self, _):
         super(AuthenticatorData, self).__init__()
 
@@ -284,12 +266,12 @@ class AuthenticatorData(bytes):
         self.counter = reader.unpack(">I")
         rest = reader.read()
 
-        if self.flags & AuthenticatorData.FLAG.ATTESTED:
+        if self.flags & AuthenticatorData.FLAGS.ATTESTED:
             self.credential_data, rest = AttestedCredentialData.unpack_from(rest)
         else:
             self.credential_data = None
 
-        if self.flags & AuthenticatorData.FLAG.EXTENSION_DATA:
+        if self.flags & AuthenticatorData.FLAGS.EXTENSION_DATA:
             self.extensions, rest = cbor.decode_from(rest)
         else:
             self.extensions = None
@@ -297,8 +279,18 @@ class AuthenticatorData(bytes):
         if rest:
             raise ValueError("Wrong length")
 
+    def __str__(self):  # Override default implementation from bytes.
+        return repr(self)
+
     @classmethod
-    def create(cls, rp_id_hash, flags, counter, credential_data=b"", extensions=None):
+    def create(
+        cls,
+        rp_id_hash: bytes,
+        flags: "AuthenticatorData.FLAGS",
+        counter: int,
+        credential_data: bytes = b"",
+        extensions: Optional[Mapping] = None,
+    ):
         """Create an AuthenticatorData instance.
 
         :param rp_id_hash: SHA256 hash of the RP ID.
@@ -316,55 +308,41 @@ class AuthenticatorData(bytes):
             + (cbor.encode(extensions) if extensions is not None else b"")
         )
 
-    def is_user_present(self):
+    def is_user_present(self) -> bool:
         """Return true if the User Present flag is set.
 
         :return: True if User Present is set, False otherwise.
         :rtype: bool
         """
-        return bool(self.flags & AuthenticatorData.FLAG.USER_PRESENT)
+        return bool(self.flags & AuthenticatorData.FLAGS.USER_PRESENT)
 
-    def is_user_verified(self):
+    def is_user_verified(self) -> bool:
         """Return true if the User Verified flag is set.
 
         :return: True if User Verified is set, False otherwise.
         :rtype: bool
         """
-        return bool(self.flags & AuthenticatorData.FLAG.USER_VERIFIED)
+        return bool(self.flags & AuthenticatorData.FLAGS.USER_VERIFIED)
 
-    def is_attested(self):
+    def is_attested(self) -> bool:
         """Return true if the Attested credential data flag is set.
 
         :return: True if Attested credential data is set, False otherwise.
         :rtype: bool
         """
-        return bool(self.flags & AuthenticatorData.FLAG.ATTESTED)
+        return bool(self.flags & AuthenticatorData.FLAGS.ATTESTED)
 
-    def has_extension_data(self):
+    def has_extension_data(self) -> bool:
         """Return true if the Extenstion data flag is set.
 
         :return: True if Extenstion data is set, False otherwise.
         :rtype: bool
         """
-        return bool(self.flags & AuthenticatorData.FLAG.EXTENSION_DATA)
-
-    def __repr__(self):
-        r = "AuthenticatorData(rp_id_hash: h'%s', flags: 0x%02x, counter: %d" % (
-            self.rp_id_hash.hex(),
-            self.flags,
-            self.counter,
-        )
-        if self.credential_data:
-            r += ", credential_data: %s" % self.credential_data
-        if self.extensions:
-            r += ", extensions: %s" % self.extensions
-        return r + ")"
-
-    def __str__(self):
-        return self.__repr__()
+        return bool(self.flags & AuthenticatorData.FLAGS.EXTENSION_DATA)
 
 
-class AttestationObject(bytes):
+@dataclass(init=False)
+class AttestationObject(_CborDataObject):
     """Binary CBOR encoded attestation object.
 
     :param _: The binary representation of the attestation object.
@@ -375,90 +353,24 @@ class AttestationObject(bytes):
     :type auth_data: AuthenticatorData
     :ivar att_statement: The attestation statement.
     :type att_statement: Dict[str, Any]
-    :ivar data: The AttestationObject members, in the form of a dict.
-    :type data: Dict[AttestationObject.KEY, Any]
     """
 
-    @unique
-    class KEY(IntEnum):
-        FMT = 1
-        AUTH_DATA = 2
-        ATT_STMT = 3
-        EP_ATT = 4
-        LARGE_BLOB_KEY = 5
+    fmt: str = cbor_field(0x01)
+    auth_data: AuthenticatorData = cbor_field(0x02, transform=AuthenticatorData)
+    att_statement: Dict[str, Any] = cbor_field(0x03)
+    ep_att: Optional[bool] = cbor_field(0x04, default=None)
+    large_blob_key: Optional[bytes] = cbor_field(0x05, default=None)
 
-        @classmethod
-        def for_key(cls, key):
-            """Get an AttestationObject.KEY by number or by name, using the
-            numeric ID or the Webauthn key string.
-
-            :param key: The numeric key value, or the string name of a member.
-            :type key: Union[str, int]
-            :return: The KEY corresponding to the input.
-            :rtype: AttestationObject.KEY
-            """
-            if isinstance(key, int):
-                return cls(key)
-            name = re.sub("([a-z])([A-Z])", r"\1_\2", key).upper()
-            return getattr(cls, name)
-
-        @property
-        def string_key(self):
-            """Get the string used for this key in the Webauthn specification.
-
-            :return: The Webauthn string used for a key.
-            :rtype: str
-            """
-            value = "".join(w.capitalize() for w in self.name.split("_"))
-            return value[0].lower() + value[1:]
-
-    def __init__(self, _):
-        super(AttestationObject, self).__init__()
-
-        data = dict(
-            (AttestationObject.KEY.for_key(k), v)
-            for (k, v) in cbor.decode(self).items()
-        )
-        self.fmt = data[AttestationObject.KEY.FMT]
-        self.auth_data = AuthenticatorData(data[AttestationObject.KEY.AUTH_DATA])
-        data[AttestationObject.KEY.AUTH_DATA] = self.auth_data
-        self.att_statement = data[AttestationObject.KEY.ATT_STMT]
-        self.ep_att = data.get(AttestationObject.KEY.EP_ATT)
-        self.large_blob_key = data.get(AttestationObject.KEY.LARGE_BLOB_KEY)
-        self.data = data
-
-    def __repr__(self):
-        return (
-            "AttestationObject(fmt: %r, auth_data: %r, att_statement: %r, "
-            "ep_attr: %r, large_blob_key: %r)"
-        ) % (
-            self.fmt,
-            self.auth_data,
-            self.att_statement,
-            self.ep_att,
-            self.large_blob_key,
-        )
-
-    def __str__(self):
-        return self.__repr__()
+    def get_webauthn(self) -> Dict[str, Any]:
+        """Get data formatted as a WebAuthn Attestation Object"""
+        return {
+            "fmt": self.fmt,
+            "attStmt": self.att_statement,
+            "authData": self.auth_data,
+        }
 
     @classmethod
-    def create(cls, fmt, auth_data, att_stmt):
-        """Create an AttestationObject instance.
-
-        :param fmt: The type of attestation used.
-        :type fmt: str
-        :param auth_data: Binary representation of the authenticator data.
-        :type auth_data: bytes
-        :param att_stmt: The attestation statement.
-        :type att_stmt: dict
-        :return: The attestation object.
-        :rtype: AttestationObject
-        """
-        return cls(cbor.encode(args(fmt, auth_data, att_stmt)))
-
-    @classmethod
-    def from_ctap1(cls, app_param, registration):
+    def from_ctap1(cls, app_param: bytes, registration) -> "AttestationObject":
         """Create an AttestationObject from a CTAP1 RegistrationData instance.
 
         :param app_param: SHA256 hash of the RP ID used for the CTAP1 request.
@@ -469,43 +381,24 @@ class AttestationObject(bytes):
         :rtype: AttestationObject
         """
         return cls.create(
-            FidoU2FAttestation.FORMAT,
-            AuthenticatorData.create(
+            fmt=FidoU2FAttestation.FORMAT,
+            auth_data=AuthenticatorData.create(
                 app_param,
-                0x41,
+                AuthenticatorData.FLAGS.ATTESTED | AuthenticatorData.FLAGS.USER_PRESENT,
                 0,
                 AttestedCredentialData.from_ctap1(
                     registration.key_handle, registration.public_key
                 ),
             ),
-            {  # att_statement
+            att_statement={
                 "x5c": [registration.certificate],
                 "sig": registration.signature,
             },
         )
 
-    def with_int_keys(self):
-        """Get a copy of this AttestationObject, using CTAP2 integer values as
-        map keys in the CBOR representation.
 
-        :return: The attestation object, using int keys.
-        :rtype: AttestationObject
-        """
-        return AttestationObject(cbor.encode(self.data))
-
-    def with_string_keys(self):
-        """Get a copy of this AttestationObject, using Webauthn string values as
-        map keys in the CBOR representation.
-
-        :return: The attestation object, using str keys.
-        :rtype: AttestationObject
-        """
-        return AttestationObject(
-            cbor.encode(dict((k.string_key, v) for k, v in self.data.items()))
-        )
-
-
-class AssertionResponse(bytes):
+@dataclass(init=False)
+class AssertionResponse(_CborDataObject):
     """Binary CBOR encoded assertion response.
 
     :param _: The binary representation of the assertion response.
@@ -517,47 +410,15 @@ class AssertionResponse(bytes):
         (only set for the first response, if > 1).
     """
 
-    @unique
-    class KEY(IntEnum):
-        CREDENTIAL = 1
-        AUTH_DATA = 2
-        SIGNATURE = 3
-        USER = 4
-        N_CREDS = 5
-        USER_SELECTED = 6
-        LARGE_BLOB_KEY = 7
+    credential: Dict[str, Any] = cbor_field(0x01)
+    auth_data: AuthenticatorData = cbor_field(0x02, transform=AuthenticatorData)
+    signature: bytes = cbor_field(0x03)
+    user: Optional[Dict[str, Any]] = cbor_field(0x04, default=None)
+    number_of_credentials: Optional[int] = cbor_field(0x05, default=None)
+    user_selected: Optional[bool] = cbor_field(0x06, default=None)
+    large_blob_key: Optional[bytes] = cbor_field(0x07, default=None)
 
-    def __init__(self, _):
-        super(AssertionResponse, self).__init__()
-
-        data = dict(
-            (AssertionResponse.KEY(k), v) for (k, v) in cbor.decode(self).items()
-        )
-        self.credential = data.get(AssertionResponse.KEY.CREDENTIAL)
-        self.auth_data = AuthenticatorData(data[AssertionResponse.KEY.AUTH_DATA])
-        self.signature = data[AssertionResponse.KEY.SIGNATURE]
-        self.user = data.get(AssertionResponse.KEY.USER)
-        self.number_of_credentials = data.get(AssertionResponse.KEY.N_CREDS)
-        self.user_selected = data.get(AssertionResponse.KEY.USER_SELECTED, False)
-        self.large_blob_key = data.get(AssertionResponse.KEY.LARGE_BLOB_KEY)
-        self.data = data
-
-    def __repr__(self):
-        r = "AssertionResponse(credential: %r, auth_data: %r, signature: h'%s'" % (
-            self.credential,
-            self.auth_data,
-            self.signature.hex(),
-        )
-        if self.user:
-            r += ", user: %s" % self.user
-        if self.number_of_credentials is not None:
-            r += ", number_of_credentials: %d" % self.number_of_credentials
-        return r + ")"
-
-    def __str__(self):
-        return self.__repr__()
-
-    def verify(self, client_param, public_key):
+    def verify(self, client_param: bytes, public_key: CoseKey):
         """Verify the digital signature of the response with regard to the
         client_param, using the given public key.
 
@@ -567,20 +428,9 @@ class AssertionResponse(bytes):
         public_key.verify(self.auth_data + client_param, self.signature)
 
     @classmethod
-    def create(cls, credential, auth_data, signature, user=None, n_creds=None):
-        """Create an AssertionResponse instance.
-
-        :param credential: The credential used for the response.
-        :param auth_data: The binary encoded authenticator data.
-        :param signature: The digital signature of the response.
-        :param user: The user data of the credential, if any.
-        :param n_creds: The number of responses available.
-        :return: The assertion response.
-        """
-        return cls(cbor.encode(args(credential, auth_data, signature, user, n_creds)))
-
-    @classmethod
-    def from_ctap1(cls, app_param, credential, authentication):
+    def from_ctap1(
+        cls, app_param: bytes, credential: Dict[str, Any], authentication
+    ) -> "AssertionResponse":
         """Create an AssertionResponse from a CTAP1 SignatureData instance.
 
         :param app_param: SHA256 hash of the RP ID used for the CTAP1 request.
@@ -590,11 +440,11 @@ class AssertionResponse(bytes):
         :return: The assertion response.
         """
         return cls.create(
-            credential,
-            AuthenticatorData.create(
+            credential=credential,
+            auth_data=AuthenticatorData.create(
                 app_param, authentication.user_presence & 0x01, authentication.counter
             ),
-            authentication.signature,
+            signature=authentication.signature,
         )
 
 
@@ -623,7 +473,7 @@ class Ctap2:
         BIO_ENROLLMENT_PRE = 0x40
         CREDENTIAL_MGMT_PRE = 0x41
 
-    def __init__(self, device, strict_cbor=True):
+    def __init__(self, device: CtapDevice, strict_cbor: bool = True):
         if not device.capabilities & CAPABILITY.CBOR:
             raise ValueError("Device does not support CTAP2.")
         self.device = device
@@ -631,7 +481,7 @@ class Ctap2:
         self._info = self.get_info()
 
     @property
-    def info(self):
+    def info(self) -> Info:
         """Get a cached Info object which can be used to determine capabilities.
 
         :rtype: Info
@@ -640,8 +490,12 @@ class Ctap2:
         return self._info
 
     def send_cbor(
-        self, cmd, data=None, event=None, parse=cbor.decode, on_keepalive=None
-    ):
+        self,
+        cmd: int,
+        data: Optional[Mapping[int, Any]] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> Mapping[int, Any]:
         """Sends a CBOR message to the device, and waits for a response.
 
         :param cmd: The command byte of the request.
@@ -661,11 +515,12 @@ class Ctap2:
         status = response[0]
         if status != 0x00:
             raise CtapError(status)
-        if len(response) == 1:
-            return None
         enc = response[1:]
+        if not enc:
+            return {}
+        decoded = cbor.decode(enc)
         if self._strict_cbor:
-            expected = cbor.encode(cbor.decode(enc))
+            expected = cbor.encode(decoded)
             if expected != enc:
                 enc_h = enc.hex()
                 exp_h = expected.hex()
@@ -673,25 +528,27 @@ class Ctap2:
                     "Non-canonical CBOR from Authenticator.\n"
                     "Got: {}\n".format(enc_h) + "Expected: {}".format(exp_h)
                 )
-        return parse(enc)
+        if isinstance(decoded, Mapping):
+            return decoded
+        raise TypeError("Decoded value of wrong type")
 
-    def get_info(self):
+    def get_info(self) -> Info:
         """CTAP2 getInfo command.
 
         :return: Information about the authenticator.
         """
-        return self.send_cbor(Ctap2.CMD.GET_INFO, parse=Info)
+        return Info(self.send_cbor(Ctap2.CMD.GET_INFO))
 
     def client_pin(
         self,
-        pin_uv_protocol,
-        sub_cmd,
-        key_agreement=None,
-        pin_uv_param=None,
-        new_pin_enc=None,
-        pin_hash_enc=None,
-        permissions=None,
-        permissions_rpid=None,
+        pin_uv_protocol: int,
+        sub_cmd: int,
+        key_agreement: Optional[Mapping[int, Any]] = None,
+        pin_uv_param: Optional[bytes] = None,
+        new_pin_enc: Optional[bytes] = None,
+        pin_hash_enc: Optional[bytes] = None,
+        permissions: Optional[int] = None,
+        permissions_rpid: Optional[str] = None,
     ):
         """CTAP2 clientPin command, used for various PIN operations.
 
@@ -724,7 +581,11 @@ class Ctap2:
             ),
         )
 
-    def reset(self, event=None, on_keepalive=None):
+    def reset(
+        self,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ):
         """CTAP2 reset command, erases all credentials and PIN.
 
         :param event: Optional threading.Event object used to cancel the request.
@@ -735,18 +596,18 @@ class Ctap2:
 
     def make_credential(
         self,
-        client_data_hash,
-        rp,
-        user,
-        key_params,
-        exclude_list=None,
-        extensions=None,
-        options=None,
-        pin_uv_param=None,
-        pin_uv_protocol=None,
-        event=None,
-        on_keepalive=None,
-    ):
+        client_data_hash: bytes,
+        rp: Mapping[str, Any],
+        user: Mapping[str, Any],
+        key_params: List[Mapping[str, Any]],
+        exclude_list: Optional[List[Mapping[str, Any]]] = None,
+        extensions: Optional[Mapping[str, Any]] = None,
+        options: Optional[Mapping[str, Any]] = None,
+        pin_uv_param: Optional[bytes] = None,
+        pin_uv_protocol: Optional[int] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> AttestationObject:
         """CTAP2 makeCredential operation.
 
         :param client_data_hash: SHA256 hash of the ClientData.
@@ -763,36 +624,37 @@ class Ctap2:
             messages from the authenticator.
         :return: The new credential.
         """
-        return self.send_cbor(
-            Ctap2.CMD.MAKE_CREDENTIAL,
-            args(
-                client_data_hash,
-                rp,
-                user,
-                key_params,
-                exclude_list,
-                extensions,
-                options,
-                pin_uv_param,
-                pin_uv_protocol,
-            ),
-            event,
-            AttestationObject,
-            on_keepalive,
+        return AttestationObject(
+            self.send_cbor(
+                Ctap2.CMD.MAKE_CREDENTIAL,
+                args(
+                    client_data_hash,
+                    rp,
+                    user,
+                    key_params,
+                    exclude_list,
+                    extensions,
+                    options,
+                    pin_uv_param,
+                    pin_uv_protocol,
+                ),
+                event,
+                on_keepalive,
+            )
         )
 
     def get_assertion(
         self,
-        rp_id,
-        client_data_hash,
-        allow_list=None,
-        extensions=None,
-        options=None,
-        pin_uv_param=None,
-        pin_uv_protocol=None,
-        event=None,
-        on_keepalive=None,
-    ):
+        rp_id: str,
+        client_data_hash: bytes,
+        allow_list: Optional[List[Mapping[str, Any]]] = None,
+        extensions: Optional[Mapping[str, Any]] = None,
+        options: Optional[Mapping[str, Any]] = None,
+        pin_uv_param: Optional[bytes] = None,
+        pin_uv_protocol: Optional[int] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> AssertionResponse:
         """CTAP2 getAssertion command.
 
         :param rp_id: The RP ID of the credential.
@@ -807,30 +669,31 @@ class Ctap2:
             from the authenticator.
         :return: The new assertion.
         """
-        return self.send_cbor(
-            Ctap2.CMD.GET_ASSERTION,
-            args(
-                rp_id,
-                client_data_hash,
-                allow_list,
-                extensions,
-                options,
-                pin_uv_param,
-                pin_uv_protocol,
-            ),
-            event,
-            AssertionResponse,
-            on_keepalive,
+        return AssertionResponse(
+            self.send_cbor(
+                Ctap2.CMD.GET_ASSERTION,
+                args(
+                    rp_id,
+                    client_data_hash,
+                    allow_list,
+                    extensions,
+                    options,
+                    pin_uv_param,
+                    pin_uv_protocol,
+                ),
+                event,
+                on_keepalive,
+            )
         )
 
-    def get_next_assertion(self):
+    def get_next_assertion(self) -> AssertionResponse:
         """CTAP2 getNextAssertion command.
 
         :return: The next available assertion response.
         """
-        return self.send_cbor(Ctap2.CMD.GET_NEXT_ASSERTION, parse=AssertionResponse)
+        return AssertionResponse(self.send_cbor(Ctap2.CMD.GET_NEXT_ASSERTION))
 
-    def get_assertions(self, *args, **kwargs):
+    def get_assertions(self, *args, **kwargs) -> List[AssertionResponse]:
         """Convenience method to get list of assertions.
 
         See get_assertion and get_next_assertion for details.
@@ -843,7 +706,11 @@ class Ctap2:
         return [first] + rest
 
     def credential_mgmt(
-        self, sub_cmd, sub_cmd_params=None, pin_uv_protocol=None, pin_uv_param=None
+        self,
+        sub_cmd: int,
+        sub_cmd_params: Optional[Mapping[int, Any]] = None,
+        pin_uv_protocol: Optional[int] = None,
+        pin_uv_param: Optional[bytes] = None,
     ):
         """CTAP2 credentialManagement command, used to manage resident
         credentials.
@@ -873,14 +740,14 @@ class Ctap2:
 
     def bio_enrollment(
         self,
-        modality=None,
-        sub_cmd=None,
-        sub_cmd_params=None,
-        pin_uv_protocol=None,
-        pin_uv_param=None,
-        get_modality=None,
-        event=None,
-        on_keepalive=None,
+        modality: Optional[int] = None,
+        sub_cmd: Optional[int] = None,
+        sub_cmd_params: Optional[Mapping[int, Any]] = None,
+        pin_uv_protocol: Optional[int] = None,
+        pin_uv_param: Optional[bytes] = None,
+        get_modality: Optional[bool] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
     ):
         """CTAP2 bio enrollment command. Used to provision/enumerate/delete bio
         enrollments in the authenticator.
@@ -918,7 +785,11 @@ class Ctap2:
             on_keepalive=on_keepalive,
         )
 
-    def selection(self, event=None, on_keepalive=None):
+    def selection(
+        self,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ):
         """CTAP2 authenticator selection command.
 
         This command allows the platform to let a user select a certain authenticator
@@ -932,12 +803,12 @@ class Ctap2:
 
     def large_blobs(
         self,
-        offset,
-        get=None,
-        set=None,
-        length=None,
-        pin_uv_param=None,
-        pin_uv_protocol=None,
+        offset: int,
+        get: Optional[int] = None,
+        set: Optional[bytes] = None,
+        length: Optional[int] = None,
+        pin_uv_param: Optional[bytes] = None,
+        pin_uv_protocol: Optional[int] = None,
     ):
         """CTAP2 authenticator large blobs command.
 
@@ -959,7 +830,11 @@ class Ctap2:
         )
 
     def config(
-        self, sub_cmd, sub_cmd_params=None, pin_uv_protocol=None, pin_uv_param=None
+        self,
+        sub_cmd: int,
+        sub_cmd_params: Optional[Mapping[int, Any]] = None,
+        pin_uv_protocol: Optional[int] = None,
+        pin_uv_param: Optional[bytes] = None,
     ):
         """CTAP2 authenticator config command.
 

@@ -29,6 +29,7 @@
 
 import mock
 import unittest
+import json
 from threading import Event, Timer
 from fido2.utils import sha256, websafe_decode
 from fido2.hid import CAPABILITY
@@ -56,7 +57,7 @@ class TestClientData(unittest.TestCase):
         self.assertEqual(client_data, ClientData.from_b64(client_data.b64))
 
         self.assertEqual(
-            client_data.data,
+            json.loads(client_data),
             {
                 "typ": "navigator.id.finishEnrollment",
                 "challenge": "vqrS6WXDe1JUs5_c3i4-LkKIHRr-3XVb3azuA5TifHo",
@@ -336,7 +337,7 @@ class TestFido2Client(unittest.TestCase):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
         ctap2 = mock.MagicMock()
-        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        ctap2.get_info.return_value = Info.parse(_INFO_NO_PIN)
         PatchedCtap2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
         try:
@@ -357,7 +358,7 @@ class TestFido2Client(unittest.TestCase):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
         ctap2 = mock.MagicMock()
-        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        ctap2.get_info.return_value = Info.parse(_INFO_NO_PIN)
         ctap2.info = ctap2.get_info()
         ctap2.make_credential.side_effect = CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
         PatchedCtap2.return_value = ctap2
@@ -384,9 +385,9 @@ class TestFido2Client(unittest.TestCase):
         dev = mock.Mock()
         dev.capabilities = CAPABILITY.CBOR
         ctap2 = mock.MagicMock()
-        ctap2.get_info.return_value = Info(_INFO_NO_PIN)
+        ctap2.get_info.return_value = Info.parse(_INFO_NO_PIN)
         ctap2.info = ctap2.get_info()
-        ctap2.make_credential.return_value = AttestationObject(_MC_RESP)
+        ctap2.make_credential.return_value = AttestationObject.parse(_MC_RESP)
         PatchedCtap2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
 

@@ -34,7 +34,8 @@ On Windows, the native WebAuthn API will be used.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import ClientPin, LargeBlobs
+from fido2.ctap2 import LargeBlobs
+from fido2.ctap2.pin import ClientPin, PERMISSIONS
 from fido2.client import Fido2Client
 from fido2.server import Fido2Server
 from getpass import getpass
@@ -118,9 +119,9 @@ print("Large Blob Key:", key)
 
 client_pin = ClientPin(client.ctap2)
 if pin:
-    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+    token = client_pin.get_pin_token(pin, PERMISSIONS.LARGE_BLOB_WRITE)
 else:
-    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+    token = client_pin.get_uv_token(PERMISSIONS.LARGE_BLOB_WRITE)
 large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
 
 # Write a large blob
@@ -146,9 +147,9 @@ key = assertion.large_blob_key
 
 # Get a fresh PIN token
 if pin:
-    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+    token = client_pin.get_pin_token(pin, PERMISSIONS.LARGE_BLOB_WRITE)
 else:
-    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+    token = client_pin.get_uv_token(PERMISSIONS.LARGE_BLOB_WRITE)
 large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
 
 blob = large_blobs.get_blob(key)

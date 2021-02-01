@@ -35,7 +35,8 @@ Consider this highly experimental.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import Ctap2, ClientPin, FPBioEnrollment, CaptureError
+from fido2.ctap2 import Ctap2, FPBioEnrollment, CaptureError
+from fido2.ctap2.pin import ClientPin, PERMISSIONS
 from getpass import getpass
 import sys
 
@@ -61,7 +62,7 @@ if not ctap.info.options.get("clientPin"):
 print("Preparing to enroll a new fingerprint.")
 pin = getpass("Please enter PIN: ")
 client_pin = ClientPin(ctap)
-pin_token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.BIO_ENROLL)
+pin_token = client_pin.get_pin_token(pin, PERMISSIONS.BIO_ENROLL)
 bio = FPBioEnrollment(ctap, client_pin.protocol, pin_token)
 
 print(bio.enumerate_enrollments())

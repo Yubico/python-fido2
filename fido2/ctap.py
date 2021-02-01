@@ -41,6 +41,11 @@ class CtapDevice(abc.ABC):
     list_devices, which should return a generator over discoverable devices.
     """
 
+    @property
+    @abc.abstractmethod
+    def capabilities(self) -> int:
+        """Get device capabilities"""
+
     @abc.abstractmethod
     def call(self, cmd, data=b"", event=None, on_keepalive=None):
         """Sends a command to the authenticator, and reads the response.

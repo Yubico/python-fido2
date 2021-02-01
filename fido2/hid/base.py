@@ -26,7 +26,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Union
 import struct
 import abc
 import os
@@ -37,7 +37,7 @@ FIDO_USAGE = 0x1
 
 @dataclass
 class HidDescriptor:
-    path: str
+    path: Union[str, bytes]
     vid: int
     pid: int
     report_size_in: int

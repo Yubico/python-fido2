@@ -38,7 +38,7 @@ class U2FDevice(object):
 
     def sign(self, client_data):
         authenticator_data = AuthenticatorData.create(
-            sha256(self.app_id), flags=AuthenticatorData.FLAG.USER_PRESENT, counter=0
+            sha256(self.app_id), flags=AuthenticatorData.FLAGS.USER_PRESENT, counter=0
         )
 
         signature = self.priv_key.sign(

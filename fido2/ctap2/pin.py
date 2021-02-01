@@ -26,6 +26,8 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from ..utils import sha256, hmac_sha256, bytes2int, int2bytes
+from ..cose import CoseKey
+from .base import Ctap2
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -33,7 +35,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from enum import IntEnum, unique
+from enum import IntEnum, IntFlag, unique
+from typing import ClassVar, Optional, Mapping, Tuple, Any
+import abc
 import os
 
 
@@ -49,7 +53,35 @@ def _pad_pin(pin: str) -> bytes:
     return pin_padded
 
 
-class PinProtocolV1:
+class PinProtocol(abc.ABC):
+    VERSION: ClassVar[int]
+
+    @abc.abstractmethod
+    def encapsulate(self, peer_cose_key: CoseKey) -> Tuple[Mapping[int, Any], bytes]:
+        """Generates an encapsulation of the public key.
+        Returns the message to transmit and the shared secret.
+        """
+
+    @abc.abstractmethod
+    def encrypt(self, key: bytes, plaintext: bytes) -> bytes:
+        """Encrypts data"""
+
+    @abc.abstractmethod
+    def decrypt(self, key: bytes, ciphertext: bytes) -> bytes:
+        """Decrypts encrypted data"""
+
+    @abc.abstractmethod
+    def authenticate(self, key: bytes, message: bytes) -> bytes:
+        """Computes a MAC of the given message."""
+
+    @abc.abstractmethod
+    def validate_token(self, token: bytes) -> bytes:
+        """Validates that a token is well-formed.
+        Returns the token, or if invalid, raises a ValueError.
+        """
+
+
+class PinProtocolV1(PinProtocol):
     """Implementation of the CTAP2 PIN/UV protocol v1.
 
     :param ctap: An instance of a CTAP2 object.
@@ -60,7 +92,7 @@ class PinProtocolV1:
     VERSION = 1
     IV = b"\x00" * 16
 
-    def kdf(self, z):
+    def kdf(self, z) -> bytes:
         return sha256(z)
 
     def encapsulate(self, peer_cose_key):
@@ -164,6 +196,16 @@ class PinProtocolV2(PinProtocolV1):
         return token
 
 
+@unique
+class PERMISSIONS(IntFlag):
+    MAKE_CREDENTIAL = 0x01
+    GET_ASSERTION = 0x02
+    CREDENTIAL_MGMT = 0x04
+    BIO_ENROLL = 0x08
+    LARGE_BLOB_WRITE = 0x10
+    AUTHENTICATOR_CFG = 0x20
+
+
 class ClientPin:
     """Implementation of the CTAP2 Client PIN API.
 
@@ -173,10 +215,7 @@ class ClientPin:
         will be used.
     """
 
-    PROTOCOLS = [
-        PinProtocolV2,
-        PinProtocolV1,
-    ]
+    PROTOCOLS = [PinProtocolV2, PinProtocolV1]
 
     @unique
     class CMD(IntEnum):
@@ -197,16 +236,7 @@ class ClientPin:
         POWER_CYCLE_STATE = 0x04
         UV_RETRIES = 0x05
 
-    @unique
-    class PERMISSION(IntEnum):
-        MAKE_CREDENTIAL = 0x01
-        GET_ASSERTION = 0x02
-        CREDENTIAL_MGMT = 0x04
-        BIO_ENROLL = 0x08
-        LARGE_BLOB_WRITE = 0x10
-        AUTHENTICATOR_CFG = 0x20
-
-    def __init__(self, ctap, protocol=None):
+    def __init__(self, ctap: Ctap2, protocol: Optional[PinProtocol] = None):
         if "clientPin" not in ctap.info.options:
             raise ValueError("Authenticator does not support ClientPin")
 
@@ -229,7 +259,12 @@ class ClientPin:
 
         return self.protocol.encapsulate(pk)
 
-    def get_pin_token(self, pin, permissions=None, permissions_rpid=None):
+    def get_pin_token(
+        self,
+        pin: str,
+        permissions: Optional[PERMISSIONS] = None,
+        permissions_rpid: Optional[str] = None,
+    ) -> bytes:
         """Get a PIN/UV token from the authenticator using PIN.
 
         :param pin: The PIN of the authenticator.
