@@ -35,10 +35,13 @@ Navigate to https://localhost:5000 in a supported web browser.
 """
 from __future__ import print_function, absolute_import, unicode_literals
 
-from fido2.webauthn import PublicKeyCredentialRpEntity
+from fido2.webauthn import (
+    PublicKeyCredentialRpEntity,
+    AttestationObject,
+    AuthenticatorData,
+)
 from fido2.client import ClientData
 from fido2.server import Fido2Server
-from fido2.ctap2 import AttestationObject, AuthenticatorData
 from fido2 import cbor
 from flask import Flask, session, request, redirect, abort
 
@@ -133,6 +136,10 @@ def authenticate_complete():
     return cbor.encode({"status": "OK"})
 
 
-if __name__ == "__main__":
+def main():
     print(__doc__)
     app.run(ssl_context="adhoc", debug=False)
+
+
+if __name__ == "__main__":
+    main()

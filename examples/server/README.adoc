@@ -4,17 +4,17 @@ WebAuthn credential registration, and use.
 
 
 === Running
-To run this sample, you will need `pipenv`. For instructions on installing
-`pipenv`, see https://docs.pipenv.org.
+To run this sample, you will need `poetry`. For instructions on installing
+`poetry`, see https://python-poetry.org/.
 
 Run the following command in the `examples/server` directory to set up the
 example:
 
-  $ pipenv install
+  $ poetry install
 
 Once the environment has been created, you can run the server by running:
 
-  $ pipenv run server
+  $ poetry run server
 
 When the server is running, use a browser supporting WebAuthn and open
 https://localhost:5000 to access the website.
@@ -49,11 +49,12 @@ a slightly altered version of the example server which uses this class to
 authenticate U2F credentials as well as WebAuthn credentials. To run this
 version of the server, run:
 
-  $ pipenv run server-u2f
+  $ poetry run server-u2f
 
 This version allows registration both using the newer WebAuthn APIs and by using
 the legacy U2F APIs, so that you can test authentication using both credential
-types. The source code for this version of the server is in `server-u2f.py`.
+types. The source code for this version of the server is in
+`server/server_u2f.py`.
 
 NOTE: There should be no need to support registration of new U2F credentials as
 new registrations should be using the WebAuthn APIs, even for existing users.
