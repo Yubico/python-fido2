@@ -28,10 +28,11 @@
 from .hid import STATUS
 from .ctap import CtapDevice, CtapError
 from .ctap1 import Ctap1, APDU, ApduError
-from .ctap2 import Ctap2, AttestationObject, AssertionResponse, Info
+from .ctap2 import Ctap2, AssertionResponse, Info
 from .ctap2.pin import ClientPin, PERMISSIONS
 from .ctap2.extensions import Ctap2Extension
 from .webauthn import (
+    AttestationObject,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
@@ -560,7 +561,7 @@ class Fido2Client(_BaseClient):
                 used_extensions.append(ext)
                 extension_inputs[ext.NAME] = auth_input
 
-        att_obj = self.ctap2.make_credential(
+        att_resp = self.ctap2.make_credential(
             client_data.hash,
             rp,
             user,
@@ -577,11 +578,16 @@ class Fido2Client(_BaseClient):
         # Process extenstion outputs
         extension_outputs = {}
         for ext in used_extensions:
-            output = ext.process_create_output(att_obj.auth_data)
+            output = ext.process_create_output(att_resp.auth_data)
             if output is not None:
                 extension_outputs.update(output)
 
-        return att_obj, extension_outputs
+        return (
+            AttestationObject.create(
+                att_resp.fmt, att_resp.auth_data, att_resp.att_stmt
+            ),
+            extension_outputs,
+        )
 
     def _ctap1_make_credential(
         self,

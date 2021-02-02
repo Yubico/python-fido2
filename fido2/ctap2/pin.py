@@ -244,11 +244,12 @@ class ClientPin:
         if protocol is None:
             for proto in ClientPin.PROTOCOLS:
                 if proto.VERSION in ctap.info.pin_uv_protocols:
-                    protocol = proto()
+                    self.protocol: PinProtocol = proto()
                     break
             else:
                 raise ValueError("No compatible PIN/UV protocols supported!")
-        self.protocol = protocol
+        else:
+            self.protocol = protocol
         self._supports_permissions = ctap.info.options.get("pinUvAuthToken")
 
     def _get_shared_secret(self):

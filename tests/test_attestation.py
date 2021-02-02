@@ -25,7 +25,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.ctap2 import AuthenticatorData
+from fido2.webauthn import AuthenticatorData
 from fido2.attestation import (
     Attestation,
     AttestationType,

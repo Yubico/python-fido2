@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 
 from fido2.utils import sha256, bytes2int
-from fido2.ctap2 import AuthenticatorData
+from fido2.webauthn import AuthenticatorData
 
 
 class U2FDevice(object):

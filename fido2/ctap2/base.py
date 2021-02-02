@@ -27,15 +27,14 @@
 
 from .. import cbor
 from ..ctap import CtapDevice, CtapError
-from ..cose import CoseKey, ES256
+from ..cose import CoseKey
 from ..hid import CTAPHID, CAPABILITY
-from ..utils import ByteBuffer
-from ..attestation import FidoU2FAttestation
+from ..webauthn import AuthenticatorData
 
-from enum import IntEnum, IntFlag, unique
+from enum import IntEnum, unique
 from dataclasses import dataclass, field, fields, MISSING
 from threading import Event
-from typing import Mapping, Dict, Any, List, Optional, Tuple, Type, TypeVar, Callable
+from typing import Mapping, Dict, Any, List, Optional, Type, TypeVar, Callable
 import struct
 
 
@@ -146,203 +145,7 @@ class Info(_CborDataObject):
 
 
 @dataclass(init=False)
-class AttestedCredentialData(bytes):
-    aaguid: bytes
-    credential_id: bytes
-    public_key: CoseKey
-
-    def __init__(self, _):
-        super(AttestedCredentialData, self).__init__()
-
-        parsed = AttestedCredentialData._parse(self)
-        self.aaguid = parsed[0]
-        self.credential_id = parsed[1]
-        self.public_key = parsed[2]
-        if parsed[3]:
-            raise ValueError("Wrong length")
-
-    def __str__(self):  # Override default implementation from bytes.
-        return repr(self)
-
-    @staticmethod
-    def _parse(data: bytes) -> Tuple[bytes, bytes, CoseKey, bytes]:
-        """Parse the components of an AttestedCredentialData from a binary
-        string, and return them.
-
-        :param data: A binary string containing an attested credential data.
-        :return: AAGUID, credential ID, public key, and remaining data.
-        """
-        reader = ByteBuffer(data)
-        aaguid = reader.read(16)
-        cred_id = reader.read(reader.unpack(">H"))
-        pub_key, rest = cbor.decode_from(reader.read())
-        return aaguid, cred_id, CoseKey.parse(pub_key), rest
-
-    @classmethod
-    def create(
-        cls, aaguid: bytes, credential_id: bytes, public_key: CoseKey
-    ) -> "AttestedCredentialData":
-        """Create an AttestedCredentialData by providing its components.
-
-        :param aaguid: The AAGUID of the authenticator.
-        :param credential_id: The binary ID of the credential.
-        :param public_key: A COSE formatted public key.
-        :return: The attested credential data.
-        """
-        return cls(
-            aaguid
-            + struct.pack(">H", len(credential_id))
-            + credential_id
-            + cbor.encode(public_key)
-        )
-
-    @classmethod
-    def unpack_from(cls, data: bytes) -> Tuple["AttestedCredentialData", bytes]:
-        """Unpack an AttestedCredentialData from a byte string, returning it and
-        any remaining data.
-
-        :param data: A binary string containing an attested credential data.
-        :return: The parsed AttestedCredentialData, and any remaining data from
-            the input.
-        """
-        parts = cls._parse(data)
-        return cls.create(*parts[:-1]), parts[-1]
-
-    @classmethod
-    def from_ctap1(
-        cls, key_handle: bytes, public_key: bytes
-    ) -> "AttestedCredentialData":
-        """Create an AttestatedCredentialData from a CTAP1 RegistrationData instance.
-
-        :param key_handle: The CTAP1 credential key_handle.
-        :type key_handle: bytes
-        :param public_key: The CTAP1 65 byte public key.
-        :type public_key: bytes
-        :return: The credential data, using an all-zero AAGUID.
-        :rtype: AttestedCredentialData
-        """
-        return cls.create(
-            b"\0" * 16, key_handle, ES256.from_ctap1(public_key)  # AAGUID
-        )
-
-
-@dataclass(init=False)
-class AuthenticatorData(bytes):
-    """Binary encoding of the authenticator data.
-
-    :param _: The binary representation of the authenticator data.
-    :ivar rp_id_hash: SHA256 hash of the RP ID.
-    :ivar flags: The flags of the authenticator data, see
-        AuthenticatorData.FLAGS.
-    :ivar counter: The signature counter of the authenticator.
-    :ivar credential_data: Attested credential data, if available.
-    :ivar extensions: Authenticator extensions, if available.
-    """
-
-    @unique
-    class FLAGS(IntFlag):
-        """Authenticator data flags
-
-        See https://www.w3.org/TR/webauthn/#sec-authenticator-data for details
-        """
-
-        USER_PRESENT = 0x01
-        USER_VERIFIED = 0x04
-        ATTESTED = 0x40
-        EXTENSION_DATA = 0x80
-
-    rp_id_hash: bytes
-    flags: "AuthenticatorData.FLAGS"
-    counter: int
-    credential_data: Optional[AttestedCredentialData]
-    extensions: Optional[Mapping]
-
-    def __init__(self, _):
-        super(AuthenticatorData, self).__init__()
-
-        reader = ByteBuffer(self)
-        self.rp_id_hash = reader.read(32)
-        self.flags = reader.unpack("B")
-        self.counter = reader.unpack(">I")
-        rest = reader.read()
-
-        if self.flags & AuthenticatorData.FLAGS.ATTESTED:
-            self.credential_data, rest = AttestedCredentialData.unpack_from(rest)
-        else:
-            self.credential_data = None
-
-        if self.flags & AuthenticatorData.FLAGS.EXTENSION_DATA:
-            self.extensions, rest = cbor.decode_from(rest)
-        else:
-            self.extensions = None
-
-        if rest:
-            raise ValueError("Wrong length")
-
-    def __str__(self):  # Override default implementation from bytes.
-        return repr(self)
-
-    @classmethod
-    def create(
-        cls,
-        rp_id_hash: bytes,
-        flags: "AuthenticatorData.FLAGS",
-        counter: int,
-        credential_data: bytes = b"",
-        extensions: Optional[Mapping] = None,
-    ):
-        """Create an AuthenticatorData instance.
-
-        :param rp_id_hash: SHA256 hash of the RP ID.
-        :param flags: Flags of the AuthenticatorData.
-        :param counter: Signature counter of the authenticator data.
-        :param credential_data: Authenticated credential data (only if attested
-            credential data flag is set).
-        :param extensions: Authenticator extensions (only if ED flag is set).
-        :return: The authenticator data.
-        """
-        return cls(
-            rp_id_hash
-            + struct.pack(">BI", flags, counter)
-            + credential_data
-            + (cbor.encode(extensions) if extensions is not None else b"")
-        )
-
-    def is_user_present(self) -> bool:
-        """Return true if the User Present flag is set.
-
-        :return: True if User Present is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAGS.USER_PRESENT)
-
-    def is_user_verified(self) -> bool:
-        """Return true if the User Verified flag is set.
-
-        :return: True if User Verified is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAGS.USER_VERIFIED)
-
-    def is_attested(self) -> bool:
-        """Return true if the Attested credential data flag is set.
-
-        :return: True if Attested credential data is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAGS.ATTESTED)
-
-    def has_extension_data(self) -> bool:
-        """Return true if the Extenstion data flag is set.
-
-        :return: True if Extenstion data is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAGS.EXTENSION_DATA)
-
-
-@dataclass(init=False)
-class AttestationObject(_CborDataObject):
+class AttestationResponse(_CborDataObject):
     """Binary CBOR encoded attestation object.
 
     :param _: The binary representation of the attestation object.
@@ -351,50 +154,15 @@ class AttestationObject(_CborDataObject):
     :type fmt: str
     :ivar auth_data: The attested authenticator data.
     :type auth_data: AuthenticatorData
-    :ivar att_statement: The attestation statement.
-    :type att_statement: Dict[str, Any]
+    :ivar att_stmt: The attestation statement.
+    :type att_stmt: Dict[str, Any]
     """
 
     fmt: str = cbor_field(0x01)
     auth_data: AuthenticatorData = cbor_field(0x02, transform=AuthenticatorData)
-    att_statement: Dict[str, Any] = cbor_field(0x03)
+    att_stmt: Dict[str, Any] = cbor_field(0x03)
     ep_att: Optional[bool] = cbor_field(0x04, default=None)
     large_blob_key: Optional[bytes] = cbor_field(0x05, default=None)
-
-    def get_webauthn(self) -> Dict[str, Any]:
-        """Get data formatted as a WebAuthn Attestation Object"""
-        return {
-            "fmt": self.fmt,
-            "attStmt": self.att_statement,
-            "authData": self.auth_data,
-        }
-
-    @classmethod
-    def from_ctap1(cls, app_param: bytes, registration) -> "AttestationObject":
-        """Create an AttestationObject from a CTAP1 RegistrationData instance.
-
-        :param app_param: SHA256 hash of the RP ID used for the CTAP1 request.
-        :type app_param: bytes
-        :param registration: The CTAP1 registration data.
-        :type registration: RegistrationData
-        :return: The attestation object, using the "fido-u2f" format.
-        :rtype: AttestationObject
-        """
-        return cls.create(
-            fmt=FidoU2FAttestation.FORMAT,
-            auth_data=AuthenticatorData.create(
-                app_param,
-                AuthenticatorData.FLAGS.ATTESTED | AuthenticatorData.FLAGS.USER_PRESENT,
-                0,
-                AttestedCredentialData.from_ctap1(
-                    registration.key_handle, registration.public_key
-                ),
-            ),
-            att_statement={
-                "x5c": [registration.certificate],
-                "sig": registration.signature,
-            },
-        )
 
 
 @dataclass(init=False)
@@ -442,7 +210,9 @@ class AssertionResponse(_CborDataObject):
         return cls.create(
             credential=credential,
             auth_data=AuthenticatorData.create(
-                app_param, authentication.user_presence & 0x01, authentication.counter
+                app_param,
+                authentication.user_presence & AuthenticatorData.FLAGS.USER_PRESENT,
+                authentication.counter,
             ),
             signature=authentication.signature,
         )
@@ -501,12 +271,8 @@ class Ctap2:
         :param cmd: The command byte of the request.
         :param data: The payload to send (to be CBOR encoded).
         :param event: Optional threading.Event used to cancel the request.
-        :param parse: Function used to parse the binary response data, defaults
-            to parsing the CBOR.
         :param on_keepalive: Optional function called when keep-alive is sent by
             the authenticator.
-        :return: The result of calling the parse function on the response data
-            (defaults to the CBOR decoded value).
         """
         request = struct.pack(">B", cmd)
         if data is not None:
@@ -607,7 +373,7 @@ class Ctap2:
         pin_uv_protocol: Optional[int] = None,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> AttestationObject:
+    ) -> AttestationResponse:
         """CTAP2 makeCredential operation.
 
         :param client_data_hash: SHA256 hash of the ClientData.
@@ -624,7 +390,7 @@ class Ctap2:
             messages from the authenticator.
         :return: The new credential.
         """
-        return AttestationObject(
+        return AttestationResponse(
             self.send_cbor(
                 Ctap2.CMD.MAKE_CREDENTIAL,
                 args(

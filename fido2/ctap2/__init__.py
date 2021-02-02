@@ -28,9 +28,7 @@
 from .base import (  # noqa
     Ctap2,
     Info,
-    AuthenticatorData,
-    AttestedCredentialData,
-    AttestationObject,
+    AttestationResponse,
     AssertionResponse,
 )
 
@@ -39,6 +37,3 @@ from .credman import CredentialManagement  # noqa
 from .bio import FPBioEnrollment, CaptureError  # noqa
 from .blob import LargeBlobs  # noqa
 from .config import Config  # noqa
-
-# Alias for compatibility, this will be going away
-CTAP2 = Ctap2

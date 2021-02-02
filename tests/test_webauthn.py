@@ -70,7 +70,6 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o, {"id": "example.com", "name": "Example"})
         self.assertEqual(o.id, "example.com")
         self.assertEqual(o.name, "Example")
-        self.assertIsNone(o.icon)
 
         with self.assertRaises(TypeError):
             PublicKeyCredentialRpEntity("example.com")
@@ -86,7 +85,6 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.id, b"user")
         self.assertEqual(o.name, "Example")
         self.assertEqual(o.display_name, "Display")
-        self.assertIsNone(o.icon)
 
         with self.assertRaises(TypeError):
             PublicKeyCredentialUserEntity(b"user")
@@ -201,17 +199,3 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             PublicKeyCredentialRequestOptions(
                 b"request_challenge", user_verification="invalid"
             )
-
-    def test_update_value(self):
-        o = PublicKeyCredentialRpEntity("example.com", "Example")
-        self.assertEqual(o, {"id": "example.com", "name": "Example"})
-        self.assertEqual(o.id, "example.com")
-        self.assertEqual(o.name, "Example")
-
-        o.id = "new-id.com"
-        self.assertEqual(o, {"id": "new-id.com", "name": "Example"})
-        self.assertEqual(o.id, "new-id.com")
-
-        o["name"] = "New Name"
-        self.assertEqual(o, {"id": "new-id.com", "name": "New Name"})
-        self.assertEqual(o.name, "New Name")

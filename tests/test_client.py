@@ -35,9 +35,9 @@ from fido2.utils import sha256, websafe_decode
 from fido2.hid import CAPABILITY
 from fido2.ctap import CtapError
 from fido2.ctap1 import ApduError, APDU, RegistrationData, SignatureData
-from fido2.ctap2 import Info, AttestationObject
+from fido2.ctap2 import Info, AttestationResponse
 from fido2.client import ClientData, U2fClient, ClientError, Fido2Client
-from fido2.webauthn import PublicKeyCredentialCreationOptions
+from fido2.webauthn import PublicKeyCredentialCreationOptions, AttestationObject
 
 
 class TestClientData(unittest.TestCase):
@@ -387,7 +387,7 @@ class TestFido2Client(unittest.TestCase):
         ctap2 = mock.MagicMock()
         ctap2.get_info.return_value = Info.parse(_INFO_NO_PIN)
         ctap2.info = ctap2.get_info()
-        ctap2.make_credential.return_value = AttestationObject.parse(_MC_RESP)
+        ctap2.make_credential.return_value = AttestationResponse.parse(_MC_RESP)
         PatchedCtap2.return_value = ctap2
         client = Fido2Client(dev, APP_ID)
 

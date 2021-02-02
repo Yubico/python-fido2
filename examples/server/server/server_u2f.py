@@ -75,7 +75,6 @@ def register_begin():
             "id": b"user_id",
             "name": "a_user",
             "displayName": "A. User",
-            "icon": "https://example.com/image.png",
         },
         credentials,
     )
@@ -153,7 +152,6 @@ def u2f_begin():
             "id": b"user_id",
             "name": "a_user",
             "displayName": "A. User",
-            "icon": "https://example.com/image.png",
         },
         credentials,
     )

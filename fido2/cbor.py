@@ -32,10 +32,10 @@ required for FIDO 2 CTAP.
 """
 
 import struct
-from typing import Any, Tuple, Union, List, Mapping, Type, Callable
+from typing import Any, Tuple, Union, Sequence, Mapping, Type, Callable
 
 
-CborType = Union[int, bool, str, bytes, List[Any], Mapping[Any, Any]]
+CborType = Union[int, bool, str, bytes, Sequence[Any], Mapping[Any, Any]]
 
 
 def dump_int(data: int, mt: int = 0) -> bytes:
@@ -61,7 +61,7 @@ def dump_bool(data: bool) -> bytes:
     return b"\xf5" if data else b"\xf4"
 
 
-def dump_list(data: List[CborType]) -> bytes:
+def dump_list(data: Sequence[CborType]) -> bytes:
     return dump_int(len(data), mt=4) + b"".join([encode(x) for x in data])
 
 
@@ -85,13 +85,13 @@ def dump_text(data: str) -> bytes:
     return dump_int(len(data_bytes), mt=3) + data_bytes
 
 
-_SERIALIZERS: List[Tuple[Type, Callable[[Any], bytes]]] = [
+_SERIALIZERS: Sequence[Tuple[Type, Callable[[Any], bytes]]] = [
     (bool, dump_bool),
     (int, dump_int),
-    (dict, dump_dict),
-    (list, dump_list),
     (str, dump_text),
     (bytes, dump_bytes),
+    (Mapping, dump_dict),
+    (Sequence, dump_list),
 ]
 
 
@@ -135,7 +135,7 @@ def load_text(ai: int, data: bytes) -> Tuple[str, bytes]:
     return enc.decode("utf8"), rest
 
 
-def load_array(ai: int, data: bytes) -> Tuple[List[CborType], bytes]:
+def load_array(ai: int, data: bytes) -> Tuple[Sequence[CborType], bytes]:
     l, data = load_int(ai, data)
     values = []
     for i in range(l):
