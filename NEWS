@@ -1,3 +1,6 @@
+* Version 0.9.1 (released 2021-02-03)
+ ** Add new CTAP error codes and improve handling of unknown codes.
+
 * Version 0.9.0 (released 2021-01-20)
  ** Server: Attestation is now done in two parts (to align better with the spec):
     First, type-specific validation is done to provide a trust chain.
