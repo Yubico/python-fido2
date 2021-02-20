@@ -131,7 +131,12 @@ class CredentialManagement(object):
 
         See enumerate_rps_begin and enumerate_rps_next for details.
         """
-        first = self.enumerate_rps_begin()
+        try:
+            first = self.enumerate_rps_begin()
+        except CtapError as e:
+            if e.code == CtapError.ERR.NO_CREDENTIALS:
+                return []
+            raise  # Other error
         n_rps = first[CredentialManagement.RESULT.TOTAL_RPS]
         if n_rps == 0:
             return []
