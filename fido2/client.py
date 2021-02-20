@@ -398,33 +398,72 @@ class Fido2Client(_BaseClient):
             self._do_make_credential = self._ctap1_make_credential
             self._do_get_assertion = self._ctap1_get_assertion
 
-    def _get_ctap_uv(self, uv_requirement, pin_provided):
-        pin_supported = "clientPin" in self.info.options
-        pin_set = self.info.options.get("clientPin", False)
+    def _should_use_uv(self, user_verification, mc):
+        uv_supported = any(
+            k in self.info.options for k in ("uv", "clientPin", "bioEnroll")
+        )
+        uv_configured = any(
+            self.info.options.get(k) for k in ("uv", "clientPin", "bioEnroll")
+        )
 
-        if pin_provided:
-            if not pin_set:
-                raise ClientError.ERR.BAD_REQUEST("PIN provided, but not set/supported")
-            else:
-                return False  # If PIN is provided, internal uv is not used
-
-        uv_supported = "uv" in self.info.options
-        uv_set = self.info.options.get("uv", False)
-
-        if uv_requirement == UserVerificationRequirement.REQUIRED:
-            if not uv_set:
+        if (
+            user_verification == UserVerificationRequirement.REQUIRED
+            or (
+                user_verification == UserVerificationRequirement.PREFERRED
+                and uv_supported
+            )
+            or self.info.options.get("alwaysUv")
+        ):
+            if not uv_configured:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
                     "User verification not configured/supported"
                 )
             return True
-        elif uv_requirement == UserVerificationRequirement.PREFERRED:
-            if not uv_set and (uv_supported or pin_supported):
-                raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
-                    "User verification supported but not configured"
-                )
-            return uv_set
-
+        elif mc and uv_configured and not self.info.options.get("makeCredUvNotRqd"):
+            return True
         return False
+
+    def _get_token(self, permissions, rp_id, pin=None):
+        if pin:
+            if self.info.options.get("clientPin"):
+                return self.client_pin.get_pin_token(pin, permissions, rp_id)
+            else:
+                raise ClientError.ERR.BAD_REQUEST("PIN provided, but not set/supported")
+        elif self.info.options.get("uv"):
+            if self.info.options.get("pinUvAuthToken") and self.info.options.get(
+                "bioEnroll"
+            ):
+                return self.client_pin.get_uv_token(permissions, rp_id)
+            else:
+                return None  # No token, use uv=True
+        elif self.info.options.get("clientPin"):
+            raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
+        raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
+            "User verification not configured/supported"
+        )
+
+    def _get_auth_params(self, client_data, rp_id, user_verification, pin):
+        mc = client_data.get("type") == WEBAUTHN_TYPE.MAKE_CREDENTIAL
+        self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
+
+        pin_auth = None
+        pin_protocol = None
+        internal_uv = False
+        if self._should_use_uv(user_verification, mc):
+            permission = (
+                ClientPin.PERMISSION.MAKE_CREDENTIAL
+                if mc
+                else ClientPin.PERMISSION.GET_ASSERTION
+            )
+            token = self._get_token(permission, rp_id, pin)
+            if token:
+                pin_protocol = self.client_pin.protocol.VERSION
+                pin_auth = self.client_pin.protocol.authenticate(
+                    token, client_data.hash
+                )
+            else:
+                internal_uv = True
+        return pin_protocol, pin_auth, internal_uv
 
     def make_credential(self, options, **kwargs):
         """Creates a credential.
@@ -460,7 +499,7 @@ class Fido2Client(_BaseClient):
                 options.exclude_credentials,
                 options.extensions,
                 selection.require_resident_key,
-                self._get_ctap_uv(selection.user_verification, pin is not None),
+                selection.user_verification,
                 pin,
                 event,
                 kwargs.get("on_keepalive"),
@@ -483,32 +522,22 @@ class Fido2Client(_BaseClient):
         exclude_list,
         extensions,
         rk,
-        uv,
+        user_verification,
         pin,
         event,
         on_keepalive,
     ):
-        self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
-        pin_auth = None
-        pin_protocol = None
-        if pin:
-            pin_protocol = self.client_pin.protocol.VERSION
-            pin_token = self.client_pin.get_pin_token(
-                pin, ClientPin.PERMISSION.MAKE_CREDENTIAL, rp["id"]
-            )
-            pin_auth = self.client_pin.protocol.authenticate(
-                pin_token, client_data.hash
-            )
-        elif self.info.options.get("clientPin") and not uv:
-            raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
+        pin_protocol, pin_auth, internal_uv = self._get_auth_params(
+            client_data, rp["id"], user_verification, pin
+        )
 
-        if not (rk or uv):
+        if not (rk or internal_uv):
             options = None
         else:
             options = {}
             if rk:
                 options["rk"] = True
-            if uv:
+            if internal_uv:
                 options["uv"] = True
 
         if exclude_list:
@@ -564,12 +593,16 @@ class Fido2Client(_BaseClient):
         exclude_list,
         extensions,
         rk,
-        uv,
+        user_verification,
         pin,
         event,
         on_keepalive,
     ):
-        if rk or uv or ES256.ALGORITHM not in [p.alg for p in key_params]:
+        if (
+            rk
+            or user_verification == UserVerificationRequirement.REQUIRED
+            or ES256.ALGORITHM not in [p.alg for p in key_params]
+        ):
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
         app_param = sha256(rp["id"].encode())
@@ -636,7 +669,7 @@ class Fido2Client(_BaseClient):
                 options.rp_id,
                 options.allow_credentials,
                 options.extensions,
-                self._get_ctap_uv(options.user_verification, pin is not None),
+                options.user_verification,
                 pin,
                 event,
                 kwargs.get("on_keepalive"),
@@ -651,23 +684,20 @@ class Fido2Client(_BaseClient):
                 timer.cancel()
 
     def _ctap2_get_assertion(
-        self, client_data, rp_id, allow_list, extensions, uv, pin, event, on_keepalive
+        self,
+        client_data,
+        rp_id,
+        allow_list,
+        extensions,
+        user_verification,
+        pin,
+        event,
+        on_keepalive,
     ):
-        self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
-        pin_auth = None
-        pin_protocol = None
-        if pin:
-            pin_protocol = self.client_pin.protocol.VERSION
-            pin_token = self.client_pin.get_pin_token(
-                pin, ClientPin.PERMISSION.GET_ASSERTION, rp_id
-            )
-            pin_auth = self.client_pin.protocol.authenticate(
-                pin_token, client_data.hash
-            )
-        elif self.info.options.get("clientPin") and not uv:
-            raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
-
-        if uv:
+        pin_protocol, pin_auth, internal_uv = self._get_auth_params(
+            client_data, rp_id, user_verification, pin
+        )
+        if internal_uv:
             options = {"uv": True}
         else:
             options = None
@@ -710,9 +740,17 @@ class Fido2Client(_BaseClient):
         return assertions, used_extensions
 
     def _ctap1_get_assertion(
-        self, client_data, rp_id, allow_list, extensions, uv, pin, event, on_keepalive
+        self,
+        client_data,
+        rp_id,
+        allow_list,
+        extensions,
+        user_verification,
+        pin,
+        event,
+        on_keepalive,
     ):
-        if uv or not allow_list:
+        if user_verification == UserVerificationRequirement.REQUIRED or not allow_list:
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
         app_param = sha256(rp_id.encode())
