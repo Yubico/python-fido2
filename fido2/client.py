@@ -111,11 +111,11 @@ class ClientError(Exception):
     def __repr__(self):
         r = "Client error: {0} - {0.name}".format(self.code)
         if self.cause:
-            r += ". Caused by {}".format(self.cause)
+            r += " (cause: {})".format(self.cause)
         return r
 
 
-def _ctap2client_err(e):
+def _ctap2client_err(e, err_cls=ClientError):
     if e.code in [CtapError.ERR.CREDENTIAL_EXCLUDED, CtapError.ERR.NO_CREDENTIALS]:
         ce = ClientError.ERR.DEVICE_INELIGIBLE
     elif e.code in [
@@ -127,7 +127,6 @@ def _ctap2client_err(e):
     elif e.code in [
         CtapError.ERR.UNSUPPORTED_ALGORITHM,
         CtapError.ERR.UNSUPPORTED_OPTION,
-        CtapError.ERR.UNSUPPORTED_EXTENSION,
         CtapError.ERR.KEY_STORE_FULL,
     ]:
         ce = ClientError.ERR.CONFIGURATION_UNSUPPORTED
@@ -137,7 +136,7 @@ def _ctap2client_err(e):
         CtapError.ERR.INVALID_CBOR,
         CtapError.ERR.MISSING_PARAMETER,
         CtapError.ERR.INVALID_OPTION,
-        CtapError.ERR.PIN_REQUIRED,
+        CtapError.ERR.PUAT_REQUIRED,
         CtapError.ERR.PIN_INVALID,
         CtapError.ERR.PIN_BLOCKED,
         CtapError.ERR.PIN_NOT_SET,
@@ -152,7 +151,14 @@ def _ctap2client_err(e):
     else:
         ce = ClientError.ERR.OTHER_ERROR
 
-    return ce(e)
+    return err_cls(ce, e)
+
+
+class PinRequiredError(ClientError):
+    def __init__(
+        self, code=ClientError.ERR.BAD_REQUEST, cause="Pin required but not provided"
+    ):
+        super(PinRequiredError, self).__init__(code, cause)
 
 
 def _call_polling(poll_delay, event, on_keepalive, func, *args, **kwargs):
@@ -353,10 +359,13 @@ class Fido2ClientAssertionSelection(AssertionSelection):
     def _get_extension_results(self, assertion):
         # Process extenstion outputs
         extension_outputs = {}
-        for ext in self._extensions:
-            output = ext.process_get_output(assertion.auth_data)
-            if output is not None:
-                extension_outputs.update(output)
+        try:
+            for ext in self._extensions:
+                output = ext.process_get_output(assertion.auth_data)
+                if output is not None:
+                    extension_outputs.update(output)
+        except ValueError as e:
+            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
         return extension_outputs
 
 
@@ -423,7 +432,7 @@ class Fido2Client(_BaseClient):
             return True
         return False
 
-    def _get_token(self, permissions, rp_id, pin=None):
+    def _get_token(self, permissions, rp_id, pin, event, on_keepalive):
         if pin:
             if self.info.options.get("clientPin"):
                 return self.client_pin.get_pin_token(pin, permissions, rp_id)
@@ -433,16 +442,23 @@ class Fido2Client(_BaseClient):
             if self.info.options.get("pinUvAuthToken") and self.info.options.get(
                 "bioEnroll"
             ):
-                return self.client_pin.get_uv_token(permissions, rp_id)
+                try:
+                    return self.client_pin.get_uv_token(
+                        permissions, rp_id, event, on_keepalive
+                    )
+                except CtapError as e:
+                    raise _ctap2client_err(e, PinRequiredError)
             else:
                 return None  # No token, use uv=True
         elif self.info.options.get("clientPin"):
-            raise ClientError.ERR.BAD_REQUEST("PIN required but not provided")
+            raise PinRequiredError()
         raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
             "User verification not configured/supported"
         )
 
-    def _get_auth_params(self, client_data, rp_id, user_verification, pin):
+    def _get_auth_params(
+        self, client_data, rp_id, user_verification, pin, event, on_keepalive
+    ):
         mc = client_data.get("type") == WEBAUTHN_TYPE.MAKE_CREDENTIAL
         self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
 
@@ -455,7 +471,7 @@ class Fido2Client(_BaseClient):
                 if mc
                 else ClientPin.PERMISSION.GET_ASSERTION
             )
-            token = self._get_token(permission, rp_id, pin)
+            token = self._get_token(permission, rp_id, pin, event, on_keepalive)
             if token:
                 pin_protocol = self.client_pin.protocol.VERSION
                 pin_auth = self.client_pin.protocol.authenticate(
@@ -527,19 +543,6 @@ class Fido2Client(_BaseClient):
         event,
         on_keepalive,
     ):
-        pin_protocol, pin_auth, internal_uv = self._get_auth_params(
-            client_data, rp["id"], user_verification, pin
-        )
-
-        if not (rk or internal_uv):
-            options = None
-        else:
-            options = {}
-            if rk:
-                options["rk"] = True
-            if internal_uv:
-                options["uv"] = True
-
         if exclude_list:
             # Filter out credential IDs which are too long
             max_len = self.info.max_cred_id_length
@@ -555,11 +558,28 @@ class Fido2Client(_BaseClient):
         client_inputs = extensions or {}
         extension_inputs = {}
         used_extensions = []
-        for ext in [cls(self.ctap2) for cls in self.extensions]:
-            auth_input = ext.process_create_input(client_inputs)
-            if auth_input is not None:
-                used_extensions.append(ext)
-                extension_inputs[ext.NAME] = auth_input
+        try:
+            for ext in [cls(self.ctap2) for cls in self.extensions]:
+                auth_input = ext.process_create_input(client_inputs)
+                if auth_input is not None:
+                    used_extensions.append(ext)
+                    extension_inputs[ext.NAME] = auth_input
+        except ValueError as e:
+            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
+
+        # Handle auth
+        pin_protocol, pin_auth, internal_uv = self._get_auth_params(
+            client_data, rp["id"], user_verification, pin, event, on_keepalive
+        )
+
+        if not (rk or internal_uv):
+            options = None
+        else:
+            options = {}
+            if rk:
+                options["rk"] = True
+            if internal_uv:
+                options["uv"] = True
 
         att_obj = self.ctap2.make_credential(
             client_data.hash,
@@ -577,10 +597,13 @@ class Fido2Client(_BaseClient):
 
         # Process extenstion outputs
         extension_outputs = {}
-        for ext in used_extensions:
-            output = ext.process_create_output(att_obj.auth_data)
-            if output is not None:
-                extension_outputs.update(output)
+        try:
+            for ext in used_extensions:
+                output = ext.process_create_output(att_obj.auth_data)
+                if output is not None:
+                    extension_outputs.update(output)
+        except ValueError as e:
+            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
         return att_obj, extension_outputs
 
@@ -695,7 +718,7 @@ class Fido2Client(_BaseClient):
         on_keepalive,
     ):
         pin_protocol, pin_auth, internal_uv = self._get_auth_params(
-            client_data, rp_id, user_verification, pin
+            client_data, rp_id, user_verification, pin, event, on_keepalive
         )
         if internal_uv:
             options = {"uv": True}
@@ -719,11 +742,14 @@ class Fido2Client(_BaseClient):
         client_inputs = extensions or {}
         extension_inputs = {}
         used_extensions = []
-        for ext in [cls(self.ctap2) for cls in self.extensions]:
-            auth_input = ext.process_get_input(client_inputs)
-            if auth_input is not None:
-                used_extensions.append(ext)
-                extension_inputs[ext.NAME] = auth_input
+        try:
+            for ext in [cls(self.ctap2) for cls in self.extensions]:
+                auth_input = ext.process_get_input(client_inputs)
+                if auth_input is not None:
+                    used_extensions.append(ext)
+                    extension_inputs[ext.NAME] = auth_input
+        except ValueError as e:
+            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
         assertions = self.ctap2.get_assertions(
             rp_id,

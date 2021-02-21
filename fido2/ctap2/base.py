@@ -704,6 +704,8 @@ class Ctap2(object):
         pin_hash_enc=None,
         permissions=None,
         permissions_rpid=None,
+        event=None,
+        on_keepalive=None,
     ):
         """CTAP2 clientPin command, used for various PIN operations.
 
@@ -718,6 +720,9 @@ class Ctap2(object):
         :param pin_hash_enc: The pinHashEnc parameter.
         :param permissions: The permissions parameter.
         :param permissions_rpid: The permissions RPID parameter.
+        :param event: Optional threading.Event used to cancel the request.
+        :param on_keepalive: Optional callback function to handle keep-alive
+            messages from the authenticator.
         :return: The response of the command, decoded.
         """
         return self.send_cbor(
@@ -734,6 +739,8 @@ class Ctap2(object):
                 permissions,
                 permissions_rpid,
             ),
+            event=event,
+            on_keepalive=on_keepalive,
         )
 
     def reset(self, event=None, on_keepalive=None):

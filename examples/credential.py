@@ -34,14 +34,19 @@ On Windows, the native WebAuthn API will be used.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient
+from fido2.ctap import CtapError, STATUS
+from fido2.client import Fido2Client, WindowsClient, PinRequiredError
 from fido2.server import Fido2Server
 from getpass import getpass
 import sys
 import ctypes
 
-use_prompt = False
-pin = None
+
+def on_keepalive(status):
+    if status == STATUS.UPNEEDED:  # Waiting for touch
+        print("\nTouch your authenticator device now...\n")
+
+
 uv = "discouraged"
 
 if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
@@ -52,7 +57,6 @@ else:
     dev = next(CtapHidDevice.list_devices(), None)
     if dev is not None:
         print("Use USB HID channel.")
-        use_prompt = True
     else:
         try:
             from fido2.pcsc import CtapPcscDevice
@@ -69,15 +73,10 @@ else:
     # Set up a FIDO 2 client using the origin https://example.com
     client = Fido2Client(dev, "https://example.com")
 
-    # Prefer UV if supported
+    # Prefer UV if supported and configured
     if client.info.options.get("uv"):
         uv = "preferred"
         print("Authenticator supports User Verification")
-    elif client.info.options.get("clientPin"):
-        # Prompt for PIN if needed
-        pin = getpass("Please enter PIN: ")
-    else:
-        print("PIN not set, won't use")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
@@ -90,10 +89,18 @@ create_options, state = server.register_begin(
 )
 
 # Create a credential
-if use_prompt:
-    print("\nTouch your authenticator device now...\n")
-
-result = client.make_credential(create_options["publicKey"], pin=pin)
+try:
+    result = client.make_credential(
+        create_options["publicKey"], on_keepalive=on_keepalive
+    )
+except PinRequiredError as e:
+    if isinstance(e.cause, CtapError):
+        print(e.cause)
+    result = client.make_credential(
+        create_options["publicKey"],
+        on_keepalive=on_keepalive,
+        pin=getpass("Enter PIN: "),
+    )
 
 # Complete registration
 auth_data = server.register_complete(
@@ -113,11 +120,21 @@ print("CREDENTIAL DATA:", auth_data.credential_data)
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
 # Authenticate the credential
-if use_prompt:
-    print("\nTouch your authenticator device now...\n")
+try:
+    result = client.get_assertion(
+        request_options["publicKey"], on_keepalive=on_keepalive
+    )
+except PinRequiredError as e:
+    if isinstance(e.cause, CtapError):
+        print(e.cause)
+    result = client.get_assertion(
+        request_options["publicKey"],
+        on_keepalive=on_keepalive,
+        pin=getpass("Enter PIN: "),
+    )
 
 # Only one cred in allowCredentials, only one response.
-result = client.get_assertion(request_options["publicKey"], pin=pin).get_response(0)
+result = result.get_response(0)
 
 # Complete authenticator
 server.authenticate_complete(
