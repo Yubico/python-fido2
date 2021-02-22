@@ -245,7 +245,7 @@ class ClientPin(object):
         pin_hash = sha256(pin.encode())[:16]
         pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
 
-        if self._supports_permissions:
+        if self._supports_permissions and permissions:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN
         else:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN_LEGACY
