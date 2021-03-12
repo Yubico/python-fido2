@@ -39,7 +39,7 @@ FIDO_USAGE = 0x1
 
 class HidDescriptor(
     namedtuple(
-        "HidDescriptor", ["path", "vid", "pid", "report_size_in", "report_size_out"]
+        "HidDescriptor", ["path", "vid", "pid", "report_size_in", "report_size_out", "product_name", "serial"]
     )
 ):
     __slots__ = ()

@@ -91,6 +91,16 @@ class CtapPcscDevice(CtapDevice):
         """Capabilities supported by the device."""
         return self._capabilities
 
+    @property
+    def product_name(self):
+        """Product name of device."""
+        return ''
+
+    @property
+    def serial(self):
+        """Serial number of device."""
+        return ''
+
     def get_atr(self):
         """Get the ATR/ATS of the connected card."""
         return self._conn.getATR()
