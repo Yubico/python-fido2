@@ -61,6 +61,7 @@ class UsbDeviceInfo(Structure):
         ("udi_serial", c_char * USB_MAX_STRING_LEN),
     ]
 
+
 class OpenBsdCtapHidConnection(FileCtapHidConnection):
     def __init__(self, descriptor):
         super(OpenBsdCtapHidConnection, self).__init__(descriptor)
@@ -104,8 +105,8 @@ def get_descriptor(path):
 
     vid = int(dev_info.udi_vendorNo)
     pid = int(dev_info.udi_productNo)
-    name   = dev_info.udi_product.decode('utf-8')
-    serial = dev_info.udi_serial.decode('utf-8')
+    name = dev_info.udi_product.decode("utf-8")
+    serial = dev_info.udi_serial.decode("utf-8")
 
     return HidDescriptor(path, vid, pid, MAX_U2F_HIDLEN, MAX_U2F_HIDLEN, name, serial)
 

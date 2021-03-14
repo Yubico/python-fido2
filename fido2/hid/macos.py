@@ -143,7 +143,12 @@ cf.CFStringCreateWithCString.argtypes = [
     ctypes.c_uint32,
 ]
 cf.CFStringGetCString.restype = ctypes.c_bool
-cf.CFStringGetCString.argtypes = [CF_TYPE_REF, ctypes.c_char_p, CF_INDEX, CF_STRING_ENCODING]
+cf.CFStringGetCString.argtypes = [
+    CF_TYPE_REF,
+    ctypes.c_char_p,
+    CF_INDEX,
+    CF_STRING_ENCODING,
+]
 cf.CFGetTypeID.restype = CF_TYPE_ID
 cf.CFGetTypeID.argtypes = [CF_TYPE_REF]
 cf.CFNumberGetTypeID.restype = CF_TYPE_ID
@@ -301,7 +306,11 @@ class MacCtapHidConnection(CtapHidConnection):
 
     def write_packet(self, packet):
         result = iokit.IOHIDDeviceSetReport(
-            self.handle, K_IO_HID_REPORT_TYPE_OUTPUT, 0, packet, len(packet),
+            self.handle,
+            K_IO_HID_REPORT_TYPE_OUTPUT,
+            0,
+            packet,
+            len(packet),
         )
 
         # Non-zero status indicates failure
@@ -336,6 +345,7 @@ def get_int_property(dev, key):
 
     return out.value
 
+
 def get_string_property(dev, key):
     """Reads string property from the HID device."""
     cf_key = cf.CFStringCreateWithCString(None, key, 0)
@@ -348,14 +358,16 @@ def get_string_property(dev, key):
         raise OSError("Expected string type, got {}".format(cf.CFGetTypeID(type_ref)))
 
     out = ctypes.create_string_buffer(128)
-    ret = cf.CFStringGetCString(type_ref, out, ctypes.sizeof(out), CF_STRING_BUILTIN_ENCODINGS_UTF8)
+    ret = cf.CFStringGetCString(
+        type_ref, out, ctypes.sizeof(out), CF_STRING_BUILTIN_ENCODINGS_UTF8
+    )
     if not ret:
-        return ''
+        return ""
 
     try:
-        return out.raw.decode('utf-8')
+        return out.raw.decode("utf-8")
     except:
-        return ''
+        return ""
 
 
 def get_device_id(handle):
@@ -409,7 +421,9 @@ def _get_descriptor_from_handle(handle):
         serial = get_string_property(handle, HID_DEVICE_PROPERTY_SERIAL_NUMBER)
         size_in = get_int_property(handle, HID_DEVICE_PROPERTY_MAX_INPUT_REPORT_SIZE)
         size_out = get_int_property(handle, HID_DEVICE_PROPERTY_MAX_OUTPUT_REPORT_SIZE)
-        return HidDescriptor(str(device_id), vid, pid, size_in, size_out, product, serial)
+        return HidDescriptor(
+            str(device_id), vid, pid, size_in, size_out, product, serial
+        )
     raise ValueError("Not a CTAP device")
 
 

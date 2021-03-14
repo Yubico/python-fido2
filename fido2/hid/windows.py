@@ -247,22 +247,30 @@ def get_product_name(device):
     if not result:
         raise ctypes.WinError()
 
-    return buf.raw.decode(encoding = 'utf-16').rstrip('\u0000')
+    return buf.raw.decode(encoding="utf-16").rstrip("\u0000")
 
 
 def get_serial(device):
     buf = ctypes.create_string_buffer(256)
 
-    result = hid.HidD_GetSerialNumberString(device, buf, ctypes.c_ulong(ctypes.sizeof(buf)))
+    result = hid.HidD_GetSerialNumberString(
+        device, buf, ctypes.c_ulong(ctypes.sizeof(buf))
+    )
     if not result:
         raise ctypes.WinError()
 
-    return buf.raw.decode(encoding = 'utf-16').rstrip('\u0000')
+    return buf.raw.decode(encoding="utf-16").rstrip("\u0000")
 
 
 def get_descriptor(path):
     device = kernel32.CreateFileA(
-        path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, None,
+        path,
+        0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        None,
+        OPEN_EXISTING,
+        0,
+        None,
     )
     if device == INVALID_HANDLE_VALUE:
         raise ctypes.WinError()
@@ -286,7 +294,9 @@ def get_descriptor(path):
                 # Sizes here include 1-byte report ID, which we need to remove.
                 size_in = caps.InputReportByteLength - 1
                 size_out = caps.OutputReportByteLength - 1
-                return HidDescriptor(path, vid, pid, size_in, size_out, product_name, serial)
+                return HidDescriptor(
+                    path, vid, pid, size_in, size_out, product_name, serial
+                )
             raise ValueError("Not a CTAP device")
 
         finally:

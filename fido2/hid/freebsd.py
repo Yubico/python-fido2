@@ -57,7 +57,13 @@ def list_descriptors():
         try:
             serial = dev["serial_number"] if "serial_number" in dev else ""
             descriptors.append(
-                _read_descriptor(dev["vendor_id"], dev["product_id"], dev["product_desc"], serial, dev["path"])
+                _read_descriptor(
+                    dev["vendor_id"],
+                    dev["product_id"],
+                    dev["product_desc"],
+                    serial,
+                    dev["path"],
+                )
             )
             logger.debug("Found CTAP device: %s", dev["path"])
         except ValueError:
