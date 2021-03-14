@@ -366,7 +366,7 @@ def get_string_property(dev, key):
 
     try:
         return out.raw.decode("utf-8")
-    except:
+    except Exception:
         return ""
 
 

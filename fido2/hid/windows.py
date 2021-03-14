@@ -20,8 +20,6 @@ from __future__ import absolute_import
 
 from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
 
-from array import array
-
 import ctypes
 import platform
 from ctypes import wintypes, LibraryLoader, WinDLL
