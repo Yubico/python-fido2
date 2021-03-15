@@ -52,7 +52,7 @@ def enumerate_devices():
 for dev in enumerate_devices():
     print("CONNECT: %s" % dev)
     print("Product name: %s" % dev.product_name)
-    print("Serial number: %s" % dev.serial)
+    print("Serial number: %s" % dev.serial_number)
     print("CTAPHID protocol version: %d" % dev.version)
 
     if dev.capabilities & CAPABILITY.CBOR:

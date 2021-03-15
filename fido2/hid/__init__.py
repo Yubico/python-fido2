@@ -147,9 +147,9 @@ class CtapHidDevice(CtapDevice):
         return self.descriptor.product_name
 
     @property
-    def serial(self):
+    def serial_number(self):
         """Serial number of device."""
-        return self.descriptor.serial
+        return self.descriptor.serial_number
 
     def call(self, cmd, data=b"", event=None, on_keepalive=None):
         event = event or Event()

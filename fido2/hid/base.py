@@ -47,7 +47,7 @@ class HidDescriptor(
             "report_size_in",
             "report_size_out",
             "product_name",
-            "serial",
+            "serial_number",
         ],
     )
 ):

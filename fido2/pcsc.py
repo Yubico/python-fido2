@@ -97,7 +97,7 @@ class CtapPcscDevice(CtapDevice):
         return None
 
     @property
-    def serial(self):
+    def serial_number(self):
         """Serial number of device."""
         return None
 
