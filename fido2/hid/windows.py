@@ -243,7 +243,7 @@ def get_product_name(device):
 
     result = hid.HidD_GetProductString(device, buf, ctypes.c_ulong(ctypes.sizeof(buf)))
     if not result:
-        raise ctypes.WinError()
+        return None
 
     return buf.raw.decode(encoding="utf-16").rstrip("\u0000")
 
@@ -255,7 +255,7 @@ def get_serial(device):
         device, buf, ctypes.c_ulong(ctypes.sizeof(buf))
     )
     if not result:
-        raise ctypes.WinError()
+        return None
 
     return buf.raw.decode(encoding="utf-16").rstrip("\u0000")
 

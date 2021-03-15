@@ -106,7 +106,9 @@ def get_descriptor(path):
     vid = int(dev_info.udi_vendorNo)
     pid = int(dev_info.udi_productNo)
     name = dev_info.udi_product.decode("utf-8")
+    name = name if name else None
     serial = dev_info.udi_serial.decode("utf-8")
+    serial = serial if serial else None
 
     return HidDescriptor(path, vid, pid, MAX_U2F_HIDLEN, MAX_U2F_HIDLEN, name, serial)
 

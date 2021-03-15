@@ -58,11 +58,13 @@ def get_descriptor(path):
         buf = array("B", [0] * 128)
         fcntl.ioctl(f, HIDIOCGRAWNAME, buf, True)
         name = buf.tobytes().decode()
+        name = name if name else None
 
         # Read unique ID
         buf = array("B", [0] * 64)
         fcntl.ioctl(f, HIDIOCGRAWUNIQ, buf, True)
         serial = buf.tobytes().decode()
+        serial = serial if serial else None
 
         # Read report descriptor
         buf = array("B", [0] * 4)

@@ -46,7 +46,9 @@ def get_descriptor(path):
             vid = dev["vendor_id"]
             pid = dev["product_id"]
             name = dev["product_desc"]
-            serial = dev["serial_number"] if "serial_number" in dev else ""
+            name = name if name else None
+            serial = dev["serial_number"] if "serial_number" in dev else None
+            serial = serial if serial else None
             return _read_descriptor(vid, pid, name, serial, path)
     raise ValueError("Device not found")
 
@@ -55,14 +57,13 @@ def list_descriptors():
     descriptors = []
     for dev in uhid_freebsd.enumerate():
         try:
-            serial = dev["serial_number"] if "serial_number" in dev else ""
+            name = dev["product_desc"]
+            name = name if name else None
+            serial = dev["serial_number"] if "serial_number" in dev else None
+            serial = serial if serial else None
             descriptors.append(
                 _read_descriptor(
-                    dev["vendor_id"],
-                    dev["product_id"],
-                    dev["product_desc"],
-                    serial,
-                    dev["path"],
+                    dev["vendor_id"], dev["product_id"], name, serial, dev["path"],
                 )
             )
             logger.debug("Found CTAP device: %s", dev["path"])

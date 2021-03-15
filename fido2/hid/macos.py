@@ -358,12 +358,13 @@ def get_string_property(dev, key):
         type_ref, out, ctypes.sizeof(out), CF_STRING_BUILTIN_ENCODINGS_UTF8
     )
     if not ret:
-        return ""
+        return None
 
     try:
-        return out.raw.decode("utf-8")
-    except Exception:
-        return ""
+        value = out.raw.decode("utf-8")
+        return value if value else None
+    except UnicodeDecodeError:
+        return None
 
 
 def get_device_id(handle):
