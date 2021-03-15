@@ -239,17 +239,17 @@ def get_vid_pid(device):
 
 
 def get_product_name(device):
-    buf = ctypes.create_string_buffer(256)
+    buf = ctypes.create_unicode_buffer(128)
 
     result = hid.HidD_GetProductString(device, buf, ctypes.c_ulong(ctypes.sizeof(buf)))
     if not result:
         return None
 
-    return buf.raw.decode(encoding="utf-16").rstrip("\u0000")
+    return buf.value
 
 
 def get_serial(device):
-    buf = ctypes.create_string_buffer(256)
+    buf = ctypes.create_unicode_buffer(128)
 
     result = hid.HidD_GetSerialNumberString(
         device, buf, ctypes.c_ulong(ctypes.sizeof(buf))
@@ -257,7 +257,7 @@ def get_serial(device):
     if not result:
         return None
 
-    return buf.raw.decode(encoding="utf-16").rstrip("\u0000")
+    return buf.value
 
 
 def get_descriptor(path):
