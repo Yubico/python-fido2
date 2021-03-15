@@ -209,8 +209,12 @@ class ClientPin(object):
         LARGE_BLOB_WRITE = 0x10
         AUTHENTICATOR_CFG = 0x20
 
+    @staticmethod
+    def is_supported(info):
+        return "clientPin" in info.options
+
     def __init__(self, ctap, protocol=None):
-        if "clientPin" not in ctap.info.options:
+        if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support ClientPin")
 
         self.ctap = ctap

@@ -54,19 +54,25 @@ class BioEnrollment(object):
     class MODALITY(IntEnum):
         FINGERPRINT = 0x01
 
+    @staticmethod
+    def is_supported(info):
+        if "bioEnroll" in info.options:
+            return True
+        # We also support the Prototype command
+        if "FIDO_2_1_PRE" in info.versions and info.options.get(
+            "credentialMgmtPreview"
+        ):
+            return True
+        return False
+
     def __init__(self, ctap, modality):
-        if "bioEnroll" not in ctap.info.options:
-            # We also support the Prototype command
-            if not (
-                "FIDO_2_1_PRE" in ctap.info.versions
-                and ctap.info.options.get("credentialMgmtPreview")
-            ):
-                raise ValueError("Authenticator does not support BioEnroll")
+        if not self.is_supported(ctap.info):
+            raise ValueError("Authenticator does not support BioEnroll")
 
         self.ctap = ctap
         self.modality = self.get_modality()
         if modality != self.modality:
-            raise ValueError("Device does not support {%s}".format(modality))
+            raise ValueError("Device does not support {:s}".format(modality))
 
     def get_modality(self):
         """Get bio modality.

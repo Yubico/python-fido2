@@ -54,8 +54,12 @@ class Config(object):
         MIN_PIN_LENGTH_RPIDS = 0x02
         FORCE_CHANGE_PIN = 0x03
 
+    @staticmethod
+    def is_supported(info):
+        return info.options.get("authnrCfg")
+
     def __init__(self, ctap, pin_uv_protocol=None, pin_uv_token=None):
-        if not ctap.info.options.get("authnrCfg"):
+        if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support Config")
 
         self.ctap = ctap

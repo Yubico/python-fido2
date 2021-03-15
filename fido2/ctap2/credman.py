@@ -73,11 +73,20 @@ class CredentialManagement(object):
         CRED_PROTECT = 0x0A
         LARGE_BLOB_KEY = 0x0B
 
+    @staticmethod
+    def is_supported(info):
+        if info.options.get("credMgmt"):
+            return True
+        # We also support the Prototype command
+        if "FIDO_2_1_PRE" in info.versions and info.options.get(
+            "credentialMgmtPreview"
+        ):
+            return True
+        return False
+
     def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
-        if not ctap.info.options.get("credMgmt"):
-            # We also support the Prototype command
-            if not ctap.info.options.get("credentialMgmtPreview"):
-                raise ValueError("Authenticator does not support Credential Management")
+        if not self.is_supported(ctap.info):
+            raise ValueError("Authenticator does not support Credential Management")
 
         self.ctap = ctap
         self.pin_uv_protocol = pin_uv_protocol

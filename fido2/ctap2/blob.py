@@ -86,8 +86,12 @@ class LargeBlobs(object):
     :param pin_uv_token: A valid PIN/UV Auth Token for the current CTAP session.
     """
 
+    @staticmethod
+    def is_supported(info):
+        return info.options.get("largeBlobs")
+
     def __init__(self, ctap, pin_uv_protocol=None, pin_uv_token=None):
-        if not ctap.info.options.get("largeBlobs"):
+        if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support LargeBlobs")
 
         self.ctap = ctap
