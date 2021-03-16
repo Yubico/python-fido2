@@ -25,7 +25,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from enum import Enum, auto
+from enum import Enum
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
@@ -67,11 +67,11 @@ AttestationResult = namedtuple("AttestationResult", ["attestation_type", "trust_
 
 
 class AttestationType(Enum):
-    BASIC = auto()
-    SELF = auto()
-    ATT_CA = auto()
-    ANON_CA = auto()
-    NONE = auto
+    BASIC = 1
+    SELF = 2
+    ATT_CA = 3
+    ANON_CA = 4
+    NONE = 0
 
 
 def catch_builtins(f):
