@@ -361,8 +361,7 @@ def get_string_property(dev, key):
         return None
 
     try:
-        value = out.value.decode("utf-8")
-        return value if value else None
+        return out.value.decode("utf-8") or None
     except UnicodeDecodeError:
         return None
 
