@@ -112,6 +112,7 @@ jobs:
 
       - name: Install .deb
         run: |
+          sudo apt install python
           ! python2 -c "import fido2"
           sudo dpkg -i dist/python-fido2_*.deb
           python2 -c "import fido2"
