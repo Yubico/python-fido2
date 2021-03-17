@@ -21,7 +21,7 @@ import select
 import os
 import os.path
 
-from ctypes import Structure, c_char, c_int, c_uint8, c_uint16
+from ctypes import Structure, c_char, c_int, c_uint8, c_uint16, c_uint32
 
 from .base import HidDescriptor, FileCtapHidConnection
 
@@ -57,7 +57,7 @@ class UsbDeviceInfo(Structure):
         ("udi_power", c_int),
         ("udi_nports", c_int),
         ("udi_devnames", c_char * USB_MAX_DEVNAMELEN * USB_MAX_DEVNAMES),
-        ("udi_ports", c_uint8 * 8),
+        ("udi_ports", c_uint32 * 16),
         ("udi_serial", c_char * USB_MAX_STRING_LEN),
     ]
 
@@ -105,8 +105,10 @@ def get_descriptor(path):
 
     vid = int(dev_info.udi_vendorNo)
     pid = int(dev_info.udi_productNo)
+    name = dev_info.udi_product.decode("utf-8") or None
+    serial = dev_info.udi_serial.decode("utf-8") or None
 
-    return HidDescriptor(path, vid, pid, MAX_U2F_HIDLEN, MAX_U2F_HIDLEN)
+    return HidDescriptor(path, vid, pid, MAX_U2F_HIDLEN, MAX_U2F_HIDLEN, name, serial)
 
 
 def list_descriptors():

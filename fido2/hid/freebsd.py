@@ -32,12 +32,12 @@ def open_connection(descriptor):
     return FileCtapHidConnection(descriptor)
 
 
-def _read_descriptor(vid, pid, path):
+def _read_descriptor(vid, pid, name, serial, path):
     fd = os.open(path, os.O_RDONLY)
     data = uhid_freebsd.get_report_data(fd, 3)
     os.close(fd)
     max_in_size, max_out_size = parse_report_descriptor(data)
-    return HidDescriptor(path, vid, pid, max_in_size, max_out_size)
+    return HidDescriptor(path, vid, pid, max_in_size, max_out_size, name, serial)
 
 
 def get_descriptor(path):
@@ -45,7 +45,9 @@ def get_descriptor(path):
         if dev["path"] == path:
             vid = dev["vendor_id"]
             pid = dev["product_id"]
-            return _read_descriptor(vid, pid, path)
+            name = dev["product_desc"] or None
+            serial = (dev["serial_number"] if "serial_number" in dev else None) or None
+            return _read_descriptor(vid, pid, name, serial, path)
     raise ValueError("Device not found")
 
 
@@ -53,8 +55,12 @@ def list_descriptors():
     descriptors = []
     for dev in uhid_freebsd.enumerate():
         try:
+            name = dev["product_desc"] or None
+            serial = (dev["serial_number"] if "serial_number" in dev else None) or None
             descriptors.append(
-                _read_descriptor(dev["vendor_id"], dev["product_id"], dev["path"])
+                _read_descriptor(
+                    dev["vendor_id"], dev["product_id"], name, serial, dev["path"],
+                )
             )
             logger.debug("Found CTAP device: %s", dev["path"])
         except ValueError:

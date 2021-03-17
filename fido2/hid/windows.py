@@ -128,6 +128,8 @@ hid.HidD_FreePreparsedData.restype = wintypes.BOOLEAN
 hid.HidD_FreePreparsedData.argtypes = [PHIDP_PREPARSED_DATA]
 hid.HidD_GetProductString.restype = wintypes.BOOLEAN
 hid.HidD_GetProductString.argtypes = [HANDLE, ctypes.c_void_p, ctypes.c_ulong]
+hid.HidD_GetSerialNumberString.restype = wintypes.BOOLEAN
+hid.HidD_GetSerialNumberString.argtypes = [HANDLE, ctypes.c_void_p, ctypes.c_ulong]
 hid.HidP_GetCaps.restype = NTSTATUS
 hid.HidP_GetCaps.argtypes = [PHIDP_PREPARSED_DATA, ctypes.POINTER(HidCapabilities)]
 
@@ -236,6 +238,28 @@ def get_vid_pid(device):
     return attributes.VendorID, attributes.ProductID
 
 
+def get_product_name(device):
+    buf = ctypes.create_unicode_buffer(128)
+
+    result = hid.HidD_GetProductString(device, buf, ctypes.c_ulong(ctypes.sizeof(buf)))
+    if not result:
+        return None
+
+    return buf.value
+
+
+def get_serial(device):
+    buf = ctypes.create_unicode_buffer(128)
+
+    result = hid.HidD_GetSerialNumberString(
+        device, buf, ctypes.c_ulong(ctypes.sizeof(buf))
+    )
+    if not result:
+        return None
+
+    return buf.value
+
+
 def get_descriptor(path):
     device = kernel32.CreateFileA(
         path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, None, OPEN_EXISTING, 0, None,
@@ -257,10 +281,14 @@ def get_descriptor(path):
 
             if caps.UsagePage == FIDO_USAGE_PAGE and caps.Usage == FIDO_USAGE:
                 vid, pid = get_vid_pid(device)
+                product_name = get_product_name(device)
+                serial = get_serial(device)
                 # Sizes here include 1-byte report ID, which we need to remove.
                 size_in = caps.InputReportByteLength - 1
                 size_out = caps.OutputReportByteLength - 1
-                return HidDescriptor(path, vid, pid, size_in, size_out)
+                return HidDescriptor(
+                    path, vid, pid, size_in, size_out, product_name, serial
+                )
             raise ValueError("Not a CTAP device")
 
         finally:

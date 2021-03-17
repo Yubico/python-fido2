@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 HIDIOCGRAWINFO = 0x80084803
 HIDIOCGRDESCSIZE = 0x80044801
 HIDIOCGRDESC = 0x90044802
+HIDIOCGRAWNAME = 0x90044804
+HIDIOCGRAWUNIQ = 0x90044808
 
 
 class LinuxCtapHidConnection(FileCtapHidConnection):
@@ -52,6 +54,16 @@ def get_descriptor(path):
         fcntl.ioctl(f, HIDIOCGRAWINFO, buf, True)
         _, vid, pid = struct.unpack("<IHH", buf)
 
+        # Read product
+        buf = array("B", [0] * 128)
+        fcntl.ioctl(f, HIDIOCGRAWNAME, buf, True)
+        name = bytearray(buf).decode("utf-8") or None
+
+        # Read unique ID
+        buf = array("B", [0] * 64)
+        fcntl.ioctl(f, HIDIOCGRAWUNIQ, buf, True)
+        serial = bytearray(buf).decode("utf-8") or None
+
         # Read report descriptor
         buf = array("B", [0] * 4)
         fcntl.ioctl(f, HIDIOCGRDESCSIZE, buf, True)
@@ -61,7 +73,7 @@ def get_descriptor(path):
 
     data = bytearray(buf[4:])
     max_in_size, max_out_size = parse_report_descriptor(data)
-    return HidDescriptor(path, vid, pid, max_in_size, max_out_size)
+    return HidDescriptor(path, vid, pid, max_in_size, max_out_size, name, serial)
 
 
 def list_descriptors():
