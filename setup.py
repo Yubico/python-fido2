@@ -53,11 +53,7 @@ setup(
     description="Python based FIDO 2.0 library",
     url="https://github.com/Yubico/python-fido2",
     python_requires=">=2.7.6,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*",
-    install_requires=[
-        "six",
-        "cryptography>=1.5",
-        'uhid-freebsd>=1.2.1;platform_system=="FreeBSD"',
-    ],
+    install_requires=["six", "cryptography>=1.5"],
     extras_require={':python_version < "3.4"': ["enum34"], "pcsc": ["pyscard"]},
     classifiers=[
         "License :: OSI Approved :: BSD License",
