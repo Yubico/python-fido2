@@ -67,7 +67,7 @@ def open_connection(descriptor):
 
 
 def _get_report_data(fd, report_type):
-    data = ctypes.create_string_buffer(b"\000" * 4096)
+    data = ctypes.create_string_buffer(4096)
     desc = usb_gen_descriptor(
         ugd_data=ctypes.addressof(data),
         ugd_maxlen=ctypes.sizeof(data),
@@ -98,7 +98,7 @@ def _enumerate():
         pnpinfo = ("dev.uhid." + index + ".%pnpinfo").encode()
         desc = ("dev.uhid." + index + ".%desc").encode()
 
-        ovalue = ctypes.create_string_buffer(b"\000" * 1024)
+        ovalue = ctypes.create_string_buffer(1024)
         olen = ctypes.c_size_t(ctypes.sizeof(ovalue))
         key = ctypes.c_char_p(pnpinfo)
         retval = libc.sysctlbyname(key, ovalue, ctypes.byref(olen), None, None)
@@ -109,7 +109,7 @@ def _enumerate():
         dev["name"] = uhid
         dev["path"] = devdir + uhid
 
-        value = ovalue.value.decode()
+        value = ovalue.value[: olen.value].decode()
         m = vendor_re.search(value)
         dev["vendor_id"] = m.group(1) if m else None
 
@@ -122,7 +122,7 @@ def _enumerate():
         key = ctypes.c_char_p(desc)
         retval = libc.sysctlbyname(key, ovalue, ctypes.byref(olen), None, None)
         if retval == 0:
-            dev["product_desc"] = ovalue.value.decode() or None
+            dev["product_desc"] = ovalue.value[: olen.value].decode() or None
 
         yield dev
 
