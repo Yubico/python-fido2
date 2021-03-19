@@ -20,6 +20,7 @@ from __future__ import absolute_import
 
 from ctypes.util import find_library
 import ctypes
+import glob
 import re
 import os
 
@@ -32,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 devdir = "/dev/"
 
-device_re = re.compile("^uhid([0-9]+)$")
 vendor_re = re.compile("vendor=(0x[0-9a-fA-F]+)")
 product_re = re.compile("product=(0x[0-9a-fA-F]+)")
 sernum_re = re.compile('sernum="([^"]+)')
@@ -88,13 +88,12 @@ def _read_descriptor(vid, pid, name, serial, path):
 
 
 def _enumerate():
-    for uhid in os.listdir(devdir):
+    for uhid in glob.glob(devdir + "uhid?*"):
 
-        m = device_re.search(uhid)
-        if m is None:
+        index = uhid[len(devdir) + len("uhid") :]
+        if not index.isdigit():
             continue
 
-        index = m.group(1)
         pnpinfo = ("dev.uhid." + index + ".%pnpinfo").encode()
         desc = ("dev.uhid." + index + ".%desc").encode()
 
@@ -106,8 +105,8 @@ def _enumerate():
             continue
 
         dev = {}
-        dev["name"] = uhid
-        dev["path"] = devdir + uhid
+        dev["name"] = uhid[len(devdir) :]
+        dev["path"] = uhid
 
         value = ovalue.value[: olen.value].decode()
         m = vendor_re.search(value)
