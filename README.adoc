@@ -54,6 +54,8 @@ and relies on community contributions.
 
 
 === Installation
+==== Python
+
 fido2 is installable by running the following command:
 
   pip install fido2
@@ -63,10 +65,16 @@ instead use:
 
   pip install fido2[pcsc]
 
+==== Windows
+
 Under Windows 10 (1903 or later) access to FIDO devices is restricted and
 requires running as Administrator. This library can still be used when running
 as non-administrator, via the  `fido.client.WindowsClient` class. An example of
 this is included in the file `examples/credential.py`.
+
+==== Linux
+
+See Also: https://support.yubico.com/hc/en-us/articles/360013708900-Using-Your-U2F-YubiKey-with-Linux
 
 Under Linux you will need to add a Udev rule to be able to access the FIDO
 device, or run as root. For example, the Udev rule may contain the following:
@@ -82,7 +90,6 @@ Under FreeBSD you will either need to run as root or add rules for your device
 to /etc/devd.conf, which can be automated by installing security/u2f-devd:
 
   # pkg install u2f-devd
-
 
 === Dependencies
 This project depends on Cryptography. For instructions on installing this
