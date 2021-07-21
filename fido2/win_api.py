@@ -629,7 +629,10 @@ def get_version(class_name):
     :returns: Version of Struct to use.
     :rtype: int
     """
-    if class_name in WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION]:
+    if (
+        WEBAUTHN_API_VERSION in WEBAUTHN_STRUCT_VERSIONS and
+        class_name in WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION]
+    ):
         return WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION][class_name]
 
     return WEBAUTHN_STRUCT_VERSIONS[1][class_name]
