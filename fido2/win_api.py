@@ -347,7 +347,12 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         ("pbU2fAppId", BOOL),
         ("pCancellationId", ctypes.POINTER(GUID)),
         ("pAllowCredentialList", ctypes.POINTER(WebAuthNCredentialList)),
+        ("dwCredLargeBlobOperation", DWORD),
+        ("cbCredLargeBlob", DWORD),
+        ("pbCredLargeBlob", PBYTE),
     ]
+
+    cred_large_blob = BytesProperty("CredLargeBlob")
 
     def __init__(
         self,
@@ -356,6 +361,8 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         user_verification_requirement,
         credentials,
         cancellationId,
+        cred_large_blob_operation,
+        cred_large_blob,
     ):
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
@@ -370,6 +377,10 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
             self.pAllowCredentialList = ctypes.pointer(clist)
         else:
             self.CredentialList = WebAuthNCredentials(credentials)
+
+        if self.dwVersion >= 5:
+            self.cred_large_blob_operation = cred_large_blob_operation
+            self.cred_large_blob = cred_large_blob
 
 
 class WebAuthNAssertion(ctypes.Structure):
@@ -387,11 +398,16 @@ class WebAuthNAssertion(ctypes.Structure):
         ("Credential", WebAuthNCredential),
         ("cbUserId", DWORD),
         ("pbUserId", PBYTE),
+        ("Extensions", WebAuthNExtensions),
+        ("cbCredLargeBlob", DWORD),
+        ("pbCredLargeBlob", PBYTE),
+        ("dwCredLargeBlobStatus", DWORD),
     ]
 
     auth_data = BytesProperty("AuthenticatorData")
     signature = BytesProperty("Signature")
     user_id = BytesProperty("UserId")
+    cred_large_blob = BytesProperty("CredLargeBlob")
 
     def __del__(self):
         WEBAUTHN.WebAuthNFreeAssertion(ctypes.byref(self))
@@ -426,6 +442,9 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         ("dwFlags", DWORD),
         ("pCancellationId", ctypes.POINTER(GUID)),
         ("pExcludeCredentialList", ctypes.POINTER(WebAuthNCredentialList)),
+        ("dwEnterpriseAttestation", DWORD),
+        ("dwLargeBlobSupport", DWORD),
+        ("bPreferResidentKey", BOOL),
     ]
 
     def __init__(
@@ -437,6 +456,9 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         attestation_convoyence,
         credentials,
         cancellationId,
+        enterprise_attestation,
+        large_blob_support,
+        prefer_resident_key,
     ):
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
@@ -454,6 +476,11 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
             )
         else:
             self.CredentialList = WebAuthNCredentials(credentials)
+
+        if self.dwVersion >= 4:
+            self.dwEnterpriseAttestation = enterprise_attestation
+            self.dwLargeBlobSupport = large_blob_support
+            self.bPreferResidentKey = prefer_resident_key
 
 
 class WebAuthNCredentialAttestation(ctypes.Structure):
@@ -477,6 +504,9 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
         ("pbCredentialId", PBYTE),
         ("Extensions", WebAuthNExtensions),
         ("dwUsedTransport", DWORD),
+        ("bEpAtt", BOOL),
+        ("bLargeBlobSupported", BOOL),
+        ("bResidentKey", BOOL),
     ]
 
     auth_data = BytesProperty("AuthenticatorData")
@@ -488,8 +518,14 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
         WEBAUTHN.WebAuthNFreeCredentialAttestation(ctypes.byref(self))
 
 
+class _FromString(object):
+    @classmethod
+    def from_string(cls, value):
+        return getattr(cls, value.upper().replace("-", "_"))
+
+
 @unique
-class WebAuthNUserVerificationRequirement(IntEnum):
+class WebAuthNUserVerificationRequirement(_FromString, IntEnum):
     """Maps to WEBAUTHN_USER_VERIFICATION_REQUIREMENT_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L335
@@ -500,13 +536,9 @@ class WebAuthNUserVerificationRequirement(IntEnum):
     PREFERRED = 2
     DISCOURAGED = 3
 
-    @classmethod
-    def from_string(cls, value):
-        return getattr(cls, value.upper().replace("-", "_"))
-
 
 @unique
-class WebAuthNAttestationConvoyancePreference(IntEnum):
+class WebAuthNAttestationConvoyancePreference(_FromString, IntEnum):
     """Maps to WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L340
@@ -517,13 +549,9 @@ class WebAuthNAttestationConvoyancePreference(IntEnum):
     INDIRECT = 2
     DIRECT = 3
 
-    @classmethod
-    def from_string(cls, value):
-        return getattr(cls, value.upper().replace("-", "_"))
-
 
 @unique
-class WebAuthNAuthenticatorAttachment(IntEnum):
+class WebAuthNAuthenticatorAttachment(_FromString, IntEnum):
     """Maps to WEBAUTHN_AUTHENTICATOR_ATTACHMENT_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L330
@@ -534,13 +562,9 @@ class WebAuthNAuthenticatorAttachment(IntEnum):
     CROSS_PLATFORM = 2
     CROSS_PLATFORM_U2F_V2 = 3
 
-    @classmethod
-    def from_string(cls, value):
-        return getattr(cls, value.upper().replace("-", "_"))
-
 
 @unique
-class WebAuthNCTAPTransport(IntEnum):
+class WebAuthNCTAPTransport(_FromString, IntEnum):
     """Maps to WEBAUTHN_CTAP_TRANSPORT_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L225
@@ -554,9 +578,42 @@ class WebAuthNCTAPTransport(IntEnum):
     INTERNAL = 0x00000010
     FLAGS_MASK = 0x0000001F
 
-    @classmethod
-    def from_string(cls, value):
-        return getattr(cls, value.upper().replace("-", "_"))
+
+@unique
+class WebAuthNEnterpriseAttestation(_FromString, IntEnum):
+    """Maps to WEBAUTHN_ENTERPRISE_ATTESTATION_*.
+
+    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L401
+    """
+
+    NONE = 0
+    VENDOR_FACILITATED = 1
+    PLATFORM_MANAGED = 2
+
+
+@unique
+class WebAuthNLargeBlobSupport(_FromString, IntEnum):
+    """Maps to WEBAUTHN_LARGE_BLOB_SUPPORT_*.
+
+    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L405
+    """
+
+    NONE = 0
+    REQUIRED = 1
+    PREFERRED = 2
+
+
+@unique
+class WebAuthNLargeBlobOperation(_FromString, IntEnum):
+    """Maps to WEBAUTHN_LARGE_BLOB_OPERATION_*.
+
+    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L478
+    """
+
+    NONE = 0
+    GET = 1
+    SET = 2
+    DELETE = 3
 
 
 WEBAUTHN = ctypes.windll.webauthn
@@ -614,11 +671,17 @@ WEBAUTHN_STRUCT_VERSIONS = {
         "WebAuthNCredentialEx": 1,
         "WebAuthNMakeCredentialOptions": 3,
         "WebAuthNGetAssertionOptions": 4,
-        "WEBAUTHN_COMMON_ATTESTATION": 1,
+        "WebAuthNCommonAttestation": 1,
         "WebAuthNCredentialAttestation": 3,
         "WebAuthNAssertion": 1,
     },
     2: {},
+    3: {
+        "WebAuthNMakeCredentialOptions": 4,
+        "WebAuthNGetAssertionOptions": 5,
+        "WebAuthNCredentialAttestation": 4,
+        "WebAuthNAssertion": 2,
+    },
 }
 
 
@@ -629,10 +692,12 @@ def get_version(class_name):
     :returns: Version of Struct to use.
     :rtype: int
     """
-    if class_name in WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION]:
-        return WEBAUTHN_STRUCT_VERSIONS[WEBAUTHN_API_VERSION][class_name]
-
-    return WEBAUTHN_STRUCT_VERSIONS[1][class_name]
+    for api_version in range(WEBAUTHN_API_VERSION, 0, -1):
+        if (
+            api_version in WEBAUTHN_STRUCT_VERSIONS
+            and class_name in WEBAUTHN_STRUCT_VERSIONS[api_version]
+        ):
+            return WEBAUTHN_STRUCT_VERSIONS[api_version][class_name]
 
 
 class CancelThread(Thread):
@@ -738,6 +803,10 @@ class WinAPI(object):
                     attestation,
                     exclude_credentials or [],
                     ctypes.pointer(t.guid) if event else None,
+                    # Not supported:
+                    WebAuthNEnterpriseAttestation.NONE,
+                    WebAuthNLargeBlobSupport.NONE,
+                    False,
                 )
             ),
             ctypes.byref(attestation_pointer),
@@ -790,6 +859,9 @@ class WinAPI(object):
                     user_verification,
                     allow_credentials or [],
                     ctypes.pointer(t.guid) if event else None,
+                    # Not supported:
+                    WebAuthNLargeBlobOperation.NONE,
+                    b"",
                 )
             ),
             ctypes.byref(assertion_pointer),
