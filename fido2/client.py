@@ -25,20 +25,14 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals, division
-
 from .hid import STATUS
-from .ctap import CtapError
+from .ctap import CtapDevice, CtapError
 from .ctap1 import Ctap1, APDU, ApduError
-from .ctap2 import (
-    Ctap2,
-    AttestationObject,
-    AssertionResponse,
-    Info,
-    ClientPin,
-)
+from .ctap2 import Ctap2, AssertionResponse, Info
+from .ctap2.pin import ClientPin
 from .ctap2.extensions import Ctap2Extension
 from .webauthn import (
+    AttestationObject,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
@@ -51,38 +45,38 @@ from .rpid import verify_rp_id, verify_app_id
 from .utils import sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
 from threading import Timer, Event
+from typing import Type, Any, Union, Callable, Optional, Mapping, Sequence
 
 import json
-import six
 import platform
 
 
 class ClientData(bytes):
     def __init__(self, _):
         super(ClientData, self).__init__()
-        self.data = json.loads(self.decode())
+        self._data = json.loads(self.decode())
 
-    def get(self, key):
-        return self.data[key]
+    def get(self, key: str) -> Any:
+        return self._data[key]
 
     @property
-    def challenge(self):
+    def challenge(self) -> bytes:
         return websafe_decode(self.get("challenge"))
 
     @property
-    def b64(self):
+    def b64(self) -> str:
         return websafe_encode(self)
 
     @property
-    def hash(self):
+    def hash(self) -> bytes:
         return sha256(self)
 
     @classmethod
-    def build(cls, **kwargs):
+    def build(cls, **kwargs) -> "ClientData":
         return cls(json.dumps(kwargs).encode())
 
     @classmethod
-    def from_b64(cls, data):
+    def from_b64(cls, data: Union[str, bytes]) -> "ClientData":
         return cls(websafe_decode(data))
 
     def __repr__(self):
@@ -180,12 +174,12 @@ def _call_polling(poll_delay, event, on_keepalive, func, *args, **kwargs):
 
 
 @unique
-class U2F_TYPE(six.text_type, Enum):
+class U2F_TYPE(str, Enum):
     REGISTER = "navigator.id.finishEnrollment"
     SIGN = "navigator.id.getAssertion"
 
 
-class U2fClient(object):
+class U2fClient:
     """U2F-like client implementation.
 
     The client allows registration and authentication of U2F credentials against
@@ -196,7 +190,12 @@ class U2fClient(object):
     :param verify: Function to verify an APP ID for a given origin.
     """
 
-    def __init__(self, device, origin, verify=verify_app_id):
+    def __init__(
+        self,
+        device: CtapDevice,
+        origin: str,
+        verify: Callable[[str, str], bool] = verify_app_id,
+    ):
         self.poll_delay = 0.25
         self.ctap = Ctap1(device)
         self.origin = origin
@@ -211,8 +210,13 @@ class U2fClient(object):
         raise ClientError.ERR.BAD_REQUEST()
 
     def register(
-        self, app_id, register_requests, registered_keys, event=None, on_keepalive=None
-    ):
+        self,
+        app_id: str,
+        register_requests: Sequence[Mapping[str, str]],
+        registered_keys: Sequence[Mapping[str, Any]],
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> Mapping[str, str]:
         self._verify_app_id(app_id)
 
         version = self.ctap.get_version()
@@ -256,7 +260,14 @@ class U2fClient(object):
 
         return {"registrationData": reg_data.b64, "clientData": client_data.b64}
 
-    def sign(self, app_id, challenge, registered_keys, event=None, on_keepalive=None):
+    def sign(
+        self,
+        app_id: str,
+        challenge: bytes,
+        registered_keys: Sequence[Mapping[str, Any]],
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> Mapping[str, str]:
         client_data = ClientData.build(
             typ=U2F_TYPE.SIGN, challenge=challenge, origin=self.origin
         )
@@ -292,13 +303,13 @@ class U2fClient(object):
 
 
 @unique
-class WEBAUTHN_TYPE(six.text_type, Enum):
+class WEBAUTHN_TYPE(str, Enum):
     MAKE_CREDENTIAL = "webauthn.create"
     GET_ASSERTION = "webauthn.get"
 
 
-class _BaseClient(object):
-    def __init__(self, origin, verify):
+class _BaseClient:
+    def __init__(self, origin: str, verify: Callable[[str, str], bool]):
         self.origin = origin
         self._verify = verify
 
@@ -319,25 +330,27 @@ class _BaseClient(object):
         )
 
 
-class AssertionSelection(object):
+class AssertionSelection:
     """GetAssertion result holding one or more assertions.
 
     Since multiple assertions may be retured by Fido2Client.get_assertion, this result
     is returned which can be used to select a specific response to get.
     """
 
-    def __init__(self, client_data, assertions):
+    def __init__(
+        self, client_data: ClientData, assertions: Sequence[AssertionResponse]
+    ):
         self._client_data = client_data
         self._assertions = assertions
 
-    def get_assertions(self):
+    def get_assertions(self) -> Sequence[AssertionResponse]:
         """Get the raw AssertionResponses available to inspect before selecting one."""
         return self._assertions
 
     def _get_extension_results(self, assertion):
-        return {}
+        return {}  # Not implemented
 
-    def get_response(self, index):
+    def get_response(self, index: int) -> AuthenticatorAssertionResponse:
         """Get a single response."""
         assertion = self._assertions[index]
 
@@ -352,7 +365,12 @@ class AssertionSelection(object):
 
 
 class Fido2ClientAssertionSelection(AssertionSelection):
-    def __init__(self, client_data, assertions, extensions):
+    def __init__(
+        self,
+        client_data: ClientData,
+        assertions: Sequence[AssertionResponse],
+        extensions: Sequence[Ctap2Extension],
+    ):
         super(Fido2ClientAssertionSelection, self).__init__(client_data, assertions)
         self._extensions = extensions
 
@@ -373,7 +391,7 @@ def _default_extensions():
     return [cls for cls in Ctap2Extension.__subclasses__() if hasattr(cls, "NAME")]
 
 
-_CTAP1_INFO = Info.create(["U2F_V2"])
+_CTAP1_INFO = Info.create(versions=["U2F_V2"], aaguid=b"\0" * 32)
 
 
 class Fido2Client(_BaseClient):
@@ -387,7 +405,13 @@ class Fido2Client(_BaseClient):
     :param verify: Function to verify an RP ID for a given origin.
     """
 
-    def __init__(self, device, origin, verify=verify_rp_id, extension_types=None):
+    def __init__(
+        self,
+        device: CtapDevice,
+        origin: str,
+        verify: Callable[[str, str], bool] = verify_rp_id,
+        extension_types: Optional[Type[Ctap2Extension]] = None,
+    ):
         super(Fido2Client, self).__init__(origin, verify)
 
         self.extensions = extension_types or _default_extensions()
@@ -396,7 +420,7 @@ class Fido2Client(_BaseClient):
             self.ctap2 = Ctap2(device)
             self.info = self.ctap2.info
             try:
-                self.client_pin = ClientPin(self.ctap2)
+                self.client_pin: Optional[ClientPin] = ClientPin(self.ctap2)
             except ValueError:
                 self.client_pin = None
             self._do_make_credential = self._ctap2_make_credential
@@ -481,7 +505,13 @@ class Fido2Client(_BaseClient):
                 internal_uv = True
         return pin_protocol, pin_auth, internal_uv
 
-    def make_credential(self, options, **kwargs):
+    def make_credential(
+        self,
+        options: PublicKeyCredentialCreationOptions,
+        pin: Optional[str] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ):
         """Creates a credential.
 
         :param options: PublicKeyCredentialCreationOptions data.
@@ -491,8 +521,7 @@ class Fido2Client(_BaseClient):
         """
 
         options = PublicKeyCredentialCreationOptions._wrap(options)
-        pin = kwargs.get("pin")
-        event = kwargs.get("event", Event())
+        event = event or Event()
         if options.timeout:
             timer = Timer(options.timeout / 1000, event.set)
             timer.daemon = True
@@ -507,7 +536,7 @@ class Fido2Client(_BaseClient):
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
 
         try:
-            att_obj, extension_outputs = self._do_make_credential(
+            att_resp, extension_outputs = self._do_make_credential(
                 client_data,
                 options.rp,
                 options.user,
@@ -518,11 +547,13 @@ class Fido2Client(_BaseClient):
                 selection.user_verification,
                 pin,
                 event,
-                kwargs.get("on_keepalive"),
+                on_keepalive,
             )
             return AuthenticatorAttestationResponse(
                 client_data,
-                att_obj,
+                AttestationObject.create(
+                    att_resp.fmt, att_resp.auth_data, att_resp.att_stmt
+                ),
                 extension_outputs,
             )
         except CtapError as e:
@@ -665,7 +696,13 @@ class Fido2Client(_BaseClient):
             {},
         )
 
-    def get_assertion(self, options, **kwargs):
+    def get_assertion(
+        self,
+        options: PublicKeyCredentialRequestOptions,
+        pin: Optional[str] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ):
         """Get an assertion.
 
         :param options: PublicKeyCredentialRequestOptions data.
@@ -675,8 +712,7 @@ class Fido2Client(_BaseClient):
         """
 
         options = PublicKeyCredentialRequestOptions._wrap(options)
-        pin = kwargs.get("pin")
-        event = kwargs.get("event", Event())
+        event = event or Event()
         if options.timeout:
             timer = Timer(options.timeout / 1000, event.set)
             timer.daemon = True
@@ -697,7 +733,7 @@ class Fido2Client(_BaseClient):
                 options.user_verification,
                 pin,
                 event,
-                kwargs.get("on_keepalive"),
+                on_keepalive,
             )
             return Fido2ClientAssertionSelection(
                 client_data,
@@ -804,7 +840,8 @@ class Fido2Client(_BaseClient):
         raise ClientError.ERR.DEVICE_INELIGIBLE()
 
 
-_WIN_INFO = Info.create(["U2F_V2", "FIDO_2_0"])
+_WIN_INFO = Info.create(versions=["U2F_V2", "FIDO_2_0"], aaguid=b"\0" * 32)
+foo = _WIN_INFO.aaguid
 
 if platform.system().lower() == "windows":
     try:
@@ -833,16 +870,21 @@ class WindowsClient(_BaseClient):
     :param ctypes.wintypes.HWND handle: (optional) Window reference to use.
     """
 
-    def __init__(self, origin, verify=verify_rp_id, handle=None):
+    def __init__(
+        self,
+        origin: str,
+        verify: Callable[[str, str], bool] = verify_rp_id,
+        handle=None,
+    ):
         super(WindowsClient, self).__init__(origin, verify)
         self.api = WinAPI(handle)
 
     @property
-    def info(self):
+    def info(self) -> Info:
         return _WIN_INFO
 
     @staticmethod
-    def is_available():
+    def is_available() -> bool:
         return platform.system().lower() == "windows" and WinAPI.version > 0
 
     def make_credential(self, options, **kwargs):

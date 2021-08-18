@@ -25,11 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .rpid import verify_rp_id, verify_app_id
 from .cose import CoseKey
-from .ctap2 import AttestedCredentialData
 from .client import WEBAUTHN_TYPE
 from .attestation import (
     Attestation,
@@ -40,6 +37,7 @@ from .attestation import (
 )
 from .utils import websafe_encode, websafe_decode
 from .webauthn import (
+    AttestedCredentialData,
     AttestationConveyancePreference,
     PublicKeyCredentialRpEntity,
     AuthenticatorSelectionCriteria,
@@ -165,7 +163,7 @@ class AttestationVerifier(abc.ABC):
         self.verify_attestation(*args)
 
 
-class Fido2Server(object):
+class Fido2Server:
     """FIDO2 server.
 
     :param rp: Relying party data as `PublicKeyCredentialRpEntity` instance.
@@ -198,6 +196,7 @@ class Fido2Server(object):
         user_verification=None,
         authenticator_attachment=None,
         challenge=None,
+        extensions=None,
     ):
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
@@ -235,6 +234,7 @@ class Fido2Server(object):
                     if any((authenticator_attachment, resident_key, user_verification))
                     else None,
                     self.attestation,
+                    extensions,
                 )
             },
             state,
@@ -280,7 +280,7 @@ class Fido2Server(object):
         return attestation_object.auth_data
 
     def authenticate_begin(
-        self, credentials=None, user_verification=None, challenge=None
+        self, credentials=None, user_verification=None, challenge=None, extensions=None
     ):
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
@@ -304,6 +304,7 @@ class Fido2Server(object):
                     self.rp.id,
                     _wrap_credentials(credentials),
                     user_verification,
+                    extensions,
                 )
             },
             state,
@@ -383,13 +384,13 @@ class U2FFido2Server(Fido2Server):
         )
 
     def register_begin(self, *args, **kwargs):
+        kwargs.setdefault("extensions", {})["appidExclude"] = self._app_id
         req, state = super(U2FFido2Server, self).register_begin(*args, **kwargs)
-        req["publicKey"].setdefault("extensions", {})["appidExclude"] = self._app_id
         return req, state
 
     def authenticate_begin(self, *args, **kwargs):
+        kwargs.setdefault("extensions", {})["appid"] = self._app_id
         req, state = super(U2FFido2Server, self).authenticate_begin(*args, **kwargs)
-        req["publicKey"].setdefault("extensions", {})["appid"] = self._app_id
         return req, state
 
     def authenticate_complete(self, *args, **kwargs):

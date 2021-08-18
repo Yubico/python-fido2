@@ -25,15 +25,13 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .. import cbor
 
 from enum import IntEnum, unique
 import struct
 
 
-class Config(object):
+class Config:
     """Implementation of the CTAP2.1 Authenticator Config API.
 
     :param ctap: An instance of a CTAP2 object.

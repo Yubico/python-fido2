@@ -25,14 +25,10 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import
-
 from .base import (  # noqa
     Ctap2,
     Info,
-    AuthenticatorData,
-    AttestedCredentialData,
-    AttestationObject,
+    AttestationResponse,
     AssertionResponse,
 )
 
@@ -41,6 +37,3 @@ from .credman import CredentialManagement  # noqa
 from .bio import FPBioEnrollment, CaptureError  # noqa
 from .blob import LargeBlobs  # noqa
 from .config import Config  # noqa
-
-# Alias for compatibility, this will be going away
-CTAP2 = Ctap2

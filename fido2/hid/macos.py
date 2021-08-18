@@ -15,15 +15,12 @@
 # Modified work Copyright 2020 Yubico AB. All Rights Reserved.
 # This file, with modifications, is licensed under the above Apache License.
 
-
-from __future__ import absolute_import
-
 from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
 
 import ctypes
 import ctypes.util
 import threading
-from six.moves.queue import Queue, Empty
+from queue import Queue, Empty
 
 import logging
 

@@ -25,10 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-
-from __future__ import absolute_import
-
-from collections import namedtuple
+from dataclasses import dataclass
+from typing import Tuple, Union, Optional
 import struct
 import abc
 import os
@@ -37,34 +35,28 @@ FIDO_USAGE_PAGE = 0xF1D0
 FIDO_USAGE = 0x1
 
 
-class HidDescriptor(
-    namedtuple(
-        "HidDescriptor",
-        [
-            "path",
-            "vid",
-            "pid",
-            "report_size_in",
-            "report_size_out",
-            "product_name",
-            "serial_number",
-        ],
-    )
-):
-    __slots__ = ()
+@dataclass
+class HidDescriptor:
+    path: Union[str, bytes]
+    vid: int
+    pid: int
+    report_size_in: int
+    report_size_out: int
+    product_name: Optional[str]
+    serial_number: Optional[str]
 
 
 class CtapHidConnection(abc.ABC):
     @abc.abstractmethod
-    def read_packet(self):
+    def read_packet(self) -> bytes:
         """Reads a CTAP HID packet"""
 
     @abc.abstractmethod
-    def write_packet(self, data):
+    def write_packet(self, data: bytes) -> None:
         """Writes a CTAP HID packet"""
 
     @abc.abstractmethod
-    def close(self):
+    def close(self) -> None:
         """Closes the connection"""
 
 
@@ -97,7 +89,7 @@ USAGE_PAGE = 0x04
 USAGE = 0x08
 
 
-def parse_report_descriptor(data):
+def parse_report_descriptor(data: bytes) -> Tuple[int, int]:
     # Parse report descriptor data
     usage, usage_page = None, None
     max_input_size, max_output_size = None, None
@@ -136,6 +128,6 @@ def parse_report_descriptor(data):
                 report_size = value
 
     if not remaining and usage_page == FIDO_USAGE_PAGE and usage == FIDO_USAGE:
-        return max_input_size, max_output_size
+        return max_input_size, max_output_size  # type: ignore
 
     raise ValueError("Not a FIDO device")

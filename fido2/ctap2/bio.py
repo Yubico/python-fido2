@@ -25,8 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .. import cbor
 from ..ctap import CtapError
 
@@ -34,7 +32,7 @@ from enum import IntEnum, unique
 import struct
 
 
-class BioEnrollment(object):
+class BioEnrollment:
     @unique
     class RESULT(IntEnum):
         MODALITY = 0x01
@@ -90,7 +88,7 @@ class CaptureError(Exception):
         super(CaptureError, self).__init__("Fingerprint capture error: %s" % code)
 
 
-class FPEnrollmentContext(object):
+class FPEnrollmentContext:
     """Helper object to perform fingerprint enrollment.
 
     :param bio: An instance of FPBioEnrollment.

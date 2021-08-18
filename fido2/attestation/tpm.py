@@ -27,8 +27,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .base import (
     Attestation,
     AttestationType,
@@ -42,25 +40,14 @@ from ..cose import CoseKey
 from ..utils import bytes2int, ByteBuffer
 
 from enum import IntEnum
-from collections import namedtuple
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives import hashes
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from dataclasses import dataclass
 
 import struct
-import six
-
-
-if six.PY2:
-    # Workaround for int max size on Python 2.
-    from enum import Enum
-
-    class _LongEnum(long, Enum):  # noqa F821
-        """Like IntEnum, but supports larger values"""
-
-    IntEnum = _LongEnum  # Use instead of IntEnum  # noqa F811
 
 
 TPM_ALG_NULL = 0x0010
@@ -100,10 +87,13 @@ class TpmAlgHash(IntEnum):
         )
 
 
-TpmsCertifyInfo = namedtuple("TpmsCertifyInfo", "name qualified_name")
+@dataclass
+class TpmsCertifyInfo:
+    name: bytes
+    qualified_name: bytes
 
 
-class TpmAttestationFormat(object):
+class TpmAttestationFormat:
     """the signature data is defined by [TPMv2-Part2] Section 10.12.8 (TPMS_ATTEST)
     as:
       TPM_GENERATED_VALUE (0xff544347 aka "\xffTCG")
@@ -199,7 +189,7 @@ class TpmAttestationFormat(object):
         )
 
 
-class TpmsRsaParms(object):
+class TpmsRsaParms:
     """Parse TPMS_RSA_PARMS struct
 
     See:
@@ -349,7 +339,7 @@ class TpmiAlgKdf(IntEnum):
     KDF1_SP800_108 = 0x0022
 
 
-class TpmsEccParms(object):
+class TpmsEccParms:
     @classmethod
     def parse(cls, reader):
         symmetric = reader.unpack("!H")
@@ -381,7 +371,7 @@ class TpmsEccParms(object):
         )
 
 
-class TpmsEccPoint(object):
+class TpmsEccPoint:
     """TPMS_ECC_POINT
     https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
     Section 11.2.5.2
@@ -402,7 +392,7 @@ class TpmsEccPoint(object):
         return "<TpmsEccPoint" " x={self.x}" " y={self.y}" ">".format(self=self)
 
 
-class TpmPublicFormat(object):
+class TpmPublicFormat:
     """the public area structure is defined by [TPMv2-Part2] Section 12.2.4 (TPMT_PUBLIC)
     as:
       TPMI_ALG_PUBLIC - type

@@ -25,8 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .. import cbor
 from ..ctap import CtapError
 
@@ -34,7 +32,7 @@ from enum import IntEnum, unique
 import struct
 
 
-class CredentialManagement(object):
+class CredentialManagement:
     """Implementation of a draft specification of the Credential Management API.
     WARNING: This specification is not final and this class is likely to change.
 

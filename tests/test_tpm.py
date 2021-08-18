@@ -25,29 +25,27 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-
-from __future__ import absolute_import, unicode_literals
-
 from fido2.attestation.tpm import TpmAttestationFormat, TpmPublicFormat
-from binascii import a2b_hex
 
 import unittest
 
 
 class TestTpmObject(unittest.TestCase):
     def test_parse_tpm(self):
-        data = a2b_hex(
+        data = bytes.fromhex(
             "ff54434780170022000b68cec627cc6411099a1f809fde4379f649aa170c7072d1adf230de439efc80810014f7c8b0cdeb31328648130a19733d6fff16e76e1300000003ef605603446ed8c56aa7608d01a6ea5651ee67a8a20022000bdf681917e18529c61e1b85a1e7952f3201eb59c609ed5d8e217e5de76b228bbd0022000b0a10d216b0c3ab82bfdc1f0a016ab9493384c7aee1937ee8800f76b30c9b71a7"  # noqa
         )
 
         tpm = TpmAttestationFormat.parse(data)
-        self.assertEqual(tpm.data, a2b_hex("f7c8b0cdeb31328648130a19733d6fff16e76e13"))
+        self.assertEqual(
+            tpm.data, bytes.fromhex("f7c8b0cdeb31328648130a19733d6fff16e76e13")
+        )
 
     def test_parse_too_short_of_a_tpm(self):
         with self.assertRaises(ValueError):
-            TpmAttestationFormat.parse(a2b_hex("ff5443"))
+            TpmAttestationFormat.parse(bytes.fromhex("ff5443"))
         with self.assertRaises(ValueError) as e:
-            data = a2b_hex(
+            data = bytes.fromhex(
                 "ff54434780170022000b68cec627cc6411099a1f809fde4379f649aa170c7072d1adf230de439efc80810014f7c8b0cdeb31328648"  # noqa
             )
             TpmAttestationFormat.parse(data)
@@ -56,7 +54,7 @@ class TestTpmObject(unittest.TestCase):
         )
 
     def test_parse_public_ecc(self):
-        data = a2b_hex(
+        data = bytes.fromhex(
             "0023000b00060472000000100010000300100020b9174cd199f77552afcffe6b1f069c032ffdc4f56068dec4e189e7967b3bf6b0002037bf8aa7d93fddb9507319141c6fa31c8e48a1c6da013603a9f6e3913d157c66"  # noqa
         )
         TpmPublicFormat.parse(data)

@@ -25,8 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import
-
 from enum import IntEnum, unique
 import abc
 
@@ -42,6 +40,11 @@ class CtapDevice(abc.ABC):
     CTAP-capable device. Subclasses of this should implement call, as well as
     list_devices, which should return a generator over discoverable devices.
     """
+
+    @property
+    @abc.abstractmethod
+    def capabilities(self) -> int:
+        """Get device capabilities"""
 
     @abc.abstractmethod
     def call(self, cmd, data=b"", event=None, on_keepalive=None):

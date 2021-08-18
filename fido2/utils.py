@@ -33,9 +33,8 @@ This module contains various functions used throughout the rest of the project.
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
-from binascii import b2a_hex
 from io import BytesIO
-import six
+from typing import Union
 import struct
 
 __all__ = [
@@ -48,7 +47,7 @@ __all__ = [
 ]
 
 
-def sha256(data):
+def sha256(data: bytes) -> bytes:
     """Produces a SHA256 hash of the input.
 
     :param data: The input data to hash.
@@ -71,16 +70,16 @@ def hmac_sha256(key, data):
     return h.finalize()
 
 
-def bytes2int(value):
+def bytes2int(value: bytes) -> int:
     """Parses an arbitrarily sized integer from a byte string.
 
     :param value: A byte string encoding a big endian unsigned integer.
     :return: The parsed int.
     """
-    return int(b2a_hex(value), 16)
+    return int.from_bytes(value, "big")
 
 
-def int2bytes(value, minlen=-1):
+def int2bytes(value: int, minlen: int = -1) -> bytes:
     """Encodes an int as a byte string.
 
     :param value: The integer value to encode.
@@ -93,24 +92,24 @@ def int2bytes(value, minlen=-1):
         value >>= 8
     ba.append(value)
     ba.extend([0] * (minlen - len(ba)))
-    return bytes(bytearray(reversed(ba)))
+    return bytes(reversed(ba))
 
 
-def websafe_decode(data):
-    """Decodes a websafe-base64 encoded string (bytes or str).
+def websafe_decode(data: Union[str, bytes]) -> bytes:
+    """Decodes a websafe-base64 encoded string.
     See: "Base 64 Encoding with URL and Filename Safe Alphabet" from Section 5
     in RFC4648 without padding.
 
     :param data: The input to decode.
     :return: The decoded bytes.
     """
-    if isinstance(data, six.text_type):
+    if isinstance(data, str):
         data = data.encode("ascii")
     data += b"=" * (-len(data) % 4)
     return urlsafe_b64decode(data)
 
 
-def websafe_encode(data):
+def websafe_encode(data: bytes) -> str:
     """Encodes a byte string into websafe-base64 encoding.
 
     :param data: The input to encode.
@@ -122,7 +121,7 @@ def websafe_encode(data):
 class ByteBuffer(BytesIO):
     """BytesIO-like object with the ability to unpack values."""
 
-    def unpack(self, fmt):
+    def unpack(self, fmt: str):
         """Reads and unpacks a value from the buffer.
 
         :param fmt: A struct format string yielding a single value.

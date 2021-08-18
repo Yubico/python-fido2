@@ -25,8 +25,6 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .. import cbor
 from ..utils import sha256
 
@@ -76,7 +74,7 @@ def _lb_unpack(key, entry):
         raise ValueError("Wrong key")
 
 
-class LargeBlobs(object):
+class LargeBlobs:
     """Implementation of the CTAP2.1 Large Blobs API.
 
     Getting a largeBlobKey for a credential is done via the LargeBlobKey extension.

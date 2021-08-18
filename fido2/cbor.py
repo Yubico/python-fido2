@@ -32,17 +32,20 @@ required for FIDO 2 CTAP.
 """
 
 import struct
-import six
+from typing import Any, Tuple, Union, Sequence, Mapping, Type, Callable
 
 
-def dump_int(data, mt=0):
+CborType = Union[int, bool, str, bytes, Sequence[Any], Mapping[Any, Any]]
+
+
+def dump_int(data: int, mt: int = 0) -> bytes:
     if data < 0:
         mt = 1
         data = -1 - data
 
     mt = mt << 5
     if data <= 23:
-        args = (">B", mt | data)
+        args: Any = (">B", mt | data)
     elif data <= 0xFF:
         args = (">BB", mt | 24, data)
     elif data <= 0xFFFF:
@@ -54,56 +57,56 @@ def dump_int(data, mt=0):
     return struct.pack(*args)
 
 
-def dump_bool(data):
+def dump_bool(data: bool) -> bytes:
     return b"\xf5" if data else b"\xf4"
 
 
-def dump_list(data):
+def dump_list(data: Sequence[CborType]) -> bytes:
     return dump_int(len(data), mt=4) + b"".join([encode(x) for x in data])
 
 
 def _sort_keys(entry):
     key = entry[0]
-    return six.indexbytes(key, 0), len(key), key
+    return key[0], len(key), key
 
 
-def dump_dict(data):
+def dump_dict(data: Mapping[CborType, CborType]) -> bytes:
     items = [(encode(k), encode(v)) for k, v in data.items()]
     items.sort(key=_sort_keys)
     return dump_int(len(items), mt=5) + b"".join([k + v for (k, v) in items])
 
 
-def dump_bytes(data):
+def dump_bytes(data: bytes) -> bytes:
     return dump_int(len(data), mt=2) + data
 
 
-def dump_text(data):
+def dump_text(data: str) -> bytes:
     data_bytes = data.encode("utf8")
     return dump_int(len(data_bytes), mt=3) + data_bytes
 
 
-_SERIALIZERS = [
+_SERIALIZERS: Sequence[Tuple[Type, Callable[[Any], bytes]]] = [
     (bool, dump_bool),
-    (six.integer_types, dump_int),
-    (dict, dump_dict),
-    (list, dump_list),
-    (six.text_type, dump_text),
-    (six.binary_type, dump_bytes),
+    (int, dump_int),
+    (str, dump_text),
+    (bytes, dump_bytes),
+    (Mapping, dump_dict),
+    (Sequence, dump_list),
 ]
 
 
-def encode(data):
+def encode(data: CborType) -> bytes:
     for k, v in _SERIALIZERS:
         if isinstance(data, k):
             return v(data)
-    raise ValueError("Unsupported value: {}".format(data))
+    raise ValueError("Unsupported value: %r" % data)
 
 
-def load_int(ai, data):
+def load_int(ai: int, data: bytes) -> Tuple[int, bytes]:
     if ai < 24:
         return ai, data
     elif ai == 24:
-        return six.indexbytes(data, 0), data[1:]
+        return data[0], data[1:]
     elif ai == 25:
         return struct.unpack_from(">H", data)[0], data[2:]
     elif ai == 26:
@@ -113,26 +116,26 @@ def load_int(ai, data):
     raise ValueError("Invalid additional information")
 
 
-def load_nint(ai, data):
+def load_nint(ai: int, data: bytes) -> Tuple[int, bytes]:
     val, rest = load_int(ai, data)
     return -1 - val, rest
 
 
-def load_bool(ai, data):
+def load_bool(ai: int, data: bytes) -> Tuple[bool, bytes]:
     return ai == 21, data
 
 
-def load_bytes(ai, data):
+def load_bytes(ai: int, data: bytes) -> Tuple[bytes, bytes]:
     l, data = load_int(ai, data)
     return data[:l], data[l:]
 
 
-def load_text(ai, data):
+def load_text(ai: int, data: bytes) -> Tuple[str, bytes]:
     enc, rest = load_bytes(ai, data)
     return enc.decode("utf8"), rest
 
 
-def load_array(ai, data):
+def load_array(ai: int, data: bytes) -> Tuple[Sequence[CborType], bytes]:
     l, data = load_int(ai, data)
     values = []
     for i in range(l):
@@ -141,7 +144,7 @@ def load_array(ai, data):
     return values, data
 
 
-def load_map(ai, data):
+def load_map(ai: int, data: bytes) -> Tuple[Mapping[CborType, CborType], bytes]:
     l, data = load_int(ai, data)
     values = {}
     for i in range(l):
@@ -162,12 +165,12 @@ _DESERIALIZERS = {
 }
 
 
-def decode_from(data):
-    fb = six.indexbytes(data, 0)
+def decode_from(data: bytes) -> Tuple[Any, bytes]:
+    fb = data[0]
     return _DESERIALIZERS[fb >> 5](fb & 0b11111, data[1:])
 
 
-def decode(data):
+def decode(data) -> CborType:
     value, rest = decode_from(data)
     if rest != b"":
         raise ValueError("Extraneous data")

@@ -35,7 +35,8 @@ Consider this highly experimental.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import Ctap2, ClientPin, FPBioEnrollment, CaptureError
+from fido2.ctap2 import Ctap2, FPBioEnrollment, CaptureError
+from fido2.ctap2.pin import ClientPin
 from getpass import getpass
 import sys
 

@@ -25,16 +25,12 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import absolute_import, unicode_literals
-
 from .hid import CTAPHID
 from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
 from .cose import ES256
 from .attestation import FidoU2FAttestation
 from enum import IntEnum, unique
-from binascii import b2a_hex
 import struct
-import six
 
 
 @unique
@@ -79,15 +75,15 @@ class RegistrationData(bytes):
     def __init__(self, _):
         super(RegistrationData, self).__init__()
 
-        if six.indexbytes(self, 0) != 0x05:
+        if self[0] != 0x05:
             raise ValueError("Reserved byte != 0x05")
 
         self.public_key = self[1:66]
-        kh_len = six.indexbytes(self, 66)
+        kh_len = self[66]
         self.key_handle = self[67 : 67 + kh_len]
 
         cert_offs = 67 + kh_len
-        cert_len = six.indexbytes(self, cert_offs + 1)
+        cert_len = self[cert_offs + 1]
         if cert_len > 0x80:
             n_bytes = cert_len - 0x80
             cert_len = (
@@ -123,7 +119,7 @@ class RegistrationData(bytes):
             "RegistrationData(public_key: h'%s', key_handle: h'%s', "
             "certificate: h'%s', signature: h'%s')"
         ) % tuple(
-            b2a_hex(x).decode()
+            (x).hex()
             for x in (
                 self.public_key,
                 self.key_handle,
@@ -181,7 +177,7 @@ class SignatureData(bytes):
     def __repr__(self):
         return (
             "SignatureData(user_presence: 0x%02x, counter: %d, " "signature: h'%s'"
-        ) % (self.user_presence, self.counter, b2a_hex(self.signature))
+        ) % (self.user_presence, self.counter, self.signature.hex())
 
     def __str__(self):
         return "%r" % self
@@ -196,7 +192,7 @@ class SignatureData(bytes):
         return cls(websafe_decode(data))
 
 
-class Ctap1(object):
+class Ctap1:
     """Implementation of the CTAP1 specification.
 
     :param device: A CtapHidDevice handle supporting CTAP1.

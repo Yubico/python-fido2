@@ -34,7 +34,8 @@ On Windows, the native WebAuthn API will be used.
 from __future__ import print_function, absolute_import, unicode_literals
 
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import ClientPin, LargeBlobs
+from fido2.ctap2 import LargeBlobs
+from fido2.ctap2.pin import ClientPin
 from fido2.client import Fido2Client
 from fido2.server import Fido2Server
 from getpass import getpass

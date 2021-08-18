@@ -15,9 +15,6 @@
 # Modified work Copyright 2020 Yubico AB. All Rights Reserved.
 # This file, with modifications, is licensed under the above Apache License.
 
-
-from __future__ import absolute_import
-
 from ctypes.util import find_library
 import ctypes
 import glob
@@ -145,7 +142,11 @@ def list_descriptors():
             serial = (dev["serial_number"] if "serial_number" in dev else None) or None
             descriptors.append(
                 _read_descriptor(
-                    dev["vendor_id"], dev["product_id"], name, serial, dev["path"],
+                    dev["vendor_id"],
+                    dev["product_id"],
+                    name,
+                    serial,
+                    dev["path"],
                 )
             )
             logger.debug("Found CTAP device: %s", dev["path"])

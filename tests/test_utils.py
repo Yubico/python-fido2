@@ -29,7 +29,6 @@
 
 
 import unittest
-from binascii import a2b_hex
 
 from fido2.utils import hmac_sha256, sha256, websafe_encode, websafe_decode
 
@@ -38,14 +37,14 @@ class TestSha256(unittest.TestCase):
     def test_sha256_vectors(self):
         self.assertEqual(
             sha256(b"abc"),
-            a2b_hex(
-                b"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+            bytes.fromhex(
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
             ),
         )
         self.assertEqual(
             sha256(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
-            a2b_hex(
-                b"248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+            bytes.fromhex(
+                "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
             ),
         )
 
@@ -54,15 +53,15 @@ class TestHmacSha256(unittest.TestCase):
     def test_hmac_sha256_vectors(self):
         self.assertEqual(
             hmac_sha256(b"\x0b" * 20, b"Hi There"),
-            a2b_hex(
-                b"b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+            bytes.fromhex(
+                "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
             ),
         )
 
         self.assertEqual(
             hmac_sha256(b"Jefe", b"what do ya want for nothing?"),
-            a2b_hex(
-                b"5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+            bytes.fromhex(
+                "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
             ),
         )
 

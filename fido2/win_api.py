@@ -37,8 +37,6 @@ https://github.com/microsoft/webauthn
 #
 # pylint: disable=invalid-name, super-init-not-called, too-few-public-methods
 
-from __future__ import absolute_import, unicode_literals
-
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND
 from threading import Thread
@@ -50,7 +48,7 @@ PBYTE = ctypes.POINTER(ctypes.c_ubyte)  # Different from wintypes.PBYTE, which i
 PCWSTR = ctypes.c_wchar_p
 
 
-class BytesProperty(object):
+class BytesProperty:
     """Property for structs storing byte arrays as DWORD + PBYTE.
 
     Allows for easy reading/writing to struct fields using Python bytes objects.
@@ -656,7 +654,7 @@ class CancelThread(Thread):
         self.join()
 
 
-class WinAPI(object):
+class WinAPI:
     """Implementation of Microsoft's WebAuthN APIs.
 
     :param ctypes.HWND handle: Window handle to use for API calls.

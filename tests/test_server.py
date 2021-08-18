@@ -1,14 +1,14 @@
-from __future__ import absolute_import, unicode_literals
-
 import json
 import unittest
-from binascii import a2b_hex
-import six
 
 from fido2.client import WEBAUTHN_TYPE, ClientData
-from fido2.ctap2 import AttestedCredentialData, AuthenticatorData
 from fido2.server import Fido2Server, U2FFido2Server
-from fido2.webauthn import PublicKeyCredentialRpEntity, UserVerificationRequirement
+from fido2.webauthn import (
+    PublicKeyCredentialRpEntity,
+    UserVerificationRequirement,
+    AttestedCredentialData,
+    AuthenticatorData,
+)
 
 from .test_ctap2 import _ATT_CRED_DATA, _CRED_ID
 from .utils import U2FDevice
@@ -28,7 +28,7 @@ USER = {"id": b"user_id", "name": "A. User"}
 
 
 class TestFido2Server(unittest.TestCase):
-    def test_register_begin_rp_no_icon(self):
+    def test_register_begin_rp(self):
         rp = PublicKeyCredentialRpEntity("example.com", "Example")
         server = Fido2Server(rp)
 
@@ -37,21 +37,6 @@ class TestFido2Server(unittest.TestCase):
         self.assertEqual(
             request["publicKey"]["rp"], {"id": "example.com", "name": "Example"}
         )
-
-    def test_register_begin_rp_icon(self):
-        rp = PublicKeyCredentialRpEntity(
-            "example.com", "Example", "http://example.com/icon.svg"
-        )
-        server = Fido2Server(rp)
-
-        request, state = server.register_begin(USER)
-
-        data = {
-            "id": "example.com",
-            "name": "Example",
-            "icon": "http://example.com/icon.svg",
-        }
-        self.assertEqual(request["publicKey"]["rp"], data)
 
     def test_register_begin_custom_challenge(self):
         rp = PublicKeyCredentialRpEntity("example.com", "Example")
@@ -84,10 +69,10 @@ class TestFido2Server(unittest.TestCase):
             "type": WEBAUTHN_TYPE.GET_ASSERTION,
         }
         client_data = ClientData(json.dumps(client_data_dict).encode("utf-8"))
-        _AUTH_DATA = a2b_hex(
+        _AUTH_DATA = bytes.fromhex(
             "A379A6F6EEAFB9A55E378C118034E2751E682FAB9F2D30AB13D2125586CE1947010000001D"
         )
-        with six.assertRaisesRegex(self, ValueError, "Invalid signature."):
+        with self.assertRaisesRegex(ValueError, "Invalid signature."):
             server.authenticate_complete(
                 state,
                 [AttestedCredentialData(_ATT_CRED_DATA)],
@@ -100,9 +85,7 @@ class TestFido2Server(unittest.TestCase):
 
 class TestU2FFido2Server(unittest.TestCase):
     def test_u2f(self):
-        rp = PublicKeyCredentialRpEntity(
-            "example.com", "Example", "http://example.com/icon.svg"
-        )
+        rp = PublicKeyCredentialRpEntity("example.com", "Example")
         app_id = b"https://example.com"
         server = U2FFido2Server(app_id=app_id.decode("ascii"), rp=rp)
 
@@ -133,9 +116,7 @@ class TestU2FFido2Server(unittest.TestCase):
         )
 
     def test_u2f_facets(self):
-        rp = PublicKeyCredentialRpEntity(
-            "example.com", "Example", "http://example.com/icon.svg"
-        )
+        rp = PublicKeyCredentialRpEntity("example.com", "Example")
         app_id = b"https://www.example.com/facets.json"
 
         def verify_u2f_origin(origin):
@@ -181,9 +162,7 @@ class TestU2FFido2Server(unittest.TestCase):
 
         authenticator_data, signature = device.sign(client_data)
 
-        with six.assertRaisesRegex(
-            self, ValueError, "Invalid origin in " "ClientData."
-        ):
+        with self.assertRaisesRegex(ValueError, "Invalid origin in ClientData."):
             server.authenticate_complete(
                 state,
                 [auth_data],
