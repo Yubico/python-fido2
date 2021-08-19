@@ -1,3 +1,7 @@
+* Version 1.0.0 (unreleased)
+ ** First stable release.
+ ** Drop support for Python <3.6.
+
 * Version 0.9.1 (released 2021-02-03)
  ** Add new CTAP error codes and improve handling of unknown codes.
 

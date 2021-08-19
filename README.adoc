@@ -48,9 +48,9 @@ or the _COPYING.MPLv2_ file for the full license text.
 
 
 === Requirements
-fido2 is compatible with CPython 2.7 (2.7.6 and up), 3.5 onwards, and is tested
-on Windows, MacOS, and Linux. Support for OpenBSD and FreeBSD is provided as-is
-and relies on community contributions.
+fido2 is compatible with Python 3.6 and later, and is tested on Windows,
+MacOS, and Linux. Support for OpenBSD and FreeBSD is provided as-is and relies
+on community contributions.
 
 
 === Installation
@@ -58,7 +58,7 @@ fido2 is installable by running the following command:
 
   pip install fido2
 
-To install the dependencies required for communication with NFC Authenticators,
+To install the dependencies required for communication with NFC authenticators,
 instead use:
 
   pip install fido2[pcsc]
