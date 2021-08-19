@@ -65,8 +65,6 @@ else:
     print("No Authenticator with the largeBlobKey extension found!")
     sys.exit(1)
 
-use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
-
 pin = None
 uv = "discouraged"
 
@@ -106,7 +104,6 @@ options.extensions = {"largeBlobKey": True}
 print("\nTouch your authenticator device now...\n")
 
 result = client.make_credential(options, pin=pin)
-key = result.attestation_object.large_blob_key
 
 # Complete registration
 auth_data = server.register_complete(
@@ -115,18 +112,6 @@ auth_data = server.register_complete(
 credentials = [auth_data.credential_data]
 
 print("New credential created!")
-print("Large Blob Key:", key)
-
-client_pin = ClientPin(client.ctap2)
-if pin:
-    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
-else:
-    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
-large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
-
-# Write a large blob
-print("Writing a large blob...")
-large_blobs.put_blob(key, b"Here is some data to store!")
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(user_verification=uv)
@@ -144,16 +129,34 @@ assertion = selection.get_assertions()[0]
 
 # This should match the key from MakeCredential.
 key = assertion.large_blob_key
+print("Large Blob Key:", key.hex())
+
+# Get a PIN/UV token for writing a blob
+client_pin = ClientPin(client.ctap2)
+if pin:
+    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+else:
+    print("\nPerform User Verification now...\n")
+    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
+large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
+
+# Write a large blob
+print("Writing a large blob...")
+large_blobs.put_blob(key, b"Here is some data to store!")
+
+# Read the blob without providing a PIN token.
+large_blobs = LargeBlobs(client.ctap2)
+blob = large_blobs.get_blob(key)
+print("Read blob", blob)
 
 # Get a fresh PIN token
 if pin:
     token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
 else:
+    print("\nPerform User Verification now...\n")
     token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
 large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
 
-blob = large_blobs.get_blob(key)
-print("Read blob", blob)
-
 # Clean up
 large_blobs.delete_blob(key)
+print("Blob deleted...")
