@@ -163,7 +163,7 @@ class CtapHidDevice(CtapDevice):
         try:
             # Read response
             seq = 0
-            response = None
+            response = b""
             last_ka = None
             while True:
                 if event.is_set():
@@ -182,11 +182,11 @@ class CtapHidDevice(CtapDevice):
                 if r_channel != self._channel_id:
                     raise Exception("Wrong channel")
 
-                if response is None:  # Initialization packet
+                if not response:  # Initialization packet
                     r_cmd, r_len = struct.unpack_from(">BH", recv)
                     recv = recv[3:]
                     if r_cmd == TYPE_INIT | cmd:
-                        response = b""
+                        pass  # first data packet
                     elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
                         ka_status = struct.unpack_from(">B", recv)[0]
                         logger.debug("Got keepalive status: %02x" % ka_status)

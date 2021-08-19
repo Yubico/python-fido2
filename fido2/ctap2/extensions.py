@@ -36,6 +36,8 @@ class Ctap2Extension(abc.ABC):
     the extension.
     """
 
+    NAME: str = None  # type: ignore
+
     def __init__(self, ctap):
         self.ctap = ctap
 

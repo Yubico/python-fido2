@@ -277,7 +277,7 @@ class MacCtapHidConnection(CtapHidConnection):
             raise OSError("Failed to open device for communication: {}".format(result))
 
         # Create read queue
-        self.read_queue = Queue()
+        self.read_queue: Queue = Queue()
 
         # Create and start read thread
         self.run_loop_ref = None

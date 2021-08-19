@@ -24,6 +24,7 @@ import os
 from .base import HidDescriptor, parse_report_descriptor, FileCtapHidConnection
 
 import logging
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ def _enumerate():
         if retval != 0:
             continue
 
-        dev = {}
+        dev: Dict[str, Optional[str]] = {}
         dev["name"] = uhid[len(devdir) :]
         dev["path"] = uhid
 

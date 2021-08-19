@@ -29,6 +29,7 @@ from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
+from typing import Sequence, Type
 
 try:
     from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -101,9 +102,9 @@ class CoseKey(dict):
     def supported_algorithms():
         """Get a list of all supported algorithm identifiers"""
         if ed25519:
-            algs = (ES256, EdDSA, PS256, RS256)
+            algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, PS256, RS256]
         else:
-            algs = (ES256, PS256, RS256)
+            algs = [ES256, PS256, RS256]
         return [cls.ALGORITHM for cls in algs]
 
 

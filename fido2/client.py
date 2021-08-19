@@ -49,6 +49,7 @@ from typing import Type, Any, Union, Callable, Optional, Mapping, Sequence
 
 import json
 import platform
+import inspect
 
 
 class ClientData(bytes):
@@ -387,8 +388,10 @@ class Fido2ClientAssertionSelection(AssertionSelection):
         return extension_outputs
 
 
-def _default_extensions():
-    return [cls for cls in Ctap2Extension.__subclasses__() if hasattr(cls, "NAME")]
+def _default_extensions() -> Sequence[Type[Ctap2Extension]]:
+    return [
+        cls for cls in Ctap2Extension.__subclasses__() if not inspect.isabstract(cls)
+    ]
 
 
 _CTAP1_INFO = Info.create(versions=["U2F_V2"], aaguid=b"\0" * 32)
@@ -410,7 +413,7 @@ class Fido2Client(_BaseClient):
         device: CtapDevice,
         origin: str,
         verify: Callable[[str, str], bool] = verify_rp_id,
-        extension_types: Optional[Type[Ctap2Extension]] = None,
+        extension_types: Sequence[Type[Ctap2Extension]] = [],
     ):
         super(Fido2Client, self).__init__(origin, verify)
 
@@ -420,9 +423,9 @@ class Fido2Client(_BaseClient):
             self.ctap2 = Ctap2(device)
             self.info = self.ctap2.info
             try:
-                self.client_pin: Optional[ClientPin] = ClientPin(self.ctap2)
+                self.client_pin: ClientPin = ClientPin(self.ctap2)
             except ValueError:
-                self.client_pin = None
+                self.client_pin = None  # type: ignore
             self._do_make_credential = self._ctap2_make_credential
             self._do_get_assertion = self._ctap2_get_assertion
         except (ValueError, CtapError):
@@ -760,10 +763,7 @@ class Fido2Client(_BaseClient):
         pin_protocol, pin_auth, internal_uv = self._get_auth_params(
             client_data, rp_id, user_verification, pin, event, on_keepalive
         )
-        if internal_uv:
-            options = {"uv": True}
-        else:
-            options = None
+        options = {"uv": True} if internal_uv else None
 
         if allow_list:
             # Filter out credential IDs which are too long
@@ -966,5 +966,12 @@ class WindowsClient(_BaseClient):
         user = {"id": user_id} if user_id else None
         return AssertionSelection(
             client_data,
-            [AssertionResponse.create(credential, auth_data, signature, user)],
+            [
+                AssertionResponse.create(
+                    credential=credential,
+                    auth_data=auth_data,
+                    signature=signature,
+                    user=user,
+                )
+            ],
         )

@@ -103,7 +103,7 @@ def _ignore_attestation(attestation_object, client_data_hash):
 
 def _default_attestations():
     return [
-        cls()
+        cls()  # type: ignore
         for cls in Attestation.__subclasses__()
         if getattr(cls, "FORMAT", "none") != "none"
     ]
@@ -183,7 +183,7 @@ class Fido2Server:
         self.timeout = None
         self.attestation = AttestationConveyancePreference._wrap(attestation)
         self.allowed_algorithms = [
-            PublicKeyCredentialParameters("public-key", alg)
+            PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, alg)
             for alg in CoseKey.supported_algorithms()
         ]
         self._verify_attestation = verify_attestation or _ignore_attestation

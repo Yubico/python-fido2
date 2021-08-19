@@ -40,8 +40,14 @@ https://github.com/microsoft/webauthn
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND
 from threading import Thread
+from typing import Mapping
 
 import ctypes
+from ctypes import WinDLL  # type: ignore
+from ctypes import LibraryLoader
+
+
+windll = LibraryLoader(WinDLL)
 
 
 PBYTE = ctypes.POINTER(ctypes.c_ubyte)  # Different from wintypes.PBYTE, which is signed
@@ -558,7 +564,7 @@ class WebAuthNCTAPTransport(IntEnum):
 
 
 HRESULT = ctypes.HRESULT  # type: ignore
-WEBAUTHN = ctypes.windll.webauthn  # type: ignore
+WEBAUTHN = windll.webauthn  # type: ignore
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
 # The following is derived from
 # https://github.com/microsoft/webauthn/blob/master/webauthn.h#L37
@@ -603,7 +609,7 @@ WEBAUTHN.WebAuthNGetErrorName.argtypes = [HRESULT]
 WEBAUTHN.WebAuthNGetErrorName.restype = PCWSTR
 
 
-WEBAUTHN_STRUCT_VERSIONS = {
+WEBAUTHN_STRUCT_VERSIONS: Mapping[int, Mapping[str, int]] = {
     1: {
         "WebAuthNRpEntityInformation": 1,
         "WebAuthNUserEntityInformation": 1,
@@ -621,7 +627,7 @@ WEBAUTHN_STRUCT_VERSIONS = {
 }
 
 
-def get_version(class_name):
+def get_version(class_name: str) -> int:
     """Get version of struct.
 
     :param str class_name: Struct class name.
@@ -663,7 +669,7 @@ class WinAPI:
     version = WEBAUTHN_API_VERSION
 
     def __init__(self, handle=None):
-        self.handle = handle or ctypes.windll.user32.GetForegroundWindow()
+        self.handle = handle or windll.user32.GetForegroundWindow()
 
     def get_error_name(self, winerror):
         """Returns an error name given an error HRESULT value.

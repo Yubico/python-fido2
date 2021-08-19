@@ -30,7 +30,7 @@ from .cose import CoseKey, ES256
 from .utils import sha256, ByteBuffer
 from enum import Enum, unique, IntFlag
 from dataclasses import dataclass, fields, field as _field
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Mapping, Optional, Sequence, Tuple, cast
 import re
 import struct
 
@@ -256,7 +256,7 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
     def __init__(self, _):
         super().__init__()
 
-        data = cbor.decode(bytes(self))
+        data = cast(Mapping[str, Any], cbor.decode(bytes(self)))
         self.fmt = data["fmt"]
         self.auth_data = AuthenticatorData(data["authData"])
         self.att_stmt = data["attStmt"]
@@ -368,7 +368,10 @@ class _DataObject(Mapping[str, Any]):
                 self._keys.append(_snake2camel(f.name))
 
     def __getitem__(self, key):
-        return getattr(self, _camel2snake(key))
+        try:
+            return getattr(self, _camel2snake(key))
+        except AttributeError as e:
+            raise KeyError(e)
 
     def __iter__(self):
         return iter(self._keys)

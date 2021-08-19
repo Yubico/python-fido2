@@ -19,7 +19,7 @@ from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
 
 import ctypes
 import platform
-from ctypes import WinDLL  # type: ignore
+from ctypes import WinDLL, WinError  # type: ignore
 from ctypes import wintypes, LibraryLoader
 
 import logging
@@ -193,7 +193,7 @@ class WinCtapHidConnection(CtapHidConnection):
             None,
         )
         if self.handle == INVALID_HANDLE_VALUE:
-            raise ctypes.WinError()
+            raise WinError()
 
     def close(self):
         kernel32.CloseHandle(self.handle)
@@ -205,7 +205,7 @@ class WinCtapHidConnection(CtapHidConnection):
             self.handle, out, len(out), ctypes.byref(num_written), None
         )
         if not ret:
-            raise ctypes.WinError()
+            raise WinError()
         if num_written.value != len(out):
             raise OSError(
                 "Failed to write complete packet.  "
@@ -219,7 +219,7 @@ class WinCtapHidConnection(CtapHidConnection):
             self.handle, buf, len(buf), ctypes.byref(num_read), None
         )
         if not ret:
-            raise ctypes.WinError()
+            raise WinError()
 
         if num_read.value != self.descriptor.report_size_in + 1:
             raise OSError("Failed to read full length report from device.")
@@ -231,7 +231,7 @@ def get_vid_pid(device):
     attributes = HidAttributes()
     result = hid.HidD_GetAttributes(device, ctypes.byref(attributes))
     if not result:
-        raise ctypes.WinError()
+        raise WinError()
 
     return attributes.VendorID, attributes.ProductID
 
@@ -269,19 +269,19 @@ def get_descriptor(path):
         None,
     )
     if device == INVALID_HANDLE_VALUE:
-        raise ctypes.WinError()
+        raise WinError()
     try:
         preparsed_data = PHIDP_PREPARSED_DATA(0)
         ret = hid.HidD_GetPreparsedData(device, ctypes.byref(preparsed_data))
         if not ret:
-            raise ctypes.WinError()
+            raise WinError()
 
         try:
             caps = HidCapabilities()
             ret = hid.HidP_GetCaps(preparsed_data, ctypes.byref(caps))
 
             if ret != HIDP_STATUS_SUCCESS:
-                raise ctypes.WinError()
+                raise WinError()
 
             if caps.UsagePage == FIDO_USAGE_PAGE and caps.Usage == FIDO_USAGE:
                 vid, pid = get_vid_pid(device)
@@ -331,19 +331,19 @@ def list_descriptors():
             if not result:
                 break
 
-            detail_len = wintypes.DWORD()
+            dw_detail_len = wintypes.DWORD()
             result = setupapi.SetupDiGetDeviceInterfaceDetailA(
                 collection,
                 ctypes.byref(interface_info),
                 None,
                 0,
-                ctypes.byref(detail_len),
+                ctypes.byref(dw_detail_len),
                 None,
             )
             if result:
-                raise ctypes.WinError()
+                raise WinError()
 
-            detail_len = detail_len.value
+            detail_len = dw_detail_len.value
             if detail_len == 0:
                 # skip this device, some kind of error
                 continue
@@ -361,7 +361,7 @@ def list_descriptors():
                 None,
             )
             if not result:
-                raise ctypes.WinError()
+                raise WinError()
 
             path = ctypes.string_at(interface_detail.DevicePath)
 

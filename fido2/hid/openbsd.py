@@ -99,7 +99,7 @@ def get_descriptor(path):
     dev_info = UsbDeviceInfo()
 
     try:
-        fcntl.ioctl(f, USB_GET_DEVICEINFO, dev_info)
+        fcntl.ioctl(f, USB_GET_DEVICEINFO, dev_info)  # type: ignore
     finally:
         os.close(f)
 
