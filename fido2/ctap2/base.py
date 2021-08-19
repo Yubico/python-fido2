@@ -67,9 +67,7 @@ class _CborDataObject(Mapping[int, Any]):
                     v = f.default_factory()  # type: ignore
                     # see https://github.com/python/mypy/issues/6910
                 else:
-                    raise TypeError(
-                        "Input data missing required field %s: %s" % (k, f.name)
-                    )
+                    raise TypeError(f"Input data missing required field {k}: {f.name}")
                 setattr(self, f.name, transform(v))
 
     @classmethod
@@ -288,11 +286,9 @@ class Ctap2:
         if self._strict_cbor:
             expected = cbor.encode(decoded)
             if expected != enc:
-                enc_h = enc.hex()
-                exp_h = expected.hex()
                 raise ValueError(
                     "Non-canonical CBOR from Authenticator.\n"
-                    "Got: {}\n".format(enc_h) + "Expected: {}".format(exp_h)
+                    f"Got: {enc.hex()}\nExpected: {expected.hex()}"
                 )
         if isinstance(decoded, Mapping):
             return decoded

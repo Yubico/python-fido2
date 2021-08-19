@@ -106,7 +106,7 @@ class ClientError(Exception):
     def __repr__(self):
         r = "Client error: {0} - {0.name}".format(self.code)
         if self.cause:
-            r += " (cause: {})".format(self.cause)
+            r += f" (cause: {self.cause})"
         return r
 
 

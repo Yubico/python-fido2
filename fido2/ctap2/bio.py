@@ -70,7 +70,7 @@ class BioEnrollment:
         self.ctap = ctap
         self.modality = self.get_modality()
         if modality != self.modality:
-            raise ValueError("Device does not support {:s}".format(modality))
+            raise ValueError(f"Device does not support {modality:s}")
 
     def get_modality(self):
         """Get bio modality.
@@ -85,7 +85,7 @@ class BioEnrollment:
 class CaptureError(Exception):
     def __init__(self, code):
         self.code = code
-        super(CaptureError, self).__init__("Fingerprint capture error: %s" % code)
+        super(CaptureError, self).__init__(f"Fingerprint capture error: {code}")
 
 
 class FPEnrollmentContext:
@@ -181,7 +181,7 @@ class FPBioEnrollment(BioEnrollment):
         NO_UP_TRANSITION = 0x0E
 
         def __str__(self):
-            return "0x%02X - %s" % (self.value, self.name)
+            return f"0x{self.value:02X} - {self.name}"
 
     def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
         super(FPBioEnrollment, self).__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)

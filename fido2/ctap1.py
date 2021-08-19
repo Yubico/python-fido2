@@ -56,9 +56,7 @@ class ApduError(Exception):
         self.data = data
 
     def __repr__(self):
-        return "APDU error: 0x{:04X} {:d} bytes of data".format(
-            self.code, len(self.data)
-        )
+        return f"APDU error: 0x{self.code:04X} {len(self.data):d} bytes of data"
 
 
 class RegistrationData(bytes):
@@ -129,7 +127,7 @@ class RegistrationData(bytes):
         )
 
     def __str__(self):
-        return "%r" % self
+        return f"{self!r}"
 
     @classmethod
     def from_b64(cls, data):
@@ -180,7 +178,7 @@ class SignatureData(bytes):
         ) % (self.user_presence, self.counter, self.signature.hex())
 
     def __str__(self):
-        return "%r" % self
+        return f"{self!r}"
 
     @classmethod
     def from_b64(cls, data):

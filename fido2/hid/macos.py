@@ -274,7 +274,7 @@ class MacCtapHidConnection(CtapHidConnection):
         # Open device
         result = iokit.IOHIDDeviceOpen(self.handle, 0)
         if result != K_IO_RETURN_SUCCESS:
-            raise OSError("Failed to open device for communication: {}".format(result))
+            raise OSError(f"Failed to open device for communication: {result}")
 
         # Create read queue
         self.read_queue: Queue = Queue()
@@ -312,7 +312,7 @@ class MacCtapHidConnection(CtapHidConnection):
 
         # Non-zero status indicates failure
         if result != K_IO_RETURN_SUCCESS:
-            raise OSError("Failed to write report to device: {}".format(result))
+            raise OSError(f"Failed to write report to device: {result}")
 
     def read_packet(self):
         read_thread = threading.Thread(target=_dev_read_thread, args=(self,))
@@ -333,7 +333,7 @@ def get_int_property(dev, key):
         return None
 
     if cf.CFGetTypeID(type_ref) != cf.CFNumberGetTypeID():
-        raise OSError("Expected number type, got {}".format(cf.CFGetTypeID(type_ref)))
+        raise OSError(f"Expected number type, got {cf.CFGetTypeID(type_ref)}")
 
     out = ctypes.c_int32()
     ret = cf.CFNumberGetValue(type_ref, K_CF_NUMBER_SINT32_TYPE, ctypes.byref(out))
@@ -352,7 +352,7 @@ def get_string_property(dev, key):
         return None
 
     if cf.CFGetTypeID(type_ref) != cf.CFStringGetTypeID():
-        raise OSError("Expected string type, got {}".format(cf.CFGetTypeID(type_ref)))
+        raise OSError(f"Expected string type, got {cf.CFGetTypeID(type_ref)}")
 
     out = ctypes.create_string_buffer(128)
     ret = cf.CFStringGetCString(
@@ -383,7 +383,7 @@ def get_device_id(handle):
         io_service_obj, ctypes.byref(entry_id)
     )
     if result != K_IO_RETURN_SUCCESS:
-        raise OSError("Failed to obtain IORegistry entry ID: {}".format(result))
+        raise OSError(f"Failed to obtain IORegistry entry ID: {result}")
 
     return entry_id.value
 
@@ -396,9 +396,7 @@ def _handle_from_path(path):
         K_IO_MASTER_PORT_DEFAULT, matching_dict
     )
     if not device_entry:
-        raise OSError(
-            "Device ID {} does not match any HID device on the system".format(path)
-        )
+        raise OSError(f"Device ID {path} does not match any HID device on the system")
 
     return iokit.IOHIDDeviceCreate(K_CF_ALLOCATOR_DEFAULT, device_entry)
 

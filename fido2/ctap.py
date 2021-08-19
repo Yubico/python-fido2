@@ -87,7 +87,7 @@ class CtapError(Exception):
             return "<ERR.UNKNOWN: %d>" % self
 
         def __str__(self):
-            return "0x%02X - UNKNOWN" % self
+            return f"0x{self:02X} - UNKNOWN"
 
     @unique
     class ERR(IntEnum):
@@ -148,7 +148,7 @@ class CtapError(Exception):
         VENDOR_LAST = 0xFF
 
         def __str__(self):
-            return "0x%02X - %s" % (self.value, self.name)
+            return f"0x{self.value:02X} - {self.name}"
 
     def __init__(self, code):
         try:
@@ -156,4 +156,4 @@ class CtapError(Exception):
         except ValueError:
             code = CtapError.UNKNOWN_ERR(code)
         self.code = code
-        super(CtapError, self).__init__("CTAP error: %s" % code)
+        super(CtapError, self).__init__(f"CTAP error: {code}")

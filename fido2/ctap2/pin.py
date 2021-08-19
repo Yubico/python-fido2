@@ -43,7 +43,7 @@ import os
 
 def _pad_pin(pin: str) -> bytes:
     if not isinstance(pin, str):
-        raise ValueError("PIN of wrong type, expecting %s" % str)
+        raise ValueError(f"PIN of wrong type, expecting {str}")
     if len(pin) < 4:
         raise ValueError("PIN must be >= 4 characters")
     pin_padded = pin.encode().ljust(64, b"\0")

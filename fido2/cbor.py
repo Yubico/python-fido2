@@ -99,7 +99,7 @@ def encode(data: CborType) -> bytes:
     for k, v in _SERIALIZERS:
         if isinstance(data, k):
             return v(data)
-    raise ValueError("Unsupported value: %r" % data)
+    raise ValueError(f"Unsupported value: {data!r}")
 
 
 def load_int(ai: int, data: bytes) -> Tuple[int, bytes]:

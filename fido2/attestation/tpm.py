@@ -82,9 +82,7 @@ class TpmAlgHash(IntEnum):
         elif self == TpmAlgHash.SHA512:
             return hashes.SHA512()
 
-        return NotImplementedError(
-            "_hash_alg is not implemented for {0!r}".format(self)
-        )
+        return NotImplementedError(f"_hash_alg is not implemented for {self!r}")
 
 
 @dataclass
@@ -150,7 +148,7 @@ class TpmAttestationFormat:
             restart_count = reader.unpack("!L")
             safe_value = reader.unpack("B")
             if safe_value not in (0, 1):
-                raise ValueError("invalid value 0x{0:x} for boolean".format(safe_value))
+                raise ValueError(f"invalid value 0x{safe_value:x} for boolean")
             safe = safe_value == 1
 
             firmware_version = reader.unpack("!Q")
@@ -180,12 +178,12 @@ class TpmAttestationFormat:
     def __repr__(self):
         return (
             "<TpmAttestationFormat"
-            " data={self.data}"
-            " name={self.name}"
-            " clock_info={self.clock_info}"
-            " firmware_version=0x{self.firmware_version:x}"
-            " attested={self.attested}"
-            ">".format(self=self)
+            f" data={self.data}"
+            f" name={self.name}"
+            f" clock_info={self.clock_info}"
+            f" firmware_version=0x{self.firmware_version:x}"
+            f" attested={self.attested}"
+            ">"
         )
 
 
@@ -278,11 +276,11 @@ class TpmsRsaParms:
     def __repr__(self):
         return (
             "<TpmsRsaParms"
-            " symmetric=0x{self.symmetric:x}"
-            " scheme=0x{self.scheme:x}"
-            " key_bits={self.key_bits}"
-            " exponent={self.exponent}"
-            ">".format(self=self)
+            f" symmetric=0x{self.symmetric:x}"
+            f" scheme=0x{self.scheme:x}"
+            f" key_bits={self.key_bits}"
+            f" exponent={self.exponent}"
+            ">"
         )
 
 
@@ -363,11 +361,11 @@ class TpmsEccParms:
     def __repr__(self):
         return (
             "<TpmsEccParms"
-            " symmetric=0x{self.symmetric:x}"
-            " scheme=0x{self.scheme:x}"
-            " curve_id={self.curve_id!r}"
-            " kdf={self.kdf!r}"
-            ">".format(self=self)
+            f" symmetric=0x{self.symmetric:x}"
+            f" scheme=0x{self.scheme:x}"
+            f" curve_id={self.curve_id!r}"
+            f" kdf={self.kdf!r}"
+            ">"
         )
 
 
@@ -389,7 +387,7 @@ class TpmsEccPoint:
         self.y = y
 
     def __repr__(self):
-        return "<TpmsEccPoint" " x={self.x}" " y={self.y}" ">".format(self=self)
+        return f"<TpmsEccPoint x={self.x} y={self.y}>"
 
 
 class TpmPublicFormat:
@@ -440,9 +438,7 @@ class TpmPublicFormat:
 
         attributes = reader.unpack("!L")
         if attributes & TpmPublicFormat.ATTRIBUTES.SHALL_BE_ZERO != 0:
-            raise ValueError(
-                "attributes is not formated correctly: 0x{:x}".format(attributes)
-            )
+            raise ValueError(f"attributes is not formated correctly: 0x{attributes:x}")
 
         auth_policy = reader.read(reader.unpack("!H"))
 
@@ -453,9 +449,7 @@ class TpmPublicFormat:
             parameters = TpmsEccParms.parse(reader)
             unique = TpmsEccPoint.parse(reader)
         else:
-            raise NotImplementedError(
-                "sign alg {:x} is not " "supported".format(sign_alg)
-            )
+            raise NotImplementedError(f"sign alg {sign_alg:x} is not supported")
 
         rest = reader.read()
         if len(rest) != 0:
@@ -479,13 +473,13 @@ class TpmPublicFormat:
     def __repr__(self):
         return (
             "<TpmPublicFormat"
-            " sign_alg=0x{self.sign_alg:x}"
-            " name_alg=0x{self.name_alg:x}"
-            " attributes=0x{self.attributes:x}({self.attributes!r})"
-            " auth_policy={self.auth_policy}"
-            " parameters={self.parameters}"
-            " unique={self.unique}"
-            ">".format(self=self)
+            f" sign_alg=0x{self.sign_alg:x}"
+            f" name_alg=0x{self.name_alg:x}"
+            f" attributes=0x{self.attributes:x}({self.attributes!r})"
+            f" auth_policy={self.auth_policy}"
+            f" parameters={self.parameters}"
+            f" unique={self.unique}"
+            ">"
         )
 
     def public_key(self):
@@ -500,9 +494,7 @@ class TpmPublicFormat:
                 self.parameters.to_curve(),
             ).public_key(default_backend())
 
-        raise NotImplementedError(
-            "public_key not implemented for {0!r}".format(self.sign_alg)
-        )
+        raise NotImplementedError(f"public_key not implemented for {self.sign_alg!r}")
 
     def name(self):
         """

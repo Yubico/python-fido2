@@ -69,7 +69,7 @@ class CtapPcscDevice(CtapDevice):
                 raise ValueError("Unsupported device")
 
     def __repr__(self):
-        return "CtapPcscDevice(%s)" % self._name
+        return f"CtapPcscDevice({self._name})"
 
     @property
     def version(self):

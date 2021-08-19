@@ -113,7 +113,7 @@ class CtapHidDevice(CtapDevice):
         self._device_version = (v1, v2, v3)
 
     def __repr__(self):
-        return "CtapHidDevice(%s)" % self.descriptor.path
+        return f"CtapHidDevice({self.descriptor.path})"
 
     @property
     def version(self):
@@ -189,7 +189,7 @@ class CtapHidDevice(CtapDevice):
                         pass  # first data packet
                     elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
                         ka_status = struct.unpack_from(">B", recv)[0]
-                        logger.debug("Got keepalive status: %02x" % ka_status)
+                        logger.debug(f"Got keepalive status: {ka_status:02x}")
                         if on_keepalive and ka_status != last_ka:
                             try:
                                 ka_status = STATUS(ka_status)
