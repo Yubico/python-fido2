@@ -33,8 +33,6 @@ See the file README.adoc in this directory for details.
 
 Navigate to https://localhost:5000 in a supported web browser.
 """
-from __future__ import print_function, absolute_import, unicode_literals
-
 from fido2.webauthn import (
     PublicKeyCredentialRpEntity,
     AttestationObject,
