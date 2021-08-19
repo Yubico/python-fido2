@@ -28,8 +28,7 @@
 from .. import cbor
 from ..utils import sha256
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
 import struct
@@ -44,13 +43,12 @@ def _lb_ad(orig_size):
 def _lb_pack(key, data):
     orig_size = len(data)
     nonce = os.urandom(12)
-    cipher = Cipher(algorithms.AES(key), modes.GCM(nonce), default_backend())
-    encryptor = cipher.encryptor()
-    encryptor.authenticate_additional_data(_lb_ad(orig_size))
-    ciphertext = encryptor.update(zlib.compress(data)) + encryptor.finalize()
+    aesgcm = AESGCM(key)
+
+    ciphertext = aesgcm.encrypt(nonce, zlib.compress(data), _lb_ad(orig_size))
 
     return {
-        1: ciphertext + encryptor.tag,
+        1: ciphertext,
         2: nonce,
         3: orig_size,
     }
@@ -58,18 +56,14 @@ def _lb_pack(key, data):
 
 def _lb_unpack(key, entry):
     try:
-        ciphertext, tag = entry[1][:-16], entry[1][-16:]
+        ciphertext = entry[1]
         nonce = entry[2]
         orig_size = entry[3]
-        cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), default_backend())
-        decryptor = cipher.decryptor()
-        decryptor.authenticate_additional_data(_lb_ad(orig_size))
+        aesgcm = AESGCM(key)
+        compressed = aesgcm.decrypt(nonce, ciphertext, _lb_ad(orig_size))
+        return compressed, orig_size
     except (TypeError, IndexError, KeyError):
         raise ValueError("Invalid entry")
-
-    try:
-        compressed = decryptor.update(ciphertext) + decryptor.finalize()
-        return compressed, orig_size
     except InvalidTag:
         raise ValueError("Wrong key")
 
