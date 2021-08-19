@@ -31,8 +31,6 @@ creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
-from __future__ import print_function, absolute_import, unicode_literals
-
 from fido2.hid import CtapHidDevice
 from fido2.ctap2 import LargeBlobs
 from fido2.ctap2.pin import ClientPin
@@ -84,7 +82,7 @@ else:
     print("PIN not set, won't use")
 
 
-server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
+server = Fido2Server({"id": "example.com", "name": "Example RP"})
 
 user = {"id": b"user_id", "name": "A. User"}
 

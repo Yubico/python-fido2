@@ -32,8 +32,6 @@ fingerprint. This requires that a PIN is already set.
 NOTE: This uses a draft bio enrollment specification which is not yet final.
 Consider this highly experimental.
 """
-from __future__ import print_function, absolute_import, unicode_literals
-
 from fido2.hid import CtapHidDevice
 from fido2.ctap2 import Ctap2, FPBioEnrollment, CaptureError
 from fido2.ctap2.pin import ClientPin
@@ -77,4 +75,6 @@ while template_id is None:
         print(enroller.remaining, "more scans needed.")
     except CaptureError as e:
         print(e)
+bio.set_name(template_id, "Example")
+
 print("Fingerprint registered successfully with ID:", template_id)

@@ -30,8 +30,6 @@ Connects to the first FIDO device found which supports the HmacSecret extension,
 creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
-from __future__ import print_function, absolute_import, unicode_literals
-
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client
 from getpass import getpass

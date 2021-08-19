@@ -142,7 +142,7 @@ class AttestationVerifier(abc.ABC):
         # includes the auth_data. The caller may choose to handle this case
         # and allow the registration.
         result = att_verifier.verify(
-            attestation_object.att_statement,
+            attestation_object.att_stmt,
             attestation_object.auth_data,
             client_data_hash,
         )

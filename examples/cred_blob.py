@@ -29,8 +29,6 @@
 Connects to the first FIDO device found which supports the CredBlob extension,
 creates a new credential for it with the extension enabled, and stores some data.
 """
-from __future__ import print_function, absolute_import, unicode_literals
-
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client
 from fido2.server import Fido2Server
@@ -63,21 +61,32 @@ else:
 
 use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
 
-# Prepare parameters for makeCredential
+# Prefer UV token if supported
+pin = None
+uv = "discouraged"
+if client.info.options.get("pinUvAuthToken") and client.info.options.get("uv"):
+    uv = "preferred"
+    print("Authenticator supports UV token")
+elif client.info.options.get("clientPin"):
+    # Prompt for PIN if needed
+    pin = getpass("Please enter PIN: ")
+else:
+    print("PIN not set, won't use")
+
+
 server = Fido2Server({"id": "example.com", "name": "Example RP"})
 user = {"id": b"user_id", "name": "A. User"}
-create_options, state = server.register_begin(user, resident_key=True)
+# Prepare parameters for makeCredential
+create_options, state = server.register_begin(
+    user,
+    resident_key=True,
+    user_verification=uv,
+    authenticator_attachment="cross-platform",
+)
 
 # Add CredBlob extension, attach data
 blob = os.urandom(32)  # 32 random bytes
-create_options["publicKey"]["extensions"] = {"credBlob": blob}
-
-# Prompt for PIN if needed
-pin = None
-if client.info.options.get("clientPin"):
-    pin = getpass("Please enter PIN:")
-else:
-    print("no pin")
+create_options["publicKey"].extensions = {"credBlob": blob}
 
 # Create a credential
 if not use_nfc:
@@ -101,9 +110,7 @@ print("New credential created, with the CredBlob extension.")
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin()
-request_options["publicKey"]["extensions"] = {
-    "getCredBlob": True,
-}
+request_options["publicKey"].extensions = {"getCredBlob": True}
 
 # Authenticate the credential
 if not use_nfc:

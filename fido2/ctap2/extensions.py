@@ -190,6 +190,9 @@ class MinPinLengthExtension(Ctap2Extension):
 
     NAME = "minPinLength"
 
+    def is_supported(self):  # NB: There is no key in the extensions field.
+        return "setMinPINLength" in self.ctap.info.options
+
     def process_create_input(self, inputs):
         if self.is_supported() and inputs.get(self.NAME) is True:
             return True

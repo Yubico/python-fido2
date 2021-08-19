@@ -34,8 +34,6 @@ creates a new credential for it, and verifies that attestation is signed by the
 Yubico FIDO root CA (this will only work for Yubico devices).
 On Windows, the native WebAuthn API will be used.
 """
-from __future__ import print_function, absolute_import, unicode_literals
-
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client, WindowsClient
 from fido2.server import Fido2Server, AttestationVerifier

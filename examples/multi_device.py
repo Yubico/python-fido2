@@ -30,8 +30,6 @@ Connects to each FIDO device found, and causes them all to blink until the user
 triggers one to select it. A new credential is created for that authenticator,
 and the operation is cancelled for the others.
 """
-from __future__ import print_function, absolute_import, unicode_literals
-
 from fido2.hid import CtapHidDevice, STATUS
 from fido2.client import Fido2Client, ClientError
 from threading import Event, Thread
@@ -50,7 +48,7 @@ rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
 challenge = b"Y2hhbGxlbmdl"
 cancel = Event()
-attestation, client_data = None, None
+result = None
 
 has_prompted = False
 
@@ -63,9 +61,9 @@ def on_keepalive(status):
 
 
 def work(client):
-    global attestation, client_data
+    global result
     try:
-        attestation, client_data = client.make_credential(
+        result = client.make_credential(
             {
                 "rp": rp,
                 "user": user,
@@ -81,10 +79,6 @@ def work(client):
         else:
             return
     cancel.set()
-    print("New credential created!")
-    print("ATTESTATION OBJECT:", attestation)
-    print()
-    print("CREDENTIAL DATA:", attestation.auth_data.credential_data)
 
 
 threads = []
@@ -96,5 +90,10 @@ for client in clients:
 for t in threads:
     t.join()
 
-if not cancel.is_set():
+if cancel.is_set():
+    print("New credential created!")
+    print("ATTESTATION OBJECT:", result.attestation_object)
+    print()
+    print("CREDENTIAL DATA:", result.attestation_object.auth_data.credential_data)
+else:
     print("Operation timed out!")
