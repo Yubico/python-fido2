@@ -64,7 +64,7 @@ class UsbDeviceInfo(Structure):
 
 class OpenBsdCtapHidConnection(FileCtapHidConnection):
     def __init__(self, descriptor):
-        super(OpenBsdCtapHidConnection, self).__init__(descriptor)
+        super().__init__(descriptor)
         try:
             self._terrible_ping_kludge()
         except Exception:

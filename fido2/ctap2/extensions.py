@@ -74,7 +74,7 @@ class HmacSecretExtension(Ctap2Extension):
     SALT_LEN = 32
 
     def __init__(self, ctap, pin_protocol=None):
-        super(HmacSecretExtension, self).__init__(ctap)
+        super().__init__(ctap)
         self.pin_protocol = pin_protocol
 
     def process_create_input(self, inputs):

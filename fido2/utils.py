@@ -134,7 +134,7 @@ class ByteBuffer(BytesIO):
         """Like BytesIO.read(), but checks the number of bytes read and raises an error
         if fewer bytes were read than expected.
         """
-        data = super(ByteBuffer, self).read(size)
+        data = super().read(size)
         if size > 0 and len(data) != size:
             raise ValueError(
                 "Not enough data to read (need: %d, had: %d)." % (size, len(data))

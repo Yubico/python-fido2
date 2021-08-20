@@ -85,7 +85,7 @@ class BioEnrollment:
 class CaptureError(Exception):
     def __init__(self, code):
         self.code = code
-        super(CaptureError, self).__init__(f"Fingerprint capture error: {code}")
+        super().__init__(f"Fingerprint capture error: {code}")
 
 
 class FPEnrollmentContext:
@@ -184,7 +184,7 @@ class FPBioEnrollment(BioEnrollment):
             return f"0x{self.value:02X} - {self.name}"
 
     def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
-        super(FPBioEnrollment, self).__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)
+        super().__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)
         self.pin_uv_protocol = pin_uv_protocol
         self.pin_uv_token = pin_uv_token
 

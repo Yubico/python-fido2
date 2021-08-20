@@ -54,7 +54,7 @@ import inspect
 
 class ClientData(bytes):
     def __init__(self, _):
-        super(ClientData, self).__init__()
+        super().__init__()
         self._data = json.loads(self.decode())
 
     def get(self, key: str) -> Any:
@@ -153,7 +153,7 @@ class PinRequiredError(ClientError):
     def __init__(
         self, code=ClientError.ERR.BAD_REQUEST, cause="Pin required but not provided"
     ):
-        super(PinRequiredError, self).__init__(code, cause)
+        super().__init__(code, cause)
 
 
 def _call_polling(poll_delay, event, on_keepalive, func, *args, **kwargs):
@@ -372,7 +372,7 @@ class Fido2ClientAssertionSelection(AssertionSelection):
         assertions: Sequence[AssertionResponse],
         extensions: Sequence[Ctap2Extension],
     ):
-        super(Fido2ClientAssertionSelection, self).__init__(client_data, assertions)
+        super().__init__(client_data, assertions)
         self._extensions = extensions
 
     def _get_extension_results(self, assertion):
@@ -415,7 +415,7 @@ class Fido2Client(_BaseClient):
         verify: Callable[[str, str], bool] = verify_rp_id,
         extension_types: Sequence[Type[Ctap2Extension]] = [],
     ):
-        super(Fido2Client, self).__init__(origin, verify)
+        super().__init__(origin, verify)
 
         self.extensions = extension_types or _default_extensions()
         self.ctap1_poll_delay = 0.25
@@ -876,7 +876,7 @@ class WindowsClient(_BaseClient):
         verify: Callable[[str, str], bool] = verify_rp_id,
         handle=None,
     ):
-        super(WindowsClient, self).__init__(origin, verify)
+        super().__init__(origin, verify)
         self.api = WinAPI(handle)
 
     @property

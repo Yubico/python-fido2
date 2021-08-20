@@ -55,7 +55,7 @@ class UntrustedAttestation(InvalidAttestation):
 
 class UnsupportedType(InvalidAttestation):
     def __init__(self, auth_data, fmt=None):
-        super(UnsupportedType, self).__init__(
+        super().__init__(
             f'Attestation format "{fmt}" is not supported'
             if fmt
             else "This attestation format is not supported!"
@@ -134,7 +134,7 @@ class Attestation(abc.ABC):
 
         class TypedUnsupportedAttestation(UnsupportedAttestation):
             def __init__(self):
-                super(TypedUnsupportedAttestation, self).__init__(fmt)
+                super().__init__(fmt)
 
         return TypedUnsupportedAttestation
 

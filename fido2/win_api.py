@@ -642,7 +642,7 @@ def get_version(class_name: str) -> int:
 
 class CancelThread(Thread):
     def __init__(self, event):
-        super(CancelThread, self).__init__()
+        super().__init__()
         self.daemon = True
         self._completed = False
         self.event = event

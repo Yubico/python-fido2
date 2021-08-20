@@ -37,7 +37,7 @@ HIDIOCGRAWUNIQ = 0x90044808
 class LinuxCtapHidConnection(FileCtapHidConnection):
     def write_packet(self, packet):
         # Prepend the report ID
-        super(LinuxCtapHidConnection, self).write_packet(b"\0" + packet)
+        super().write_packet(b"\0" + packet)
 
 
 def open_connection(descriptor):

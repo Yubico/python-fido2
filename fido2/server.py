@@ -373,7 +373,7 @@ class U2FFido2Server(Fido2Server):
     """
 
     def __init__(self, app_id, rp, verify_u2f_origin=None, *args, **kwargs):
-        super(U2FFido2Server, self).__init__(rp, *args, **kwargs)
+        super().__init__(rp, *args, **kwargs)
         if verify_u2f_origin:
             kwargs["verify_origin"] = verify_u2f_origin
         else:
@@ -385,16 +385,16 @@ class U2FFido2Server(Fido2Server):
 
     def register_begin(self, *args, **kwargs):
         kwargs.setdefault("extensions", {})["appidExclude"] = self._app_id
-        req, state = super(U2FFido2Server, self).register_begin(*args, **kwargs)
+        req, state = super().register_begin(*args, **kwargs)
         return req, state
 
     def authenticate_begin(self, *args, **kwargs):
         kwargs.setdefault("extensions", {})["appid"] = self._app_id
-        req, state = super(U2FFido2Server, self).authenticate_begin(*args, **kwargs)
+        req, state = super().authenticate_begin(*args, **kwargs)
         return req, state
 
     def authenticate_complete(self, *args, **kwargs):
         try:
-            return super(U2FFido2Server, self).authenticate_complete(*args, **kwargs)
+            return super().authenticate_complete(*args, **kwargs)
         except ValueError:
             return self._app_id_server.authenticate_complete(*args, **kwargs)
