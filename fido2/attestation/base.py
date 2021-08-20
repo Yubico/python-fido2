@@ -25,7 +25,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from enum import Enum
+from enum import IntEnum, unique
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
@@ -64,7 +64,8 @@ class UnsupportedType(InvalidAttestation):
         self.fmt = fmt
 
 
-class AttestationType(Enum):
+@unique
+class AttestationType(IntEnum):
     BASIC = 1
     SELF = 2
     ATT_CA = 3

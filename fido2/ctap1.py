@@ -30,6 +30,7 @@ from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
 from .cose import ES256
 from .attestation import FidoU2FAttestation
 from enum import IntEnum, unique
+from dataclasses import dataclass
 import struct
 
 
@@ -59,6 +60,7 @@ class ApduError(Exception):
         return f"APDU error: 0x{self.code:04X} {len(self.data):d} bytes of data"
 
 
+@dataclass(init=False)
 class RegistrationData(bytes):
     """Binary response data for a CTAP1 registration.
 
@@ -70,26 +72,30 @@ class RegistrationData(bytes):
     :ivar signature: Attestation signature.
     """
 
-    def __init__(self, _):
-        super(RegistrationData, self).__init__()
+    public_key: bytes
+    key_handle: bytes
+    certificate: bytes
+    signature: bytes
 
-        if self[0] != 0x05:
+    def __init__(self, _):
+        super().__init__()
+
+        reader = ByteBuffer(self)
+        if reader.unpack("B") != 0x05:
             raise ValueError("Reserved byte != 0x05")
 
-        self.public_key = self[1:66]
-        kh_len = self[66]
-        self.key_handle = self[67 : 67 + kh_len]
+        self.public_key = reader.read(65)
+        self.key_handle = reader.read(reader.unpack("B"))
 
-        cert_offs = 67 + kh_len
-        cert_len = self[cert_offs + 1]
-        if cert_len > 0x80:
+        cert_buf = reader.read(2)  # Tag and first length byte
+        cert_len = cert_buf[1]
+        if cert_len > 0x80:  # Multi-byte length
             n_bytes = cert_len - 0x80
-            cert_len = (
-                bytes2int(self[cert_offs + 2 : cert_offs + 2 + n_bytes]) + n_bytes
-            )
-        cert_len += 2
-        self.certificate = self[cert_offs : cert_offs + cert_len]
-        self.signature = self[cert_offs + cert_len :]
+            len_bytes = reader.read(n_bytes)
+            cert_buf += len_bytes
+            cert_len = bytes2int(len_bytes)
+        self.certificate = cert_buf + reader.read(cert_len)
+        self.signature = reader.read()
 
     @property
     def b64(self):
@@ -112,23 +118,6 @@ class RegistrationData(bytes):
             self.signature,
         )
 
-    def __repr__(self):
-        return (
-            "RegistrationData(public_key: h'%s', key_handle: h'%s', "
-            "certificate: h'%s', signature: h'%s')"
-        ) % tuple(
-            (x).hex()
-            for x in (
-                self.public_key,
-                self.key_handle,
-                self.certificate,
-                self.signature,
-            )
-        )
-
-    def __str__(self):
-        return f"{self!r}"
-
     @classmethod
     def from_b64(cls, data):
         """Parse a RegistrationData from a websafe base64 encoded string.
@@ -139,6 +128,7 @@ class RegistrationData(bytes):
         return cls(websafe_decode(data))
 
 
+@dataclass(init=False)
 class SignatureData(bytes):
     """Binary response data for a CTAP1 authentication.
 
@@ -148,8 +138,12 @@ class SignatureData(bytes):
     :ivar signature: Cryptographic signature.
     """
 
+    user_presence: int
+    counter: int
+    signature: bytes
+
     def __init__(self, _):
-        super(SignatureData, self).__init__()
+        super().__init__()
 
         reader = ByteBuffer(self)
         self.user_presence = reader.unpack("B")
@@ -171,14 +165,6 @@ class SignatureData(bytes):
         """
         m = app_param + self[:5] + client_param
         ES256.from_ctap1(public_key).verify(m, self.signature)
-
-    def __repr__(self):
-        return (
-            "SignatureData(user_presence: 0x%02x, counter: %d, " "signature: h'%s'"
-        ) % (self.user_presence, self.counter, self.signature.hex())
-
-    def __str__(self):
-        return f"{self!r}"
 
     @classmethod
     def from_b64(cls, data):
@@ -263,6 +249,3 @@ class Ctap1:
         p1 = 0x07 if check_only else 0x03
         response = self.send_apdu(ins=Ctap1.INS.AUTHENTICATE, p1=p1, data=data)
         return SignatureData(response)
-
-
-CTAP1 = Ctap1
