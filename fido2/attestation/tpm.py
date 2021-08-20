@@ -39,13 +39,14 @@ from .base import (
 from ..cose import CoseKey
 from ..utils import bytes2int, ByteBuffer
 
-from enum import IntEnum
+from enum import IntEnum, unique
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives import hashes
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import dataclass
+from typing import Tuple, Union, cast
 
 import struct
 
@@ -54,6 +55,7 @@ TPM_ALG_NULL = 0x0010
 OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
 
 
+@unique
 class TpmRsaScheme(IntEnum):
     RSASSA = 0x0014
     RSAPSS = 0x0016
@@ -61,11 +63,13 @@ class TpmRsaScheme(IntEnum):
     RSAES = 0x0015
 
 
+@unique
 class TpmAlgAsym(IntEnum):
     RSA = 0x0001
     ECC = 0x0023
 
 
+@unique
 class TpmAlgHash(IntEnum):
     SHA1 = 0x0004
     SHA256 = 0x000B
@@ -91,6 +95,11 @@ class TpmsCertifyInfo:
     qualified_name: bytes
 
 
+TPM_GENERATED_VALUE = b"\xffTCG"
+TPM_ST_ATTEST_CERTIFY = b"\x80\x17"
+
+
+@dataclass
 class TpmAttestationFormat:
     """the signature data is defined by [TPMv2-Part2] Section 10.12.8 (TPMS_ATTEST)
     as:
@@ -118,8 +127,11 @@ class TpmAttestationFormat:
       https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-3-Commands-01.38.pdf
     """
 
-    TPM_GENERATED_VALUE = b"\xffTCG"
-    TPM_ST_ATTEST_CERTIFY = b"\x80\x17"
+    name: bytes
+    data: bytes
+    clock_info: Tuple[int, int, int, bool]
+    firmware_version: int
+    attested: TpmsCertifyInfo
 
     @classmethod
     def parse(cls, data):
@@ -129,14 +141,14 @@ class TpmAttestationFormat:
         # Verify that magic is set to TPM_GENERATED_VALUE.
         # see https://w3c.github.io/webauthn/#sctn-tpm-attestation
         #     verification procedure
-        if generated_value != cls.TPM_GENERATED_VALUE:
+        if generated_value != TPM_GENERATED_VALUE:
             raise ValueError("generated value field is invalid")
 
         # Verify that type is set to TPM_ST_ATTEST_CERTIFY.
         # see https://w3c.github.io/webauthn/#sctn-tpm-attestation
         #     verification procedure
         tpmi_st_attest = reader.read(2)
-        if tpmi_st_attest != cls.TPM_ST_ATTEST_CERTIFY:
+        if tpmi_st_attest != TPM_ST_ATTEST_CERTIFY:
             raise ValueError("tpmi_st_attest field is invalid")
 
         try:
@@ -168,25 +180,8 @@ class TpmAttestationFormat:
             ),
         )
 
-    def __init__(self, name, data, clock_info, firmware_version, attested):
-        self.name = name
-        self.data = data
-        self.clock_info = clock_info
-        self.firmware_version = firmware_version
-        self.attested = attested
 
-    def __repr__(self):
-        return (
-            "<TpmAttestationFormat"
-            f" data={self.data}"
-            f" name={self.name}"
-            f" clock_info={self.clock_info}"
-            f" firmware_version=0x{self.firmware_version:x}"
-            f" attested={self.attested}"
-            ">"
-        )
-
-
+@dataclass
 class TpmsRsaParms:
     """Parse TPMS_RSA_PARMS struct
 
@@ -195,10 +190,13 @@ class TpmsRsaParms:
     section 12.2.3.5
     """
 
+    symmetric: int
+    scheme: int
+    key_bits: int
+    exponent: int
+
     @classmethod
     def parse(cls, reader, attributes):
-        ATTRIBUTES = TpmPublicFormat.ATTRIBUTES
-
         symmetric = reader.unpack("!H")
 
         restricted_decryption = attributes & (
@@ -267,31 +265,14 @@ class TpmsRsaParms:
 
         return cls(symmetric, scheme, key_bits, exponent)
 
-    def __init__(self, symmetric, scheme, key_bits, exponent):
-        self.symmetric = symmetric
-        self.scheme = scheme
-        self.key_bits = key_bits
-        self.exponent = exponent
-
-    def __repr__(self):
-        return (
-            "<TpmsRsaParms"
-            f" symmetric=0x{self.symmetric:x}"
-            f" scheme=0x{self.scheme:x}"
-            f" key_bits={self.key_bits}"
-            f" exponent={self.exponent}"
-            ">"
-        )
-
 
 class Tpm2bPublicKeyRsa(bytes):
     @classmethod
     def parse(cls, reader):
-        buffer = reader.read(reader.unpack("!H"))
-
-        return cls(buffer)
+        return cls(reader.read(reader.unpack("!H")))
 
 
+@unique
 class TpmEccCurve(IntEnum):
     """TPM_ECC_CURVE
     https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
@@ -325,6 +306,7 @@ class TpmEccCurve(IntEnum):
         raise ValueError("curve is not supported", self)
 
 
+@unique
 class TpmiAlgKdf(IntEnum):
     """TPMI_ALG_KDF
     https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
@@ -337,7 +319,13 @@ class TpmiAlgKdf(IntEnum):
     KDF1_SP800_108 = 0x0022
 
 
+@dataclass
 class TpmsEccParms:
+    symmetric: int
+    scheme: int
+    curve_id: TpmEccCurve
+    kdf: TpmiAlgKdf
+
     @classmethod
     def parse(cls, reader):
         symmetric = reader.unpack("!H")
@@ -352,28 +340,16 @@ class TpmsEccParms:
 
         return cls(symmetric, scheme, curve_id, kdf_scheme)
 
-    def __init__(self, symmetric, scheme, curve_id, kdf):
-        self.symmetric = symmetric
-        self.scheme = scheme
-        self.curve_id = curve_id
-        self.kdf = kdf
 
-    def __repr__(self):
-        return (
-            "<TpmsEccParms"
-            f" symmetric=0x{self.symmetric:x}"
-            f" scheme=0x{self.scheme:x}"
-            f" curve_id={self.curve_id!r}"
-            f" kdf={self.kdf!r}"
-            ">"
-        )
-
-
+@dataclass
 class TpmsEccPoint:
     """TPMS_ECC_POINT
     https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
     Section 11.2.5.2
     """
+
+    x: bytes
+    y: bytes
 
     @classmethod
     def parse(cls, reader):
@@ -382,14 +358,36 @@ class TpmsEccPoint:
 
         return cls(x, y)
 
-    def __init__(self, x, y):
-        self.x = y
-        self.y = y
 
-    def __repr__(self):
-        return f"<TpmsEccPoint x={self.x} y={self.y}>"
+@unique
+class ATTRIBUTES(IntEnum):
+    """Object attributes
+    see section 8.3
+      https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+    """
+
+    FIXED_TPM = 1 << 1
+    ST_CLEAR = 1 << 2
+    FIXED_PARENT = 1 << 4
+    SENSITIVE_DATA_ORIGIN = 1 << 5
+    USER_WITH_AUTH = 1 << 6
+    ADMIN_WITH_POLICY = 1 << 7
+    NO_DA = 1 << 10
+    ENCRYPTED_DUPLICATION = 1 << 11
+    RESTRICTED = 1 << 16
+    DECRYPT = 1 << 17
+    SIGN_ENCRYPT = 1 << 18
+
+    SHALL_BE_ZERO = (
+        (1 << 0)  # 0 Reserved
+        | (1 << 3)  # 3 Reserved
+        | (0x3 << 8)  # 9:8 Reserved
+        | (0xF << 12)  # 15:12 Reserved
+        | ((0xFFFFFFFF << 19) & (2 ** 32 - 1))  # 31:19 Reserved
+    )
 
 
+@dataclass
 class TpmPublicFormat:
     """the public area structure is defined by [TPMv2-Part2] Section 12.2.4 (TPMT_PUBLIC)
     as:
@@ -404,31 +402,13 @@ class TpmPublicFormat:
       https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
     """
 
-    class ATTRIBUTES(IntEnum):
-        """Object attributes
-        see section 8.3
-          https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
-        """
-
-        FIXED_TPM = 1 << 1
-        ST_CLEAR = 1 << 2
-        FIXED_PARENT = 1 << 4
-        SENSITIVE_DATA_ORIGIN = 1 << 5
-        USER_WITH_AUTH = 1 << 6
-        ADMIN_WITH_POLICY = 1 << 7
-        NO_DA = 1 << 10
-        ENCRYPTED_DUPLICATION = 1 << 11
-        RESTRICTED = 1 << 16
-        DECRYPT = 1 << 17
-        SIGN_ENCRYPT = 1 << 18
-
-        SHALL_BE_ZERO = (
-            (1 << 0)  # 0 Reserved
-            | (1 << 3)  # 3 Reserved
-            | (0x3 << 8)  # 9:8 Reserved
-            | (0xF << 12)  # 15:12 Reserved
-            | ((0xFFFFFFFF << 19) & (2 ** 32 - 1))  # 31:19 Reserved
-        )
+    sign_alg: TpmAlgAsym
+    name_alg: TpmAlgHash
+    attributes: int
+    auth_policy: bytes
+    parameters: Union[TpmsRsaParms, TpmsEccParms]
+    unique: Union[Tpm2bPublicKeyRsa, TpmsEccPoint]
+    data: bytes
 
     @classmethod
     def parse(cls, data):
@@ -437,7 +417,7 @@ class TpmPublicFormat:
         name_alg = TpmAlgHash(reader.unpack("!H"))
 
         attributes = reader.unpack("!L")
-        if attributes & TpmPublicFormat.ATTRIBUTES.SHALL_BE_ZERO != 0:
+        if attributes & ATTRIBUTES.SHALL_BE_ZERO != 0:
             raise ValueError(f"attributes is not formated correctly: 0x{attributes:x}")
 
         auth_policy = reader.read(reader.unpack("!H"))
@@ -459,39 +439,17 @@ class TpmPublicFormat:
             sign_alg, name_alg, attributes, auth_policy, parameters, unique, data
         )
 
-    def __init__(
-        self, sign_alg, name_alg, attributes, auth_policy, parameters, unique, data
-    ):
-        self.sign_alg = sign_alg
-        self.name_alg = name_alg
-        self.attributes = attributes
-        self.auth_policy = auth_policy
-        self.parameters = parameters
-        self.unique = unique
-        self.data = data
-
-    def __repr__(self):
-        return (
-            "<TpmPublicFormat"
-            f" sign_alg=0x{self.sign_alg:x}"
-            f" name_alg=0x{self.name_alg:x}"
-            f" attributes=0x{self.attributes:x}({self.attributes!r})"
-            f" auth_policy={self.auth_policy}"
-            f" parameters={self.parameters}"
-            f" unique={self.unique}"
-            ">"
-        )
-
     def public_key(self):
         if self.sign_alg == TpmAlgAsym.RSA:
-            exponent = self.parameters.exponent
-            modulus = bytes2int(self.unique)
+            exponent = cast(TpmsRsaParms, self.parameters).exponent
+            modulus = bytes2int(cast(Tpm2bPublicKeyRsa, self.unique))
             return rsa.RSAPublicNumbers(exponent, modulus).public_key(default_backend())
         elif self.sign_alg == TpmAlgAsym.ECC:
+            unique = cast(TpmsEccPoint, self.unique)
             return ec.EllipticCurvePublicNumbers(
-                bytes2int(self.unique.x),
-                bytes2int(self.unique.y),
-                self.parameters.to_curve(),
+                bytes2int(unique.x),
+                bytes2int(unique.y),
+                cast(TpmsEccParms, self.parameters).curve_id.to_curve(),
             ).public_key(default_backend())
 
         raise NotImplementedError(f"public_key not implemented for {self.sign_alg!r}")
