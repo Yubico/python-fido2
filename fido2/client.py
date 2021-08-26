@@ -45,7 +45,18 @@ from .rpid import verify_rp_id, verify_app_id
 from .utils import sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
 from threading import Timer, Event
-from typing import Type, Any, Union, Callable, Optional, Mapping, Sequence
+from typing import (
+    Type,
+    Any,
+    Union,
+    Callable,
+    Optional,
+    Mapping,
+    Sequence,
+    Tuple,
+    List,
+    Dict,
+)
 
 import json
 import platform
@@ -394,45 +405,124 @@ def _default_extensions() -> Sequence[Type[Ctap2Extension]]:
     ]
 
 
-_CTAP1_INFO = Info.create(versions=["U2F_V2"], aaguid=b"\0" * 32)
+class _ClientBackend:
+    info: Info
+
+    def do_make_credential(self, *args) -> Tuple[AttestationObject, Dict[str, Any]]:
+        raise NotImplementedError()
+
+    def do_get_assertion(
+        self, *args
+    ) -> Tuple[List[AssertionResponse], List[Ctap2Extension]]:
+        raise NotImplementedError()
 
 
-class Fido2Client(_BaseClient):
-    """WebAuthn-like client implementation.
+class _Ctap1ClientBackend(_ClientBackend):
+    def __init__(self, device):
+        self.ctap1 = Ctap1(device)
+        self.info = Info.create(versions=["U2F_V2"], aaguid=b"\0" * 32)
+        self._poll_delay = 0.25
 
-    The client allows registration and authentication of WebAuthn credentials against
-    an Authenticator using CTAP (1 or 2).
-
-    :param device: CtapDevice to use.
-    :param str origin: The origin to use.
-    :param verify: Function to verify an RP ID for a given origin.
-    """
-
-    def __init__(
+    def do_make_credential(
         self,
-        device: CtapDevice,
-        origin: str,
-        verify: Callable[[str, str], bool] = verify_rp_id,
-        extension_types: Sequence[Type[Ctap2Extension]] = [],
+        client_data,
+        rp,
+        user,
+        key_params,
+        exclude_list,
+        extensions,
+        rk,
+        user_verification,
+        pin,
+        event,
+        on_keepalive,
     ):
-        super().__init__(origin, verify)
+        if (
+            rk
+            or user_verification == UserVerificationRequirement.REQUIRED
+            or ES256.ALGORITHM not in [p.alg for p in key_params]
+        ):
+            raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
-        self.extensions = extension_types or _default_extensions()
-        self.ctap1_poll_delay = 0.25
-        try:
-            self.ctap2 = Ctap2(device)
-            self.info = self.ctap2.info
+        app_param = sha256(rp["id"].encode())
+
+        dummy_param = b"\0" * 32
+        for cred in exclude_list or []:
+            key_handle = cred["id"]
             try:
-                self.client_pin: ClientPin = ClientPin(self.ctap2)
-            except ValueError:
-                self.client_pin = None  # type: ignore
-            self._do_make_credential = self._ctap2_make_credential
-            self._do_get_assertion = self._ctap2_get_assertion
-        except (ValueError, CtapError):
-            self.ctap1 = Ctap1(device)
-            self.info = _CTAP1_INFO
-            self._do_make_credential = self._ctap1_make_credential
-            self._do_get_assertion = self._ctap1_get_assertion
+                self.ctap1.authenticate(dummy_param, app_param, key_handle, True)
+                raise ClientError.ERR.OTHER_ERROR()  # Shouldn't happen
+            except ApduError as e:
+                if e.code == APDU.USE_NOT_SATISFIED:
+                    _call_polling(
+                        self._poll_delay,
+                        event,
+                        on_keepalive,
+                        self.ctap1.register,
+                        dummy_param,
+                        dummy_param,
+                    )
+                    raise ClientError.ERR.DEVICE_INELIGIBLE()
+
+        return (
+            AttestationObject.from_ctap1(
+                app_param,
+                _call_polling(
+                    self._poll_delay,
+                    event,
+                    on_keepalive,
+                    self.ctap1.register,
+                    client_data.hash,
+                    app_param,
+                ),
+            ),
+            {},
+        )
+
+    def do_get_assertion(
+        self,
+        client_data,
+        rp_id,
+        allow_list,
+        extensions,
+        user_verification,
+        pin,
+        event,
+        on_keepalive,
+    ):
+        if user_verification == UserVerificationRequirement.REQUIRED or not allow_list:
+            raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
+
+        app_param = sha256(rp_id.encode())
+        client_param = client_data.hash
+        for cred in allow_list:
+            try:
+                auth_resp = _call_polling(
+                    self._poll_delay,
+                    event,
+                    on_keepalive,
+                    self.ctap1.authenticate,
+                    client_param,
+                    app_param,
+                    cred["id"],
+                )
+                assertions = [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
+                return assertions, []
+            except ClientError as e:
+                if e.code == ClientError.ERR.TIMEOUT:
+                    raise  # Other errors are ignored so we move to the next.
+        raise ClientError.ERR.DEVICE_INELIGIBLE()
+
+
+class _Ctap2ClientBackend(_ClientBackend):
+    def __init__(self, device, extensions):
+        self.ctap2 = Ctap2(device)
+        self.info = self.ctap2.info
+        self.extensions = extensions
+        try:
+            self.client_pin: ClientPin = ClientPin(self.ctap2)
+        except ValueError:
+            self.client_pin = None  # type: ignore
 
     def _should_use_uv(self, user_verification, mc):
         uv_supported = any(
@@ -508,64 +598,7 @@ class Fido2Client(_BaseClient):
                 internal_uv = True
         return pin_protocol, pin_auth, internal_uv
 
-    def make_credential(
-        self,
-        options: PublicKeyCredentialCreationOptions,
-        pin: Optional[str] = None,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
-    ):
-        """Creates a credential.
-
-        :param options: PublicKeyCredentialCreationOptions data.
-        :param pin: (optional) Used if PIN verification is required.
-        :param threading.Event event: (optional) Signal to abort the operation.
-        :param on_keepalive: (optional) function to call with CTAP status updates.
-        """
-
-        options = PublicKeyCredentialCreationOptions._wrap(options)
-        event = event or Event()
-        if options.timeout:
-            timer = Timer(options.timeout / 1000, event.set)
-            timer.daemon = True
-            timer.start()
-
-        self._verify_rp_id(options.rp.id)
-
-        client_data = self._build_client_data(
-            WEBAUTHN_TYPE.MAKE_CREDENTIAL, options.challenge
-        )
-
-        selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
-
-        try:
-            att_resp, extension_outputs = self._do_make_credential(
-                client_data,
-                options.rp,
-                options.user,
-                options.pub_key_cred_params,
-                options.exclude_credentials,
-                options.extensions,
-                selection.require_resident_key,
-                selection.user_verification,
-                pin,
-                event,
-                on_keepalive,
-            )
-            return AuthenticatorAttestationResponse(
-                client_data,
-                AttestationObject.create(
-                    att_resp.fmt, att_resp.auth_data, att_resp.att_stmt
-                ),
-                extension_outputs,
-            )
-        except CtapError as e:
-            raise _ctap2client_err(e)
-        finally:
-            if options.timeout:
-                timer.cancel()
-
-    def _ctap2_make_credential(
+    def do_make_credential(
         self,
         client_data,
         rp,
@@ -643,113 +676,7 @@ class Fido2Client(_BaseClient):
 
         return att_obj, extension_outputs
 
-    def _ctap1_make_credential(
-        self,
-        client_data,
-        rp,
-        user,
-        key_params,
-        exclude_list,
-        extensions,
-        rk,
-        user_verification,
-        pin,
-        event,
-        on_keepalive,
-    ):
-        if (
-            rk
-            or user_verification == UserVerificationRequirement.REQUIRED
-            or ES256.ALGORITHM not in [p.alg for p in key_params]
-        ):
-            raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
-
-        app_param = sha256(rp["id"].encode())
-
-        dummy_param = b"\0" * 32
-        for cred in exclude_list or []:
-            key_handle = cred["id"]
-            try:
-                self.ctap1.authenticate(dummy_param, app_param, key_handle, True)
-                raise ClientError.ERR.OTHER_ERROR()  # Shouldn't happen
-            except ApduError as e:
-                if e.code == APDU.USE_NOT_SATISFIED:
-                    _call_polling(
-                        self.ctap1_poll_delay,
-                        event,
-                        on_keepalive,
-                        self.ctap1.register,
-                        dummy_param,
-                        dummy_param,
-                    )
-                    raise ClientError.ERR.DEVICE_INELIGIBLE()
-
-        return (
-            AttestationObject.from_ctap1(
-                app_param,
-                _call_polling(
-                    self.ctap1_poll_delay,
-                    event,
-                    on_keepalive,
-                    self.ctap1.register,
-                    client_data.hash,
-                    app_param,
-                ),
-            ),
-            {},
-        )
-
-    def get_assertion(
-        self,
-        options: PublicKeyCredentialRequestOptions,
-        pin: Optional[str] = None,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
-    ):
-        """Get an assertion.
-
-        :param options: PublicKeyCredentialRequestOptions data.
-        :param pin: (optional) Used if PIN verification is required.
-        :param threading.Event event: (optional) Signal to abort the operation.
-        :param on_keepalive: (optional) Not implemented.
-        """
-
-        options = PublicKeyCredentialRequestOptions._wrap(options)
-        event = event or Event()
-        if options.timeout:
-            timer = Timer(options.timeout / 1000, event.set)
-            timer.daemon = True
-            timer.start()
-
-        self._verify_rp_id(options.rp_id)
-
-        client_data = self._build_client_data(
-            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
-        )
-
-        try:
-            assertions, used_extensions = self._do_get_assertion(
-                client_data,
-                options.rp_id,
-                options.allow_credentials,
-                options.extensions,
-                options.user_verification,
-                pin,
-                event,
-                on_keepalive,
-            )
-            return Fido2ClientAssertionSelection(
-                client_data,
-                assertions,
-                used_extensions,
-            )
-        except CtapError as e:
-            raise _ctap2client_err(e)
-        finally:
-            if options.timeout:
-                timer.cancel()
-
-    def _ctap2_get_assertion(
+    def do_get_assertion(
         self,
         client_data,
         rp_id,
@@ -805,43 +732,148 @@ class Fido2Client(_BaseClient):
 
         return assertions, used_extensions
 
-    def _ctap1_get_assertion(
-        self,
-        client_data,
-        rp_id,
-        allow_list,
-        extensions,
-        user_verification,
-        pin,
-        event,
-        on_keepalive,
-    ):
-        if user_verification == UserVerificationRequirement.REQUIRED or not allow_list:
-            raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
-        app_param = sha256(rp_id.encode())
-        client_param = client_data.hash
-        for cred in allow_list:
-            try:
-                auth_resp = _call_polling(
-                    self.ctap1_poll_delay,
-                    event,
-                    on_keepalive,
-                    self.ctap1.authenticate,
-                    client_param,
-                    app_param,
-                    cred["id"],
-                )
-                assertions = [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
-                return assertions, []
-            except ClientError as e:
-                if e.code == ClientError.ERR.TIMEOUT:
-                    raise  # Other errors are ignored so we move to the next.
-        raise ClientError.ERR.DEVICE_INELIGIBLE()
+class Fido2Client(_BaseClient):
+    """WebAuthn-like client implementation.
+
+    The client allows registration and authentication of WebAuthn credentials against
+    an Authenticator using CTAP (1 or 2).
+
+    :param device: CtapDevice to use.
+    :param str origin: The origin to use.
+    :param verify: Function to verify an RP ID for a given origin.
+    """
+
+    def __init__(
+        self,
+        device: CtapDevice,
+        origin: str,
+        verify: Callable[[str, str], bool] = verify_rp_id,
+        extension_types: Sequence[Type[Ctap2Extension]] = [],
+    ):
+        super().__init__(origin, verify)
+
+        try:
+            self._backend: _ClientBackend = _Ctap2ClientBackend(
+                device, extension_types or _default_extensions()
+            )
+        except (ValueError, CtapError):
+            self._backend = _Ctap1ClientBackend(device)
+
+    @property
+    def info(self):
+        return self._backend.info
+
+    def make_credential(
+        self,
+        options: PublicKeyCredentialCreationOptions,
+        pin: Optional[str] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ):
+        """Creates a credential.
+
+        :param options: PublicKeyCredentialCreationOptions data.
+        :param pin: (optional) Used if PIN verification is required.
+        :param threading.Event event: (optional) Signal to abort the operation.
+        :param on_keepalive: (optional) function to call with CTAP status updates.
+        """
+
+        options = PublicKeyCredentialCreationOptions._wrap(options)
+        event = event or Event()
+        if options.timeout:
+            timer = Timer(options.timeout / 1000, event.set)
+            timer.daemon = True
+            timer.start()
+
+        self._verify_rp_id(options.rp.id)
+
+        client_data = self._build_client_data(
+            WEBAUTHN_TYPE.MAKE_CREDENTIAL, options.challenge
+        )
+
+        selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
+
+        try:
+            att_resp, extension_outputs = self._backend.do_make_credential(
+                client_data,
+                options.rp,
+                options.user,
+                options.pub_key_cred_params,
+                options.exclude_credentials,
+                options.extensions,
+                selection.require_resident_key,
+                selection.user_verification,
+                pin,
+                event,
+                on_keepalive,
+            )
+            return AuthenticatorAttestationResponse(
+                client_data,
+                AttestationObject.create(
+                    att_resp.fmt, att_resp.auth_data, att_resp.att_stmt
+                ),
+                extension_outputs,
+            )
+        except CtapError as e:
+            raise _ctap2client_err(e)
+        finally:
+            if options.timeout:
+                timer.cancel()
+
+    def get_assertion(
+        self,
+        options: PublicKeyCredentialRequestOptions,
+        pin: Optional[str] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ):
+        """Get an assertion.
+
+        :param options: PublicKeyCredentialRequestOptions data.
+        :param pin: (optional) Used if PIN verification is required.
+        :param threading.Event event: (optional) Signal to abort the operation.
+        :param on_keepalive: (optional) Not implemented.
+        """
+
+        options = PublicKeyCredentialRequestOptions._wrap(options)
+        event = event or Event()
+        if options.timeout:
+            timer = Timer(options.timeout / 1000, event.set)
+            timer.daemon = True
+            timer.start()
+
+        self._verify_rp_id(options.rp_id)
+
+        client_data = self._build_client_data(
+            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
+        )
+
+        try:
+            assertions, used_extensions = self._backend.do_get_assertion(
+                client_data,
+                options.rp_id,
+                options.allow_credentials,
+                options.extensions,
+                options.user_verification,
+                pin,
+                event,
+                on_keepalive,
+            )
+            return Fido2ClientAssertionSelection(
+                client_data,
+                assertions,
+                used_extensions,
+            )
+        except CtapError as e:
+            raise _ctap2client_err(e)
+        finally:
+            if options.timeout:
+                timer.cancel()
 
 
 _WIN_INFO = Info.create(versions=["U2F_V2", "FIDO_2_0"], aaguid=b"\0" * 32)
-foo = _WIN_INFO.aaguid
+
 
 if platform.system().lower() == "windows":
     try:
@@ -878,10 +910,7 @@ class WindowsClient(_BaseClient):
     ):
         super().__init__(origin, verify)
         self.api = WinAPI(handle)
-
-    @property
-    def info(self) -> Info:
-        return _WIN_INFO
+        self.info = Info.create(versions=["U2F_V2", "FIDO_2_0"], aaguid=b"\0" * 32)
 
     @staticmethod
     def is_available() -> bool:

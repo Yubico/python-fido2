@@ -428,9 +428,10 @@ class TestFido2Client(unittest.TestCase):
         dev.capabilities = 0  # No CTAP2
         client = Fido2Client(dev, APP_ID)
 
-        client.ctap1 = mock.MagicMock()
-        client.ctap1.get_version.return_value = "U2F_V2"
-        client.ctap1.register.return_value = REG_DATA
+        ctap1_mock = mock.MagicMock()
+        ctap1_mock.get_version.return_value = "U2F_V2"
+        ctap1_mock.register.return_value = REG_DATA
+        client._backend.ctap1 = ctap1_mock
 
         response = client.make_credential(
             PublicKeyCredentialCreationOptions(
@@ -442,7 +443,7 @@ class TestFido2Client(unittest.TestCase):
         self.assertIsInstance(response.client_data, ClientData)
         client_data = response.client_data
 
-        client.ctap1.register.assert_called_with(
+        ctap1_mock.register.assert_called_with(
             client_data.hash, sha256(rp["id"].encode())
         )
 
