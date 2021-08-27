@@ -30,7 +30,7 @@ Connects to the first FIDO device found which supports the CredBlob extension,
 creates a new credential for it with the extension enabled, and stores some data.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client
+from fido2.client import Fido2Client, UserInteraction
 from fido2.server import Fido2Server
 from getpass import getpass
 import sys
@@ -50,28 +50,33 @@ def enumerate_devices():
             yield dev
 
 
+# Handle user interaction
+class CliInteraction(UserInteraction):
+    def prompt_up(self):
+        print("\nTouch your authenticator device now...\n")
+
+    def request_pin(self, permissions, rd_id):
+        return getpass("Enter PIN: ")
+
+    def request_uv(self, permissions, rd_id):
+        print("User Verification required.")
+        return True
+
+
 # Locate a device
 for dev in enumerate_devices():
-    client = Fido2Client(dev, "https://example.com")
+    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
     if "credBlob" in client.info.extensions:
         break
 else:
     print("No Authenticator with the CredBlob extension found!")
     sys.exit(1)
 
-use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
-
 # Prefer UV token if supported
-pin = None
 uv = "discouraged"
-if client.info.options.get("pinUvAuthToken") and client.info.options.get("uv"):
+if client.info.options.get("pinUvAuthToken") or client.info.options.get("uv"):
     uv = "preferred"
     print("Authenticator supports UV token")
-elif client.info.options.get("clientPin"):
-    # Prompt for PIN if needed
-    pin = getpass("Please enter PIN: ")
-else:
-    print("PIN not set, won't use")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"})
@@ -89,10 +94,7 @@ blob = os.urandom(32)  # 32 random bytes
 create_options["publicKey"].extensions = {"credBlob": blob}
 
 # Create a credential
-if not use_nfc:
-    print("\nTouch your authenticator device now...\n")
-
-result = client.make_credential(create_options["publicKey"], pin=pin)
+result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 auth_data = server.register_complete(
@@ -113,11 +115,8 @@ request_options, state = server.authenticate_begin()
 request_options["publicKey"].extensions = {"getCredBlob": True}
 
 # Authenticate the credential
-if not use_nfc:
-    print("\nTouch your authenticator device now...\n")
-
 # Only one cred in allowCredentials, only one response.
-result = client.get_assertion(request_options["publicKey"], pin=pin).get_response(0)
+result = client.get_assertion(request_options["publicKey"]).get_response(0)
 
 blob_res = result.authenticator_data.extensions.get("credBlob")
 

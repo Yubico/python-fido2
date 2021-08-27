@@ -30,9 +30,10 @@ Connects to each FIDO device found, and causes them all to blink until the user
 triggers one to select it. A new credential is created for that authenticator,
 and the operation is cancelled for the others.
 """
-from fido2.hid import CtapHidDevice, STATUS
-from fido2.client import Fido2Client, ClientError
+from fido2.hid import CtapHidDevice
+from fido2.client import Fido2Client, ClientError, UserInteraction
 from threading import Event, Thread
+from getpass import getpass
 import sys
 
 # Locate a device
@@ -41,38 +42,38 @@ if not devs:
     print("No FIDO device found")
     sys.exit(1)
 
-clients = [Fido2Client(d, "https://example.com") for d in devs]
+
+# Handle user interaction
+class CliInteraction(UserInteraction):
+    def prompt_up(self):
+        print("\nTouch your authenticator device now...\n")
+
+    def request_pin(self, permissions, rd_id):
+        return getpass("Enter PIN: ")
+
+    def request_uv(self, permissions, rd_id):
+        print("User Verification required.")
+        return True
+
+
+clients = [
+    Fido2Client(d, "https://example.com", user_interaction=CliInteraction())
+    for d in devs
+]
 
 # Prepare parameters for makeCredential
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
 challenge = b"Y2hhbGxlbmdl"
 cancel = Event()
-result = None
-
-has_prompted = False
+selected = None
 
 
-def on_keepalive(status):
-    global has_prompted  # Don't prompt for each device.
-    if status == STATUS.UPNEEDED and not has_prompted:
-        print("\nTouch your authenticator device now...\n")
-        has_prompted = True
-
-
-def work(client):
-    global result
+def select(client):
+    global selected
     try:
-        result = client.make_credential(
-            {
-                "rp": rp,
-                "user": user,
-                "challenge": challenge,
-                "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
-            },
-            event=cancel,
-            on_keepalive=on_keepalive,
-        )
+        client.selection(cancel)
+        selected = client
     except ClientError as e:
         if e.code != ClientError.ERR.TIMEOUT:
             raise
@@ -81,9 +82,11 @@ def work(client):
     cancel.set()
 
 
+print("\nTouch the authenticator you wish to use...\n")
+
 threads = []
 for client in clients:
-    t = Thread(target=work, args=(client,))
+    t = Thread(target=select, args=(client,))
     threads.append(t)
     t.start()
 
@@ -91,6 +94,17 @@ for t in threads:
     t.join()
 
 if cancel.is_set():
+    print("Authenticator selected, making credential...")
+
+    result = selected.make_credential(
+        {
+            "rp": rp,
+            "user": user,
+            "challenge": challenge,
+            "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+        },
+    )
+
     print("New credential created!")
     print("ATTESTATION OBJECT:", result.attestation_object)
     print()

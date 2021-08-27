@@ -25,8 +25,11 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from .pin import ClientPin
+from .base import AttestationResponse, AssertionResponse
+from .pin import ClientPin, PinProtocol
+from .blob import LargeBlobs
 from enum import Enum, unique
+from typing import Dict, Tuple, Any, Optional
 import abc
 
 
@@ -41,27 +44,48 @@ class Ctap2Extension(abc.ABC):
     def __init__(self, ctap):
         self.ctap = ctap
 
-    def is_supported(self):
+    def is_supported(self) -> bool:
+        """Whether or not the extension is supported by the authenticator."""
         return self.NAME in self.ctap.info.extensions
 
-    def process_create_input(self, inputs):
+    def process_create_input(self, inputs: Dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
         """
         return None
 
-    def process_create_output(self, auth_data):
-        """Return client extension output given auth_data, or None."""
+    def process_create_input_with_permissions(
+        self, inputs: Dict[str, Any]
+    ) -> Tuple[Any, ClientPin.PERMISSION]:
+        return self.process_create_input(inputs), ClientPin.PERMISSION(0)
+
+    def process_create_output(
+        self,
+        attestation_response: AttestationResponse,
+        token: Optional[str],
+        pin_protocol: Optional[PinProtocol],
+    ) -> Optional[Dict[str, Any]]:
+        """Return client extension output given attestation_response, or None."""
         return None
 
-    def process_get_input(self, inputs):
+    def process_get_input(self, inputs: Dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
         """
         return None
 
-    def process_get_output(self, auth_data):
-        """Return client extension output given auth_data, or None."""
+    def process_get_input_with_permissions(
+        self, inputs: Dict[str, Any]
+    ) -> Tuple[Any, ClientPin.PERMISSION]:
+        return self.process_get_input(inputs), ClientPin.PERMISSION(0)
+
+    def process_get_output(
+        self,
+        assertion_response: AssertionResponse,
+        token: Optional[str],
+        pin_protocol: Optional[PinProtocol],
+    ) -> Optional[Dict[str, Any]]:
+        """Return client extension output given assertion_response, or None."""
         return None
 
 
@@ -81,8 +105,8 @@ class HmacSecretExtension(Ctap2Extension):
         if self.is_supported() and inputs.get("hmacCreateSecret") is True:
             return True
 
-    def process_create_output(self, auth_data):
-        if auth_data.extensions.get(self.NAME):
+    def process_create_output(self, attestation_response, *args):
+        if attestation_response.auth_data.extensions.get(self.NAME):
             return {"hmacCreateSecret": True}
 
     def process_get_input(self, inputs):
@@ -113,8 +137,8 @@ class HmacSecretExtension(Ctap2Extension):
             4: self.pin_protocol.VERSION,
         }
 
-    def process_get_output(self, auth_data):
-        value = auth_data.extensions.get(self.NAME)
+    def process_get_output(self, assertion_response, *args):
+        value = assertion_response.auth_data.extensions.get(self.NAME)
 
         decrypted = self.pin_protocol.decrypt(self.shared_secret, value)
         output1 = decrypted[: HmacSecretExtension.SALT_LEN]
@@ -126,20 +150,54 @@ class HmacSecretExtension(Ctap2Extension):
         return {"hmacGetSecret": outputs}
 
 
-class LargeBlobKeyExtension(Ctap2Extension):
+class LargeBlobExtension(Ctap2Extension):
     """
-    Implements the Large Blob Key CTAP2 extension.
+    Implements the Large Blob WebAuthn extension.
     """
 
     NAME = "largeBlobKey"
 
+    def is_supported(self):
+        return super().is_supported() and self.ctap.info.options.get("largeBlobs")
+
     def process_create_input(self, inputs):
-        if self.is_supported() and inputs.get("largeBlobKey") is True:
+        data = inputs.get("largeBlob", {})
+        if data:
+            if "read" in data or "write" in data:
+                raise ValueError("Invalid set of parameters")
+            is_supported = self.is_supported()
+            if data.get("support") == "required" and not is_supported:
+                raise ValueError("Authenticator does not support large blob storage")
             return True
 
-    def process_get_input(self, inputs):
-        if self.is_supported() and inputs.get("largeBlobKey") is True:
-            return True
+    def process_create_output(self, attestation_response, *args):
+        return {"supported": attestation_response.large_blob_key is not None}
+
+    def process_get_input_with_permissions(self, inputs):
+        data = inputs.get("largeBlob", {})
+        permissions = ClientPin.PERMISSION(0)
+        if data:
+            if "support" in data or ("read" in data and "write" in data):
+                raise ValueError("Invalid set of parameters")
+            if not self.is_supported():
+                raise ValueError("Authenticator does not support large blob storage")
+            if data.get("read") is True:
+                self._action = True
+            else:
+                self._action = data.get("write")
+                permissions = ClientPin.PERMISSION.LARGE_BLOB_WRITE
+        return True if data else None, permissions
+
+    def process_get_output(self, assertion_response, token, pin_protocol):
+        blob_key = assertion_response.large_blob_key
+        if self._action is True:  # Read
+            large_blobs = LargeBlobs(self.ctap)
+            blob = large_blobs.get_blob(blob_key)
+            return {"blob": blob}
+        elif self._action:  # Write
+            large_blobs = LargeBlobs(self.ctap, pin_protocol, token)
+            large_blobs.put_blob(blob_key, self._action)
+            return {"written": True}
 
 
 class CredBlobExtension(Ctap2Extension):

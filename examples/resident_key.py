@@ -32,7 +32,7 @@ This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient
+from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server
 from getpass import getpass
 import sys
@@ -52,8 +52,19 @@ def enumerate_devices():
             yield dev
 
 
-use_prompt = False
-pin = None
+# Handle user interaction
+class CliInteraction(UserInteraction):
+    def prompt_up(self):
+        print("\nTouch your authenticator device now...\n")
+
+    def request_pin(self, permissions, rd_id):
+        return getpass("Enter PIN: ")
+
+    def request_uv(self, permissions, rd_id):
+        print("User Verification required.")
+        return True
+
+
 uv = "discouraged"
 
 if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
@@ -62,9 +73,10 @@ if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
 else:
     # Locate a device
     for dev in enumerate_devices():
-        client = Fido2Client(dev, "https://example.com")
+        client = Fido2Client(
+            dev, "https://example.com", user_interaction=CliInteraction()
+        )
         if client.info.options.get("rk"):
-            use_prompt = not (CtapPcscDevice and isinstance(dev, CtapPcscDevice))
             break
     else:
         print("No Authenticator with support for resident key found!")
@@ -74,11 +86,6 @@ else:
     if client.info.options.get("uv"):
         uv = "preferred"
         print("Authenticator supports User Verification")
-    elif client.info.options.get("clientPin"):
-        # Prompt for PIN if needed
-        pin = getpass("Please enter PIN: ")
-    else:
-        print("PIN not set, won't use")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
@@ -94,10 +101,7 @@ create_options, state = server.register_begin(
 )
 
 # Create a credential
-if use_prompt:
-    print("\nTouch your authenticator device now...\n")
-
-result = client.make_credential(create_options["publicKey"], pin=pin)
+result = client.make_credential(create_options["publicKey"])
 
 
 # Complete registration
@@ -118,10 +122,7 @@ print("CREDENTIAL DATA:", auth_data.credential_data)
 request_options, state = server.authenticate_begin(user_verification=uv)
 
 # Authenticate the credential
-if use_prompt:
-    print("\nTouch your authenticator device now...\n")
-
-selection = client.get_assertion(request_options["publicKey"], pin=pin)
+selection = client.get_assertion(request_options["publicKey"])
 result = selection.get_response(0)  # There may be multiple responses, get the first.
 
 print("USER ID:", result.user_handle)

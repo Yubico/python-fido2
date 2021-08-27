@@ -416,7 +416,7 @@ class TestFido2Client(unittest.TestCase):
             None,
             None,
             mock.ANY,
-            None,
+            mock.ANY,
         )
 
         self.assertEqual(response.client_data.get("origin"), APP_ID)

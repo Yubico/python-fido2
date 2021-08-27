@@ -32,9 +32,7 @@ This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
 from fido2.hid import CtapHidDevice
-from fido2.ctap2 import LargeBlobs
-from fido2.ctap2.pin import ClientPin
-from fido2.client import Fido2Client
+from fido2.client import Fido2Client, UserInteraction
 from fido2.server import Fido2Server
 from getpass import getpass
 import sys
@@ -54,17 +52,28 @@ def enumerate_devices():
             yield dev
 
 
+# Handle user interaction
+class CliInteraction(UserInteraction):
+    def prompt_up(self):
+        print("\nTouch your authenticator device now...\n")
+
+    def request_pin(self, permissions, rd_id):
+        return getpass("Enter PIN: ")
+
+    def request_uv(self, permissions, rd_id):
+        print("User Verification required.")
+        return True
+
+
 # Locate a device
 for dev in enumerate_devices():
-    client = Fido2Client(dev, "https://example.com")
+    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
     if "largeBlobKey" in client.info.extensions:
         break
 else:
     print("No Authenticator with the largeBlobKey extension found!")
     sys.exit(1)
 
-pin = None
-uv = "discouraged"
 
 if not client.info.options.get("largeBlobs"):
     print("Authenticator does not support large blobs!")
@@ -72,18 +81,13 @@ if not client.info.options.get("largeBlobs"):
 
 
 # Prefer UV token if supported
-if client.info.options.get("pinUvAuthToken") and client.info.options.get("uv"):
+uv = "discouraged"
+if client.info.options.get("pinUvAuthToken") or client.info.options.get("uv"):
     uv = "preferred"
     print("Authenticator supports UV token")
-elif client.info.options.get("clientPin"):
-    # Prompt for PIN if needed
-    pin = getpass("Please enter PIN: ")
-else:
-    print("PIN not set, won't use")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"})
-
 user = {"id": b"user_id", "name": "A. User"}
 
 # Prepare parameters for makeCredential
@@ -94,14 +98,14 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
-# Enable largeBlobKey
+print("Creating a credential with LargeBlob support...")
+
+# Enable largeBlob
 options = create_options["publicKey"]
-options.extensions = {"largeBlobKey": True}
+options.extensions = {"largeBlob": {"support": "required"}}
 
 # Create a credential
-print("\nTouch your authenticator device now...\n")
-
-result = client.make_credential(options, pin=pin)
+result = client.make_credential(options)
 
 # Complete registration
 auth_data = server.register_complete(
@@ -109,52 +113,37 @@ auth_data = server.register_complete(
 )
 credentials = [auth_data.credential_data]
 
-print("New credential created!")
+if not result.extension_results.get("supported"):
+    print("Credential does not support largeBlob, failure!")
+    sys.exit(1)
+
+print("Credential created! Writing a blob...")
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(user_verification=uv)
 
-# Enable largeBlobKey
+# Write a large blob
 options = request_options["publicKey"]
-options.extensions = {"largeBlobKey": True}
+options.extensions = {"largeBlob": {"write": b"Here is some data to store!"}}
 
 # Authenticate the credential
-print("\nTouch your authenticator device now...\n")
+selection = client.get_assertion(options)
 
-selection = client.get_assertion(options, pin=pin)
 # Only one cred in allowCredentials, only one response.
-assertion = selection.get_assertions()[0]
+result = selection.get_response(0)
+if not result.extension_results.get("written"):
+    print("Failed to write blob!")
+    sys.exit(1)
 
-# This should match the key from MakeCredential.
-key = assertion.large_blob_key
-print("Large Blob Key:", key.hex())
+print("Blob written! Reading back the blob...")
 
-# Get a PIN/UV token for writing a blob
-client_pin = ClientPin(client.ctap2)
-if pin:
-    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
-else:
-    print("\nPerform User Verification now...\n")
-    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
-large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
+# Read the blob
+options = request_options["publicKey"]
+options.extensions = {"largeBlob": {"read": True}}
 
-# Write a large blob
-print("Writing a large blob...")
-large_blobs.put_blob(key, b"Here is some data to store!")
+# Authenticate the credential
+selection = client.get_assertion(options)
 
-# Read the blob without providing a PIN token.
-large_blobs = LargeBlobs(client.ctap2)
-blob = large_blobs.get_blob(key)
-print("Read blob", blob)
-
-# Get a fresh PIN token
-if pin:
-    token = client_pin.get_pin_token(pin, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
-else:
-    print("\nPerform User Verification now...\n")
-    token = client_pin.get_uv_token(ClientPin.PERMISSION.LARGE_BLOB_WRITE)
-large_blobs = LargeBlobs(client.ctap2, client_pin.protocol, token)
-
-# Clean up
-large_blobs.delete_blob(key)
-print("Blob deleted...")
+# Only one cred in allowCredentials, only one response.
+result = selection.get_response(0)
+print("Read blob: ", result.extension_results.get("blob"))

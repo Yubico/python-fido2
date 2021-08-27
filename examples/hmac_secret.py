@@ -31,7 +31,7 @@ creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client
+from fido2.client import Fido2Client, UserInteraction
 from getpass import getpass
 from binascii import b2a_hex
 import sys
@@ -51,32 +51,34 @@ def enumerate_devices():
             yield dev
 
 
+# Handle user interaction
+class CliInteraction(UserInteraction):
+    def prompt_up(self):
+        print("\nTouch your authenticator device now...\n")
+
+    def request_pin(self, permissions, rd_id):
+        return getpass("Enter PIN: ")
+
+    def request_uv(self, permissions, rd_id):
+        print("User Verification required.")
+        return True
+
+
 # Locate a device
 for dev in enumerate_devices():
-    client = Fido2Client(dev, "https://example.com")
+    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
     if "hmac-secret" in client.info.extensions:
         break
 else:
     print("No Authenticator with the HmacSecret extension found!")
     sys.exit(1)
 
-use_nfc = CtapPcscDevice and isinstance(dev, CtapPcscDevice)
-
 # Prepare parameters for makeCredential
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}
 challenge = b"Y2hhbGxlbmdl"
 
-# Prompt for PIN if needed
-pin = None
-if client.info.options.get("clientPin"):
-    pin = getpass("Please enter PIN:")
-else:
-    print("no pin")
-
 # Create a credential with a HmacSecret
-if not use_nfc:
-    print("\nTouch your authenticator device now...\n")
 result = client.make_credential(
     {
         "rp": rp,
@@ -85,7 +87,6 @@ result = client.make_credential(
         "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
         "extensions": {"hmacCreateSecret": True},
     },
-    pin=pin,
 )
 
 # HmacSecret result:
@@ -105,9 +106,6 @@ salt = os.urandom(32)
 print("Authenticate with salt:", b2a_hex(salt))
 
 # Authenticate the credential
-if not use_nfc:
-    print("\nTouch your authenticator device now...\n")
-
 result = client.get_assertion(
     {
         "rpId": rp["id"],
@@ -115,7 +113,6 @@ result = client.get_assertion(
         "allowCredentials": allow_list,
         "extensions": {"hmacGetSecret": {"salt1": salt}},
     },
-    pin=pin,
 ).get_response(
     0
 )  # Only one cred in allowList, only one response.
@@ -129,9 +126,6 @@ print("Authenticated, secret:", b2a_hex(output1))
 salt2 = os.urandom(32)
 print("Authenticate with second salt:", b2a_hex(salt2))
 
-if not use_nfc:
-    print("\nTouch your authenticator device now...\n")
-
 # The first salt is reused, which should result in the same secret.
 result = client.get_assertion(
     {
@@ -140,7 +134,6 @@ result = client.get_assertion(
         "allowCredentials": allow_list,
         "extensions": {"hmacGetSecret": {"salt1": salt, "salt2": salt2}},
     },
-    pin=pin,
 ).get_response(
     0
 )  # One cred in allowCredentials, single response.

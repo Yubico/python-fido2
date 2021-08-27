@@ -35,7 +35,7 @@ Yubico FIDO root CA (this will only work for Yubico devices).
 On Windows, the native WebAuthn API will be used.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient
+from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server, AttestationVerifier
 from base64 import b64decode
 from getpass import getpass
@@ -80,9 +80,21 @@ class YubicoAttestationVerifier(AttestationVerifier):
         return [YUBICO_CA]
 
 
-use_prompt = False
-pin = None
 uv = "discouraged"
+
+
+# Handle user interaction
+class CliInteraction(UserInteraction):
+    def prompt_up(self):
+        print("\nTouch your authenticator device now...\n")
+
+    def request_pin(self, permissions, rd_id):
+        return getpass("Enter PIN: ")
+
+    def request_uv(self, permissions, rd_id):
+        print("User Verification required.")
+        return True
+
 
 if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
     # Use the Windows WebAuthn API if available, and we're not running as admin
@@ -107,17 +119,12 @@ else:
         sys.exit(1)
 
     # Set up a FIDO 2 client using the origin https://example.com
-    client = Fido2Client(dev, "https://example.com")
+    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
 
     # Prefer UV if supported
     if client.info.options.get("uv"):
         uv = "preferred"
         print("Authenticator supports User Verification")
-    elif client.info.options.get("clientPin"):
-        # Prompt for PIN if needed
-        pin = getpass("Please enter PIN: ")
-    else:
-        print("PIN not set, won't use")
 
 
 server = Fido2Server(
@@ -137,7 +144,7 @@ create_options, state = server.register_begin(
 if use_prompt:
     print("\nTouch your authenticator device now...\n")
 
-result = client.make_credential(create_options["publicKey"], pin=pin)
+result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 auth_data = server.register_complete(
