@@ -25,6 +25,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from ..webauthn import AuthenticatorData
 from enum import IntEnum, unique
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -32,7 +33,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import dataclass
 from functools import wraps
-from typing import List, Type
+from typing import List, Type, Mapping, Any
 
 import abc
 
@@ -119,7 +120,10 @@ def verify_x509_chain(chain: List[bytes]) -> None:
 class Attestation(abc.ABC):
     @abc.abstractmethod
     def verify(
-        self, statement, auth_data, client_data_hash: bytes
+        self,
+        statement: Mapping[str, Any],
+        auth_data: AuthenticatorData,
+        client_data_hash: bytes,
     ) -> AttestationResult:
         """Verifies attestation statement.
 

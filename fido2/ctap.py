@@ -25,8 +25,13 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from enum import IntEnum, unique
 import abc
+from enum import IntEnum, unique
+
+from typing import Optional, Callable, Iterator
+
+if False:  # Import for mypy only
+    from threading import Event
 
 
 @unique
@@ -47,7 +52,13 @@ class CtapDevice(abc.ABC):
         """Get device capabilities"""
 
     @abc.abstractmethod
-    def call(self, cmd, data=b"", event=None, on_keepalive=None):
+    def call(
+        self,
+        cmd: int,
+        data: bytes = b"",
+        event: Optional["Event"] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> bytes:
         """Sends a command to the authenticator, and reads the response.
 
         :param cmd: The integer value of the command.
@@ -60,7 +71,7 @@ class CtapDevice(abc.ABC):
         :return: The response from the authenticator.
         """
 
-    def close(self):
+    def close(self) -> None:
         """Close the device, releasing any held resources."""
 
     def __enter__(self):
@@ -71,7 +82,7 @@ class CtapDevice(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def list_devices(cls):
+    def list_devices(cls) -> Iterator["CtapDevice"]:
         """Generates instances of cls for discoverable devices."""
 
 
@@ -150,10 +161,9 @@ class CtapError(Exception):
         def __str__(self):
             return f"0x{self.value:02X} - {self.name}"
 
-    def __init__(self, code):
+    def __init__(self, code: int):
         try:
-            code = CtapError.ERR(code)
+            self.code = CtapError.ERR(code)
         except ValueError:
-            code = CtapError.UNKNOWN_ERR(code)
-        self.code = code
-        super().__init__(f"CTAP error: {code}")
+            self.code = CtapError.UNKNOWN_ERR(code)  # type: ignore
+        super().__init__(f"CTAP error: {self.code}")

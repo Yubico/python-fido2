@@ -361,8 +361,10 @@ class AssertionSelection:
         """Get the raw AssertionResponses available to inspect before selecting one."""
         return self._assertions
 
-    def _get_extension_results(self, assertion):
-        return {}  # Not implemented
+    def _get_extension_results(
+        self, assertion: AssertionResponse
+    ) -> Optional[Mapping[str, Any]]:
+        return None  # Not implemented
 
     def get_response(self, index: int) -> AuthenticatorAssertionResponse:
         """Get a single response."""

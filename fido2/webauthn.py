@@ -338,12 +338,12 @@ class PublicKeyCredentialType(_StringEnum):
     PUBLIC_KEY = "public-key"
 
 
-def _snake2camel(name):
+def _snake2camel(name: str) -> str:
     parts = name.split("_")
     return parts[0] + "".join(p.title() for p in parts[1:])
 
 
-def _camel2snake(name):
+def _camel2snake(name: str) -> str:
     s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
@@ -398,7 +398,7 @@ class PublicKeyCredentialRpEntity(_DataObject):
     name: str
 
     @property
-    def id_hash(self):
+    def id_hash(self) -> bytes:
         """Return SHA256 hash of the identifier."""
         return sha256(self.id.encode("utf8"))
 
@@ -475,7 +475,7 @@ class PublicKeyCredentialRequestOptions(_DataObject):
 class AuthenticatorAttestationResponse(_DataObject):
     client_data: bytes
     attestation_object: AttestationObject = field(transform=AttestationObject)
-    extension_results: Optional[Any] = None
+    extension_results: Optional[Mapping[str, Any]] = None
 
 
 @dataclass(eq=False)
@@ -485,4 +485,4 @@ class AuthenticatorAssertionResponse(_DataObject):
     signature: bytes = field()
     user_handle: bytes = field()
     credential_id: bytes = field()
-    extension_results: Optional[Any] = None
+    extension_results: Optional[Mapping[str, Any]] = None

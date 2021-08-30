@@ -27,7 +27,7 @@
 
 from ..ctap import CtapDevice, CtapError, STATUS
 from threading import Event
-from enum import IntEnum, unique
+from enum import IntEnum, IntFlag, unique
 import struct
 import sys
 import os
@@ -72,13 +72,13 @@ class CTAPHID(IntEnum):
 
 
 @unique
-class CAPABILITY(IntEnum):
+class CAPABILITY(IntFlag):
     WINK = 0x01
     LOCK = 0x02  # Not used
     CBOR = 0x04
     NMSG = 0x08
 
-    def supported(self, flags):
+    def supported(self, flags: "CAPABILITY") -> bool:
         return bool(flags & self)
 
 

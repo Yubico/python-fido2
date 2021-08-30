@@ -34,7 +34,7 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from io import BytesIO
-from typing import Union
+from typing import Union, Optional
 import struct
 
 __all__ = [
@@ -58,7 +58,7 @@ def sha256(data: bytes) -> bytes:
     return h.finalize()
 
 
-def hmac_sha256(key, data):
+def hmac_sha256(key: bytes, data: bytes) -> bytes:
     """Performs an HMAC-SHA256 operation on the given data, using the given key.
 
     :param key: The key to use.
@@ -130,12 +130,12 @@ class ByteBuffer(BytesIO):
         s = struct.Struct(fmt)
         return s.unpack(self.read(s.size))[0]
 
-    def read(self, size=-1):
+    def read(self, size: Optional[int] = -1) -> bytes:
         """Like BytesIO.read(), but checks the number of bytes read and raises an error
         if fewer bytes were read than expected.
         """
         data = super().read(size)
-        if size > 0 and len(data) != size:
+        if size is not None and size > 0 and len(data) != size:
             raise ValueError(
                 "Not enough data to read (need: %d, had: %d)." % (size, len(data))
             )

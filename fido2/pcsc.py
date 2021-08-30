@@ -33,6 +33,7 @@ from smartcard.pcsc.PCSCExceptions import ListReadersException
 from smartcard.pcsc.PCSCContext import PCSCContext
 
 from threading import Event
+from typing import Tuple, Optional, Callable, Iterator
 import struct
 import logging
 
@@ -53,8 +54,8 @@ class CtapPcscDevice(CtapDevice):
     This class is intended for use with NFC readers.
     """
 
-    def __init__(self, connection, name):
-        self._capabilities = 0
+    def __init__(self, connection, name: str):
+        self._capabilities = CAPABILITY(0)
         self.use_ext_apdu = False
         self._conn = connection
         self._conn.connect()
@@ -65,7 +66,7 @@ class CtapPcscDevice(CtapDevice):
             self.call(CTAPHID.CBOR, b"\x04")
             self._capabilities |= CAPABILITY.CBOR
         except CtapError:
-            if self._capabilities == 0:
+            if not self._capabilities:
                 raise ValueError("Unsupported device")
 
     def __repr__(self):
@@ -76,10 +77,10 @@ class CtapPcscDevice(CtapDevice):
         """CTAPHID protocol version.
         :rtype: int
         """
-        return 2 if self._capabilities & CAPABILITY.CBOR else 1
+        return 2 if CAPABILITY.CBOR in self._capabilities else 1
 
     @property
-    def capabilities(self):
+    def capabilities(self) -> CAPABILITY:
         """Capabilities supported by the device."""
         return self._capabilities
 
@@ -97,7 +98,7 @@ class CtapPcscDevice(CtapDevice):
         """Get the ATR/ATS of the connected card."""
         return self._conn.getATR()
 
-    def apdu_exchange(self, apdu, protocol=None):
+    def apdu_exchange(self, apdu: bytes, protocol=None) -> Tuple[bytes, int, int]:
         """Exchange data with smart card.
 
         :param apdu: byte string. data to exchange with card
@@ -111,7 +112,7 @@ class CtapPcscDevice(CtapDevice):
 
         return response, sw1, sw2
 
-    def control_exchange(self, control_code, control_data=b""):
+    def control_exchange(self, control_code: int, control_data: bytes = b"") -> bytes:
         """Sends control sequence to reader's driver.
 
         :param control_code: int. code to send to reader driver.
@@ -126,15 +127,17 @@ class CtapPcscDevice(CtapDevice):
 
         return response
 
-    def _select(self):
+    def _select(self) -> None:
         apdu = b"\x00\xa4\x04\x00" + struct.pack("!B", len(AID_FIDO)) + AID_FIDO
         resp, sw1, sw2 = self.apdu_exchange(apdu)
         if (sw1, sw2) != SW_SUCCESS:
             raise ValueError("FIDO applet selection failure.")
         if resp == b"U2F_V2":
-            self._capabilities |= 0x08
+            self._capabilities |= CAPABILITY.NMSG
 
-    def _chain_apdus(self, cla, ins, p1, p2, data=b""):
+    def _chain_apdus(
+        self, cla: int, ins: int, p1: int, p2: int, data: bytes = b""
+    ) -> Tuple[bytes, int, int]:
         if self.use_ext_apdu:
             header = struct.pack("!BBBBBH", cla, ins, p1, p2, 0x00, len(data))
             resp, sw1, sw2 = self.apdu_exchange(header + data)
@@ -156,7 +159,7 @@ class CtapPcscDevice(CtapDevice):
                 resp += lres
             return resp, sw1, sw2
 
-    def _call_apdu(self, apdu):
+    def _call_apdu(self, apdu: bytes) -> bytes:
         if len(apdu) >= 7 and apdu[4] == 0:
             # Extended APDU
             data_len = struct.unpack("!H", apdu[5:7])[0]
@@ -172,7 +175,12 @@ class CtapPcscDevice(CtapDevice):
         resp, sw1, sw2 = self._chain_apdus(cla, ins, p1, p2, data)
         return resp + struct.pack("!BB", sw1, sw2)
 
-    def _call_cbor(self, data=b"", event=None, on_keepalive=None):
+    def _call_cbor(
+        self,
+        data: bytes = b"",
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> bytes:
         event = event or Event()
         # NFCCTAP_MSG
         resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, 0x80, 0x00, data)
@@ -199,7 +207,13 @@ class CtapPcscDevice(CtapDevice):
 
         raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
 
-    def call(self, cmd, data=b"", event=None, on_keepalive=None):
+    def call(
+        self,
+        cmd: int,
+        data: bytes = b"",
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ):
         if cmd == CTAPHID.CBOR:
             return self._call_cbor(data, event, on_keepalive)
         elif cmd == CTAPHID.MSG:
@@ -207,11 +221,11 @@ class CtapPcscDevice(CtapDevice):
         else:
             raise CtapError(CtapError.ERR.INVALID_COMMAND)
 
-    def close(self):
+    def close(self) -> None:
         self._conn.disconnect()
 
     @classmethod
-    def list_devices(cls, name=""):
+    def list_devices(cls, name: str = "") -> Iterator["CtapPcscDevice"]:
         for reader in _list_readers():
             if name in reader.name:
                 try:

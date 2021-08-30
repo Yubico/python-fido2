@@ -26,6 +26,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from .hid import CTAPHID
+from .ctap import CtapDevice
 from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
 from .cose import ES256
 from .attestation import FidoU2FAttestation
@@ -98,11 +99,11 @@ class RegistrationData(bytes):
         self.signature = reader.read()
 
     @property
-    def b64(self):
+    def b64(self) -> str:
         """Websafe base64 encoded string of the RegistrationData."""
         return websafe_encode(self)
 
-    def verify(self, app_param, client_param):
+    def verify(self, app_param: bytes, client_param: bytes) -> None:
         """Verify the included signature with regard to the given app and client
         params.
 
@@ -119,7 +120,7 @@ class RegistrationData(bytes):
         )
 
     @classmethod
-    def from_b64(cls, data):
+    def from_b64(cls, data: str) -> "RegistrationData":
         """Parse a RegistrationData from a websafe base64 encoded string.
 
         :param data: Websafe base64 encoded string.
@@ -151,11 +152,11 @@ class SignatureData(bytes):
         self.signature = reader.read()
 
     @property
-    def b64(self):
+    def b64(self) -> str:
         """str: Websafe base64 encoded string of the SignatureData."""
         return websafe_encode(self)
 
-    def verify(self, app_param, client_param, public_key):
+    def verify(self, app_param: bytes, client_param: bytes, public_key: bytes) -> None:
         """Verify the included signature with regard to the given app and client
         params, using the given public key.
 
@@ -167,7 +168,7 @@ class SignatureData(bytes):
         ES256.from_ctap1(public_key).verify(m, self.signature)
 
     @classmethod
-    def from_b64(cls, data):
+    def from_b64(cls, data: str) -> "SignatureData":
         """Parse a SignatureData from a websafe base64 encoded string.
 
         :param data: Websafe base64 encoded string.
@@ -188,10 +189,12 @@ class Ctap1:
         AUTHENTICATE = 0x02
         VERSION = 0x03
 
-    def __init__(self, device):
+    def __init__(self, device: CtapDevice):
         self.device = device
 
-    def send_apdu(self, cla=0, ins=0, p1=0, p2=0, data=b""):
+    def send_apdu(
+        self, cla: int = 0, ins: int = 0, p1: int = 0, p2: int = 0, data: bytes = b""
+    ) -> bytes:
         """Packs and sends an APDU for use in CTAP1 commands.
         This is a low-level method mainly used internally. Avoid calling it
         directly if possible, and use the get_version, register, and
@@ -214,7 +217,7 @@ class Ctap1:
             raise ApduError(status, data)
         return data
 
-    def get_version(self):
+    def get_version(self) -> str:
         """Get the U2F version implemented by the authenticator.
         The only version specified is "U2F_V2".
 
@@ -222,7 +225,7 @@ class Ctap1:
         """
         return self.send_apdu(ins=Ctap1.INS.VERSION).decode()
 
-    def register(self, client_param, app_param):
+    def register(self, client_param: bytes, app_param: bytes) -> RegistrationData:
         """Register a new U2F credential.
 
         :param client_param: SHA256 hash of the ClientData used for the request.
@@ -233,7 +236,13 @@ class Ctap1:
         response = self.send_apdu(ins=Ctap1.INS.REGISTER, data=data)
         return RegistrationData(response)
 
-    def authenticate(self, client_param, app_param, key_handle, check_only=False):
+    def authenticate(
+        self,
+        client_param: bytes,
+        app_param: bytes,
+        key_handle: bytes,
+        check_only: bool = False,
+    ) -> SignatureData:
         """Authenticate a previously registered credential.
 
         :param client_param: SHA256 hash of the ClientData used for the request.

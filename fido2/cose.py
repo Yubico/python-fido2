@@ -29,7 +29,7 @@ from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
-from typing import Sequence, Type
+from typing import Sequence, Type, Mapping, Any
 
 try:
     from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -46,7 +46,7 @@ class CoseKey(dict):
 
     ALGORITHM: int = None  # type: ignore
 
-    def verify(self, message, signature):
+    def verify(self, message: bytes, signature: bytes) -> None:
         """Validates a digital signature over a given message.
 
         :param message: The message which was signed.
@@ -64,7 +64,7 @@ class CoseKey(dict):
         raise NotImplementedError("Creation from cryptography not supported.")
 
     @staticmethod
-    def for_alg(alg):
+    def for_alg(alg: int) -> Type["CoseKey"]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
@@ -79,7 +79,7 @@ class CoseKey(dict):
         return UnsupportedKey
 
     @staticmethod
-    def for_name(name):
+    def for_name(name: str) -> Type["CoseKey"]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
@@ -91,7 +91,7 @@ class CoseKey(dict):
         return UnsupportedKey
 
     @staticmethod
-    def parse(cose):
+    def parse(cose: Mapping[int, Any]) -> "CoseKey":
         """Create a CoseKey from a dict"""
         alg = cose.get(3)
         if not alg:
@@ -99,7 +99,7 @@ class CoseKey(dict):
         return CoseKey.for_alg(alg)(cose)
 
     @staticmethod
-    def supported_algorithms():
+    def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
         if ed25519:
             algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, PS256, RS256]
