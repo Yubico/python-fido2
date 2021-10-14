@@ -1,4 +1,4 @@
-python-fido2 (0.9.2) xenial; urgency=low
+python-fido2 (0.9.2+git) xenial; urgency=low
 
   * Build for ppa
 
