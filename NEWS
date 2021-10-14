@@ -1,3 +1,8 @@
+* Version 0.9.2 (released 2021-10-14)
+ ** Support the latest Windows webauthn.h API (included in Windows 11).
+ ** Add product name and serial number to HidDescriptors.
+ ** Remove the need for the uhid-freebsd dependency on FreeBSD.
+
 * Version 0.9.1 (released 2021-02-03)
  ** Add new CTAP error codes and improve handling of unknown codes.
 
