@@ -57,9 +57,12 @@ def get_descriptor(path):
         name = bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
 
         # Read unique ID
-        buf = array("B", [0] * 64)
-        length = fcntl.ioctl(f, HIDIOCGRAWUNIQ, buf, True)
-        serial = bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
+        try:
+            buf = array("B", [0] * 64)
+            length = fcntl.ioctl(f, HIDIOCGRAWUNIQ, buf, True)
+            serial = bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
+        except OSError:
+            serial = None
 
         # Read report descriptor
         buf = array("B", [0] * 4)
