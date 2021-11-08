@@ -102,9 +102,9 @@ class CoseKey(dict):
     def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
         if ed25519:
-            algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, PS256, RS256]
+            algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, ES384, ES512, PS256, RS256]
         else:
-            algs = [ES256, PS256, RS256]
+            algs = [ES256, ES384, ES512, PS256, RS256]
         return [cls.ALGORITHM for cls in algs]
 
 
@@ -146,6 +146,60 @@ class ES256(CoseKey):
         :return: A ES256 key.
         """
         return cls({1: 2, 3: cls.ALGORITHM, -1: 1, -2: data[1:33], -3: data[33:65]})
+
+
+class ES384(CoseKey):
+    ALGORITHM = -35
+    _HASH_ALG = hashes.SHA384()
+
+    def verify(self, message, signature):
+        if self[-1] != 1:
+            raise ValueError("Unsupported elliptic curve")
+        ec.EllipticCurvePublicNumbers(
+            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP384R1()
+        ).public_key(default_backend()).verify(
+            signature, message, ec.ECDSA(self._HASH_ALG)
+        )
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        pn = public_key.public_numbers()
+        return cls(
+            {
+                1: 2,
+                3: cls.ALGORITHM,
+                -1: 1,
+                -2: int2bytes(pn.x, 48),
+                -3: int2bytes(pn.y, 48),
+            }
+        )
+
+
+class ES512(CoseKey):
+    ALGORITHM = -36
+    _HASH_ALG = hashes.SHA512()
+
+    def verify(self, message, signature):
+        if self[-1] != 1:
+            raise ValueError("Unsupported elliptic curve")
+        ec.EllipticCurvePublicNumbers(
+            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP521R1()
+        ).public_key(default_backend()).verify(
+            signature, message, ec.ECDSA(self._HASH_ALG)
+        )
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        pn = public_key.public_numbers()
+        return cls(
+            {
+                1: 2,
+                3: cls.ALGORITHM,
+                -1: 1,
+                -2: int2bytes(pn.x, 64),
+                -3: int2bytes(pn.y, 64),
+            }
+        )
 
 
 class RS256(CoseKey):
