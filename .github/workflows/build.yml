@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python: [3.6, 3.7, 3.8, 3.9, pypy3]
+        python: ['3.6', '3.7', '3.8', '3.9', '3.10', 'pypy3']
         architecture: [x86, x64]
         exclude:
           - os: ubuntu-latest
@@ -18,6 +18,9 @@ jobs:
             architecture: x86
           - os: windows-latest
             python: pypy3
+          - os: windows-latest
+            architecture: x86
+            python: '3.10'
           - os: macos-latest
             python: pypy3
 
