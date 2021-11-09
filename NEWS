@@ -1,3 +1,7 @@
+* Version 0.9.3 (released 2021-11-09)
+ ** Bugfix: Linux - Don't fail device discovery when hidraw doesn't support
+    HIDIOCGRAWUNIQ (Linux kernels before 5.6).
+
 * Version 0.9.2 (released 2021-10-14)
  ** Support the latest Windows webauthn.h API (included in Windows 11).
  ** Add product name and serial number to HidDescriptors.
