@@ -60,7 +60,9 @@ def get_descriptor(path):
         try:
             buf = array("B", [0] * 64)
             length = fcntl.ioctl(f, HIDIOCGRAWUNIQ, buf, True)
-            serial = bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
+            serial = (
+                bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
+            )
         except OSError:
             serial = None
 
