@@ -152,7 +152,7 @@ class AttestationVerifier(abc.ABC):
         # Lookup CA to use for trust path verification
         ca = self.ca_lookup(result, attestation_object.auth_data)
         if ca is None:
-            raise UntrustedAttestation("No root found for Authneticator")
+            raise UntrustedAttestation("No root found for Authenticator")
 
         # Validate the trust chain
         try:
