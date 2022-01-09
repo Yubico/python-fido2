@@ -41,7 +41,7 @@ from fido2.server import Fido2Server
 from fido2.ctap2 import AttestationObject, AuthenticatorData
 from fido2 import cbor
 from flask import Flask, session, request, redirect, abort
-
+import pickle
 import os
 
 
