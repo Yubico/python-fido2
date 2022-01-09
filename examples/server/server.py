@@ -82,6 +82,27 @@ def register_begin():
     print("\n\n\n\n")
     return cbor.encode(registration_data)
 
+@app.route("/api/register/beginplatform", methods=["POST"])
+def register_begin():
+    credentials=read_key()
+    registration_data, state = server.register_begin(
+        {
+            "id": b"user_id",
+            "name": "a_user",
+            "displayName": "A. User",
+            "icon": "https://example.com/image.png",
+        },
+        credentials,
+        user_verification="discouraged",
+        authenticator_attachment="platform",
+    )
+
+    session["state"] = state
+    print("\n\n\n\n")
+    print(registration_data)
+    print("\n\n\n\n")
+    return cbor.encode(registration_data)
+
 
 @app.route("/api/register/complete", methods=["POST"])
 def register_complete():
