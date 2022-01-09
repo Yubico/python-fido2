@@ -83,7 +83,7 @@ def register_begin():
     return cbor.encode(registration_data)
 
 @app.route("/api/register/beginplatform", methods=["POST"])
-def register_begin():
+def register_begin_platform():
     credentials=read_key()
     registration_data, state = server.register_begin(
         {
