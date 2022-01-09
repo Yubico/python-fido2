@@ -111,6 +111,9 @@
             "editable": true,
             "path": "./../.."
         },
+        "pickle-mixin": {
+            "index": "pypi"
+        },
         "flask": {
             "hashes": [
                 "sha256:7b2fb8e934ddd50731893bdcdb00fc8c0315916f9fcd50d22c7cc1a95ab634e2",
