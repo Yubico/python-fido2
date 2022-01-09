@@ -52,8 +52,7 @@ rp = PublicKeyCredentialRpEntity("localhost", "Demo server")
 server = Fido2Server(rp)
 
 
-# Registered credentials are stored globally, in memory only. Single user
-# support, state is lost when the server terminates.
+# Single user support.
 credentials = []
 
 
@@ -64,6 +63,7 @@ def index():
 
 @app.route("/api/register/begin", methods=["POST"])
 def register_begin():
+    credentials=read_key()
     registration_data, state = server.register_begin(
         {
             "id": b"user_id",
@@ -85,6 +85,7 @@ def register_begin():
 
 @app.route("/api/register/complete", methods=["POST"])
 def register_complete():
+    credentials=read_key()
     data = cbor.decode(request.get_data())
     client_data = ClientData(data["clientDataJSON"])
     att_obj = AttestationObject(data["attestationObject"])
@@ -94,12 +95,14 @@ def register_complete():
     auth_data = server.register_complete(session["state"], client_data, att_obj)
 
     credentials.append(auth_data.credential_data)
+    save_key(credentials)
     print("REGISTERED CREDENTIAL:", auth_data.credential_data)
     return cbor.encode({"status": "OK"})
 
 
 @app.route("/api/authenticate/begin", methods=["POST"])
 def authenticate_begin():
+    credentials=read_key()
     if not credentials:
         abort(404)
 
@@ -110,6 +113,7 @@ def authenticate_begin():
 
 @app.route("/api/authenticate/complete", methods=["POST"])
 def authenticate_complete():
+    credentials=read_key()
     if not credentials:
         abort(404)
 
@@ -132,6 +136,18 @@ def authenticate_complete():
     print("ASSERTION OK")
     return cbor.encode({"status": "OK"})
 
+def save_key(credentials):
+	with open('datafilekey.pkl','wb') as outp1:
+		pickle.dump(credentials,outp1,pickle.HIGHEST_PROTOCOL)
+		
+def read_key():
+	try:
+		with open('datafilekey.pkl', 'rb') as inp:
+			temp = pickle.load(inp)
+			return temp
+	except:
+		print("no cred data")
+		return []
 
 if __name__ == "__main__":
     print(__doc__)
