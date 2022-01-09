@@ -1,0 +1,49 @@
+<html>
+<head>
+  <title>Fido 2.0 webauthn demo</title>
+  <script src="/cbor.js"></script>
+  <style>
+    body { font-family: sans-serif; line-height: 1.5em; padding: 2em 10em; }
+    h1, h2 { color: #325F74; }
+    a { color: #0080ac; font-weight: bold; text-decoration: none;}
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>WebAuthn demo using python-fido2</h1>
+  <p>This demo requires a browser supporting the WebAuthn API!</p>
+  <hr>
+
+  <h2>Register a credential</h2>
+  <p>Touch your authenticator device now...</p>
+  <a href="/">Cancel</a>
+
+  <script>
+    fetch('/api/register/begin', {
+      method: 'POST',
+    }).then(function(response) {
+      if(response.ok) return response.arrayBuffer();
+      throw new Error('Error getting registration data!');
+    }).then(CBOR.decode).then(function(options) {
+      return navigator.credentials.create(options);
+    }).then(function(attestation) {
+      return fetch('/api/register/complete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/cbor'},
+        body: CBOR.encode({
+          "attestationObject": new Uint8Array(attestation.response.attestationObject),
+          "clientDataJSON": new Uint8Array(attestation.response.clientDataJSON),
+        })
+      });
+    }).then(function(response) {
+      var stat = response.ok ? 'successful' : 'unsuccessful';
+      alert('Registration ' + stat + ' More details in server log...');
+    }, function(reason) {
+      alert(reason);
+    }).then(function() {
+      window.location = '/';
+    });
+  </script>
+
+</body>
+</html>
