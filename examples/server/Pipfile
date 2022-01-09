@@ -6,6 +6,7 @@ url = "https://pypi.org/simple"
 [packages]
 flask = "*"
 pyOpenSSL = "*"
+pickle-mixin = "*"
 "5448283" = {editable = true, path = "./../.."}
 
 [scripts]
