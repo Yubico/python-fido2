@@ -27,6 +27,7 @@
 
 from fido2.webauthn import (
     AuthenticatorSelectionCriteria,
+    ResidentKeyRequirement,
     PublicKeyCredentialRpEntity,
     PublicKeyCredentialUserEntity,
     PublicKeyCredentialParameters,
@@ -45,7 +46,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             o,
             {
                 "authenticatorAttachment": "platform",
-                "requireResidentKey": True,
+                "residentKey": "required",
                 "userVerification": "required",
             },
         )
@@ -53,17 +54,46 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.require_resident_key, True)
         self.assertEqual(o.user_verification, "required")
 
-        with self.assertRaises(ValueError):
-            AuthenticatorSelectionCriteria(authenticator_attachment="invalid")
+        self.assertIsNone(
+            AuthenticatorSelectionCriteria(
+                authenticator_attachment="invalid"
+            ).authenticator_attachment
+        )
 
-        with self.assertRaises(ValueError):
-            AuthenticatorSelectionCriteria(user_verification="invalid")
+        self.assertIsNone(
+            AuthenticatorSelectionCriteria(
+                user_verification="invalid"
+            ).user_verification
+        )
+
+        self.assertIsNone(
+            AuthenticatorSelectionCriteria(resident_key="invalid").resident_key
+        )
 
         o = AuthenticatorSelectionCriteria()
         self.assertEqual(o, {})
         self.assertIsNone(o.authenticator_attachment)
-        self.assertIsNone(o.require_resident_key)
+        self.assertIsNone(o.resident_key)
         self.assertIsNone(o.user_verification)
+
+        o = AuthenticatorSelectionCriteria(resident_key=True)
+        self.assertEqual(o.resident_key, ResidentKeyRequirement.REQUIRED)
+        self.assertEqual(o.require_resident_key, True)
+
+        o = AuthenticatorSelectionCriteria(resident_key=False)
+        self.assertEqual(o.require_resident_key, False)
+
+        o = AuthenticatorSelectionCriteria(resident_key="required")
+        self.assertEqual(o.resident_key, ResidentKeyRequirement.REQUIRED)
+        self.assertEqual(o.require_resident_key, True)
+
+        o = AuthenticatorSelectionCriteria(resident_key="preferred")
+        self.assertEqual(o.resident_key, ResidentKeyRequirement.PREFERRED)
+        self.assertEqual(o.require_resident_key, False)
+
+        o = AuthenticatorSelectionCriteria(resident_key="discouraged")
+        self.assertEqual(o.resident_key, ResidentKeyRequirement.DISCOURAGED)
+        self.assertEqual(o.require_resident_key, False)
 
     def test_rp_entity(self):
         o = PublicKeyCredentialRpEntity("example.com", "Example")
@@ -148,7 +178,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             [{"type": "public-key", "id": b"credential_id"}],
             {
                 "authenticatorAttachment": "platform",
-                "requireResidentKey": True,
+                "residentKey": "required",
                 "userVerification": "required",
             },
             "direct",
@@ -167,14 +197,15 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertIsNone(o.authenticator_selection)
         self.assertIsNone(o.attestation)
 
-        with self.assertRaises(ValueError):
+        self.assertIsNone(
             PublicKeyCredentialCreationOptions(
                 {"id": "example.com", "name": "Example"},
                 {"id": b"user_id", "name": "A. User"},
                 b"request_challenge",
                 [{"type": "public-key", "alg": -7}],
                 attestation="invalid",
-            )
+            ).attestation
+        )
 
     def test_request_options(self):
         o = PublicKeyCredentialRequestOptions(
@@ -195,7 +226,8 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertIsNone(o.allow_credentials)
         self.assertIsNone(o.user_verification)
 
-        with self.assertRaises(ValueError):
+        self.assertIsNone(
             PublicKeyCredentialRequestOptions(
                 b"request_challenge", user_verification="invalid"
-            )
+            ).user_verification
+        )
