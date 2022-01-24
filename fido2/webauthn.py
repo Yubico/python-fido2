@@ -300,9 +300,11 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
 class _StringEnum(str, Enum):
     @classmethod
     def _wrap(cls, value):
-        if value is None:
+        try:
+            return cls(value)
+        except ValueError:
+            # Unknown values should be treated as absent.
             return None
-        return cls(value)
 
 
 @unique
@@ -310,6 +312,7 @@ class AttestationConveyancePreference(_StringEnum):
     NONE = "none"
     INDIRECT = "indirect"
     DIRECT = "direct"
+    ENTERPRISE = "enterprise"
 
 
 @unique
@@ -317,6 +320,19 @@ class UserVerificationRequirement(_StringEnum):
     REQUIRED = "required"
     PREFERRED = "preferred"
     DISCOURAGED = "discouraged"
+
+
+@unique
+class ResidentKeyRequirement(_StringEnum):
+    REQUIRED = "required"
+    PREFERRED = "preferred"
+    DISCOURAGED = "discouraged"
+
+    @classmethod
+    def _wrap(cls, value):
+        if isinstance(value, bool):
+            return cls.REQUIRED if value else cls.DISCOURAGED
+        return super()._wrap(value)
 
 
 @unique
@@ -394,13 +410,13 @@ class _DataObject(Mapping[str, Any]):
 
 @dataclass(eq=False)
 class PublicKeyCredentialRpEntity(_DataObject):
-    id: str
+    id: Optional[str]
     name: str
 
     @property
-    def id_hash(self) -> bytes:
+    def id_hash(self) -> Optional[bytes]:
         """Return SHA256 hash of the identifier."""
-        return sha256(self.id.encode("utf8"))
+        return sha256(self.id.encode("utf8")) if self.id else None
 
 
 @dataclass(eq=False)
@@ -428,10 +444,16 @@ class AuthenticatorSelectionCriteria(_DataObject):
     authenticator_attachment: Optional[AuthenticatorAttachment] = field(
         transform=AuthenticatorAttachment._wrap, default=None
     )
-    require_resident_key: Optional[bool] = None
-    user_verification: Optional[UserVerificationRequirement] = field(
-        transform=UserVerificationRequirement, default=None
+    resident_key: Optional[ResidentKeyRequirement] = field(
+        transform=ResidentKeyRequirement._wrap, default=None
     )
+    user_verification: Optional[UserVerificationRequirement] = field(
+        transform=UserVerificationRequirement._wrap, default=None
+    )
+
+    @property
+    def require_resident_key(self):
+        return ResidentKeyRequirement.REQUIRED == self.resident_key
 
 
 @dataclass(eq=False)
