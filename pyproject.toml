@@ -30,7 +30,7 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.6"
-cryptography = ">=2.1, !=35, <37"
+cryptography = ">=2.1, !=35, <39"
 dataclasses = {version = "^0.8", python = "<3.7"}
 pyscard = {version = "^1.9 || ^2.0.0", optional = true}
 
