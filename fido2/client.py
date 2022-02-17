@@ -44,6 +44,8 @@ from .cose import ES256
 from .rpid import verify_rp_id, verify_app_id
 from .utils import sha256, websafe_decode, websafe_encode
 from enum import Enum, IntEnum, unique
+from urllib.parse import urlparse
+from dataclasses import replace
 from threading import Timer, Event
 from typing import (
     Type,
@@ -915,7 +917,16 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             timer.daemon = True
             timer.start()
 
-        self._verify_rp_id(options.rp.id)
+        rp = options.rp
+        if rp.id is None:
+            url = urlparse(self.origin)
+            if url.scheme != "https" or not url.netloc:
+                raise ClientError.ERR.BAD_REQUEST(
+                    "RP ID required for non-https origin."
+                )
+            rp = replace(rp, id=url.netloc)
+
+        self._verify_rp_id(rp.id)
 
         client_data = self._build_client_data(
             WEBAUTHN_TYPE.MAKE_CREDENTIAL, options.challenge
@@ -926,7 +937,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         try:
             return self._backend.do_make_credential(
                 client_data,
-                options.rp,
+                rp,
                 options.user,
                 options.pub_key_cred_params,
                 options.exclude_credentials,
