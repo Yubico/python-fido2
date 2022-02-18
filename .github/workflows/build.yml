@@ -19,10 +19,11 @@ jobs:
           - os: windows-latest
             python: pypy3
           - os: windows-latest
-            architecture: x86
-            python: '3.10'
+            python: '3.6'
           - os: macos-latest
             python: pypy3
+          - os: macos-latest
+            python: '3.6'
 
     name: ${{ matrix.os }} Py ${{ matrix.python }} ${{ matrix.architecture }}
     steps:
