@@ -39,6 +39,9 @@ from enum import IntEnum, IntFlag, unique
 from typing import ClassVar, Optional, Mapping, Tuple, Any
 import abc
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _pad_pin(pin: str) -> bytes:
@@ -298,6 +301,7 @@ class ClientPin:
             permissions_rpid=permissions_rpid,
         )
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
+        logger.debug(f"Got PIN token for permissions: {permissions}")
         return self.protocol.validate_token(
             self.protocol.decrypt(shared_secret, pin_token_enc)
         )
@@ -332,6 +336,7 @@ class ClientPin:
         )
 
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
+        logger.debug(f"Got UV token for permissions: {permissions}")
         return self.protocol.validate_token(
             self.protocol.decrypt(shared_secret, pin_token_enc)
         )
@@ -382,6 +387,7 @@ class ClientPin:
             new_pin_enc=pin_enc,
             pin_uv_param=pin_uv_param,
         )
+        logger.info("PIN has been set")
 
     def change_pin(self, old_pin, new_pin):
         """Change the PIN of the authenticator.
@@ -409,3 +415,4 @@ class ClientPin:
             new_pin_enc=new_pin_enc,
             pin_uv_param=pin_uv_param,
         )
+        logger.info("PIN has been changed")

@@ -30,6 +30,9 @@ from ..ctap import CtapError
 
 from enum import IntEnum, unique
 import struct
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BioEnrollment:
@@ -225,12 +228,14 @@ class FPBioEnrollment(BioEnrollment):
         :return: A tuple containing the new template ID, the sample status, and the
             number of samples remaining to complete the enrollment.
         """
+        logger.debug(f"Starting fingerprint enrollment (timeout={timeout})")
         result = self._call(
             FPBioEnrollment.CMD.ENROLL_BEGIN,
             {FPBioEnrollment.PARAM.TIMEOUT_MS: timeout},
             event=event,
             on_keepalive=on_keepalive,
         )
+        logger.debug(f"Sample capture result: {result}")
         return (
             result[BioEnrollment.RESULT.TEMPLATE_ID],
             FPBioEnrollment.FEEDBACK(result[BioEnrollment.RESULT.LAST_SAMPLE_STATUS]),
@@ -251,6 +256,7 @@ class FPBioEnrollment(BioEnrollment):
         :return: A tuple containing the sample status, and the number of samples
             remaining to complete the enrollment.
         """
+        logger.debug(f"Capturing next sample with (timeout={timeout})")
         result = self._call(
             FPBioEnrollment.CMD.ENROLL_CAPTURE_NEXT,
             {
@@ -260,6 +266,7 @@ class FPBioEnrollment(BioEnrollment):
             event=event,
             on_keepalive=on_keepalive,
         )
+        logger.debug(f"Sample capture result: {result}")
         return (
             FPBioEnrollment.FEEDBACK(result[BioEnrollment.RESULT.LAST_SAMPLE_STATUS]),
             result[BioEnrollment.RESULT.REMAINING_SAMPLES],
@@ -267,6 +274,7 @@ class FPBioEnrollment(BioEnrollment):
 
     def enroll_cancel(self):
         """Cancel any ongoing fingerprint enrollment."""
+        logger.debug("Cancelling fingerprint enrollment.")
         self._call(FPBioEnrollment.CMD.ENROLL_CANCEL, auth=False)
 
     def enroll(self, timeout=None):
@@ -301,6 +309,7 @@ class FPBioEnrollment(BioEnrollment):
         :param template_id: The ID of the template to change.
         :param name: A friendly name to give the template.
         """
+        logger.debug(f"Changing name of template: {template_id:x} to {name}")
         self._call(
             FPBioEnrollment.CMD.SET_NAME,
             {
@@ -308,13 +317,16 @@ class FPBioEnrollment(BioEnrollment):
                 BioEnrollment.TEMPLATE_INFO.NAME: name,
             },
         )
+        logger.info("Fingerprint template renamed")
 
     def remove_enrollment(self, template_id):
         """Remove a previously enrolled fingerprint template.
 
         :param template_id: The Id of the template to remove.
         """
+        logger.debug(f"Deleting template: {template_id:x}")
         self._call(
             FPBioEnrollment.CMD.REMOVE_ENROLLMENT,
             {BioEnrollment.TEMPLATE_INFO.ID: template_id},
         )
+        logger.info("Fingerprint template deleted")

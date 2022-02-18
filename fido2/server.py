@@ -54,6 +54,9 @@ import os
 import abc
 from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _verify_origin_for_rp(rp_id):
@@ -187,6 +190,7 @@ class Fido2Server:
             for alg in CoseKey.supported_algorithms()
         ]
         self._verify_attestation = verify_attestation or _ignore_attestation
+        logger.debug(f"Fido2Server initialized for RP: {self.rp}")
 
     def register_begin(
         self,
@@ -216,8 +220,12 @@ class Fido2Server:
             raise ValueError("Server has no allowed algorithms.")
 
         challenge = _validata_challenge(challenge)
-
+        descriptors = _wrap_credentials(credentials)
         state = self._make_internal_state(challenge, user_verification)
+        logger.debug(
+            "Starting new registration, existing credentials: "
+            + ", ".join(d.id.hex() for d in descriptors)
+        )
 
         return (
             {
@@ -227,7 +235,7 @@ class Fido2Server:
                     challenge,
                     self.allowed_algorithms,
                     self.timeout,
-                    _wrap_credentials(credentials),
+                    descriptors,
                     AuthenticatorSelectionCriteria(
                         authenticator_attachment, resident_key, user_verification
                     )
@@ -273,11 +281,17 @@ class Fido2Server:
             )
 
         if self.attestation not in (None, AttestationConveyancePreference.NONE):
+            logger.debug(f"Verifying attestation of type {attestation_object.fmt}")
             self._verify_attestation(attestation_object, client_data.hash)
         # We simply ignore attestation if self.attestation == 'none', as not all
         # clients strip the attestation.
 
-        return attestation_object.auth_data
+        auth_data = attestation_object.auth_data
+        logger.info(
+            "New credential registered: "
+            + auth_data.credential_data.credential_id.hex()
+        )
+        return auth_data
 
     def authenticate_begin(
         self, credentials=None, user_verification=None, challenge=None, extensions=None
@@ -293,8 +307,12 @@ class Fido2Server:
             OS-specific random bytes.
         :return: Assertion data, internal state."""
         challenge = _validata_challenge(challenge)
-
+        descriptors = _wrap_credentials(credentials)
         state = self._make_internal_state(challenge, user_verification)
+        logger.debug(
+            "Starting new authentication, for credentials: "
+            + ", ".join(d.id.hex() for d in descriptors)
+        )
 
         return (
             {
@@ -302,7 +320,7 @@ class Fido2Server:
                     challenge,
                     self.timeout,
                     self.rp.id,
-                    _wrap_credentials(credentials),
+                    descriptors,
                     user_verification,
                     extensions,
                 )
@@ -348,6 +366,7 @@ class Fido2Server:
                     cred.public_key.verify(auth_data + client_data.hash, signature)
                 except _InvalidSignature:
                     raise ValueError("Invalid signature.")
+                logger.info(f"Credential authenticated: {credential_id.hex()}")
                 return cred
         raise ValueError("Unknown credential ID.")
 

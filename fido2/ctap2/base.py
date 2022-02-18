@@ -36,6 +36,9 @@ from dataclasses import dataclass, field, fields, MISSING
 from threading import Event
 from typing import Mapping, Dict, Any, List, Optional, Type, TypeVar, Callable
 import struct
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def args(*params) -> Dict[int, Any]:
@@ -362,6 +365,7 @@ class Ctap2:
             messages from the authenticator.
         """
         self.send_cbor(Ctap2.CMD.RESET, event=event, on_keepalive=on_keepalive)
+        logger.info("Reset completed - All data erased")
 
     def make_credential(
         self,
@@ -393,6 +397,7 @@ class Ctap2:
             messages from the authenticator.
         :return: The new credential.
         """
+        logger.debug("Calling CTAP2 make_credential")
         return AttestationResponse(
             self.send_cbor(
                 Ctap2.CMD.MAKE_CREDENTIAL,
@@ -438,6 +443,7 @@ class Ctap2:
             from the authenticator.
         :return: The new assertion.
         """
+        logger.debug("Calling CTAP2 get_assertion")
         return AssertionResponse(
             self.send_cbor(
                 Ctap2.CMD.GET_ASSERTION,
