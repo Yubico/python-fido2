@@ -79,14 +79,14 @@ class TestWebSafe(unittest.TestCase):
         self.assertEqual(websafe_decode(b"Zm9vYmFy"), b"foobar")
 
     def test_websafe_decode_unicode(self):
-        self.assertEqual(websafe_decode(u""), b"")
-        self.assertEqual(websafe_decode(u"Zm9vYmFy"), b"foobar")
+        self.assertEqual(websafe_decode(""), b"")
+        self.assertEqual(websafe_decode("Zm9vYmFy"), b"foobar")
 
     def test_websafe_encode(self):
-        self.assertEqual(websafe_encode(b""), u"")
-        self.assertEqual(websafe_encode(b"f"), u"Zg")
-        self.assertEqual(websafe_encode(b"fo"), u"Zm8")
-        self.assertEqual(websafe_encode(b"foo"), u"Zm9v")
-        self.assertEqual(websafe_encode(b"foob"), u"Zm9vYg")
-        self.assertEqual(websafe_encode(b"fooba"), u"Zm9vYmE")
-        self.assertEqual(websafe_encode(b"foobar"), u"Zm9vYmFy")
+        self.assertEqual(websafe_encode(b""), "")
+        self.assertEqual(websafe_encode(b"f"), "Zg")
+        self.assertEqual(websafe_encode(b"fo"), "Zm8")
+        self.assertEqual(websafe_encode(b"foo"), "Zm9v")
+        self.assertEqual(websafe_encode(b"foob"), "Zm9vYg")
+        self.assertEqual(websafe_encode(b"fooba"), "Zm9vYmE")
+        self.assertEqual(websafe_encode(b"foobar"), "Zm9vYmFy")

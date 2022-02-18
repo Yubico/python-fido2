@@ -261,7 +261,7 @@ class TpmsRsaParms:
         exponent = reader.unpack("!L")
         if exponent == 0:
             # When  zero,  indicates  that  the  exponent  is  the  default  of 2^16 + 1
-            exponent = (2 ** 16) + 1
+            exponent = (2**16) + 1
 
         return cls(symmetric, scheme, key_bits, exponent)
 
@@ -383,7 +383,7 @@ class ATTRIBUTES(IntEnum):
         | (1 << 3)  # 3 Reserved
         | (0x3 << 8)  # 9:8 Reserved
         | (0xF << 12)  # 15:12 Reserved
-        | ((0xFFFFFFFF << 19) & (2 ** 32 - 1))  # 31:19 Reserved
+        | ((0xFFFFFFFF << 19) & (2**32 - 1))  # 31:19 Reserved
     )
 
 

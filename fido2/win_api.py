@@ -90,10 +90,10 @@ class GUID(ctypes.Structure):
             self.Data2,
             self.Data3,
             self.Data4[0] * 256 + self.Data4[1],
-            self.Data4[2] * (256 ** 5)
-            + self.Data4[3] * (256 ** 4)
-            + self.Data4[4] * (256 ** 3)
-            + self.Data4[5] * (256 ** 2)
+            self.Data4[2] * (256**5)
+            + self.Data4[3] * (256**4)
+            + self.Data4[4] * (256**3)
+            + self.Data4[5] * (256**2)
             + self.Data4[6] * 256
             + self.Data4[7],
         )
