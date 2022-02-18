@@ -47,6 +47,9 @@ __all__ = [
 ]
 
 
+LOG_LEVEL_TRAFFIC = 5
+
+
 def sha256(data: bytes) -> bytes:
     """Produces a SHA256 hash of the input.
 

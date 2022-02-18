@@ -21,6 +21,7 @@ import glob
 import fcntl
 import struct
 from array import array
+from typing import Set
 
 import logging
 
@@ -78,16 +79,25 @@ def get_descriptor(path):
     return HidDescriptor(path, vid, pid, max_in_size, max_out_size, name, serial)
 
 
+# Cache for continuously failing devices
+_failed_cache: Set[str] = set()
+
+
 def list_descriptors():
+    stale = set(_failed_cache)
     devices = []
     for hidraw in glob.glob("/dev/hidraw*"):
+        stale.discard(hidraw)
         try:
             devices.append(get_descriptor(hidraw))
-            logger.debug("Found CTAP device: %s", hidraw)
         except ValueError:
             pass  # Not a CTAP device, ignore.
-        except OSError as e:
-            logger.debug("Skip device: %s", e)
-        except Exception as e:
-            logger.debug("Failed opening device", exc_info=e)
+        except Exception:
+            if hidraw not in _failed_cache:
+                logger.debug("Failed opening device %s", hidraw, exc_info=True)
+                _failed_cache.add(hidraw)
+
+    # Remove entries from the cache that were not seen
+    _failed_cache.difference_update(hidraw)
+
     return devices

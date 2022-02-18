@@ -449,7 +449,6 @@ def list_descriptors():
                 try:
                     descriptor = _get_descriptor_from_handle(handle)
                     descriptors.append(descriptor)
-                    logger.debug("Found CTAP device: %s", descriptor.path)
                 except ValueError:
                     continue  # Not a CTAP device, ignore it
             return descriptors
