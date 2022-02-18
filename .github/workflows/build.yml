@@ -41,7 +41,7 @@ jobs:
           poetry update
 
       - name: Run pre-commit
-        if: "!startsWith(matrix.python, 'pypy')"
+        if: "!startsWith(matrix.python, 'pypy') && matrix.python != '3.6'"
         run: |
           python -m pip install pre-commit
           pre-commit run --all-files
