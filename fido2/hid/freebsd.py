@@ -24,7 +24,7 @@ import os
 from .base import HidDescriptor, parse_report_descriptor, FileCtapHidConnection
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -135,9 +135,16 @@ def get_descriptor(path):
     raise ValueError("Device not found")
 
 
+# Cache for continuously failing devices
+_failed_cache: Set[str] = set()
+
+
 def list_descriptors():
+    stale = set(_failed_cache)
     descriptors = []
     for dev in _enumerate():
+        path = dev["path"]
+        stale.discard(path)
         try:
             name = dev["product_desc"] or None
             serial = (dev["serial_number"] if "serial_number" in dev else None) or None
@@ -147,13 +154,14 @@ def list_descriptors():
                     dev["product_id"],
                     name,
                     serial,
-                    dev["path"],
+                    path,
                 )
             )
-            logger.debug("Found CTAP device: %s", dev["path"])
         except ValueError:
             pass  # Not a CTAP device, ignore
-        except Exception as e:
-            logger.debug("Failed opening HID device", exc_info=e)
+        except Exception:
+            if path not in _failed_cache:
+                logger.debug("Failed opening HID device %s", path, exc_info=True)
+                _failed_cache.add(path)
 
     return descriptors

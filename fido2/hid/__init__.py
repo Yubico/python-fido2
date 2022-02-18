@@ -26,6 +26,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from ..ctap import CtapDevice, CtapError, STATUS
+from ..utils import LOG_LEVEL_TRAFFIC
 from threading import Event
 from enum import IntEnum, IntFlag, unique
 import struct
@@ -94,6 +95,7 @@ class CtapHidDevice(CtapDevice):
 
     def __init__(self, descriptor, connection):
         self.descriptor = descriptor
+        self._packet_size = descriptor.report_size_out
         self._connection = connection
 
         nonce = os.urandom(8)
@@ -143,20 +145,26 @@ class CtapHidDevice(CtapDevice):
         """Serial number of device."""
         return self.descriptor.serial_number
 
+    def _send_cancel(self):
+        packet = struct.pack(">IB", self._channel_id, TYPE_INIT | CTAPHID.CANCEL).ljust(
+            self._packet_size, b"\0"
+        )
+        logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", packet.hex())
+        self._connection.write_packet(packet)
+
     def call(self, cmd, data=b"", event=None, on_keepalive=None):
         event = event or Event()
         remaining = data
-        packet_size = self.descriptor.report_size_out
         seq = 0
 
         # Send request
         header = struct.pack(">IBH", self._channel_id, TYPE_INIT | cmd, len(remaining))
         while remaining or seq == 0:
-            size = min(len(remaining), packet_size - len(header))
+            size = min(len(remaining), self._packet_size - len(header))
             body, remaining = remaining[:size], remaining[size:]
             packet = header + body
-            logger.debug("SEND: %s", packet.hex())
-            self._connection.write_packet(packet.ljust(packet_size, b"\0"))
+            logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", packet.hex())
+            self._connection.write_packet(packet.ljust(self._packet_size, b"\0"))
             header = struct.pack(">IB", self._channel_id, 0x7F & seq)
             seq += 1
 
@@ -169,13 +177,10 @@ class CtapHidDevice(CtapDevice):
                 if event.is_set():
                     # Cancel
                     logger.debug("Sending cancel...")
-                    packet = struct.pack(
-                        ">IB", self._channel_id, TYPE_INIT | CTAPHID.CANCEL
-                    ).ljust(packet_size, b"\0")
-                    self._connection.write_packet(packet)
+                    self._send_cancel()
 
                 recv = self._connection.read_packet()
-                logger.debug("RECV: %s", recv.hex())
+                logger.log(LOG_LEVEL_TRAFFIC, "RECV: %s", recv.hex())
 
                 r_channel = struct.unpack_from(">I", recv)[0]
                 recv = recv[4:]
@@ -215,11 +220,8 @@ class CtapHidDevice(CtapDevice):
 
             return response[:r_len]
         except KeyboardInterrupt:
-            logger.debug("Keyboard interrupt, sending cancel...")
-            packet = struct.pack(
-                ">IB", self._channel_id, TYPE_INIT | CTAPHID.CANCEL
-            ).ljust(packet_size, b"\0")
-            self._connection.write_packet(packet)
+            logger.debug("Keyboard interrupt, cancelling...")
+            self._send_cancel()
 
             raise
 

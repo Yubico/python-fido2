@@ -21,6 +21,7 @@ import ctypes
 import platform
 from ctypes import WinDLL, WinError  # type: ignore
 from ctypes import wintypes, LibraryLoader
+from typing import Dict, cast
 
 import logging
 
@@ -99,7 +100,8 @@ HANDLE = ctypes.c_void_p
 PHIDP_PREPARSED_DATA = ctypes.c_void_p  # pylint: disable=invalid-name
 
 # This is a HANDLE.
-INVALID_HANDLE_VALUE = 0xFFFFFFFF
+# INVALID_HANDLE_VALUE = 0xFFFFFFFF
+INVALID_HANDLE_VALUE = (1 << 8 * ctypes.sizeof(ctypes.c_void_p)) - 1
 
 # Status codes
 FILE_SHARE_READ = 0x00000001
@@ -305,7 +307,12 @@ def open_connection(descriptor):
     return WinCtapHidConnection(descriptor)
 
 
+_SKIP = cast(HidDescriptor, object())
+_descriptor_cache: Dict[bytes, HidDescriptor] = {}
+
+
 def list_descriptors():
+    stale = set(_descriptor_cache)
     descriptors = []
 
     hid_guid = GUID()
@@ -364,15 +371,32 @@ def list_descriptors():
                 raise WinError()
 
             path = ctypes.string_at(interface_detail.DevicePath)
+            stale.discard(path)
+
+            # Check if path already cached
+            desc = _descriptor_cache.get(path)
+            if desc:
+                if desc is not _SKIP:
+                    descriptors.append(desc)
+                continue
 
             try:
-                descriptors.append(get_descriptor(path))
-                logger.debug("Found CTAP device: %s", path)
+                descriptor = get_descriptor(path)
+                _descriptor_cache[path] = descriptor
+                descriptors.append(descriptor)
+                continue
             except ValueError:
-                pass
-            except Exception as e:
-                logger.debug("Failed reading HID descriptor: %s", e)
+                pass  # Not a CTAP device
+            except Exception:
+                logger.debug(
+                    "Failed reading HID descriptor for %s", path, exc_info=True
+                )
+            _descriptor_cache[path] = _SKIP
     finally:
         setupapi.SetupDiDestroyDeviceInfoList(collection)
+
+    # Remove entries from the cache that were not seen
+    for path in stale:
+        del _descriptor_cache[path]
 
     return descriptors

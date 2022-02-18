@@ -27,6 +27,7 @@ from ctypes import Structure, c_char, c_int, c_uint8, c_uint16, c_uint32
 from .base import HidDescriptor, FileCtapHidConnection
 
 import logging
+from typing import Set
 
 # Don't typecheck this file on Windows
 assert sys.platform != "win32"  # nosec
@@ -115,13 +116,20 @@ def get_descriptor(path):
     return HidDescriptor(path, vid, pid, MAX_U2F_HIDLEN, MAX_U2F_HIDLEN, name, serial)
 
 
+# Cache for continuously failing devices
+_failed_cache: Set[str] = set()
+
+
 def list_descriptors():
+    stale = set(_failed_cache)
     descriptors = []
     for dev in os.listdir(FIDO_DEVS):
         path = os.path.join(FIDO_DEVS, dev)
+        stale.discard(path)
         try:
             descriptors.append(get_descriptor(path))
-            logger.debug("Found CTAP device: %s", path)
-        except Exception as e:
-            logger.debug("Failed opening FIDO device", exc_info=e)
+        except Exception:
+            if path not in _failed_cache:
+                logger.debug("Failed opening FIDO device %s", path, exc_info=True)
+                _failed_cache.add(path)
     return descriptors

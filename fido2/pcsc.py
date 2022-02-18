@@ -28,6 +28,7 @@
 
 from .ctap import CtapDevice, CtapError, STATUS
 from .hid import CAPABILITY, CTAPHID
+from .utils import LOG_LEVEL_TRAFFIC
 from smartcard import System
 from smartcard.pcsc.PCSCExceptions import ListReadersException
 from smartcard.pcsc.PCSCContext import PCSCContext
@@ -105,10 +106,12 @@ class CtapPcscDevice(CtapDevice):
         :return: byte string. response from card
         """
 
-        logger.debug("SEND: %s", apdu.hex())
+        logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", apdu.hex())
         resp, sw1, sw2 = self._conn.transmit(list(apdu), protocol)
         response = bytes(resp)
-        logger.debug("RECV: %s SW=%04X", response.hex(), sw1 << 8 + sw2)
+        logger.log(
+            LOG_LEVEL_TRAFFIC, "RECV: %s SW=%04X", response.hex(), sw1 << 8 + sw2
+        )
 
         return response, sw1, sw2
 
@@ -120,10 +123,10 @@ class CtapPcscDevice(CtapDevice):
         :return: byte string. response
         """
 
-        logger.debug("control %s", control_data.hex())
+        logger.log(LOG_LEVEL_TRAFFIC, "Send control: %s", control_data.hex())
         response = self._conn.control(control_code, list(control_data))
         response = bytes(response)
-        logger.debug("response %s", response.hex())
+        logger.log(LOG_LEVEL_TRAFFIC, "Control response: %s", response.hex())
 
         return response
 
