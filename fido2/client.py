@@ -63,7 +63,6 @@ import platform
 import inspect
 import logging
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -926,6 +925,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
                 )
             rp = replace(rp, id=url.netloc)
 
+        logger.debug(f"Register a new credential for RP ID: {rp.id}")
         self._verify_rp_id(rp.id)
 
         client_data = self._build_client_data(
@@ -970,6 +970,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             timer.daemon = True
             timer.start()
 
+        logger.debug(f"Assert a credential for RP ID: {options.rp_id}")
         self._verify_rp_id(options.rp_id)
 
         client_data = self._build_client_data(
@@ -1042,6 +1043,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         options = PublicKeyCredentialCreationOptions._wrap(options)
 
+        logger.debug(f"Register a new credential for RP ID: {options.rp.id}")
         self._verify_rp_id(options.rp.id)
 
         client_data = self._build_client_data(
@@ -1074,6 +1076,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         except OSError as e:
             raise ClientError.ERR.OTHER_ERROR(e)
 
+        logger.info("New credential registered")
         return AuthenticatorAttestationResponse(
             client_data, AttestationObject(result), {}
         )
@@ -1087,6 +1090,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         options = PublicKeyCredentialRequestOptions._wrap(options)
 
+        logger.debug(f"Assert a credential for RP ID: {options.rp_id}")
         self._verify_rp_id(options.rp_id)
 
         client_data = self._build_client_data(

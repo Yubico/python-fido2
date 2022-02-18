@@ -30,6 +30,9 @@ from ..ctap import CtapError
 
 from enum import IntEnum, unique
 import struct
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CredentialManagement:
@@ -200,10 +203,12 @@ class CredentialManagement:
 
         :param cred_id: The PublicKeyCredentialDescriptor of the credential to delete.
         """
-        return self._call(
+        logger.debug(f"Deleting credential with ID: {cred_id}")
+        self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
             {CredentialManagement.PARAM.CREDENTIAL_ID: cred_id},
         )
+        logger.info("Credential deleted")
 
     def update_user_info(self, cred_id, user_info):
         """Update the user entity of a resident key.
@@ -211,10 +216,12 @@ class CredentialManagement:
         :param cred_id: The PublicKeyCredentialDescriptor of the credential to update.
         :param user_info: The user info update.
         """
-        return self._call(
+        logger.debug(f"Updating credential: {cred_id} with user info: {user_info}")
+        self._call(
             CredentialManagement.CMD.UPDATE_USER_INFO,
             {
                 CredentialManagement.PARAM.CREDENTIAL_ID: cred_id,
                 CredentialManagement.PARAM.USER: user_info,
             },
         )
+        logger.info("Credential user info updated")
