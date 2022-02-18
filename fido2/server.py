@@ -224,7 +224,7 @@ class Fido2Server:
         state = self._make_internal_state(challenge, user_verification)
         logger.debug(
             "Starting new registration, existing credentials: "
-            + ", ".join(d.id.hex() for d in descriptors)
+            + ", ".join(d.id.hex() for d in descriptors or [])
         )
 
         return (
