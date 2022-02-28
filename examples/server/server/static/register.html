@@ -15,16 +15,24 @@
   <hr>
 
   <h2>Register a credential</h2>
-  <p>Touch your authenticator device now...</p>
-  <a href="/">Cancel</a>
+  <div id="initial">
+    <button onclick="start();">Click here to start</button>
+  </div>
+  <div id="started", style="display: none;">
+    <p>Touch your authenticator device now...</p>
+    <a href="/">Cancel</a>
+  </div>
 
   <script>
+    function start() {
     fetch('/api/register/begin', {
       method: 'POST',
     }).then(function(response) {
       if(response.ok) return response.arrayBuffer();
       throw new Error('Error getting registration data!');
     }).then(CBOR.decode).then(function(options) {
+      document.getElementById('initial').style.display = 'none';
+      document.getElementById('started').style.display = 'block';
       return navigator.credentials.create(options);
     }).then(function(attestation) {
       return fetch('/api/register/complete', {
@@ -43,6 +51,7 @@
     }).then(function() {
       window.location = '/';
     });
+    }
   </script>
 
 </body>
