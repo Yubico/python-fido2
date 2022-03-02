@@ -27,11 +27,9 @@
 
 import abc
 from enum import IntEnum, unique
+from threading import Event
 
 from typing import Optional, Callable, Iterator
-
-if False:  # Import for mypy only
-    from threading import Event
 
 
 @unique
@@ -56,7 +54,7 @@ class CtapDevice(abc.ABC):
         self,
         cmd: int,
         data: bytes = b"",
-        event: Optional["Event"] = None,
+        event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> bytes:
         """Sends a command to the authenticator, and reads the response.
@@ -91,7 +89,7 @@ class CtapError(Exception):
         name = "UNKNOWN_ERR"
 
         @property
-        def value(self):
+        def value(self) -> int:
             return int(self)
 
         def __repr__(self):

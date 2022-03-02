@@ -27,9 +27,10 @@
 
 from .rpid import verify_rp_id, verify_app_id
 from .cose import CoseKey
-from .client import WEBAUTHN_TYPE
+from .client import WEBAUTHN_TYPE, ClientData
 from .attestation import (
     Attestation,
+    AttestationResult,
     UnsupportedAttestation,
     UntrustedAttestation,
     InvalidSignature,
@@ -37,9 +38,12 @@ from .attestation import (
 )
 from .utils import websafe_encode, websafe_decode
 from .webauthn import (
+    AuthenticatorData,
+    AttestationObject,
     AttestedCredentialData,
     AttestationConveyancePreference,
     PublicKeyCredentialRpEntity,
+    PublicKeyCredentialUserEntity,
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialType,
@@ -47,13 +51,16 @@ from .webauthn import (
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     UserVerificationRequirement,
+    ResidentKeyRequirement,
+    AuthenticatorAttachment,
 )
 
+from cryptography.hazmat.primitives import constant_time
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from typing import Sequence, Mapping, Optional, Callable, Union, Tuple, Any
 
 import os
 import abc
-from cryptography.hazmat.primitives import constant_time
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,7 +70,7 @@ def _verify_origin_for_rp(rp_id):
     return lambda o: verify_rp_id(rp_id, o)
 
 
-def _validata_challenge(challenge):
+def _validata_challenge(challenge) -> bytes:
     if challenge is None:
         challenge = os.urandom(32)
     else:
@@ -74,7 +81,9 @@ def _validata_challenge(challenge):
     return challenge
 
 
-def to_descriptor(credential, transports=None):
+def to_descriptor(
+    credential: AttestedCredentialData, transports=None
+) -> PublicKeyCredentialDescriptor:
     """Converts an AttestedCredentialData to a PublicKeyCredentialDescriptor.
 
     :param credential: AttestedCredentialData containing the credential ID to use.
@@ -119,24 +128,28 @@ class AttestationVerifier(abc.ABC):
     to verify the trust path from the attestation.
     """
 
-    def __init__(self, attestation_types=None):
+    def __init__(self, attestation_types: Sequence[Attestation] = None):
         self._attestation_types = attestation_types or _default_attestations()
 
     @abc.abstractmethod
-    def ca_lookup(self, attestation_result, auth_data):
+    def ca_lookup(
+        self, attestation_result: AttestationResult, auth_data: AuthenticatorData
+    ) -> Optional[bytes]:
         """Lookup a CA certificate to be used to verify a trust path.
 
         :param attestation_result: The result of the attestation
         """
         raise NotImplementedError()
 
-    def verify_attestation(self, attestation_object, client_data_hash):
+    def verify_attestation(
+        self, attestation_object: AttestationObject, client_data_hash: bytes
+    ) -> None:
         """Verify attestation.
 
         :param attestation_object: dict containing attestation data.
         :param client_data_hash: SHA256 hash of the ClientData bytes.
         """
-        att_verifier = UnsupportedAttestation(attestation_object.fmt)
+        att_verifier: Attestation = UnsupportedAttestation(attestation_object.fmt)
         for at in self._attestation_types:
             if getattr(at, "FORMAT", None) == attestation_object.fmt:
                 att_verifier = at
@@ -166,6 +179,10 @@ class AttestationVerifier(abc.ABC):
         self.verify_attestation(*args)
 
 
+VerifyAttestation = Callable[[AttestationObject, bytes], None]
+VerifyOrigin = Callable[[str], bool]
+
+
 class Fido2Server:
     """FIDO2 server.
 
@@ -179,7 +196,11 @@ class Fido2Server:
     """
 
     def __init__(
-        self, rp, attestation=None, verify_origin=None, verify_attestation=None
+        self,
+        rp: PublicKeyCredentialRpEntity,
+        attestation: Optional[AttestationConveyancePreference] = None,
+        verify_origin: Optional[VerifyOrigin] = None,
+        verify_attestation: Optional[VerifyAttestation] = None,
     ):
         self.rp = PublicKeyCredentialRpEntity._wrap(rp)
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
@@ -194,14 +215,16 @@ class Fido2Server:
 
     def register_begin(
         self,
-        user,
-        credentials=None,
-        resident_key=None,
-        user_verification=None,
-        authenticator_attachment=None,
-        challenge=None,
+        user: PublicKeyCredentialUserEntity,
+        credentials: Optional[
+            Sequence[Union[AttestedCredentialData, PublicKeyCredentialDescriptor]]
+        ] = None,
+        resident_key_requirement: Optional[ResidentKeyRequirement] = None,
+        user_verification: Optional[UserVerificationRequirement] = None,
+        authenticator_attachment: Optional[AuthenticatorAttachment] = None,
+        challenge: Optional[bytes] = None,
         extensions=None,
-    ):
+    ) -> Tuple[Mapping[str, Any], Any]:
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
         corresponding `register_complete` call.
@@ -209,7 +232,7 @@ class Fido2Server:
         :param user: The dict containing the user data.
         :param credentials: The list of previously registered credentials, these can be
             of type AttestedCredentialData, or PublicKeyCredentialDescriptor.
-        :param resident_key: True to request a resident credential.
+        :param resident_key_requirement: The desired RESIDENT_KEY_REQUIREMENT level.
         :param user_verification: The desired USER_VERIFICATION level.
         :param authenticator_attachment: The desired AUTHENTICATOR_ATTACHMENT
             or None to not provide a preference (and get both types).
@@ -237,9 +260,17 @@ class Fido2Server:
                     self.timeout,
                     descriptors,
                     AuthenticatorSelectionCriteria(
-                        authenticator_attachment, resident_key, user_verification
+                        authenticator_attachment,
+                        resident_key_requirement,
+                        user_verification,
                     )
-                    if any((authenticator_attachment, resident_key, user_verification))
+                    if any(
+                        (
+                            authenticator_attachment,
+                            resident_key_requirement,
+                            user_verification,
+                        )
+                    )
                     else None,
                     self.attestation,
                     extensions,
@@ -248,7 +279,9 @@ class Fido2Server:
             state,
         )
 
-    def register_complete(self, state, client_data, attestation_object):
+    def register_complete(
+        self, state, client_data: ClientData, attestation_object: AttestationObject
+    ) -> AuthenticatorData:
         """Verify the correctness of the registration data received from
         the client.
 
@@ -256,7 +289,8 @@ class Fido2Server:
             `register_begin`.
         :param client_data: The client data.
         :param attestation_object: The attestation object.
-        :return: The authenticator data"""
+        :return: The authenticator data
+        """
         if client_data.get("type") != WEBAUTHN_TYPE.MAKE_CREDENTIAL:
             raise ValueError("Incorrect type in ClientData.")
         if not self._verify(client_data.get("origin")):
@@ -287,6 +321,7 @@ class Fido2Server:
         # clients strip the attestation.
 
         auth_data = attestation_object.auth_data
+        assert auth_data.credential_data is not None  # nosec
         logger.info(
             "New credential registered: "
             + auth_data.credential_data.credential_id.hex()
@@ -294,8 +329,14 @@ class Fido2Server:
         return auth_data
 
     def authenticate_begin(
-        self, credentials=None, user_verification=None, challenge=None, extensions=None
-    ):
+        self,
+        credentials: Optional[
+            Sequence[Union[AttestedCredentialData, PublicKeyCredentialDescriptor]]
+        ] = None,
+        user_verification: Optional[UserVerificationRequirement] = None,
+        challenge: Optional[bytes] = None,
+        extensions=None,
+    ) -> Tuple[Mapping[str, Any], Any]:
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
         `authenticate_complete` call.
@@ -329,8 +370,14 @@ class Fido2Server:
         )
 
     def authenticate_complete(
-        self, state, credentials, credential_id, client_data, auth_data, signature
-    ):
+        self,
+        state,
+        credentials: Sequence[AttestedCredentialData],
+        credential_id: bytes,
+        client_data: ClientData,
+        auth_data: AuthenticatorData,
+        signature: bytes,
+    ) -> AttestedCredentialData:
         """Verify the correctness of the assertion data received from
         the client.
 
@@ -371,7 +418,9 @@ class Fido2Server:
         raise ValueError("Unknown credential ID.")
 
     @staticmethod
-    def _make_internal_state(challenge, user_verification):
+    def _make_internal_state(
+        challenge: bytes, user_verification: Optional[UserVerificationRequirement]
+    ):
         return {
             "challenge": websafe_encode(challenge),
             "user_verification": user_verification,
@@ -391,7 +440,14 @@ class U2FFido2Server(Fido2Server):
     For other parameters, see Fido2Server.
     """
 
-    def __init__(self, app_id, rp, verify_u2f_origin=None, *args, **kwargs):
+    def __init__(
+        self,
+        app_id: str,
+        rp: PublicKeyCredentialRpEntity,
+        verify_u2f_origin: Optional[VerifyOrigin] = None,
+        *args,
+        **kwargs,
+    ):
         super().__init__(rp, *args, **kwargs)
         if verify_u2f_origin:
             kwargs["verify_origin"] = verify_u2f_origin

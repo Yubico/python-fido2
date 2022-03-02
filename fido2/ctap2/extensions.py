@@ -25,7 +25,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from .base import AttestationResponse, AssertionResponse
+from .base import AttestationResponse, AssertionResponse, Ctap2
 from .pin import ClientPin, PinProtocol
 from .blob import LargeBlobs
 from enum import Enum, unique
@@ -41,7 +41,7 @@ class Ctap2Extension(abc.ABC):
 
     NAME: str = None  # type: ignore
 
-    def __init__(self, ctap):
+    def __init__(self, ctap: Ctap2):
         self.ctap = ctap
 
     def is_supported(self) -> bool:
@@ -208,9 +208,11 @@ class CredBlobExtension(Ctap2Extension):
     NAME = "credBlob"
 
     def process_create_input(self, inputs):
-        blob = self.is_supported() and inputs.get("credBlob")
-        if blob and len(blob) <= self.ctap.info.max_cred_blob_length:
-            return blob
+        if self.is_supported():
+            blob = inputs.get("credBlob")
+            assert self.ctap.info.max_cred_blob_length is not None  # nosec
+            if blob and len(blob) <= self.ctap.info.max_cred_blob_length:
+                return blob
 
     def process_get_input(self, inputs):
         if self.is_supported() and inputs.get("getCredBlob") is True:

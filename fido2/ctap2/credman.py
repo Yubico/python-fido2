@@ -27,8 +27,13 @@
 
 from .. import cbor
 from ..ctap import CtapError
+from ..webauthn import PublicKeyCredentialDescriptor, PublicKeyCredentialUserEntity
+from .base import Ctap2, Info
+from .pin import PinProtocol, _PinUv
 
 from enum import IntEnum, unique
+from typing import Mapping, Sequence, Any
+
 import struct
 import logging
 
@@ -75,7 +80,7 @@ class CredentialManagement:
         LARGE_BLOB_KEY = 0x0B
 
     @staticmethod
-    def is_supported(info):
+    def is_supported(info: Info) -> bool:
         if info.options.get("credMgmt"):
             return True
         # We also support the Prototype command
@@ -85,13 +90,17 @@ class CredentialManagement:
             return True
         return False
 
-    def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
+    def __init__(
+        self,
+        ctap: Ctap2,
+        pin_uv_protocol: PinProtocol,
+        pin_uv_token: bytes,
+    ):
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support Credential Management")
 
         self.ctap = ctap
-        self.pin_uv_protocol = pin_uv_protocol
-        self.pin_uv_token = pin_uv_token
+        self.pin_uv = _PinUv(pin_uv_protocol, pin_uv_token)
 
     def _call(self, sub_cmd, params=None, auth=True):
         kwargs = {"sub_cmd": sub_cmd, "sub_cmd_params": params}
@@ -99,13 +108,13 @@ class CredentialManagement:
             msg = struct.pack(">B", sub_cmd)
             if params is not None:
                 msg += cbor.encode(params)
-            kwargs["pin_uv_protocol"] = self.pin_uv_protocol.VERSION
-            kwargs["pin_uv_param"] = self.pin_uv_protocol.authenticate(
-                self.pin_uv_token, msg
+            kwargs["pin_uv_protocol"] = self.pin_uv.protocol.VERSION
+            kwargs["pin_uv_param"] = self.pin_uv.protocol.authenticate(
+                self.pin_uv.token, msg
             )
         return self.ctap.credential_mgmt(**kwargs)
 
-    def get_metadata(self):
+    def get_metadata(self) -> Mapping[int, Any]:
         """Get credentials metadata.
 
         This returns the existing resident credentials count, and the max
@@ -116,7 +125,7 @@ class CredentialManagement:
         """
         return self._call(CredentialManagement.CMD.GET_CREDS_METADATA)
 
-    def enumerate_rps_begin(self):
+    def enumerate_rps_begin(self) -> Mapping[int, Any]:
         """Start enumeration of RP entities of resident credentials.
 
         This will begin enumeration of stored RP entities, returning the first
@@ -126,7 +135,7 @@ class CredentialManagement:
         """
         return self._call(CredentialManagement.CMD.ENUMERATE_RPS_BEGIN)
 
-    def enumerate_rps_next(self):
+    def enumerate_rps_next(self) -> Mapping[int, Any]:
         """Get the next RP entity stored.
 
         This continues enumeration of stored RP entities, returning the next
@@ -136,7 +145,7 @@ class CredentialManagement:
         """
         return self._call(CredentialManagement.CMD.ENUMERATE_RPS_NEXT, auth=False)
 
-    def enumerate_rps(self):
+    def enumerate_rps(self) -> Sequence[Mapping[int, Any]]:
         """Convenience method to enumerate all RPs.
 
         See enumerate_rps_begin and enumerate_rps_next for details.
@@ -153,7 +162,7 @@ class CredentialManagement:
         rest = [self.enumerate_rps_next() for _ in range(1, n_rps)]
         return [first] + rest
 
-    def enumerate_creds_begin(self, rp_id_hash):
+    def enumerate_creds_begin(self, rp_id_hash: bytes) -> Mapping[int, Any]:
         """Start enumeration of resident credentials.
 
         This will begin enumeration of resident credentials for a given RP,
@@ -169,7 +178,7 @@ class CredentialManagement:
             {CredentialManagement.PARAM.RP_ID_HASH: rp_id_hash},
         )
 
-    def enumerate_creds_next(self):
+    def enumerate_creds_next(self) -> Mapping[int, Any]:
         """Get the next resident credential stored.
 
         This continues enumeration of resident credentials, returning the next
@@ -179,7 +188,7 @@ class CredentialManagement:
         """
         return self._call(CredentialManagement.CMD.ENUMERATE_CREDS_NEXT, auth=False)
 
-    def enumerate_creds(self, *args, **kwargs):
+    def enumerate_creds(self, *args, **kwargs) -> Sequence[Mapping[int, Any]]:
         """Convenience method to enumerate all resident credentials for an RP.
 
         See enumerate_creds_begin and enumerate_creds_next for details.
@@ -198,19 +207,23 @@ class CredentialManagement:
         ]
         return [first] + rest
 
-    def delete_cred(self, cred_id):
+    def delete_cred(self, cred_id: PublicKeyCredentialDescriptor) -> None:
         """Delete a resident credential.
 
         :param cred_id: The PublicKeyCredentialDescriptor of the credential to delete.
         """
-        logger.debug(f"Deleting credential with ID: {cred_id}")
+        logger.debug(f"Deleting credential with ID: {cred_id['id'].hex()}")
         self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
             {CredentialManagement.PARAM.CREDENTIAL_ID: cred_id},
         )
         logger.info("Credential deleted")
 
-    def update_user_info(self, cred_id, user_info):
+    def update_user_info(
+        self,
+        cred_id: PublicKeyCredentialDescriptor,
+        user_info: PublicKeyCredentialUserEntity,
+    ) -> None:
         """Update the user entity of a resident key.
 
         :param cred_id: The PublicKeyCredentialDescriptor of the credential to update.

@@ -26,7 +26,10 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from .. import cbor
+from .base import Ctap2, Info
+from .pin import PinProtocol, _PinUv
 
+from typing import Optional, List
 from enum import IntEnum, unique
 import struct
 
@@ -53,37 +56,45 @@ class Config:
         FORCE_CHANGE_PIN = 0x03
 
     @staticmethod
-    def is_supported(info):
-        return info.options.get("authnrCfg")
+    def is_supported(info: Info) -> bool:
+        return info.options.get("authnrCfg") is True
 
-    def __init__(self, ctap, pin_uv_protocol=None, pin_uv_token=None):
+    def __init__(
+        self,
+        ctap: Ctap2,
+        pin_uv_protocol: Optional[PinProtocol] = None,
+        pin_uv_token: Optional[bytes] = None,
+    ):
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support Config")
 
         self.ctap = ctap
-        self.pin_uv_protocol = pin_uv_protocol
-        self.pin_uv_token = pin_uv_token
+        self.pin_uv = (
+            _PinUv(pin_uv_protocol, pin_uv_token)
+            if pin_uv_protocol and pin_uv_token
+            else None
+        )
 
     def _call(self, sub_cmd, params=None):
         if params:
             params = {k: v for k, v in params.items() if v is not None}
         else:
             params = None
-        if self.pin_uv_protocol:
+        if self.pin_uv:
             msg = (
                 b"\xff" * 32
                 + b"\x0d"
                 + struct.pack("<b", sub_cmd)
                 + (cbor.encode(params) if params else b"")
             )
-            pin_uv_protocol = self.pin_uv_protocol.VERSION
-            pin_uv_param = self.pin_uv_protocol.authenticate(self.pin_uv_token, msg)
+            pin_uv_protocol = self.pin_uv.protocol.VERSION
+            pin_uv_param = self.pin_uv.protocol.authenticate(self.pin_uv.token, msg)
         else:
             pin_uv_protocol = None
             pin_uv_param = None
         return self.ctap.config(sub_cmd, params, pin_uv_protocol, pin_uv_param)
 
-    def toggle_always_uv(self):
+    def toggle_always_uv(self) -> None:
         """Toggle the alwaysUV setting.
 
         When true, the Authenticator always requires UV for credential assertion.
@@ -91,8 +102,11 @@ class Config:
         self._call(Config.CMD.TOGGLE_ALWAYS_UV)
 
     def set_min_pin_length(
-        self, min_pin_length=None, rp_ids=None, force_change_pin=None
-    ):
+        self,
+        min_pin_length: Optional[int] = None,
+        rp_ids: List[str] = None,
+        force_change_pin: bool = False,
+    ) -> None:
         """Set the minimum PIN length allowed when setting/changing the PIN.
 
         :param min_pin_length: The minimum PIN length the Authenticator should allow.

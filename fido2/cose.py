@@ -29,12 +29,15 @@ from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
-from typing import Sequence, Type, Mapping, Any
+from typing import Sequence, Type, Mapping, Any, Union, TypeVar
 
 try:
     from cryptography.hazmat.primitives.asymmetric import ed25519
 except ImportError:  # EdDSA requires Cryptography >= 2.6.
     ed25519 = None  # type: ignore
+
+
+T_CoseKey = TypeVar("T_CoseKey", bound="CoseKey")
 
 
 class CoseKey(dict):
@@ -55,7 +58,10 @@ class CoseKey(dict):
         raise NotImplementedError("Signature verification not supported.")
 
     @classmethod
-    def from_cryptography_key(cls, public_key):
+    def from_cryptography_key(
+        cls: Type[T_CoseKey],
+        public_key: Union[rsa.RSAPublicKey, ec.EllipticCurvePublicKey],
+    ) -> T_CoseKey:
         """Converts a PublicKey object from Cryptography into a COSE key.
 
         :param public_key: Either an EC or RSA public key.

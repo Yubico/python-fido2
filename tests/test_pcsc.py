@@ -33,6 +33,7 @@ from fido2.hid import CTAPHID
 sys.modules["smartcard"] = mock.Mock()
 sys.modules["smartcard.Exceptions"] = mock.Mock()
 sys.modules["smartcard.System"] = mock.Mock()
+sys.modules["smartcard.CardConnection"] = mock.Mock()
 sys.modules["smartcard.pcsc"] = mock.Mock()
 sys.modules["smartcard.pcsc.PCSCExceptions"] = mock.Mock()
 sys.modules["smartcard.pcsc.PCSCContext"] = mock.Mock()

@@ -316,7 +316,7 @@ class Ctap2:
         permissions_rpid: Optional[str] = None,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ):
+    ) -> Mapping[int, Any]:
         """CTAP2 clientPin command, used for various PIN operations.
 
         This method is not intended to be called directly. It is intended to be used by
@@ -357,7 +357,7 @@ class Ctap2:
         self,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ):
+    ) -> None:
         """CTAP2 reset command, erases all credentials and PIN.
 
         :param event: Optional threading.Event object used to cancel the request.
@@ -486,7 +486,7 @@ class Ctap2:
         sub_cmd_params: Optional[Mapping[int, Any]] = None,
         pin_uv_protocol: Optional[int] = None,
         pin_uv_param: Optional[bytes] = None,
-    ):
+    ) -> Mapping[int, Any]:
         """CTAP2 credentialManagement command, used to manage resident
         credentials.
 
@@ -524,7 +524,7 @@ class Ctap2:
         get_modality: Optional[bool] = None,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ):
+    ) -> Mapping[int, Any]:
         """CTAP2 bio enrollment command. Used to provision/enumerate/delete bio
         enrollments in the authenticator.
 
@@ -565,7 +565,7 @@ class Ctap2:
         self,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ):
+    ) -> None:
         """CTAP2 authenticator selection command.
 
         This command allows the platform to let a user select a certain authenticator
@@ -585,7 +585,7 @@ class Ctap2:
         length: Optional[int] = None,
         pin_uv_param: Optional[bytes] = None,
         pin_uv_protocol: Optional[int] = None,
-    ):
+    ) -> Mapping[int, Any]:
         """CTAP2 authenticator large blobs command.
 
         This command is used to read and write the large blob array.
@@ -611,7 +611,7 @@ class Ctap2:
         sub_cmd_params: Optional[Mapping[int, Any]] = None,
         pin_uv_protocol: Optional[int] = None,
         pin_uv_param: Optional[bytes] = None,
-    ):
+    ) -> Mapping[int, Any]:
         """CTAP2 authenticator config command.
 
         This command is used to configure various authenticator features through the

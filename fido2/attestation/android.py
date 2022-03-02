@@ -45,7 +45,7 @@ import json
 class AndroidSafetynetAttestation(Attestation):
     FORMAT = "android-safetynet"
 
-    def __init__(self, allow_rooted=False):
+    def __init__(self, allow_rooted: bool = False):
         self.allow_rooted = allow_rooted
 
     @catch_builtins

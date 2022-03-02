@@ -30,6 +30,7 @@ from .ctap import CtapDevice, CtapError, STATUS
 from .hid import CAPABILITY, CTAPHID
 from .utils import LOG_LEVEL_TRAFFIC
 from smartcard import System
+from smartcard.CardConnection import CardConnection
 from smartcard.pcsc.PCSCExceptions import ListReadersException
 from smartcard.pcsc.PCSCContext import PCSCContext
 
@@ -55,7 +56,7 @@ class CtapPcscDevice(CtapDevice):
     This class is intended for use with NFC readers.
     """
 
-    def __init__(self, connection, name: str):
+    def __init__(self, connection: CardConnection, name: str):
         self._capabilities = CAPABILITY(0)
         self.use_ext_apdu = False
         self._conn = connection
@@ -74,10 +75,8 @@ class CtapPcscDevice(CtapDevice):
         return f"CtapPcscDevice({self._name})"
 
     @property
-    def version(self):
-        """CTAPHID protocol version.
-        :rtype: int
-        """
+    def version(self) -> int:
+        """CTAPHID protocol version."""
         return 2 if CAPABILITY.CBOR in self._capabilities else 1
 
     @property
@@ -86,20 +85,22 @@ class CtapPcscDevice(CtapDevice):
         return self._capabilities
 
     @property
-    def product_name(self):
+    def product_name(self) -> Optional[str]:
         """Product name of device."""
         return None
 
     @property
-    def serial_number(self):
+    def serial_number(self) -> Optional[int]:
         """Serial number of device."""
         return None
 
-    def get_atr(self):
+    def get_atr(self) -> bytes:
         """Get the ATR/ATS of the connected card."""
-        return self._conn.getATR()
+        return bytes(self._conn.getATR())
 
-    def apdu_exchange(self, apdu: bytes, protocol=None) -> Tuple[bytes, int, int]:
+    def apdu_exchange(
+        self, apdu: bytes, protocol: Optional[int] = None
+    ) -> Tuple[bytes, int, int]:
         """Exchange data with smart card.
 
         :param apdu: byte string. data to exchange with card
@@ -216,7 +217,7 @@ class CtapPcscDevice(CtapDevice):
         data: bytes = b"",
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ):
+    ) -> bytes:
         if cmd == CTAPHID.CBOR:
             return self._call_cbor(data, event, on_keepalive)
         elif cmd == CTAPHID.MSG:

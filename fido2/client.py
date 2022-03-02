@@ -165,7 +165,7 @@ def _ctap2client_err(e, err_cls=ClientError):
 
 class PinRequiredError(ClientError):
     def __init__(
-        self, code=ClientError.ERR.BAD_REQUEST, cause="Pin required but not provided"
+        self, code=ClientError.ERR.BAD_REQUEST, cause="PIN required but not provided"
     ):
         super().__init__(code, cause)
 
@@ -400,7 +400,7 @@ class WebAuthnClient(abc.ABC):
         self,
         options: PublicKeyCredentialRequestOptions,
         event: Optional[Event] = None,
-    ):
+    ) -> AssertionSelection:
         """Get an assertion.
 
         :param options: PublicKeyCredentialRequestOptions data.
@@ -415,11 +415,48 @@ def _default_extensions() -> Sequence[Type[Ctap2Extension]]:
     ]
 
 
+class UserInteraction:
+    """Provides user interaction to the Client.
+
+    Users of Fido2Client should subclass this to implement asking the user to perform
+    specific actions, such as entering a PIN or touching their"""
+
+    def prompt_up(self) -> None:
+        """Called when the authenticator is awaiting a user presence check."""
+        logger.info("User Presence check required.")
+
+    def request_pin(
+        self, permissions: ClientPin.PERMISSION, rp_id: Optional[str]
+    ) -> Optional[str]:
+        """Called when the client requires a PIN from the user.
+
+        Should return a PIN, or None/Empty to cancel."""
+        logger.info("PIN requested, but UserInteraction does not support it.")
+        return None
+
+    def request_uv(
+        self, permissions: ClientPin.PERMISSION, rp_id: Optional[str]
+    ) -> bool:
+        """Called when the client is about to request UV from the user.
+
+        Should return True if allowed, or False to cancel."""
+        logger.info("User Verification requested.")
+        return True
+
+
+def _user_keepalive(user_interaction):
+    def on_keepalive(status):
+        if status == STATUS.UPNEEDED:  # Waiting for touch
+            user_interaction.prompt_up()
+
+    return on_keepalive
+
+
 class _ClientBackend(abc.ABC):
     info: Info
 
     @abc.abstractmethod
-    def selection(self, event) -> None:
+    def selection(self, event: Optional[Event]) -> None:
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -432,7 +469,7 @@ class _ClientBackend(abc.ABC):
 
 
 class _Ctap1ClientBackend(_ClientBackend):
-    def __init__(self, device, user_interaction):
+    def __init__(self, device: CtapDevice, user_interaction: UserInteraction):
         self.ctap1 = Ctap1(device)
         self.info = Info.create(versions=["U2F_V2"], aaguid=b"\0" * 32)
         self._poll_delay = 0.25
@@ -537,43 +574,6 @@ class _Ctap1ClientBackend(_ClientBackend):
         raise ClientError.ERR.DEVICE_INELIGIBLE()
 
 
-class UserInteraction:
-    """Provides user interaction to the Client.
-
-    Users of Fido2Client should subclass this to implement asking the user to perform
-    specific actions, such as entering a PIN or touching their"""
-
-    def prompt_up(self) -> None:
-        """Called when the authenticator is awaiting a user presence check."""
-        logger.info("User Presence check required.")
-
-    def request_pin(
-        self, permissions: ClientPin.PERMISSION, rp_id: Optional[str]
-    ) -> Optional[str]:
-        """Called when the client requires a PIN from the user.
-
-        Should return a PIN, or None/Empty to cancel."""
-        logger.info("PIN requested, but UserInteraction does not support it.")
-        return None
-
-    def request_uv(
-        self, permissions: ClientPin.PERMISSION, rp_id: Optional[str]
-    ) -> bool:
-        """Called when the client is about to request UV from the user.
-
-        Should return True if allowed, or False to cancel."""
-        logger.info("User Verification requested.")
-        return True
-
-
-def _user_keepalive(user_interaction):
-    def on_keepalive(status):
-        if status == STATUS.UPNEEDED:  # Waiting for touch
-            user_interaction.prompt_up()
-
-    return on_keepalive
-
-
 class _Ctap2ClientAssertionSelection(AssertionSelection):
     def __init__(
         self,
@@ -604,7 +604,12 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
 
 
 class _Ctap2ClientBackend(_ClientBackend):
-    def __init__(self, device, user_interaction, extensions):
+    def __init__(
+        self,
+        device: CtapDevice,
+        user_interaction: UserInteraction,
+        extensions: Sequence[Type[Ctap2Extension]],
+    ):
         self.ctap2 = Ctap2(device)
         self.info = self.ctap2.info
         self.extensions = extensions
@@ -889,10 +894,10 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             self._backend = _Ctap1ClientBackend(device, user_interaction)
 
     @property
-    def info(self):
+    def info(self) -> Info:
         return self._backend.info
 
-    def selection(self, event):
+    def selection(self, event: Optional[Event] = None) -> None:
         try:
             self._backend.selection(event)
         except CtapError as e:
@@ -956,7 +961,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         self,
         options: PublicKeyCredentialRequestOptions,
         event: Optional[Event] = None,
-    ):
+    ) -> AssertionSelection:
         """Get an assertion.
 
         :param options: PublicKeyCredentialRequestOptions data.

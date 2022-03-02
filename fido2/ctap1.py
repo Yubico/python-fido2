@@ -53,7 +53,7 @@ class ApduError(Exception):
 
     """
 
-    def __init__(self, code, data=b""):
+    def __init__(self, code: int, data: bytes = b""):
         self.code = code
         self.data = data
 

@@ -76,7 +76,7 @@ class TpmAlgHash(IntEnum):
     SHA384 = 0x000C
     SHA512 = 0x000D
 
-    def _hash_alg(self):
+    def _hash_alg(self) -> hashes.Hash:
         if self == TpmAlgHash.SHA1:
             return hashes.SHA1()  # nosec
         elif self == TpmAlgHash.SHA256:
@@ -134,7 +134,7 @@ class TpmAttestationFormat:
     attested: TpmsCertifyInfo
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data: bytes) -> "TpmAttestationFormat":
         reader = ByteBuffer(data)
         generated_value = reader.read(4)
 
@@ -268,7 +268,7 @@ class TpmsRsaParms:
 
 class Tpm2bPublicKeyRsa(bytes):
     @classmethod
-    def parse(cls, reader):
+    def parse(cls, reader: ByteBuffer) -> "Tpm2bPublicKeyRsa":
         return cls(reader.read(reader.unpack("!H")))
 
 
@@ -289,7 +289,7 @@ class TpmEccCurve(IntEnum):
     BN_P638 = 0x0011
     SM2_P256 = 0x0020
 
-    def to_curve(self):
+    def to_curve(self) -> ec.EllipticCurve:
         if self == TpmEccCurve.NONE:
             raise ValueError("No such curve")
         elif self == TpmEccCurve.NIST_P192:
@@ -327,7 +327,7 @@ class TpmsEccParms:
     kdf: TpmiAlgKdf
 
     @classmethod
-    def parse(cls, reader):
+    def parse(cls, reader: ByteBuffer) -> "TpmsEccParms":
         symmetric = reader.unpack("!H")
         scheme = reader.unpack("!H")
         if symmetric != TPM_ALG_NULL:
@@ -352,7 +352,7 @@ class TpmsEccPoint:
     y: bytes
 
     @classmethod
-    def parse(cls, reader):
+    def parse(cls, reader: ByteBuffer) -> "TpmsEccPoint":
         x = reader.read(reader.unpack("!H"))
         y = reader.read(reader.unpack("!H"))
 
@@ -387,6 +387,11 @@ class ATTRIBUTES(IntEnum):
     )
 
 
+_PublicKey = Union[rsa.RSAPublicKey, ec.EllipticCurvePublicKey]
+_Parameters = Union[TpmsRsaParms, TpmsEccParms]
+_Unique = Union[Tpm2bPublicKeyRsa, TpmsEccPoint]
+
+
 @dataclass
 class TpmPublicFormat:
     """the public area structure is defined by [TPMv2-Part2] Section 12.2.4 (TPMT_PUBLIC)
@@ -406,12 +411,12 @@ class TpmPublicFormat:
     name_alg: TpmAlgHash
     attributes: int
     auth_policy: bytes
-    parameters: Union[TpmsRsaParms, TpmsEccParms]
-    unique: Union[Tpm2bPublicKeyRsa, TpmsEccPoint]
+    parameters: _Parameters
+    unique: _Unique
     data: bytes
 
     @classmethod
-    def parse(cls, data):
+    def parse(cls, data: bytes) -> "TpmPublicFormat":
         reader = ByteBuffer(data)
         sign_alg = TpmAlgAsym(reader.unpack("!H"))
         name_alg = TpmAlgHash(reader.unpack("!H"))
@@ -423,8 +428,8 @@ class TpmPublicFormat:
         auth_policy = reader.read(reader.unpack("!H"))
 
         if sign_alg == TpmAlgAsym.RSA:
-            parameters = TpmsRsaParms.parse(reader, attributes)
-            unique = Tpm2bPublicKeyRsa.parse(reader)
+            parameters: _Parameters = TpmsRsaParms.parse(reader, attributes)
+            unique: _Unique = Tpm2bPublicKeyRsa.parse(reader)
         elif sign_alg == TpmAlgAsym.ECC:
             parameters = TpmsEccParms.parse(reader)
             unique = TpmsEccPoint.parse(reader)
@@ -439,7 +444,7 @@ class TpmPublicFormat:
             sign_alg, name_alg, attributes, auth_policy, parameters, unique, data
         )
 
-    def public_key(self):
+    def public_key(self) -> _PublicKey:
         if self.sign_alg == TpmAlgAsym.RSA:
             exponent = cast(TpmsRsaParms, self.parameters).exponent
             modulus = bytes2int(cast(Tpm2bPublicKeyRsa, self.unique))
@@ -454,7 +459,7 @@ class TpmPublicFormat:
 
         raise NotImplementedError(f"public_key not implemented for {self.sign_alg!r}")
 
-    def name(self):
+    def name(self) -> bytes:
         """
         Computing Entity Names
 
@@ -541,7 +546,8 @@ class TpmAttestation(Attestation):
             # Verify that extraData is set to the hash of attToBeSigned
             # using the hash algorithm employed in "alg".
             att_to_be_signed = auth_data + client_data_hash
-            digest = hashes.Hash(pub_key._HASH_ALG, backend=default_backend())
+            hash_alg = pub_key._HASH_ALG  # type: ignore
+            digest = hashes.Hash(hash_alg, backend=default_backend())
             digest.update(att_to_be_signed)
             data = digest.finalize()
 

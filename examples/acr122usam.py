@@ -286,7 +286,7 @@ dev = next(Acr122uSamPcscDevice.list_devices())
 
 print("CONNECT: %s" % dev)
 print("version: %s" % dev.reader_version())
-print("atr: %s" % bytes(dev.get_atr()).hex())
+print("atr: %s" % dev.get_atr().hex())
 print("ats: %s" % dev.ats.hex())
 
 # uncomment if you want to see parameters from card's selection

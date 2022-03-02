@@ -36,7 +36,10 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from enum import IntEnum, IntFlag, unique
-from typing import ClassVar, Optional, Mapping, Tuple, Any
+from dataclasses import dataclass
+from threading import Event
+from typing import Optional, Any, Mapping, ClassVar, Tuple, Callable
+
 import abc
 import os
 import logging
@@ -84,6 +87,12 @@ class PinProtocol(abc.ABC):
         """
 
 
+@dataclass
+class _PinUv:
+    protocol: PinProtocol
+    token: bytes
+
+
 class PinProtocolV1(PinProtocol):
     """Implementation of the CTAP2 PIN/UV protocol v1.
 
@@ -95,7 +104,7 @@ class PinProtocolV1(PinProtocol):
     VERSION = 1
     IV = b"\x00" * 16
 
-    def kdf(self, z) -> bytes:
+    def kdf(self, z: bytes) -> bytes:
         return sha256(z)
 
     def encapsulate(self, peer_cose_key):
@@ -307,8 +316,12 @@ class ClientPin:
         )
 
     def get_uv_token(
-        self, permissions, permissions_rpid=None, event=None, on_keepalive=None
-    ):
+        self,
+        permissions: Optional["ClientPin.PERMISSION"] = None,
+        permissions_rpid: Optional[str] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> bytes:
         """Get a PIN/UV token from the authenticator using built-in UV.
 
         :param permissions: The permissions to associate with the token.
@@ -341,7 +354,7 @@ class ClientPin:
             self.protocol.decrypt(shared_secret, pin_token_enc)
         )
 
-    def get_pin_retries(self):
+    def get_pin_retries(self) -> Tuple[int, Optional[int]]:
         """Get the number of PIN retries remaining.
 
         :return: A tuple of the number of PIN attempts remaining until the
@@ -364,7 +377,7 @@ class ClientPin:
         resp = self.ctap.client_pin(self.protocol.VERSION, ClientPin.CMD.GET_UV_RETRIES)
         return resp[ClientPin.RESULT.UV_RETRIES]
 
-    def set_pin(self, pin):
+    def set_pin(self, pin: str) -> None:
         """Set the PIN of the autenticator.
 
         This only works when no PIN is set. To change the PIN when set, use
@@ -372,10 +385,9 @@ class ClientPin:
 
         :param pin: A PIN to set.
         """
-        pin = _pad_pin(pin)
         key_agreement, shared_secret = self._get_shared_secret()
 
-        pin_enc = self.protocol.encrypt(shared_secret, pin)
+        pin_enc = self.protocol.encrypt(shared_secret, _pad_pin(pin))
         pin_uv_param = self.protocol.authenticate(shared_secret, pin_enc)
         self.ctap.client_pin(
             self.protocol.VERSION,
@@ -386,7 +398,7 @@ class ClientPin:
         )
         logger.info("PIN has been set")
 
-    def change_pin(self, old_pin, new_pin):
+    def change_pin(self, old_pin: str, new_pin: str) -> None:
         """Change the PIN of the authenticator.
 
         This only works when a PIN is already set. If no PIN is set, use
@@ -395,12 +407,11 @@ class ClientPin:
         :param old_pin: The currently set PIN.
         :param new_pin: The new PIN to set.
         """
-        new_pin = _pad_pin(new_pin)
         key_agreement, shared_secret = self._get_shared_secret()
 
         pin_hash = sha256(old_pin.encode())[:16]
         pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
-        new_pin_enc = self.protocol.encrypt(shared_secret, new_pin)
+        new_pin_enc = self.protocol.encrypt(shared_secret, _pad_pin(new_pin))
         pin_uv_param = self.protocol.authenticate(
             shared_secret, new_pin_enc + pin_hash_enc
         )

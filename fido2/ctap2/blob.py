@@ -27,10 +27,13 @@
 
 from .. import cbor
 from ..utils import sha256
+from .base import Ctap2, Info
+from .pin import PinProtocol, _PinUv
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
+from typing import Optional, Any, Sequence, Mapping, cast
 import struct
 import zlib
 import os
@@ -79,19 +82,27 @@ class LargeBlobs:
     """
 
     @staticmethod
-    def is_supported(info):
-        return info.options.get("largeBlobs")
+    def is_supported(info: Info) -> bool:
+        return info.options.get("largeBlobs") is True
 
-    def __init__(self, ctap, pin_uv_protocol=None, pin_uv_token=None):
+    def __init__(
+        self,
+        ctap: Ctap2,
+        pin_uv_protocol: Optional[PinProtocol] = None,
+        pin_uv_token: Optional[bytes] = None,
+    ):
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support LargeBlobs")
 
         self.ctap = ctap
         self.max_fragment_length = self.ctap.info.max_msg_size - 64
-        self.pin_uv_protocol = pin_uv_protocol
-        self.pin_uv_token = pin_uv_token
+        self.pin_uv = (
+            _PinUv(pin_uv_protocol, pin_uv_token)
+            if pin_uv_protocol and pin_uv_token
+            else None
+        )
 
-    def read_blob_array(self):
+    def read_blob_array(self) -> Sequence[Mapping[int, Any]]:
         """Gets the entire contents of the Large Blobs array.
 
         :return: The CBOR decoded list of Large Blobs.
@@ -108,9 +119,9 @@ class LargeBlobs:
         data, check = buf[:-16], buf[-16:]
         if check != sha256(data)[:-16]:
             return []
-        return cbor.decode(data)
+        return cast(Sequence[Mapping[int, Any]], cbor.decode(data))
 
-    def write_blob_array(self, blob_array):
+    def write_blob_array(self, blob_array: Sequence[Mapping[int, Any]]) -> None:
         """Writes the entire Large Blobs array.
 
         :param blob_array: A list to write to the Authenticator.
@@ -123,21 +134,22 @@ class LargeBlobs:
         offset = 0
         size = len(data)
 
-        pin_uv_param = None
-        pin_uv_protocol = self.pin_uv_protocol.VERSION if self.pin_uv_token else None
-
         while offset < size:
             ln = min(size - offset, self.max_fragment_length)
             _set = data[offset : offset + ln]
 
-            if self.pin_uv_token:
+            if self.pin_uv:
                 msg = (
                     b"\xff" * 32
                     + b"\x0c\x00"
                     + struct.pack("<I", offset)
                     + sha256(_set)
                 )
-                pin_uv_param = self.pin_uv_protocol.authenticate(self.pin_uv_token, msg)
+                pin_uv_protocol = self.pin_uv.protocol.VERSION
+                pin_uv_param = self.pin_uv.protocol.authenticate(self.pin_uv.token, msg)
+            else:
+                pin_uv_param = None
+                pin_uv_protocol = None
 
             self.ctap.large_blobs(
                 offset,
@@ -149,10 +161,10 @@ class LargeBlobs:
 
             offset += ln
 
-    def get_blob(self, large_blob_key):
+    def get_blob(self, large_blob_key: bytes) -> Optional[bytes]:
         """Gets the Large Blob stored for a single credential.
 
-        :param large_blob_key: The largeBlobKey for the credential.
+        :param large_blob_key: The largeBlobKey for the credential, or None.
         :returns: The decrypted and deflated value stored for the credential.
         """
         for entry in self.read_blob_array():
@@ -163,8 +175,9 @@ class LargeBlobs:
                     return decompressed
             except (ValueError, zlib.error):
                 continue
+        return None
 
-    def put_blob(self, large_blob_key, data):
+    def put_blob(self, large_blob_key: bytes, data: Optional[bytes]) -> None:
         """Stores a Large Blob for a single credential.
 
         Any existing entries for the same credential will be replaced.
@@ -188,7 +201,7 @@ class LargeBlobs:
         if modified:
             self.write_blob_array(entries)
 
-    def delete_blob(self, large_blob_key):
+    def delete_blob(self, large_blob_key: bytes) -> None:
         """Deletes any Large Blob(s) stored for a single credential.
 
         :param large_blob_key: The largeBlobKey for the credential.

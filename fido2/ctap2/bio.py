@@ -27,8 +27,12 @@
 
 from .. import cbor
 from ..ctap import CtapError
+from .base import Ctap2, Info
+from .pin import PinProtocol
 
 from enum import IntEnum, unique
+from threading import Event
+from typing import Optional, Callable, Mapping, Any, Tuple
 import struct
 import logging
 
@@ -56,7 +60,7 @@ class BioEnrollment:
         FINGERPRINT = 0x01
 
     @staticmethod
-    def is_supported(info):
+    def is_supported(info: Info) -> bool:
         if "bioEnroll" in info.options:
             return True
         # We also support the Prototype command
@@ -66,7 +70,7 @@ class BioEnrollment:
             return True
         return False
 
-    def __init__(self, ctap, modality):
+    def __init__(self, ctap: Ctap2, modality: MODALITY):
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support BioEnroll")
 
@@ -75,7 +79,7 @@ class BioEnrollment:
         if modality != self.modality:
             raise ValueError(f"Device does not support {modality:s}")
 
-    def get_modality(self):
+    def get_modality(self) -> int:
         """Get bio modality.
 
         :return: The type of modality supported by the authenticator.
@@ -86,7 +90,7 @@ class BioEnrollment:
 
 
 class CaptureError(Exception):
-    def __init__(self, code):
+    def __init__(self, code: int):
         self.code = code
         super().__init__(f"Fingerprint capture error: {code}")
 
@@ -101,13 +105,17 @@ class FPEnrollmentContext:
         sample has been captured).
     """
 
-    def __init__(self, bio, timeout=None):
+    def __init__(self, bio: "FPBioEnrollment", timeout: Optional[int] = None):
         self._bio = bio
         self.timeout = timeout
-        self.template_id = None
-        self.remaining = None
+        self.template_id: Optional[bytes] = None
+        self.remaining: Optional[int] = None
 
-    def capture(self, event=None, on_keepalive=None):
+    def capture(
+        self,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> Optional[bytes]:
         """Capture a fingerprint sample.
 
         This call will block for up to timeout milliseconds (or indefinitely, if
@@ -131,7 +139,7 @@ class FPEnrollmentContext:
             return self.template_id
         return None
 
-    def cancel(self):
+    def cancel(self) -> None:
         """Cancels ongoing enrollment."""
         self._bio.enroll_cancel()
         self.template_id = None
@@ -186,7 +194,7 @@ class FPBioEnrollment(BioEnrollment):
         def __str__(self):
             return f"0x{self.value:02X} - {self.name}"
 
-    def __init__(self, ctap, pin_uv_protocol, pin_uv_token):
+    def __init__(self, ctap: Ctap2, pin_uv_protocol: PinProtocol, pin_uv_token: bytes):
         super().__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)
         self.pin_uv_protocol = pin_uv_protocol
         self.pin_uv_token = pin_uv_token
@@ -211,14 +219,19 @@ class FPBioEnrollment(BioEnrollment):
             )
         return self.ctap.bio_enrollment(**kwargs)
 
-    def get_fingerprint_sensor_info(self):
+    def get_fingerprint_sensor_info(self) -> Mapping[int, Any]:
         """Get fingerprint sensor info.
 
         :return: A dict containing FINGERPRINT_KIND and MAX_SAMPLES_REQUIRES.
         """
         return self._call(FPBioEnrollment.CMD.GET_SENSOR_INFO, auth=False)
 
-    def enroll_begin(self, timeout=None, event=None, on_keepalive=None):
+    def enroll_begin(
+        self,
+        timeout: Optional[int] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> Tuple[bytes, "FPBioEnrollment.FEEDBACK", int]:
         """Start fingerprint enrollment.
 
         Starts the process of enrolling a new fingerprint, and will wait for the user
@@ -243,8 +256,12 @@ class FPBioEnrollment(BioEnrollment):
         )
 
     def enroll_capture_next(
-        self, template_id, timeout=None, event=None, on_keepalive=None
-    ):
+        self,
+        template_id: bytes,
+        timeout: Optional[int] = None,
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> Tuple["FPBioEnrollment.FEEDBACK", int]:
         """Continue fingerprint enrollment.
 
         Continues enrolling a new fingerprint and will wait for the user to scan their
@@ -272,12 +289,12 @@ class FPBioEnrollment(BioEnrollment):
             result[BioEnrollment.RESULT.REMAINING_SAMPLES],
         )
 
-    def enroll_cancel(self):
+    def enroll_cancel(self) -> None:
         """Cancel any ongoing fingerprint enrollment."""
         logger.debug("Cancelling fingerprint enrollment.")
         self._call(FPBioEnrollment.CMD.ENROLL_CANCEL, auth=False)
 
-    def enroll(self, timeout=None):
+    def enroll(self, timeout: Optional[int] = None) -> FPEnrollmentContext:
         """Convenience wrapper for doing fingerprint enrollment.
 
         See FPEnrollmentContext for details.
@@ -285,7 +302,7 @@ class FPBioEnrollment(BioEnrollment):
         """
         return FPEnrollmentContext(self, timeout)
 
-    def enumerate_enrollments(self):
+    def enumerate_enrollments(self) -> Mapping[bytes, Optional[str]]:
         """Get a dict of enrolled fingerprint templates which maps template ID's to
         their friendly names.
 
@@ -303,13 +320,13 @@ class FPBioEnrollment(BioEnrollment):
                 return {}
             raise
 
-    def set_name(self, template_id, name):
+    def set_name(self, template_id: bytes, name: str) -> None:
         """Set/Change the friendly name of a previously enrolled fingerprint template.
 
         :param template_id: The ID of the template to change.
         :param name: A friendly name to give the template.
         """
-        logger.debug(f"Changing name of template: {template_id:x} to {name}")
+        logger.debug(f"Changing name of template: {template_id.hex()} to {name}")
         self._call(
             FPBioEnrollment.CMD.SET_NAME,
             {
@@ -319,12 +336,12 @@ class FPBioEnrollment(BioEnrollment):
         )
         logger.info("Fingerprint template renamed")
 
-    def remove_enrollment(self, template_id):
+    def remove_enrollment(self, template_id: bytes) -> None:
         """Remove a previously enrolled fingerprint template.
 
         :param template_id: The Id of the template to remove.
         """
-        logger.debug(f"Deleting template: {template_id:x}")
+        logger.debug(f"Deleting template: {template_id.hex()}")
         self._call(
             FPBioEnrollment.CMD.REMOVE_ENROLLMENT,
             {BioEnrollment.TEMPLATE_INFO.ID: template_id},
