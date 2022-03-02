@@ -115,7 +115,7 @@ def _default_attestations():
 class AttestationVerifier(abc.ABC):
     """Base class for verifying attestation.
 
-    Override the ca_lookup method to provide a trusted root certificate (or chain) used
+    Override the ca_lookup method to provide a trusted root certificate used
     to verify the trust path from the attestation.
     """
 
@@ -152,12 +152,12 @@ class AttestationVerifier(abc.ABC):
 
         # Lookup CA to use for trust path verification
         ca = self.ca_lookup(result, attestation_object.auth_data)
-        if ca is None:
+        if not ca:
             raise UntrustedAttestation("No root found for Authenticator")
 
         # Validate the trust chain
         try:
-            verify_x509_chain(result.trust_path + ca)
+            verify_x509_chain(result.trust_path + [ca])
         except InvalidSignature as e:
             raise UntrustedAttestation(e)
 

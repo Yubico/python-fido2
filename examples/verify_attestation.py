@@ -77,7 +77,7 @@ class YubicoAttestationVerifier(AttestationVerifier):
     """
 
     def ca_lookup(self, result, auth_data):
-        return [YUBICO_CA]
+        return YUBICO_CA
 
 
 uv = "discouraged"
