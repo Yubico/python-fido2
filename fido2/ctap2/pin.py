@@ -355,17 +355,14 @@ class ClientPin:
             resp.get(ClientPin.RESULT.POWER_CYCLE_STATE),
         )
 
-    def get_uv_retries(self):
+    def get_uv_retries(self) -> int:
         """Get the number of UV retries remaining.
 
         :return: A tuple of the number of UV attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
         resp = self.ctap.client_pin(self.protocol.VERSION, ClientPin.CMD.GET_UV_RETRIES)
-        return (
-            resp[ClientPin.RESULT.UV_RETRIES],
-            resp.get(ClientPin.RESULT.POWER_CYCLE_STATE),
-        )
+        return resp[ClientPin.RESULT.UV_RETRIES]
 
     def set_pin(self, pin):
         """Set the PIN of the autenticator.
