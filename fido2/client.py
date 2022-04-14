@@ -27,6 +27,8 @@
 
 from __future__ import absolute_import, unicode_literals, division
 
+from collections import OrderedDict
+
 from .hid import STATUS
 from .ctap import CtapError
 from .ctap1 import Ctap1, APDU, ApduError
@@ -79,7 +81,9 @@ class ClientData(bytes):
 
     @classmethod
     def build(cls, **kwargs):
-        return cls(json.dumps(kwargs).encode())
+        # set separators to ',' and ':' per the client data verification algorithm:
+        # https://www.w3.org/TR/webauthn/#clientdatajson-verification
+        return cls(json.dumps(kwargs, separators=(',',':')).encode())
 
     @classmethod
     def from_b64(cls, data):
@@ -663,6 +667,16 @@ class Fido2Client(_BaseClient):
             {},
         )
 
+    def _build_client_data(self, typ, challenge, extensions={}, crossOrigin=False, appid=None):
+        # order the dict and use an OrderedDict to guarantee it per the client data verification algorithm:
+        # https://www.w3.org/TR/webauthn/#clientdatajson-verification
+        kwargs = OrderedDict(type=typ,challenge=websafe_encode(challenge),origin=self.origin,crossOrigin=crossOrigin)
+        if appid:
+            kwargs['origin'] = appid
+        if extensions:
+            kwargs['clientExtensions'] = extensions
+        return ClientData.build(**kwargs)
+
     def get_assertion(self, options, **kwargs):
         """Get an assertion.
 
@@ -675,6 +689,7 @@ class Fido2Client(_BaseClient):
         options = PublicKeyCredentialRequestOptions._wrap(options)
         pin = kwargs.get("pin")
         event = kwargs.get("event", Event())
+        appid = options.get('extensions', {}).get('appid', None)
         if options.timeout:
             timer = Timer(options.timeout / 1000, event.set)
             timer.daemon = True
@@ -683,7 +698,7 @@ class Fido2Client(_BaseClient):
         self._verify_rp_id(options.rp_id)
 
         client_data = self._build_client_data(
-            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
+            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge, crossOrigin=options.get('crossOrigin', False), appid=appid
         )
 
         try:
