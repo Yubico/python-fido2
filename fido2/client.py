@@ -88,7 +88,9 @@ class ClientData(bytes):
 
     @classmethod
     def build(cls, **kwargs) -> "ClientData":
-        return cls(json.dumps(kwargs).encode())
+        # set separators to ',' and ':' per the client data verification algorithm:
+        # https://www.w3.org/TR/webauthn/#clientdatajson-verification
+        return cls(json.dumps(kwargs, separators=(',',':')).encode())
 
     @classmethod
     def from_b64(cls, data: Union[str, bytes]) -> "ClientData":
@@ -903,6 +905,16 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         except CtapError as e:
             raise _ctap2client_err(e)
 
+    def _build_client_data(self, typ, challenge, extensions={}, crossOrigin=False, appid=None):
+        # order the dict per the client data verification algorithm:
+        # https://www.w3.org/TR/webauthn/#clientdatajson-verification
+        kwargs = dict(type=typ,challenge=websafe_encode(challenge),origin=self.origin,crossOrigin=crossOrigin)
+        if appid:
+            kwargs['origin'] = appid
+        if extensions:
+            kwargs['clientExtensions'] = extensions
+        return ClientData.build(**kwargs)
+
     def make_credential(
         self,
         options: PublicKeyCredentialCreationOptions,
@@ -970,6 +982,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
 
         options = PublicKeyCredentialRequestOptions._wrap(options)
         event = event or Event()
+        appid = options.get('extensions', {}).get('appid', None)
         if options.timeout:
             timer = Timer(options.timeout / 1000, event.set)
             timer.daemon = True
@@ -979,7 +992,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         self._verify_rp_id(options.rp_id)
 
         client_data = self._build_client_data(
-            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
+            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge, crossOrigin=options.get('crossOrigin', False), appid=appid
         )
 
         try:
