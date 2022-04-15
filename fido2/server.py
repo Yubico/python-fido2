@@ -66,11 +66,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _verify_origin_for_rp(rp_id):
+VerifyAttestation = Callable[[AttestationObject, bytes], None]
+VerifyOrigin = Callable[[str], bool]
+
+
+def _verify_origin_for_rp(rp_id: str) -> VerifyOrigin:
     return lambda o: verify_rp_id(rp_id, o)
 
 
-def _validata_challenge(challenge) -> bytes:
+def _validata_challenge(challenge: Optional[bytes]) -> bytes:
     if challenge is None:
         challenge = os.urandom(32)
     else:
@@ -98,7 +102,11 @@ def to_descriptor(
     )
 
 
-def _wrap_credentials(creds):
+def _wrap_credentials(
+    creds: Optional[
+        Sequence[Union[AttestedCredentialData, PublicKeyCredentialDescriptor]]
+    ],
+) -> Optional[Sequence[PublicKeyCredentialDescriptor]]:
     if creds is None:
         return None
     return [
@@ -109,7 +117,9 @@ def _wrap_credentials(creds):
     ]
 
 
-def _ignore_attestation(attestation_object, client_data_hash):
+def _ignore_attestation(
+    attestation_object: AttestationObject, client_data_hash: bytes
+) -> None:
     """Ignore attestation."""
 
 
@@ -177,10 +187,6 @@ class AttestationVerifier(abc.ABC):
     def __call__(self, *args):
         """Allows passing an instance to Fido2Server as verify_attestation"""
         self.verify_attestation(*args)
-
-
-VerifyAttestation = Callable[[AttestationObject, bytes], None]
-VerifyOrigin = Callable[[str], bool]
 
 
 class Fido2Server:
