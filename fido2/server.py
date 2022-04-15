@@ -350,10 +350,13 @@ class Fido2Server:
         challenge = _validata_challenge(challenge)
         descriptors = _wrap_credentials(credentials)
         state = self._make_internal_state(challenge, user_verification)
-        logger.debug(
-            "Starting new authentication, for credentials: "
-            + ", ".join(d.id.hex() for d in descriptors)
-        )
+        if descriptors is None:
+            logger.debug("Starting new authentication without credentials")
+        else:
+            logger.debug(
+                "Starting new authentication, for credentials: "
+                + ", ".join(d.id.hex() for d in descriptors)
+            )
 
         return (
             {
