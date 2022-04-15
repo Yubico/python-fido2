@@ -24,6 +24,10 @@ from array import array
 from typing import Set
 
 import logging
+import sys
+
+# Don't typecheck this file on Windows
+assert sys.platform != "win32"  # nosec
 
 logger = logging.getLogger(__name__)
 

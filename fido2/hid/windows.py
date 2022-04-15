@@ -17,13 +17,17 @@
 
 from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
 
-import ctypes
-import platform
-from ctypes import WinDLL, WinError  # type: ignore
 from ctypes import wintypes, LibraryLoader
 from typing import Dict, cast
 
+import ctypes
+import platform
 import logging
+import sys
+
+# Only typecheck this file on Windows
+assert sys.platform == "win32"  # nosec
+from ctypes import WinDLL, WinError  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
