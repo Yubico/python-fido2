@@ -41,6 +41,16 @@ import zlib
 import os
 
 
+def _compress(data):
+    o = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+    return o.compress(data) + o.flush()
+
+
+def _decompress(data):
+    o = zlib.decompressobj(wbits=-zlib.MAX_WBITS)
+    return o.decompress(data) + o.flush()
+
+
 def _lb_ad(orig_size):
     return b"blob" + struct.pack("<Q", orig_size)
 
@@ -50,7 +60,7 @@ def _lb_pack(key, data):
     nonce = os.urandom(12)
     aesgcm = AESGCM(key)
 
-    ciphertext = aesgcm.encrypt(nonce, zlib.compress(data), _lb_ad(orig_size))
+    ciphertext = aesgcm.encrypt(nonce, _compress(data), _lb_ad(orig_size))
 
     return {
         1: ciphertext,
@@ -172,7 +182,7 @@ class LargeBlobs:
         for entry in self.read_blob_array():
             try:
                 compressed, orig_size = _lb_unpack(large_blob_key, entry)
-                decompressed = zlib.decompress(compressed)
+                decompressed = _decompress(compressed)
                 if len(decompressed) == orig_size:
                     return decompressed
             except (ValueError, zlib.error):

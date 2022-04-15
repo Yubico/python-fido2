@@ -93,7 +93,7 @@ user = {"id": b"user_id", "name": "A. User"}
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
-    resident_key=True,
+    resident_key_requirement="required",
     user_verification=uv,
     authenticator_attachment="cross-platform",
 )
@@ -146,4 +146,4 @@ selection = client.get_assertion(options)
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-print("Read blob: ", result.extension_results.get("blob"))
+print("Read blob:", result.extension_results.get("blob"))
