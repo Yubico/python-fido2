@@ -27,7 +27,7 @@
 
 from . import cbor
 from .cose import CoseKey, ES256
-from .utils import sha256, ByteBuffer, _DataClassMapping
+from .utils import sha256, ByteBuffer, _CamelCaseDataObject
 from enum import Enum, EnumMeta, unique, IntFlag
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Tuple, cast
@@ -356,7 +356,7 @@ class PublicKeyCredentialType(_StringEnum):
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialRpEntity(_DataClassMapping):
+class PublicKeyCredentialRpEntity(_CamelCaseDataObject):
     name: str
     id: Optional[str] = None
 
@@ -367,14 +367,14 @@ class PublicKeyCredentialRpEntity(_DataClassMapping):
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialUserEntity(_DataClassMapping):
+class PublicKeyCredentialUserEntity(_CamelCaseDataObject):
     name: str
     id: bytes
     display_name: Optional[str] = None
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialParameters(_DataClassMapping):
+class PublicKeyCredentialParameters(_CamelCaseDataObject):
     type: PublicKeyCredentialType
     alg: int
 
@@ -387,7 +387,7 @@ class PublicKeyCredentialParameters(_DataClassMapping):
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialDescriptor(_DataClassMapping):
+class PublicKeyCredentialDescriptor(_CamelCaseDataObject):
     type: PublicKeyCredentialType
     id: bytes
     transports: Optional[Sequence[AuthenticatorTransport]] = None
@@ -401,7 +401,7 @@ class PublicKeyCredentialDescriptor(_DataClassMapping):
 
 
 @dataclass(eq=False)
-class AuthenticatorSelectionCriteria(_DataClassMapping):
+class AuthenticatorSelectionCriteria(_CamelCaseDataObject):
     authenticator_attachment: Optional[AuthenticatorAttachment] = None
     resident_key: Optional[ResidentKeyRequirement] = None
     user_verification: Optional[UserVerificationRequirement] = None
@@ -420,7 +420,7 @@ class AuthenticatorSelectionCriteria(_DataClassMapping):
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialCreationOptions(_DataClassMapping):
+class PublicKeyCredentialCreationOptions(_CamelCaseDataObject):
     rp: PublicKeyCredentialRpEntity
     user: PublicKeyCredentialUserEntity
     challenge: bytes
@@ -438,7 +438,7 @@ class PublicKeyCredentialCreationOptions(_DataClassMapping):
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialRequestOptions(_DataClassMapping):
+class PublicKeyCredentialRequestOptions(_CamelCaseDataObject):
     challenge: bytes
     timeout: Optional[int] = None
     rp_id: Optional[str] = None
@@ -451,14 +451,14 @@ class PublicKeyCredentialRequestOptions(_DataClassMapping):
 
 
 @dataclass(eq=False)
-class AuthenticatorAttestationResponse(_DataClassMapping):
+class AuthenticatorAttestationResponse(_CamelCaseDataObject):
     client_data: bytes
     attestation_object: AttestationObject
     extension_results: Optional[Mapping[str, Any]] = None
 
 
 @dataclass(eq=False)
-class AuthenticatorAssertionResponse(_DataClassMapping):
+class AuthenticatorAssertionResponse(_CamelCaseDataObject):
     client_data: bytes
     authenticator_data: AuthenticatorData
     signature: bytes

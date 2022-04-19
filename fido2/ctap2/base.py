@@ -26,15 +26,16 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from .. import cbor
+from ..utils import _DataClassMapping
 from ..ctap import CtapDevice, CtapError
 from ..cose import CoseKey
 from ..hid import CTAPHID, CAPABILITY
 from ..webauthn import AuthenticatorData
 
 from enum import IntEnum, unique
-from dataclasses import dataclass, field, fields, MISSING
+from dataclasses import dataclass, field, fields, Field
 from threading import Event
-from typing import Mapping, Dict, Any, List, Optional, Type, TypeVar, Callable
+from typing import Mapping, Dict, Any, List, Optional, Callable
 import struct
 import logging
 
@@ -51,61 +52,13 @@ def args(*params) -> Dict[int, Any]:
     return dict((i, v) for i, v in enumerate(params, 1) if v is not None)
 
 
-_T = TypeVar("_T", bound="_CborDataObject")
-
-
-@dataclass(init=False)
-class _CborDataObject(Mapping[int, Any]):
-    def __init__(self, data: Mapping[int, Any]):
-        self._data = dict(data)
-        for f in fields(self):
-            k = f.metadata.get("cbor_field")
-            if k:
-                transform = f.metadata["transform"]
-                if k in data:
-                    v = data[k]
-                elif f.default is not MISSING:
-                    v = f.default
-                elif f.default_factory is not MISSING:  # type: ignore
-                    v = f.default_factory()  # type: ignore
-                    # see https://github.com/python/mypy/issues/6910
-                else:
-                    raise TypeError(f"Input data missing required field {k}: {f.name}")
-                setattr(self, f.name, transform(v))
-
+class _CborDataObject(_DataClassMapping[int]):
     @classmethod
-    def parse(cls: Type[_T], binary: bytes) -> _T:
-        decoded = cbor.decode(binary)
-        if isinstance(decoded, Mapping):
-            return cls(decoded)  # type: ignore
-        raise TypeError("Decoded value of incorrect type!")
-
-    @classmethod
-    def create(cls: Type[_T], **kwargs) -> _T:
-        data = {}
-        fs = {f.name: f.metadata for f in fields(cls)}
-        for name, v in kwargs.items():
-            k = fs[name]["cbor_field"]
-            data[k] = v
-        return cls(data)
-
-    def __getitem__(self, key):
-        return self._data[key]
-
-    def __iter__(self):
-        return iter(self._data)
-
-    def __len__(self):
-        return len(self._data)
+    def _get_field_key(cls, field: Field) -> int:
+        return fields(cls).index(field) + 1
 
 
-def cbor_field(key: int, *, transform=lambda x: x, **kwargs):
-    return field(
-        init=False, metadata={"cbor_field": key, "transform": transform}, **kwargs
-    )
-
-
-@dataclass(init=False)
+@dataclass(eq=False)
 class Info(_CborDataObject):
     """Binary CBOR encoded response data returned by the CTAP2 GET_INFO command.
 
@@ -123,29 +76,30 @@ class Info(_CborDataObject):
     :ivar data: The Info members, in the form of a dict.
     """
 
-    versions: List[str] = cbor_field(0x01)
-    extensions: List[str] = cbor_field(0x02, default_factory=list)
-    aaguid: bytes = cbor_field(0x03)
-    options: Dict[str, bool] = cbor_field(0x04, default_factory=dict)
-    max_msg_size: int = cbor_field(0x05, default=1024)
-    pin_uv_protocols: List[int] = cbor_field(0x06, default_factory=list)
-    max_creds_in_list: Optional[int] = cbor_field(0x07, default=None)
-    max_cred_id_length: Optional[int] = cbor_field(0x08, default=None)
-    transports: List[str] = cbor_field(0x09, default_factory=list)
-    algorithms: Optional[List[int]] = cbor_field(0x0A, default=None)
-    max_large_blob: Optional[int] = cbor_field(0x0B, default=None)
-    force_pin_change: bool = cbor_field(0x0C, default=False)
-    min_pin_length: int = cbor_field(0x0D, default=4)
-    firmware_version: Optional[int] = cbor_field(0x0E, default=None)
-    max_cred_blob_length: Optional[int] = cbor_field(0x0F, default=None)
-    max_rpids_for_min_pin: int = cbor_field(0x10, default=0)
-    preferred_platform_uv_attempts: int = cbor_field(0x11, default=None)
-    uv_modality: Optional[int] = cbor_field(0x12, default=None)
-    certifications: Optional[Dict] = cbor_field(0x13, default=None)
-    remaining_disc_creds: Optional[int] = cbor_field(0x14, default=None)
+    versions: List[str]
+    extensions: List[str]
+    aaguid: bytes
+    options: Dict[str, bool] = field(default_factory=dict)
+    max_msg_size: int = 1024
+    pin_uv_protocols: List[int] = field(default_factory=list)
+    max_creds_in_list: Optional[int] = None
+    max_cred_id_length: Optional[int] = None
+    transports: List[str] = field(default_factory=list)
+    algorithms: Optional[List[Dict[str, Any]]] = None
+    max_large_blob: Optional[int] = None
+    force_pin_change: bool = False
+    min_pin_length: int = 4
+    firmware_version: Optional[int] = None
+    max_cred_blob_length: Optional[int] = None
+    max_rpids_for_min_pin: int = 0
+    preferred_platform_uv_attempts: Optional[int] = None
+    uv_modality: Optional[int] = None
+    certifications: Optional[Dict] = None
+    remaining_disc_creds: Optional[int] = None
+    vendor_prototype_config_commands: Optional[List[int]] = None
 
 
-@dataclass(init=False)
+@dataclass(eq=False)
 class AttestationResponse(_CborDataObject):
     """Binary CBOR encoded attestation object.
 
@@ -159,14 +113,14 @@ class AttestationResponse(_CborDataObject):
     :type att_stmt: Dict[str, Any]
     """
 
-    fmt: str = cbor_field(0x01)
-    auth_data: AuthenticatorData = cbor_field(0x02, transform=AuthenticatorData)
-    att_stmt: Dict[str, Any] = cbor_field(0x03)
-    ep_att: Optional[bool] = cbor_field(0x04, default=None)
-    large_blob_key: Optional[bytes] = cbor_field(0x05, default=None)
+    fmt: str
+    auth_data: AuthenticatorData
+    att_stmt: Dict[str, Any]
+    ep_att: Optional[bool] = None
+    large_blob_key: Optional[bytes] = None
 
 
-@dataclass(init=False)
+@dataclass(eq=False)
 class AssertionResponse(_CborDataObject):
     """Binary CBOR encoded assertion response.
 
@@ -179,13 +133,13 @@ class AssertionResponse(_CborDataObject):
         (only set for the first response, if > 1).
     """
 
-    credential: Dict[str, Any] = cbor_field(0x01)
-    auth_data: AuthenticatorData = cbor_field(0x02, transform=AuthenticatorData)
-    signature: bytes = cbor_field(0x03)
-    user: Optional[Dict[str, Any]] = cbor_field(0x04, default=None)
-    number_of_credentials: Optional[int] = cbor_field(0x05, default=None)
-    user_selected: Optional[bool] = cbor_field(0x06, default=None)
-    large_blob_key: Optional[bytes] = cbor_field(0x07, default=None)
+    credential: Dict[str, Any]
+    auth_data: AuthenticatorData
+    signature: bytes
+    user: Optional[Dict[str, Any]] = None
+    number_of_credentials: Optional[int] = None
+    user_selected: Optional[bool] = None
+    large_blob_key: Optional[bytes] = None
 
     def verify(self, client_param: bytes, public_key: CoseKey):
         """Verify the digital signature of the response with regard to the
@@ -208,7 +162,7 @@ class AssertionResponse(_CborDataObject):
         :param authentication: The CTAP1 signature data.
         :return: The assertion response.
         """
-        return cls.create(
+        return cls(
             credential=credential,
             auth_data=AuthenticatorData.create(
                 app_param,
@@ -302,7 +256,7 @@ class Ctap2:
 
         :return: Information about the authenticator.
         """
-        return Info(self.send_cbor(Ctap2.CMD.GET_INFO))
+        return Info.from_dict(self.send_cbor(Ctap2.CMD.GET_INFO))
 
     def client_pin(
         self,
@@ -398,7 +352,7 @@ class Ctap2:
         :return: The new credential.
         """
         logger.debug("Calling CTAP2 make_credential")
-        return AttestationResponse(
+        return AttestationResponse.from_dict(
             self.send_cbor(
                 Ctap2.CMD.MAKE_CREDENTIAL,
                 args(
@@ -444,7 +398,7 @@ class Ctap2:
         :return: The new assertion.
         """
         logger.debug("Calling CTAP2 get_assertion")
-        return AssertionResponse(
+        return AssertionResponse.from_dict(
             self.send_cbor(
                 Ctap2.CMD.GET_ASSERTION,
                 args(
@@ -466,7 +420,7 @@ class Ctap2:
 
         :return: The next available assertion response.
         """
-        return AssertionResponse(self.send_cbor(Ctap2.CMD.GET_NEXT_ASSERTION))
+        return AssertionResponse.from_dict(self.send_cbor(Ctap2.CMD.GET_NEXT_ASSERTION))
 
     def get_assertions(self, *args, **kwargs) -> List[AssertionResponse]:
         """Convenience method to get list of assertions.

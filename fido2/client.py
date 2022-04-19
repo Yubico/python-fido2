@@ -471,7 +471,7 @@ class _ClientBackend(abc.ABC):
 class _Ctap1ClientBackend(_ClientBackend):
     def __init__(self, device: CtapDevice, user_interaction: UserInteraction):
         self.ctap1 = Ctap1(device)
-        self.info = Info.create(versions=["U2F_V2"], aaguid=b"\0" * 32)
+        self.info = Info(versions=["U2F_V2"], extensions=[], aaguid=b"\0" * 32)
         self._poll_delay = 0.25
         self._on_keepalive = _user_keepalive(user_interaction)
 
@@ -1033,7 +1033,9 @@ class WindowsClient(WebAuthnClient, _BaseClient):
     ):
         super().__init__(origin, verify)
         self.api = WinAPI(handle)
-        self.info = Info.create(versions=["U2F_V2", "FIDO_2_0"], aaguid=b"\0" * 32)
+        self.info = Info(
+            versions=["U2F_V2", "FIDO_2_0"], extensions=[], aaguid=b"\0" * 32
+        )
 
     @staticmethod
     def is_available() -> bool:
@@ -1122,7 +1124,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         return AssertionSelection(
             client_data,
             [
-                AssertionResponse.create(
+                AssertionResponse(
                     credential=credential,
                     auth_data=auth_data,
                     signature=signature,

@@ -34,8 +34,9 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from io import BytesIO
-from dataclasses import fields
-from typing import Union, Optional, Sequence, Mapping, Any
+from dataclasses import fields, Field
+from abc import abstractmethod
+from typing import Union, Optional, Sequence, Mapping, Any, TypeVar, Hashable
 import struct
 
 __all__ = [
@@ -176,7 +177,10 @@ def _parse_value(t, value):
     return value
 
 
-class _DataClassMapping(Mapping[str, Any]):
+_T = TypeVar("_T", bound=Hashable)
+
+
+class _DataClassMapping(Mapping[_T, Any]):
     def __post_init__(self):
         for f in fields(self):
             value = getattr(self, f.name)
@@ -194,9 +198,14 @@ class _DataClassMapping(Mapping[str, Any]):
             except TypeError:
                 pass
 
+    @classmethod
+    @abstractmethod
+    def _get_field_key(cls, field: Field) -> _T:
+        raise NotImplementedError()
+
     def __getitem__(self, key):
         for f in fields(self):
-            if key == f.metadata.get("name", _snake2camel(f.name)):
+            if key == self._get_field_key(f):
                 value = getattr(self, f.name)
                 serialize = f.metadata.get("serialize")
                 if serialize:
@@ -212,7 +221,7 @@ class _DataClassMapping(Mapping[str, Any]):
 
     def __iter__(self):
         return (
-            f.metadata.get("name", _snake2camel(f.name))
+            self._get_field_key(f)
             for f in fields(self)
             if getattr(self, f.name) is not None
         )
@@ -221,7 +230,7 @@ class _DataClassMapping(Mapping[str, Any]):
         return len(list(iter(self)))
 
     @classmethod
-    def from_dict(cls, data: Optional[Mapping[str, Any]]):
+    def from_dict(cls, data: Optional[Mapping[_T, Any]]):
         if data is None:
             return None
         if isinstance(data, cls):
@@ -229,7 +238,7 @@ class _DataClassMapping(Mapping[str, Any]):
 
         kwargs = {}
         for f in fields(cls):
-            key = f.metadata.get("name", _snake2camel(f.name))
+            key = cls._get_field_key(f)
             if key in data:
                 value = data[key]
                 deserialize = f.metadata.get("deserialize")
@@ -237,3 +246,9 @@ class _DataClassMapping(Mapping[str, Any]):
                     value = deserialize(value)
                 kwargs[f.name] = value
         return cls(**kwargs)
+
+
+class _CamelCaseDataObject(_DataClassMapping[str]):
+    @classmethod
+    def _get_field_key(cls, field: Field) -> str:
+        return field.metadata.get("name", _snake2camel(field.name))
