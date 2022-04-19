@@ -914,7 +914,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         :param threading.Event event: (optional) Signal to abort the operation.
         """
 
-        options = PublicKeyCredentialCreationOptions._wrap(options)
+        options = PublicKeyCredentialCreationOptions.from_dict(options)
         event = event or Event()
         if options.timeout:
             timer = Timer(options.timeout / 1000, event.set)
@@ -968,7 +968,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         :param threading.Event event: (optional) Signal to abort the operation.
         """
 
-        options = PublicKeyCredentialRequestOptions._wrap(options)
+        options = PublicKeyCredentialRequestOptions.from_dict(options)
         event = event or Event()
         if options.timeout:
             timer = Timer(options.timeout / 1000, event.set)
@@ -1046,7 +1046,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         :param threading.Event event: (optional) Signal to abort the operation.
         """
 
-        options = PublicKeyCredentialCreationOptions._wrap(options)
+        options = PublicKeyCredentialCreationOptions.from_dict(options)
 
         logger.debug(f"Register a new credential for RP ID: {options.rp.id}")
         self._verify_rp_id(options.rp.id)
@@ -1093,7 +1093,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         :param threading.Event event: (optional) Signal to abort the operation.
         """
 
-        options = PublicKeyCredentialRequestOptions._wrap(options)
+        options = PublicKeyCredentialRequestOptions.from_dict(options)
 
         logger.debug(f"Assert a credential for RP ID: {options.rp_id}")
         self._verify_rp_id(options.rp_id)

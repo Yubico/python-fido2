@@ -93,6 +93,11 @@ def catch_builtins(f):
 
 @catch_builtins
 def verify_x509_chain(chain: List[bytes]) -> None:
+    """Verifies a chain of certificates.
+
+    Checks that the first item in the chain is signed by the next, and so on.
+    The first item is the leaf, the last is the root.
+    """
     certs = [x509.load_der_x509_certificate(der, default_backend()) for der in chain]
     cert = certs.pop(0)
     while certs:

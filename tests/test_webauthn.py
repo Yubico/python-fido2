@@ -41,11 +41,14 @@ import unittest
 
 class TestWebAuthnDataTypes(unittest.TestCase):
     def test_authenticator_selection_criteria(self):
-        o = AuthenticatorSelectionCriteria("platform", True, "required")
+        o = AuthenticatorSelectionCriteria(
+            "platform", require_resident_key=True, user_verification="required"
+        )
         self.assertEqual(
-            o,
+            dict(o),
             {
                 "authenticatorAttachment": "platform",
+                "requireResidentKey": True,
                 "residentKey": "required",
                 "userVerification": "required",
             },
@@ -66,17 +69,18 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             ).user_verification
         )
 
-        self.assertIsNone(
-            AuthenticatorSelectionCriteria(resident_key="invalid").resident_key
+        self.assertEqual(
+            AuthenticatorSelectionCriteria(resident_key="invalid").resident_key,
+            "discouraged",
         )
 
         o = AuthenticatorSelectionCriteria()
-        self.assertEqual(o, {})
+        self.assertEqual(o.resident_key, "discouraged")
+        self.assertEqual(o.require_resident_key, False)
         self.assertIsNone(o.authenticator_attachment)
-        self.assertIsNone(o.resident_key)
         self.assertIsNone(o.user_verification)
 
-        o = AuthenticatorSelectionCriteria(resident_key=True)
+        o = AuthenticatorSelectionCriteria(require_resident_key=True)
         self.assertEqual(o.resident_key, ResidentKeyRequirement.REQUIRED)
         self.assertEqual(o.require_resident_key, True)
 
@@ -96,19 +100,19 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.require_resident_key, False)
 
     def test_rp_entity(self):
-        o = PublicKeyCredentialRpEntity("example.com", "Example")
+        o = PublicKeyCredentialRpEntity("Example", "example.com")
         self.assertEqual(o, {"id": "example.com", "name": "Example"})
         self.assertEqual(o.id, "example.com")
         self.assertEqual(o.name, "Example")
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialRpEntity("example.com")
+            PublicKeyCredentialRpEntity(id="example.com")
 
         with self.assertRaises(TypeError):
             PublicKeyCredentialRpEntity()
 
     def test_user_entity(self):
-        o = PublicKeyCredentialUserEntity(b"user", "Example", display_name="Display")
+        o = PublicKeyCredentialUserEntity("Example", b"user", display_name="Display")
         self.assertEqual(
             o, {"id": b"user", "name": "Example", "displayName": "Display"}
         )
@@ -117,7 +121,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.display_name, "Display")
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialUserEntity(b"user")
+            PublicKeyCredentialUserEntity(name=b"user")
 
         with self.assertRaises(TypeError):
             PublicKeyCredentialUserEntity()
@@ -128,8 +132,8 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.type, "public-key")
         self.assertEqual(o.alg, -7)
 
-        with self.assertRaises(ValueError):
-            PublicKeyCredentialParameters("invalid-type", -7)
+        p = PublicKeyCredentialParameters("invalid-type", -7)
+        assert p.type is None
 
         with self.assertRaises(TypeError):
             PublicKeyCredentialParameters("public-key")
@@ -159,11 +163,11 @@ class TestWebAuthnDataTypes(unittest.TestCase):
 
         PublicKeyCredentialDescriptor("public-key", b"credential_id", ["valid_value"])
 
-        with self.assertRaises(ValueError):
-            PublicKeyCredentialDescriptor("wrong-type", b"credential_id")
+        d = PublicKeyCredentialDescriptor("wrong-type", b"credential_id")
+        assert d.type is None
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialDescriptor("wrong-type")
+            PublicKeyCredentialDescriptor("public-key")
 
         with self.assertRaises(TypeError):
             PublicKeyCredentialDescriptor()

@@ -34,7 +34,8 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from io import BytesIO
-from typing import Union, Optional
+from dataclasses import fields
+from typing import Union, Optional, Sequence, Mapping, Any
 import struct
 
 __all__ = [
@@ -143,3 +144,96 @@ class ByteBuffer(BytesIO):
                 "Not enough data to read (need: %d, had: %d)." % (size, len(data))
             )
         return data
+
+
+def _snake2camel(name: str) -> str:
+    parts = name.split("_")
+    return parts[0] + "".join(p.title() for p in parts[1:])
+
+
+def _parse_value(t, value):
+    if value is None:
+        return None
+
+    if Optional[t] == t:  # Optional, get the type
+        t = t.__args__[0]
+
+    # Handle list of values
+    if issubclass(getattr(t, "__origin__", object), Sequence):
+        t = t.__args__[0]
+        return [_parse_value(t, v) for v in value]
+
+    try:
+        if issubclass(t, _DataClassMapping) and not isinstance(value, t):
+            # Recursively call from_dict for nested _DataClassMappings
+            return t.from_dict(value)
+        if not isinstance(value, t):
+            # Convert to enum values, other wrappers
+            return t(value)
+    except TypeError:
+        pass
+
+    return value
+
+
+class _DataClassMapping(Mapping[str, Any]):
+    def __post_init__(self):
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if value is None:
+                continue
+            value = _parse_value(f.type, value)
+            setattr(self, f.name, value)
+            continue
+            t = f.type
+            if Optional[t] == t:  # Optional, get the type
+                t = t.__args__[0]
+            try:
+                if not isinstance(value, t):
+                    setattr(self, f.name, t(value))
+            except TypeError:
+                pass
+
+    def __getitem__(self, key):
+        for f in fields(self):
+            if key == f.metadata.get("name", _snake2camel(f.name)):
+                value = getattr(self, f.name)
+                serialize = f.metadata.get("serialize")
+                if serialize:
+                    return serialize(value)
+                if isinstance(value, _DataClassMapping):
+                    return dict(value)
+                if isinstance(value, Sequence) and all(
+                    isinstance(x, _DataClassMapping) for x in value
+                ):
+                    return [dict(x) for x in value]
+                return value
+        raise KeyError(key)
+
+    def __iter__(self):
+        return (
+            f.metadata.get("name", _snake2camel(f.name))
+            for f in fields(self)
+            if getattr(self, f.name) is not None
+        )
+
+    def __len__(self):
+        return len(list(iter(self)))
+
+    @classmethod
+    def from_dict(cls, data: Optional[Mapping[str, Any]]):
+        if data is None:
+            return None
+        if isinstance(data, cls):
+            return data
+
+        kwargs = {}
+        for f in fields(cls):
+            key = f.metadata.get("name", _snake2camel(f.name))
+            if key in data:
+                value = data[key]
+                deserialize = f.metadata.get("deserialize")
+                if deserialize:
+                    value = deserialize(value)
+                kwargs[f.name] = value
+        return cls(**kwargs)

@@ -16,7 +16,7 @@ from .utils import U2FDevice
 
 class TestPublicKeyCredentialRpEntity(unittest.TestCase):
     def test_id_hash(self):
-        rp = PublicKeyCredentialRpEntity("example.com", "Example")
+        rp = PublicKeyCredentialRpEntity("Example", "example.com")
         rp_id_hash = (
             b"\xa3y\xa6\xf6\xee\xaf\xb9\xa5^7\x8c\x11\x804\xe2u\x1eh/"
             b"\xab\x9f-0\xab\x13\xd2\x12U\x86\xce\x19G"
@@ -29,7 +29,7 @@ USER = {"id": b"user_id", "name": "A. User"}
 
 class TestFido2Server(unittest.TestCase):
     def test_register_begin_rp(self):
-        rp = PublicKeyCredentialRpEntity("example.com", "Example")
+        rp = PublicKeyCredentialRpEntity("Example", "example.com")
         server = Fido2Server(rp)
 
         request, state = server.register_begin(USER)
@@ -39,7 +39,7 @@ class TestFido2Server(unittest.TestCase):
         )
 
     def test_register_begin_custom_challenge(self):
-        rp = PublicKeyCredentialRpEntity("example.com", "Example")
+        rp = PublicKeyCredentialRpEntity("Example", "example.com")
         server = Fido2Server(rp)
 
         challenge = b"1234567890123456"
@@ -48,7 +48,7 @@ class TestFido2Server(unittest.TestCase):
         self.assertEqual(request["publicKey"]["challenge"], challenge)
 
     def test_register_begin_custom_challenge_too_short(self):
-        rp = PublicKeyCredentialRpEntity("example.com", "Example")
+        rp = PublicKeyCredentialRpEntity("Example", "example.com")
         server = Fido2Server(rp)
 
         challenge = b"123456789012345"
@@ -56,7 +56,7 @@ class TestFido2Server(unittest.TestCase):
             request, state = server.register_begin(USER, challenge=challenge)
 
     def test_authenticate_complete_invalid_signature(self):
-        rp = PublicKeyCredentialRpEntity("example.com", "Example")
+        rp = PublicKeyCredentialRpEntity("Example", "example.com")
         server = Fido2Server(rp)
 
         state = {
@@ -85,7 +85,7 @@ class TestFido2Server(unittest.TestCase):
 
 class TestU2FFido2Server(unittest.TestCase):
     def test_u2f(self):
-        rp = PublicKeyCredentialRpEntity("example.com", "Example")
+        rp = PublicKeyCredentialRpEntity("Example", "example.com")
         app_id = b"https://example.com"
         server = U2FFido2Server(app_id=app_id.decode("ascii"), rp=rp)
 
@@ -116,7 +116,7 @@ class TestU2FFido2Server(unittest.TestCase):
         )
 
     def test_u2f_facets(self):
-        rp = PublicKeyCredentialRpEntity("example.com", "Example")
+        rp = PublicKeyCredentialRpEntity("Example", "example.com")
         app_id = b"https://www.example.com/facets.json"
 
         def verify_u2f_origin(origin):

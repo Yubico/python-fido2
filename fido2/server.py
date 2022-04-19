@@ -57,6 +57,7 @@ from .webauthn import (
 
 from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from dataclasses import replace
 from typing import Sequence, Mapping, Optional, Callable, Union, Tuple, Any
 
 import os
@@ -112,7 +113,7 @@ def _wrap_credentials(
     return [
         to_descriptor(c)
         if isinstance(c, AttestedCredentialData)
-        else PublicKeyCredentialDescriptor._wrap(c)
+        else PublicKeyCredentialDescriptor.from_dict(c)
         for c in creds
     ]
 
@@ -148,6 +149,7 @@ class AttestationVerifier(abc.ABC):
         """Lookup a CA certificate to be used to verify a trust path.
 
         :param attestation_result: The result of the attestation
+        :param auth_data: The AuthenticatorData from the registration
         """
         raise NotImplementedError()
 
@@ -208,10 +210,10 @@ class Fido2Server:
         verify_origin: Optional[VerifyOrigin] = None,
         verify_attestation: Optional[VerifyAttestation] = None,
     ):
-        self.rp = PublicKeyCredentialRpEntity._wrap(rp)
+        self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
         self.timeout = None
-        self.attestation = AttestationConveyancePreference._wrap(attestation)
+        self.attestation = AttestationConveyancePreference(attestation)
         self.allowed_algorithms = [
             PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, alg)
             for alg in CoseKey.supported_algorithms()
@@ -464,7 +466,9 @@ class U2FFido2Server(Fido2Server):
             kwargs["verify_origin"] = lambda o: verify_app_id(app_id, o)
         self._app_id = app_id
         self._app_id_server = Fido2Server(
-            PublicKeyCredentialRpEntity(app_id, self.rp.name), *args, **kwargs
+            replace(PublicKeyCredentialRpEntity.from_dict(rp), id=app_id),
+            *args,
+            **kwargs,
         )
 
     def register_begin(self, *args, **kwargs):

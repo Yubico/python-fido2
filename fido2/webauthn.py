@@ -27,11 +27,10 @@
 
 from . import cbor
 from .cose import CoseKey, ES256
-from .utils import sha256, ByteBuffer
-from enum import Enum, unique, IntFlag
-from dataclasses import dataclass, fields, field as _field
+from .utils import sha256, ByteBuffer, _DataClassMapping
+from enum import Enum, EnumMeta, unique, IntFlag
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Tuple, cast
-import re
 import struct
 
 """
@@ -297,14 +296,22 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
         )
 
 
-class _StringEnum(str, Enum):
-    @classmethod
-    def _wrap(cls, value):
+class _StringEnumMeta(EnumMeta):
+    def _get_value(cls, value):
+        return None
+
+    def __call__(cls, value, *args, **kwargs):
         try:
-            return cls(value)
+            return super().__call__(value, *args, **kwargs)
         except ValueError:
-            # Unknown values should be treated as absent.
-            return None
+            return cls._get_value(value)
+
+
+class _StringEnum(str, Enum, metaclass=_StringEnumMeta):
+    """Enum of strings for WebAuthn types.
+
+    Unrecognized values are treated as missing.
+    """
 
 
 @unique
@@ -328,12 +335,6 @@ class ResidentKeyRequirement(_StringEnum):
     PREFERRED = "preferred"
     DISCOURAGED = "discouraged"
 
-    @classmethod
-    def _wrap(cls, value):
-        if isinstance(value, bool):
-            return cls.REQUIRED if value else cls.DISCOURAGED
-        return super()._wrap(value)
-
 
 @unique
 class AuthenticatorAttachment(_StringEnum):
@@ -354,64 +355,10 @@ class PublicKeyCredentialType(_StringEnum):
     PUBLIC_KEY = "public-key"
 
 
-def _snake2camel(name: str) -> str:
-    parts = name.split("_")
-    return parts[0] + "".join(p.title() for p in parts[1:])
-
-
-def _camel2snake(name: str) -> str:
-    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
-
-
-def field(*, transform=lambda x: x, **kwargs):
-    return _field(metadata={"transform": transform}, **kwargs)
-
-
-class _DataObject(Mapping[str, Any]):
-    """Base class for WebAuthn data types, acting both as dict and providing attribute
-    access to values. Subclasses should be annotated with @dataclass(eq=False)
-    """
-
-    def __post_init__(self):
-        self._keys = []
-        for f in fields(self):
-            transform = f.metadata.get("transform")
-            value = getattr(self, f.name)
-            if value:
-                if transform:
-                    setattr(self, f.name, transform(value))
-                self._keys.append(_snake2camel(f.name))
-
-    def __getitem__(self, key):
-        try:
-            return getattr(self, _camel2snake(key))
-        except AttributeError as e:
-            raise KeyError(e)
-
-    def __iter__(self):
-        return iter(self._keys)
-
-    def __len__(self):
-        return len(self._keys)
-
-    @classmethod
-    def _wrap(cls, data: Optional[Mapping[str, Any]]):
-        if data is None:
-            return None
-        if isinstance(data, cls):
-            return data
-        return cls(**{_camel2snake(k): v for k, v in data.items()})  # type: ignore
-
-    @classmethod
-    def _wrap_list(cls, datas):
-        return [cls._wrap(x) for x in datas] if datas is not None else None
-
-
 @dataclass(eq=False)
-class PublicKeyCredentialRpEntity(_DataObject):
-    id: Optional[str]
+class PublicKeyCredentialRpEntity(_DataClassMapping):
     name: str
+    id: Optional[str] = None
 
     @property
     def id_hash(self) -> Optional[bytes]:
@@ -420,91 +367,101 @@ class PublicKeyCredentialRpEntity(_DataObject):
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialUserEntity(_DataObject):
-    id: bytes
+class PublicKeyCredentialUserEntity(_DataClassMapping):
     name: str
+    id: bytes
     display_name: Optional[str] = None
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialParameters(_DataObject):
-    type: PublicKeyCredentialType = field(transform=PublicKeyCredentialType)
-    alg: int = field()
+class PublicKeyCredentialParameters(_DataClassMapping):
+    type: PublicKeyCredentialType
+    alg: int
+
+    @classmethod
+    def _deserialize_list(cls, value):
+        if value is None:
+            return None
+        items = [cls.from_dict(e) for e in value]
+        return [e for e in items if e.type is not None]
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialDescriptor(_DataObject):
-    type: PublicKeyCredentialType = field(transform=PublicKeyCredentialType)
-    id: bytes = field()
-    transports: Optional[Sequence[str]] = None
+class PublicKeyCredentialDescriptor(_DataClassMapping):
+    type: PublicKeyCredentialType
+    id: bytes
+    transports: Optional[Sequence[AuthenticatorTransport]] = None
+
+    @classmethod
+    def _deserialize_list(cls, value):
+        if value is None:
+            return None
+        items = [cls.from_dict(e) for e in value]
+        return [e for e in items if e.type is not None]
 
 
 @dataclass(eq=False)
-class AuthenticatorSelectionCriteria(_DataObject):
-    authenticator_attachment: Optional[AuthenticatorAttachment] = field(
-        transform=AuthenticatorAttachment._wrap, default=None
-    )
-    resident_key: Optional[ResidentKeyRequirement] = field(
-        transform=ResidentKeyRequirement._wrap, default=None
-    )
-    user_verification: Optional[UserVerificationRequirement] = field(
-        transform=UserVerificationRequirement._wrap, default=None
-    )
+class AuthenticatorSelectionCriteria(_DataClassMapping):
+    authenticator_attachment: Optional[AuthenticatorAttachment] = None
+    resident_key: Optional[ResidentKeyRequirement] = None
+    user_verification: Optional[UserVerificationRequirement] = None
+    require_resident_key: Optional[bool] = False
 
-    @property
-    def require_resident_key(self):
-        return ResidentKeyRequirement.REQUIRED == self.resident_key
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.resident_key is None:
+            self.resident_key = (
+                ResidentKeyRequirement.REQUIRED
+                if self.require_resident_key
+                else ResidentKeyRequirement.DISCOURAGED
+            )
+        self.require_resident_key = self.resident_key == ResidentKeyRequirement.REQUIRED
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialCreationOptions(_DataObject):
-    rp: PublicKeyCredentialRpEntity = field(transform=PublicKeyCredentialRpEntity._wrap)
-    user: PublicKeyCredentialUserEntity = field(
-        transform=PublicKeyCredentialUserEntity._wrap
-    )
-    challenge: bytes = field()
+class PublicKeyCredentialCreationOptions(_DataClassMapping):
+    rp: PublicKeyCredentialRpEntity
+    user: PublicKeyCredentialUserEntity
+    challenge: bytes
     pub_key_cred_params: Sequence[PublicKeyCredentialParameters] = field(
-        transform=PublicKeyCredentialParameters._wrap_list
+        metadata=dict(deserialize=PublicKeyCredentialParameters._deserialize_list),
     )
     timeout: Optional[int] = None
     exclude_credentials: Optional[Sequence[PublicKeyCredentialDescriptor]] = field(
-        transform=PublicKeyCredentialDescriptor._wrap_list, default=None
+        default=None,
+        metadata=dict(deserialize=PublicKeyCredentialDescriptor._deserialize_list),
     )
-    authenticator_selection: Optional[AuthenticatorSelectionCriteria] = field(
-        transform=AuthenticatorSelectionCriteria._wrap, default=None
-    )
-    attestation: Optional[AttestationConveyancePreference] = field(
-        transform=AttestationConveyancePreference._wrap, default=None
-    )
+    authenticator_selection: Optional[AuthenticatorSelectionCriteria] = None
+    attestation: Optional[AttestationConveyancePreference] = None
     extensions: Optional[Mapping[str, Any]] = None
 
 
 @dataclass(eq=False)
-class PublicKeyCredentialRequestOptions(_DataObject):
+class PublicKeyCredentialRequestOptions(_DataClassMapping):
     challenge: bytes
     timeout: Optional[int] = None
     rp_id: Optional[str] = None
     allow_credentials: Optional[Sequence[PublicKeyCredentialDescriptor]] = field(
-        transform=PublicKeyCredentialDescriptor._wrap_list, default=None
+        default=None,
+        metadata={"deserialize": PublicKeyCredentialDescriptor._deserialize_list},
     )
-    user_verification: Optional[UserVerificationRequirement] = field(
-        transform=UserVerificationRequirement._wrap, default=None
-    )
+    user_verification: Optional[UserVerificationRequirement] = None
     extensions: Optional[Mapping[str, Any]] = None
 
 
 @dataclass(eq=False)
-class AuthenticatorAttestationResponse(_DataObject):
+class AuthenticatorAttestationResponse(_DataClassMapping):
     client_data: bytes
-    attestation_object: AttestationObject = field(transform=AttestationObject)
+    attestation_object: AttestationObject
     extension_results: Optional[Mapping[str, Any]] = None
 
 
 @dataclass(eq=False)
-class AuthenticatorAssertionResponse(_DataObject):
+class AuthenticatorAssertionResponse(_DataClassMapping):
     client_data: bytes
-    authenticator_data: AuthenticatorData = field(transform=AuthenticatorData)
-    signature: bytes = field()
-    user_handle: bytes = field()
-    credential_id: bytes = field()
+    authenticator_data: AuthenticatorData
+    signature: bytes
+    user_handle: bytes
+    credential_id: bytes
     extension_results: Optional[Mapping[str, Any]] = None
