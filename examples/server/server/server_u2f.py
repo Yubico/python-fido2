@@ -51,7 +51,7 @@ import os
 app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
 
-rp = PublicKeyCredentialRpEntity("localhost", "Demo server")
+rp = PublicKeyCredentialRpEntity(name="Demo server", id="localhost")
 # By using the U2FFido2Server class, we can support existing credentials
 # registered by the legacy u2f.register API for an appId.
 server = U2FFido2Server("https://localhost:5000", rp)
