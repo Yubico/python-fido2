@@ -36,7 +36,8 @@ On Windows, the native WebAuthn API will be used.
 """
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client, WindowsClient, UserInteraction
-from fido2.server import Fido2Server, AttestationVerifier
+from fido2.server import Fido2Server
+from fido2.attestation import AttestationVerifier
 from base64 import b64decode
 from getpass import getpass
 import sys

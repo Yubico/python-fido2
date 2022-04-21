@@ -25,7 +25,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from ..webauthn import AuthenticatorData
+from ..webauthn import AuthenticatorData, AttestationObject
 from enum import IntEnum, unique
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -33,7 +33,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import dataclass
 from functools import wraps
-from typing import List, Type, Mapping, Any
+from typing import List, Type, Mapping, Sequence, Optional, Any
 
 import abc
 
@@ -175,3 +175,70 @@ def _validate_cert_common(cert):
             raise InvalidData("Attestation certificate must have CA=false!")
     except x509.ExtensionNotFound:
         raise InvalidData("Attestation certificate must have Basic Constraints!")
+
+
+def _default_attestations():
+    return [
+        cls()  # type: ignore
+        for cls in Attestation.__subclasses__()
+        if getattr(cls, "FORMAT", "none") != "none"
+    ]
+
+
+class AttestationVerifier(abc.ABC):
+    """Base class for verifying attestation.
+
+    Override the ca_lookup method to provide a trusted root certificate used
+    to verify the trust path from the attestation.
+    """
+
+    def __init__(self, attestation_types: Sequence[Attestation] = None):
+        self._attestation_types = attestation_types or _default_attestations()
+
+    @abc.abstractmethod
+    def ca_lookup(
+        self, attestation_result: AttestationResult, auth_data: AuthenticatorData
+    ) -> Optional[bytes]:
+        """Lookup a CA certificate to be used to verify a trust path.
+
+        :param attestation_result: The result of the attestation
+        :param auth_data: The AuthenticatorData from the registration
+        """
+        raise NotImplementedError()
+
+    def verify_attestation(
+        self, attestation_object: AttestationObject, client_data_hash: bytes
+    ) -> None:
+        """Verify attestation.
+
+        :param attestation_object: dict containing attestation data.
+        :param client_data_hash: SHA256 hash of the ClientData bytes.
+        """
+        att_verifier: Attestation = UnsupportedAttestation(attestation_object.fmt)
+        for at in self._attestation_types:
+            if getattr(at, "FORMAT", None) == attestation_object.fmt:
+                att_verifier = at
+                break
+        # An unsupported format causes an exception to be thrown, which
+        # includes the auth_data. The caller may choose to handle this case
+        # and allow the registration.
+        result = att_verifier.verify(
+            attestation_object.att_stmt,
+            attestation_object.auth_data,
+            client_data_hash,
+        )
+
+        # Lookup CA to use for trust path verification
+        ca = self.ca_lookup(result, attestation_object.auth_data)
+        if not ca:
+            raise UntrustedAttestation("No root found for Authenticator")
+
+        # Validate the trust chain
+        try:
+            verify_x509_chain(result.trust_path + [ca])
+        except InvalidSignature as e:
+            raise UntrustedAttestation(e)
+
+    def __call__(self, *args):
+        """Allows passing an instance to Fido2Server as verify_attestation"""
+        self.verify_attestation(*args)
