@@ -33,7 +33,6 @@ derive two separate secrets.
 from fido2.hid import CtapHidDevice
 from fido2.client import Fido2Client, UserInteraction
 from getpass import getpass
-from binascii import b2a_hex
 import sys
 import os
 
@@ -103,7 +102,7 @@ allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Generate a salt for HmacSecret:
 salt = os.urandom(32)
-print("Authenticate with salt:", b2a_hex(salt))
+print("Authenticate with salt:", salt.hex())
 
 # Authenticate the credential
 result = client.get_assertion(
@@ -118,13 +117,13 @@ result = client.get_assertion(
 )  # Only one cred in allowList, only one response.
 
 output1 = result.extension_results["hmacGetSecret"]["output1"]
-print("Authenticated, secret:", b2a_hex(output1))
+print("Authenticated, secret:", output1.hex())
 
 # Authenticate again, using two salts to generate two secrets:
 
 # Generate a second salt for HmacSecret:
 salt2 = os.urandom(32)
-print("Authenticate with second salt:", b2a_hex(salt2))
+print("Authenticate with second salt:", salt2.hex())
 
 # The first salt is reused, which should result in the same secret.
 result = client.get_assertion(
@@ -139,5 +138,5 @@ result = client.get_assertion(
 )  # One cred in allowCredentials, single response.
 
 output = result.extension_results["hmacGetSecret"]
-print("Old secret:", b2a_hex(output["output1"]))
-print("New secret:", b2a_hex(output["output2"]))
+print("Old secret:", output["output1"].hex())
+print("New secret:", output["output2"].hex())

@@ -39,7 +39,6 @@ from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server, AttestationVerifier
 from base64 import b64decode
 from getpass import getpass
-from binascii import b2a_hex
 import sys
 import ctypes
 
@@ -153,4 +152,4 @@ auth_data = server.register_complete(
 credentials = [auth_data.credential_data]
 
 print("New credential created, attestation verified!")
-print("Yubico device AAGUID:", b2a_hex(auth_data.credential_data.aaguid))
+print("Yubico device AAGUID:", auth_data.credential_data.aaguid.hex())
