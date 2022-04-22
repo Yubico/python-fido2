@@ -34,6 +34,7 @@ from .ctap2 import Ctap2, AssertionResponse, Info
 from .ctap2.pin import ClientPin, PinProtocol
 from .ctap2.extensions import Ctap2Extension
 from .webauthn import (
+    Aaguid,
     AttestationObject,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
@@ -473,7 +474,7 @@ class _ClientBackend(abc.ABC):
 class _Ctap1ClientBackend(_ClientBackend):
     def __init__(self, device: CtapDevice, user_interaction: UserInteraction):
         self.ctap1 = Ctap1(device)
-        self.info = Info(versions=["U2F_V2"], extensions=[], aaguid=b"\0" * 32)
+        self.info = Info(versions=["U2F_V2"], extensions=[], aaguid=Aaguid.NONE)
         self._poll_delay = 0.25
         self._on_keepalive = _user_keepalive(user_interaction)
 
@@ -1036,7 +1037,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         super().__init__(origin, verify)
         self.api = WinAPI(handle)
         self.info = Info(
-            versions=["U2F_V2", "FIDO_2_0"], extensions=[], aaguid=b"\0" * 32
+            versions=["U2F_V2", "FIDO_2_0"], extensions=[], aaguid=Aaguid.NONE
         )
 
     @staticmethod

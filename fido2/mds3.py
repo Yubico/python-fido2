@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from .webauthn import AttestationObject
+from .webauthn import AttestationObject, Aaguid
 from .attestation import (
     Attestation,
     UntrustedAttestation,
@@ -211,12 +211,10 @@ class MetadataStatement(_CamelCaseDataObject):
     )
     legal_header: Optional[str] = None
     aaid: Optional[str] = None
-    aaguid: Optional[bytes] = field(
+    aaguid: Optional[Aaguid] = field(
         metadata=dict(
-            deserialize=lambda x: bytes.fromhex(x.replace("-", "")),
-            serialize=lambda x: "-".join(
-                y.hex() for y in (x[:4], x[4:6], x[6:8], x[8:10], x[10:])
-            ),
+            deserialize=Aaguid.parse,
+            serialize=lambda x: str(x),
         ),
         default=None,
     )
@@ -258,12 +256,10 @@ class MetadataBlobPayloadEntry(_CamelCaseDataObject):
         )
     )
     aaid: Optional[str] = None
-    aaguid: Optional[bytes] = field(
+    aaguid: Optional[Aaguid] = field(
         metadata=dict(
-            deserialize=lambda x: bytes.fromhex(x.replace("-", "")),
-            serialize=lambda x: "-".join(
-                y.hex() for y in (x[:4], x[4:6], x[6:8], x[8:10], x[10:])
-            ),
+            deserialize=Aaguid.parse,
+            serialize=lambda x: str(x),
         ),
         default=None,
     )
@@ -386,7 +382,9 @@ class MdsAttestationVerifier(AttestationVerifier):
             for ski in e.attestation_certificate_key_identifiers or []
         }
 
-    def find_entry_by_aaguid(self, aaguid: bytes) -> Optional[MetadataBlobPayloadEntry]:
+    def find_entry_by_aaguid(
+        self, aaguid: Aaguid
+    ) -> Optional[MetadataBlobPayloadEntry]:
         """Find an entry by AAGUID.
 
         Returns a MetadataBlobPayloadEntry with a matching aaguid field, if found.
@@ -413,8 +411,8 @@ class MdsAttestationVerifier(AttestationVerifier):
 
     def ca_lookup(self, result, auth_data):
         aaguid = auth_data.credential_data.aaguid
-        if aaguid and aaguid != b"\0" * 16:
-            logging.debug(f"Using AAGUID: {aaguid.hex()} to look up metadata")
+        if aaguid:
+            logging.debug(f"Using AAGUID: {aaguid} to look up metadata")
             entry = self.find_entry_by_aaguid(aaguid)
         else:
             logging.debug("Using trust_path chain to look up metadata")

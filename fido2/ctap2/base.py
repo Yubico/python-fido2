@@ -32,7 +32,7 @@ from ..utils import _DataClassMapping
 from ..ctap import CtapDevice, CtapError
 from ..cose import CoseKey
 from ..hid import CTAPHID, CAPABILITY
-from ..webauthn import AuthenticatorData
+from ..webauthn import AuthenticatorData, Aaguid
 
 from enum import IntEnum, unique
 from dataclasses import dataclass, field, fields, Field
@@ -80,7 +80,7 @@ class Info(_CborDataObject):
 
     versions: List[str]
     extensions: List[str]
-    aaguid: bytes
+    aaguid: Aaguid
     options: Dict[str, bool] = field(default_factory=dict)
     max_msg_size: int = 1024
     pin_uv_protocols: List[int] = field(default_factory=list)

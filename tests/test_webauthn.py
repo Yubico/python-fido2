@@ -26,6 +26,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from fido2.webauthn import (
+    Aaguid,
     AuthenticatorSelectionCriteria,
     ResidentKeyRequirement,
     PublicKeyCredentialRpEntity,
@@ -37,6 +38,39 @@ from fido2.webauthn import (
 )
 
 import unittest
+
+
+class TestAaguid(unittest.TestCase):
+    def test_aaguid(self):
+        bs = b"\1" * 16
+        a = Aaguid(bs)
+        assert a
+        assert a == bs
+        assert bs == a
+
+    def test_aaguid_none(self):
+        a = Aaguid(b"\0" * 16)
+        assert not a
+        assert a == Aaguid.NONE
+        assert Aaguid.NONE == a
+
+    def test_aaguid_wrong_length(self):
+        with self.assertRaises(ValueError):
+            Aaguid(b"1234")
+
+        with self.assertRaises(ValueError):
+            Aaguid.fromhex("11" * 15)
+
+        with self.assertRaises(ValueError):
+            Aaguid(b"\2" * 17)
+
+    def test_aaguid_parse(self):
+        a = Aaguid.parse("00000000-0000-0000-0000-000000000000")
+        assert a == Aaguid.NONE
+
+        b = Aaguid.parse("01020304-0102-0304-0506-010203040506")
+        assert b == Aaguid.fromhex("01020304010203040506010203040506")
+        assert b == Aaguid(bytes.fromhex("01020304010203040506010203040506"))
 
 
 class TestWebAuthnDataTypes(unittest.TestCase):

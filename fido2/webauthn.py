@@ -44,9 +44,35 @@ See the specification for a description and details on their usage.
 # Binary types
 
 
+class Aaguid(bytes):
+    def __init__(self, data):
+        if len(data) != 16:
+            raise ValueError("AAGUID must be 16 bytes")
+
+    def __bool__(self):
+        return self != Aaguid.NONE
+
+    def __str__(self):
+        h = self.hex()
+        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+
+    def __repr__(self):
+        return f"AAGUID({str(self)})"
+
+    @classmethod
+    def parse(cls, value: str) -> Aaguid:
+        return cls.fromhex(value.replace("-", ""))
+
+    NONE: Aaguid
+
+
+# Special instance of AAGUID used when there is no AAGUID
+Aaguid.NONE = Aaguid(b"\0" * 16)
+
+
 @dataclass(init=False, frozen=True)
 class AttestedCredentialData(bytes):
-    aaguid: bytes
+    aaguid: Aaguid
     credential_id: bytes
     public_key: CoseKey
 
@@ -72,7 +98,7 @@ class AttestedCredentialData(bytes):
         :return: AAGUID, credential ID, public key, and remaining data.
         """
         reader = ByteBuffer(data)
-        aaguid = reader.read(16)
+        aaguid = Aaguid(reader.read(16))
         cred_id = reader.read(reader.unpack(">H"))
         pub_key, rest = cbor.decode_from(reader.read())
         return aaguid, cred_id, CoseKey.parse(pub_key), rest
@@ -120,9 +146,7 @@ class AttestedCredentialData(bytes):
         :return: The credential data, using an all-zero AAGUID.
         :rtype: AttestedCredentialData
         """
-        return cls.create(
-            b"\0" * 16, key_handle, ES256.from_ctap1(public_key)  # AAGUID
-        )
+        return cls.create(Aaguid.NONE, key_handle, ES256.from_ctap1(public_key))
 
 
 @dataclass(init=False, frozen=True)
