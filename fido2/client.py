@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .hid import STATUS
 from .ctap import CtapDevice, CtapError
 from .ctap1 import Ctap1, APDU, ApduError
@@ -87,11 +89,11 @@ class ClientData(bytes):
         return sha256(self)
 
     @classmethod
-    def build(cls, **kwargs) -> "ClientData":
+    def build(cls, **kwargs) -> ClientData:
         return cls(json.dumps(kwargs).encode())
 
     @classmethod
-    def from_b64(cls, data: Union[str, bytes]) -> "ClientData":
+    def from_b64(cls, data: Union[str, bytes]) -> ClientData:
         return cls(websafe_decode(data))
 
     def __repr__(self):

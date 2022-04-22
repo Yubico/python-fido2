@@ -25,6 +25,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
 from .. import cbor
 from ..utils import _DataClassMapping
 from ..ctap import CtapDevice, CtapError

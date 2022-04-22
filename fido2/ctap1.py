@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .hid import CTAPHID
 from .ctap import CtapDevice
 from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
@@ -120,7 +122,7 @@ class RegistrationData(bytes):
         )
 
     @classmethod
-    def from_b64(cls, data: str) -> "RegistrationData":
+    def from_b64(cls, data: str) -> RegistrationData:
         """Parse a RegistrationData from a websafe base64 encoded string.
 
         :param data: Websafe base64 encoded string.
@@ -168,7 +170,7 @@ class SignatureData(bytes):
         ES256.from_ctap1(public_key).verify(m, self.signature)
 
     @classmethod
-    def from_b64(cls, data: str) -> "SignatureData":
+    def from_b64(cls, data: str) -> SignatureData:
         """Parse a SignatureData from a websafe base64 encoded string.
 
         :param data: Websafe base64 encoded string.

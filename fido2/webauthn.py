@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from . import cbor
 from .cose import CoseKey, ES256
 from .utils import sha256, ByteBuffer, _CamelCaseDataObject
@@ -149,7 +151,7 @@ class AuthenticatorData(bytes):
         EXTENSION_DATA = 0x80
 
     rp_id_hash: bytes
-    flags: "AuthenticatorData.FLAG"
+    flags: AuthenticatorData.FLAG
     counter: int
     credential_data: Optional[AttestedCredentialData]
     extensions: Optional[Mapping]
@@ -183,7 +185,7 @@ class AuthenticatorData(bytes):
     def create(
         cls,
         rp_id_hash: bytes,
-        flags: "AuthenticatorData.FLAG",
+        flags: AuthenticatorData.FLAG,
         counter: int,
         credential_data: bytes = b"",
         extensions: Optional[Mapping] = None,
@@ -266,13 +268,13 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
     @classmethod
     def create(
         cls, fmt: str, auth_data: AuthenticatorData, att_stmt: Mapping[str, Any]
-    ) -> "AttestationObject":
+    ) -> AttestationObject:
         return cls(
             cbor.encode({"fmt": fmt, "authData": auth_data, "attStmt": att_stmt})
         )
 
     @classmethod
-    def from_ctap1(cls, app_param: bytes, registration) -> "AttestationObject":
+    def from_ctap1(cls, app_param: bytes, registration) -> AttestationObject:
         """Create an AttestationObject from a CTAP1 RegistrationData instance.
 
         :param app_param: SHA256 hash of the RP ID used for the CTAP1 request.

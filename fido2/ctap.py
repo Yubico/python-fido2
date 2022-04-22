@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import abc
 from enum import IntEnum, unique
 from threading import Event
@@ -80,7 +82,7 @@ class CtapDevice(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def list_devices(cls) -> Iterator["CtapDevice"]:
+    def list_devices(cls) -> Iterator[CtapDevice]:
         """Generates instances of cls for discoverable devices."""
 
 

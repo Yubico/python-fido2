@@ -26,6 +26,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .ctap import CtapDevice, CtapError, STATUS
 from .hid import CAPABILITY, CTAPHID
 from .utils import LOG_LEVEL_TRAFFIC
@@ -229,7 +231,7 @@ class CtapPcscDevice(CtapDevice):
         self._conn.disconnect()
 
     @classmethod
-    def list_devices(cls, name: str = "") -> Iterator["CtapPcscDevice"]:
+    def list_devices(cls, name: str = "") -> Iterator[CtapPcscDevice]:
         for reader in _list_readers():
             if name in reader.name:
                 try:

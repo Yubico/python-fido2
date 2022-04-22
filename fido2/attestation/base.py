@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from ..webauthn import AuthenticatorData, AttestationObject
 from enum import IntEnum, unique
 from cryptography import x509
@@ -136,7 +138,7 @@ class Attestation(abc.ABC):
         """
 
     @staticmethod
-    def for_type(fmt: str) -> Type["Attestation"]:
+    def for_type(fmt: str) -> Type[Attestation]:
         for cls in Attestation.__subclasses__():
             if getattr(cls, "FORMAT", None) == fmt:
                 return cls

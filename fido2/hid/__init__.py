@@ -25,10 +25,14 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from .base import HidDescriptor
 from ..ctap import CtapDevice, CtapError, STATUS
 from ..utils import LOG_LEVEL_TRAFFIC
 from threading import Event
 from enum import IntEnum, IntFlag, unique
+from typing import Tuple, Optional, Callable, Iterator
 import struct
 import sys
 import os
@@ -79,7 +83,7 @@ class CAPABILITY(IntFlag):
     CBOR = 0x04
     NMSG = 0x08
 
-    def supported(self, flags: "CAPABILITY") -> bool:
+    def supported(self, flags: CAPABILITY) -> bool:
         return bool(flags & self)
 
 
@@ -93,7 +97,7 @@ class CtapHidDevice(CtapDevice):
     :cvar descriptor: Device descriptor.
     """
 
-    def __init__(self, descriptor, connection):
+    def __init__(self, descriptor: HidDescriptor, connection):
         self.descriptor = descriptor
         self._packet_size = descriptor.report_size_out
         self._connection = connection
@@ -115,33 +119,30 @@ class CtapHidDevice(CtapDevice):
         self._device_version = (v1, v2, v3)
 
     def __repr__(self):
-        return f"CtapHidDevice({self.descriptor.path})"
+        return f"CtapHidDevice({self.descriptor.path!r})"
 
     @property
-    def version(self):
-        """CTAP HID protocol version.
-
-        :rtype: int
-        """
+    def version(self) -> int:
+        """CTAP HID protocol version."""
         return self._u2fhid_version
 
     @property
-    def device_version(self):
+    def device_version(self) -> Tuple[int, int, int]:
         """Device version number."""
         return self._device_version
 
     @property
-    def capabilities(self):
+    def capabilities(self) -> int:
         """Capabilities supported by the device."""
         return self._capabilities
 
     @property
-    def product_name(self):
+    def product_name(self) -> Optional[str]:
         """Product name of device."""
         return self.descriptor.product_name
 
     @property
-    def serial_number(self):
+    def serial_number(self) -> Optional[str]:
         """Serial number of device."""
         return self.descriptor.serial_number
 
@@ -152,7 +153,13 @@ class CtapHidDevice(CtapDevice):
         logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", packet.hex())
         self._connection.write_packet(packet)
 
-    def call(self, cmd, data=b"", event=None, on_keepalive=None):
+    def call(
+        self,
+        cmd: int,
+        data: bytes = b"",
+        event: Optional[Event] = None,
+        on_keepalive: Optional[Callable[[int], None]] = None,
+    ) -> bytes:
         event = event or Event()
         remaining = data
         seq = 0
@@ -225,11 +232,11 @@ class CtapHidDevice(CtapDevice):
 
             raise
 
-    def wink(self):
+    def wink(self) -> None:
         """Causes the authenticator to blink."""
         self.call(CTAPHID.WINK)
 
-    def ping(self, msg=b"Hello FIDO"):
+    def ping(self, msg: bytes = b"Hello FIDO") -> bytes:
         """Sends data to the authenticator, which echoes it back.
 
         :param msg: The data to send.
@@ -237,25 +244,25 @@ class CtapHidDevice(CtapDevice):
         """
         return self.call(CTAPHID.PING, msg)
 
-    def lock(self, lock_time=10):
+    def lock(self, lock_time: int = 10) -> None:
         """Locks the channel."""
         self.call(CTAPHID.LOCK, struct.pack(">B", lock_time))
 
-    def close(self):
+    def close(self) -> None:
         if self._connection:
             self._connection.close()
             self._connection = None
 
     @classmethod
-    def list_devices(cls):
+    def list_devices(cls) -> Iterator[CtapHidDevice]:
         for d in list_descriptors():
             yield cls(d, open_connection(d))
 
 
-def list_devices():
+def list_devices() -> Iterator[CtapHidDevice]:
     return CtapHidDevice.list_devices()
 
 
-def open_device(path):
+def open_device(path) -> CtapHidDevice:
     descriptor = get_descriptor(path)
     return CtapHidDevice(descriptor, open_connection(descriptor))

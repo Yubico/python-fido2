@@ -30,13 +30,24 @@
 This module contains various functions used throughout the rest of the project.
 """
 
+from __future__ import annotations
+
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
 from io import BytesIO
 from dataclasses import fields, Field
 from abc import abstractmethod
-from typing import Union, Optional, Sequence, Mapping, Any, TypeVar, Hashable
+from typing import (
+    Union,
+    Optional,
+    Sequence,
+    Mapping,
+    Any,
+    TypeVar,
+    Hashable,
+    get_type_hints,
+)
 import struct
 
 __all__ = [
@@ -182,21 +193,13 @@ _T = TypeVar("_T", bound=Hashable)
 
 class _DataClassMapping(Mapping[_T, Any]):
     def __post_init__(self):
+        hints = get_type_hints(type(self))
         for f in fields(self):
             value = getattr(self, f.name)
             if value is None:
                 continue
-            value = _parse_value(f.type, value)
+            value = _parse_value(hints[f.name], value)
             setattr(self, f.name, value)
-            continue
-            t = f.type
-            if Optional[t] == t:  # Optional, get the type
-                t = t.__args__[0]
-            try:
-                if not isinstance(value, t):
-                    setattr(self, f.name, t(value))
-            except TypeError:
-                pass
 
     @classmethod
     @abstractmethod

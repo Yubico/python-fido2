@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .. import cbor
 from ..ctap import CtapError
 from .base import Ctap2, Info
@@ -231,7 +233,7 @@ class FPBioEnrollment(BioEnrollment):
         timeout: Optional[int] = None,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> Tuple[bytes, "FPBioEnrollment.FEEDBACK", int]:
+    ) -> Tuple[bytes, FPBioEnrollment.FEEDBACK, int]:
         """Start fingerprint enrollment.
 
         Starts the process of enrolling a new fingerprint, and will wait for the user
@@ -261,7 +263,7 @@ class FPBioEnrollment(BioEnrollment):
         timeout: Optional[int] = None,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> Tuple["FPBioEnrollment.FEEDBACK", int]:
+    ) -> Tuple[FPBioEnrollment.FEEDBACK, int]:
         """Continue fingerprint enrollment.
 
         Continues enrolling a new fingerprint and will wait for the user to scan their

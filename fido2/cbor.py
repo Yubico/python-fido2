@@ -31,6 +31,8 @@ Minimal CBOR implementation supporting a subset of functionality and types
 required for FIDO 2 CTAP.
 """
 
+from __future__ import annotations
+
 import struct
 from typing import Any, Tuple, Union, Sequence, Mapping, Type, Callable
 

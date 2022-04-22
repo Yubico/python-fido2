@@ -27,6 +27,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .base import (
     Attestation,
     AttestationType,
@@ -134,7 +136,7 @@ class TpmAttestationFormat:
     attested: TpmsCertifyInfo
 
     @classmethod
-    def parse(cls, data: bytes) -> "TpmAttestationFormat":
+    def parse(cls, data: bytes) -> TpmAttestationFormat:
         reader = ByteBuffer(data)
         generated_value = reader.read(4)
 
@@ -268,7 +270,7 @@ class TpmsRsaParms:
 
 class Tpm2bPublicKeyRsa(bytes):
     @classmethod
-    def parse(cls, reader: ByteBuffer) -> "Tpm2bPublicKeyRsa":
+    def parse(cls, reader: ByteBuffer) -> Tpm2bPublicKeyRsa:
         return cls(reader.read(reader.unpack("!H")))
 
 
@@ -327,7 +329,7 @@ class TpmsEccParms:
     kdf: TpmiAlgKdf
 
     @classmethod
-    def parse(cls, reader: ByteBuffer) -> "TpmsEccParms":
+    def parse(cls, reader: ByteBuffer) -> TpmsEccParms:
         symmetric = reader.unpack("!H")
         scheme = reader.unpack("!H")
         if symmetric != TPM_ALG_NULL:
@@ -352,7 +354,7 @@ class TpmsEccPoint:
     y: bytes
 
     @classmethod
-    def parse(cls, reader: ByteBuffer) -> "TpmsEccPoint":
+    def parse(cls, reader: ByteBuffer) -> TpmsEccPoint:
         x = reader.read(reader.unpack("!H"))
         y = reader.read(reader.unpack("!H"))
 
@@ -416,7 +418,7 @@ class TpmPublicFormat:
     data: bytes
 
     @classmethod
-    def parse(cls, data: bytes) -> "TpmPublicFormat":
+    def parse(cls, data: bytes) -> TpmPublicFormat:
         reader = ByteBuffer(data)
         sign_alg = TpmAlgAsym(reader.unpack("!H"))
         name_alg = TpmAlgHash(reader.unpack("!H"))

@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from ..utils import sha256, hmac_sha256, bytes2int, int2bytes
 from ..cose import CoseKey
 from .base import Ctap2
@@ -278,7 +280,7 @@ class ClientPin:
     def get_pin_token(
         self,
         pin: str,
-        permissions: Optional["ClientPin.PERMISSION"] = None,
+        permissions: Optional[ClientPin.PERMISSION] = None,
         permissions_rpid: Optional[str] = None,
     ) -> bytes:
         """Get a PIN/UV token from the authenticator using PIN.
@@ -317,7 +319,7 @@ class ClientPin:
 
     def get_uv_token(
         self,
-        permissions: Optional["ClientPin.PERMISSION"] = None,
+        permissions: Optional[ClientPin.PERMISSION] = None,
         permissions_rpid: Optional[str] = None,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,

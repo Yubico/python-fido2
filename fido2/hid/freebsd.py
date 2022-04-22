@@ -15,6 +15,8 @@
 # Modified work Copyright 2020 Yubico AB. All Rights Reserved.
 # This file, with modifications, is licensed under the above Apache License.
 
+from __future__ import annotations
+
 from ctypes.util import find_library
 import ctypes
 import glob

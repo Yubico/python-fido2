@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .rpid import verify_rp_id, verify_app_id
 from .cose import CoseKey
 from .client import WEBAUTHN_TYPE, ClientData

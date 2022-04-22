@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -35,9 +37,6 @@ try:
     from cryptography.hazmat.primitives.asymmetric import ed25519
 except ImportError:  # EdDSA requires Cryptography >= 2.6.
     ed25519 = None  # type: ignore
-
-
-T_CoseKey = TypeVar("T_CoseKey", bound="CoseKey")
 
 
 class CoseKey(dict):
@@ -70,7 +69,7 @@ class CoseKey(dict):
         raise NotImplementedError("Creation from cryptography not supported.")
 
     @staticmethod
-    def for_alg(alg: int) -> Type["CoseKey"]:
+    def for_alg(alg: int) -> Type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
@@ -85,7 +84,7 @@ class CoseKey(dict):
         return UnsupportedKey
 
     @staticmethod
-    def for_name(name: str) -> Type["CoseKey"]:
+    def for_name(name: str) -> Type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
@@ -97,7 +96,7 @@ class CoseKey(dict):
         return UnsupportedKey
 
     @staticmethod
-    def parse(cose: Mapping[int, Any]) -> "CoseKey":
+    def parse(cose: Mapping[int, Any]) -> CoseKey:
         """Create a CoseKey from a dict"""
         alg = cose.get(3)
         if not alg:
@@ -112,6 +111,9 @@ class CoseKey(dict):
         else:
             algs = [ES256, ES384, ES512, PS256, RS256]
         return [cls.ALGORITHM for cls in algs]
+
+
+T_CoseKey = TypeVar("T_CoseKey", bound=CoseKey)
 
 
 class UnsupportedKey(CoseKey):
