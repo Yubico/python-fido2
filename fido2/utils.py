@@ -199,7 +199,7 @@ class _DataClassMapping(Mapping[_T, Any]):
             if value is None:
                 continue
             value = _parse_value(hints[f.name], value)
-            setattr(self, f.name, value)
+            object.__setattr__(self, f.name, value)
 
     @classmethod
     @abstractmethod

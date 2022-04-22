@@ -44,7 +44,7 @@ See the specification for a description and details on their usage.
 # Binary types
 
 
-@dataclass(init=False)
+@dataclass(init=False, frozen=True)
 class AttestedCredentialData(bytes):
     aaguid: bytes
     credential_id: bytes
@@ -54,9 +54,9 @@ class AttestedCredentialData(bytes):
         super().__init__()
 
         parsed = AttestedCredentialData._parse(self)
-        self.aaguid = parsed[0]
-        self.credential_id = parsed[1]
-        self.public_key = parsed[2]
+        object.__setattr__(self, "aaguid", parsed[0])
+        object.__setattr__(self, "credential_id", parsed[1])
+        object.__setattr__(self, "public_key", parsed[2])
         if parsed[3]:
             raise ValueError("Wrong length")
 
@@ -125,7 +125,7 @@ class AttestedCredentialData(bytes):
         )
 
 
-@dataclass(init=False)
+@dataclass(init=False, frozen=True)
 class AuthenticatorData(bytes):
     """Binary encoding of the authenticator data.
 
@@ -160,20 +160,22 @@ class AuthenticatorData(bytes):
         super().__init__()
 
         reader = ByteBuffer(self)
-        self.rp_id_hash = reader.read(32)
-        self.flags = reader.unpack("B")
-        self.counter = reader.unpack(">I")
+        object.__setattr__(self, "rp_id_hash", reader.read(32))
+        object.__setattr__(self, "flags", reader.unpack("B"))
+        object.__setattr__(self, "counter", reader.unpack(">I"))
         rest = reader.read()
 
         if self.flags & AuthenticatorData.FLAG.ATTESTED:
-            self.credential_data, rest = AttestedCredentialData.unpack_from(rest)
+            credential_data, rest = AttestedCredentialData.unpack_from(rest)
         else:
-            self.credential_data = None
+            credential_data = None
+        object.__setattr__(self, "credential_data", credential_data)
 
         if self.flags & AuthenticatorData.FLAG.EXTENSION_DATA:
-            self.extensions, rest = cbor.decode_from(rest)
+            extensions, rest = cbor.decode_from(rest)
         else:
-            self.extensions = None
+            extensions = None
+        object.__setattr__(self, "extensions", extensions)
 
         if rest:
             raise ValueError("Wrong length")
@@ -240,7 +242,7 @@ class AuthenticatorData(bytes):
         return bool(self.flags & AuthenticatorData.FLAG.EXTENSION_DATA)
 
 
-@dataclass(init=False)
+@dataclass(init=False, frozen=True)
 class AttestationObject(bytes):  # , Mapping[str, Any]):
     """Binary CBOR encoded attestation object.
 
@@ -258,9 +260,9 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
         super().__init__()
 
         data = cast(Mapping[str, Any], cbor.decode(bytes(self)))
-        self.fmt = data["fmt"]
-        self.auth_data = AuthenticatorData(data["authData"])
-        self.att_stmt = data["attStmt"]
+        object.__setattr__(self, "fmt", data["fmt"])
+        object.__setattr__(self, "auth_data", AuthenticatorData(data["authData"]))
+        object.__setattr__(self, "att_stmt", data["attStmt"])
 
     def __str__(self):  # Override default implementation from bytes.
         return repr(self)
@@ -357,7 +359,7 @@ class PublicKeyCredentialType(_StringEnum):
     PUBLIC_KEY = "public-key"
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class PublicKeyCredentialRpEntity(_CamelCaseDataObject):
     name: str
     id: Optional[str] = None
@@ -368,14 +370,14 @@ class PublicKeyCredentialRpEntity(_CamelCaseDataObject):
         return sha256(self.id.encode("utf8")) if self.id else None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class PublicKeyCredentialUserEntity(_CamelCaseDataObject):
     name: str
     id: bytes
     display_name: Optional[str] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class PublicKeyCredentialParameters(_CamelCaseDataObject):
     type: PublicKeyCredentialType
     alg: int
@@ -388,7 +390,7 @@ class PublicKeyCredentialParameters(_CamelCaseDataObject):
         return [e for e in items if e.type is not None]
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class PublicKeyCredentialDescriptor(_CamelCaseDataObject):
     type: PublicKeyCredentialType
     id: bytes
@@ -402,7 +404,7 @@ class PublicKeyCredentialDescriptor(_CamelCaseDataObject):
         return [e for e in items if e.type is not None]
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class AuthenticatorSelectionCriteria(_CamelCaseDataObject):
     authenticator_attachment: Optional[AuthenticatorAttachment] = None
     resident_key: Optional[ResidentKeyRequirement] = None
@@ -413,15 +415,21 @@ class AuthenticatorSelectionCriteria(_CamelCaseDataObject):
         super().__post_init__()
 
         if self.resident_key is None:
-            self.resident_key = (
+            object.__setattr__(
+                self,
+                "resident_key",
                 ResidentKeyRequirement.REQUIRED
                 if self.require_resident_key
-                else ResidentKeyRequirement.DISCOURAGED
+                else ResidentKeyRequirement.DISCOURAGED,
             )
-        self.require_resident_key = self.resident_key == ResidentKeyRequirement.REQUIRED
+        object.__setattr__(
+            self,
+            "require_resident_key",
+            self.resident_key == ResidentKeyRequirement.REQUIRED,
+        )
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class PublicKeyCredentialCreationOptions(_CamelCaseDataObject):
     rp: PublicKeyCredentialRpEntity
     user: PublicKeyCredentialUserEntity
@@ -439,7 +447,7 @@ class PublicKeyCredentialCreationOptions(_CamelCaseDataObject):
     extensions: Optional[Mapping[str, Any]] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class PublicKeyCredentialRequestOptions(_CamelCaseDataObject):
     challenge: bytes
     timeout: Optional[int] = None
@@ -452,14 +460,14 @@ class PublicKeyCredentialRequestOptions(_CamelCaseDataObject):
     extensions: Optional[Mapping[str, Any]] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class AuthenticatorAttestationResponse(_CamelCaseDataObject):
     client_data: bytes
     attestation_object: AttestationObject
     extension_results: Optional[Mapping[str, Any]] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class AuthenticatorAssertionResponse(_CamelCaseDataObject):
     client_data: bytes
     authenticator_data: AuthenticatorData

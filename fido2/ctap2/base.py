@@ -26,6 +26,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import annotations
+
 from .. import cbor
 from ..utils import _DataClassMapping
 from ..ctap import CtapDevice, CtapError
@@ -59,7 +60,7 @@ class _CborDataObject(_DataClassMapping[int]):
         return fields(cls).index(field) + 1
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class Info(_CborDataObject):
     """Binary CBOR encoded response data returned by the CTAP2 GET_INFO command.
 
@@ -100,7 +101,7 @@ class Info(_CborDataObject):
     vendor_prototype_config_commands: Optional[List[int]] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class AttestationResponse(_CborDataObject):
     """Binary CBOR encoded attestation object.
 
@@ -121,7 +122,7 @@ class AttestationResponse(_CborDataObject):
     large_blob_key: Optional[bytes] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class AssertionResponse(_CborDataObject):
     """Binary CBOR encoded assertion response.
 

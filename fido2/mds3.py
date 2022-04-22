@@ -52,19 +52,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class Version(_CamelCaseDataObject):
     major: int
     minor: int
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class RogueListEntry(_CamelCaseDataObject):
     sk: bytes
     date: int
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class BiometricStatusReport(_CamelCaseDataObject):
     cert_level: int
     modality: str
@@ -75,7 +75,7 @@ class BiometricStatusReport(_CamelCaseDataObject):
     certification_requirements_version: str
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class CodeAccuracyDescriptor(_CamelCaseDataObject):
     base: int
     min_length: int
@@ -83,7 +83,7 @@ class CodeAccuracyDescriptor(_CamelCaseDataObject):
     block_slowdown: Optional[int] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class BiometricAccuracyDescriptor(_CamelCaseDataObject):
     self_attested_frr: Optional[float] = field(
         default=None, metadata=dict(name="selfAttestedFRR")
@@ -96,14 +96,14 @@ class BiometricAccuracyDescriptor(_CamelCaseDataObject):
     block_slowdown: Optional[int] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class PatternAccuracyDescriptor(_CamelCaseDataObject):
     min_complexity: int
     max_retries: Optional[int] = None
     block_slowdown: Optional[int] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class VerificationMethodDescriptor(_CamelCaseDataObject):
     user_verification_method: Optional[str] = None
     ca_desc: Optional[CodeAccuracyDescriptor] = None
@@ -111,14 +111,14 @@ class VerificationMethodDescriptor(_CamelCaseDataObject):
     pa_desc: Optional[PatternAccuracyDescriptor] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class RgbPaletteEntry(_CamelCaseDataObject):
     r: int
     g: int
     b: int
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class DisplayPngCharacteristicsDescriptor(_CamelCaseDataObject):
     width: int
     height: int
@@ -130,7 +130,7 @@ class DisplayPngCharacteristicsDescriptor(_CamelCaseDataObject):
     plte: Optional[Sequence[RgbPaletteEntry]] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class EcdaaTrustAnchor(_CamelCaseDataObject):
     x: str = field(metadata=dict(name="X"))
     y: str = field(metadata=dict(name="Y"))
@@ -159,7 +159,7 @@ class AuthenticatorStatus(str, Enum):
     FIDO_CERTIFIED_L3plus = "FIDO_CERTIFIED_L3plus"
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class StatusReport(_CamelCaseDataObject):
     status: AuthenticatorStatus
     effective_date: Optional[date] = field(
@@ -181,7 +181,7 @@ class StatusReport(_CamelCaseDataObject):
     certification_requirements_version: Optional[str] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class ExtensionDescriptor(_CamelCaseDataObject):
     fail_if_unknown: bool = field(metadata=dict(name="fail_if_unknown"))
     id: str
@@ -189,7 +189,7 @@ class ExtensionDescriptor(_CamelCaseDataObject):
     data: Optional[str] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class MetadataStatement(_CamelCaseDataObject):
     description: str
     authenticator_version: int
@@ -248,7 +248,7 @@ class MetadataStatement(_CamelCaseDataObject):
     authenticator_get_info: Optional[Mapping[str, Any]] = None
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class MetadataBlobPayloadEntry(_CamelCaseDataObject):
     status_reports: Sequence[StatusReport]
     time_of_last_status_change: date = field(
@@ -288,7 +288,7 @@ class MetadataBlobPayloadEntry(_CamelCaseDataObject):
     )
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, frozen=True)
 class MetadataBlobPayload(_CamelCaseDataObject):
     legal_header: str
     no: int
@@ -433,7 +433,6 @@ def parse_blob(blob: bytes, trust_root: Optional[bytes]) -> MetadataBlobPayload:
         public_key = CoseKey.for_name(header["alg"]).from_cryptography_key(
             leaf.public_key()
         )
-        print("Verifier", public_key)
         public_key.verify(message, signature)
     else:
         logger.warn("Parsing MDS blob without trust anchor, CONTENT IS NOT VERIFIED!")
