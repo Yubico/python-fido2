@@ -257,6 +257,9 @@ Jj4B6PwIhAM3RtYg4CaGkcbFJrcJeCbAXCAC7LbfQSr8EdM79GyGw
 ).encode()
 
 
+AAGUID = bytes.fromhex("0132d110bf4e4208a403ab4f5f12efe5")
+
+
 def test_parse_blob():
     data = parse_blob(EXAMPLE_BLOB, EXAMPLE_CA)
     assert data.no == 15
@@ -266,7 +269,7 @@ def test_parse_blob():
 def test_find_by_aaguid():
     data = parse_blob(EXAMPLE_BLOB, EXAMPLE_CA)
     mds = MdsAttestationVerifier(data)
-    entry = mds.find_entry_by_aaguid(bytes.fromhex("0132d110bf4e4208a403ab4f5f12efe5"))
+    entry = mds.find_entry_by_aaguid(AAGUID)
     assert (
         entry.metadata_statement.description
         == "FIDO Alliance Sample FIDO2 Authenticator"
@@ -285,3 +288,21 @@ def test_find_by_chain_miss():
     mds = MdsAttestationVerifier(data)
     entry = mds.find_entry_by_chain([EXAMPLE_CA])
     assert entry is None
+
+
+def test_filter_entries():
+    data = parse_blob(EXAMPLE_BLOB, EXAMPLE_CA)
+    mds = MdsAttestationVerifier(data, entry_filter=lambda e: e.aaguid != AAGUID)
+    entry = mds.find_entry_by_aaguid(AAGUID)
+    assert entry is None
+
+    mds = MdsAttestationVerifier(data, entry_filter=lambda e: e.aaguid == AAGUID)
+    assert mds.find_entry_by_aaguid(AAGUID)
+
+
+def test_lookup_filter_does_not_affect_find_entry_by_aaguid():
+    data = parse_blob(EXAMPLE_BLOB, EXAMPLE_CA)
+    mds = MdsAttestationVerifier(
+        data, attestation_filter=lambda e, _: e.aaguid != AAGUID
+    )
+    assert mds.find_entry_by_aaguid(AAGUID)
