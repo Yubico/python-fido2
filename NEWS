@@ -1,6 +1,8 @@
 * Version 1.0.0 (unreleased)
  ** First stable release.
- ** Drop support for Python <3.6.
+ ** Require Python 3.7 or later.
+ ** APIs have updated to alight with WebAuthn level 2.
+ ** Several CTAP 2.1 features have been implemented.
 
 * Version 0.9.3 (released 2021-11-09)
  ** Bugfix: Linux - Don't fail device discovery when hidraw doesn't support
