@@ -30,8 +30,6 @@ from __future__ import absolute_import, unicode_literals
 
 from fido2 import cbor
 from fido2.cose import CoseKey, ES256, RS256, EdDSA, UnsupportedKey
-from cryptography import __version__ as cryptography_version
-from distutils.version import LooseVersion
 from binascii import a2b_hex
 
 import unittest
@@ -101,9 +99,6 @@ class TestCoseKey(unittest.TestCase):
         )
 
     def test_EdDSA_parse_verify(self):
-        if LooseVersion(cryptography_version) < LooseVersion("2.6"):
-            self.skipTest("EdDSA support missing")
-
         key = CoseKey.parse(cbor.decode(_EdDSA_KEY))
         self.assertIsInstance(key, EdDSA)
         self.assertEqual(

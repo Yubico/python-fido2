@@ -30,13 +30,8 @@ from __future__ import annotations
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
+from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519
 from typing import Sequence, Type, Mapping, Any, Union, TypeVar
-
-try:
-    from cryptography.hazmat.primitives.asymmetric import ed25519
-except ImportError:  # EdDSA requires Cryptography >= 2.6.
-    ed25519 = None  # type: ignore
 
 
 class CoseKey(dict):
@@ -75,9 +70,6 @@ class CoseKey(dict):
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
-        if alg == EdDSA.ALGORITHM and ed25519 is None:
-            # EdDSA requires Cryptography >= 2.6.
-            return UnsupportedKey
         for cls in CoseKey.__subclasses__():
             if cls.ALGORITHM == alg:
                 return cls
@@ -106,10 +98,7 @@ class CoseKey(dict):
     @staticmethod
     def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
-        if ed25519:
-            algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, ES384, ES512, PS256, RS256]
-        else:
-            algs = [ES256, ES384, ES512, PS256, RS256]
+        algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, ES384, ES512, PS256, RS256]
         return [cls.ALGORITHM for cls in algs]
 
 
