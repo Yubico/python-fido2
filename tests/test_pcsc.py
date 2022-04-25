@@ -26,8 +26,8 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import unittest
-import mock
 import sys
+from unittest import mock
 from fido2.hid import CTAPHID
 
 sys.modules["smartcard"] = mock.Mock()

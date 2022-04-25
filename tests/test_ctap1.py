@@ -25,9 +25,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.ctap1 import Ctap1, ApduError
 import unittest
-import mock
+from unittest import mock
+from fido2.ctap1 import Ctap1, ApduError
 
 
 class TestCtap1(unittest.TestCase):

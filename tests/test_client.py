@@ -27,9 +27,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import mock
 import unittest
 import json
+from unittest import mock
 from threading import Event, Timer
 from fido2 import cbor
 from fido2.utils import sha256, websafe_decode

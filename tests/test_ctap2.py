@@ -25,6 +25,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import unittest
+from unittest import mock
 from fido2.ctap1 import RegistrationData
 from fido2.ctap2 import (
     Ctap2,
@@ -40,8 +42,6 @@ from fido2 import cbor
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 
-import unittest
-import mock
 
 _AAGUID = bytes.fromhex("F8A011F38C0A4D15800617111F9EDC7D")
 _INFO = bytes.fromhex(
