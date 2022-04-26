@@ -84,17 +84,18 @@ user = {"id": b"user_id", "name": "A. User"}
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
-    resident_key=True,
+    resident_key_requirement="required",
     user_verification=uv,
     authenticator_attachment="cross-platform",
 )
 
 # Add CredBlob extension, attach data
 blob = os.urandom(32)  # 32 random bytes
-create_options["publicKey"].extensions = {"credBlob": blob}
+options = dict(create_options["publicKey"])
+options["extensions"] = {"credBlob": blob}
 
 # Create a credential
-result = client.make_credential(create_options["publicKey"])
+result = client.make_credential(options)
 
 # Complete registration
 auth_data = server.register_complete(
@@ -112,11 +113,12 @@ print("New credential created, with the CredBlob extension.")
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin()
-request_options["publicKey"].extensions = {"getCredBlob": True}
+options = dict(request_options["publicKey"])
+options["extensions"] = {"getCredBlob": True}
 
 # Authenticate the credential
 # Only one cred in allowCredentials, only one response.
-result = client.get_assertion(request_options["publicKey"]).get_response(0)
+result = client.get_assertion(options).get_response(0)
 
 blob_res = result.authenticator_data.extensions.get("credBlob")
 

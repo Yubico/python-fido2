@@ -1,6 +1,6 @@
 from fido2.pcsc import CtapPcscDevice
 from fido2.utils import sha256
-from fido2.ctap1 import CTAP1
+from fido2.ctap1 import Ctap1
 import sys
 
 
@@ -12,7 +12,7 @@ if not dev:
 chal = sha256(b"AAA")
 appid = sha256(b"BBB")
 
-ctap1 = CTAP1(dev)
+ctap1 = Ctap1(dev)
 
 print("version:", ctap1.get_version())
 

@@ -101,8 +101,8 @@ create_options, state = server.register_begin(
 print("Creating a credential with LargeBlob support...")
 
 # Enable largeBlob
-options = create_options["publicKey"]
-options.extensions = {"largeBlob": {"support": "required"}}
+options = dict(create_options["publicKey"])
+options["extensions"] = {"largeBlob": {"support": "required"}}
 
 # Create a credential
 result = client.make_credential(options)
@@ -123,8 +123,8 @@ print("Credential created! Writing a blob...")
 request_options, state = server.authenticate_begin(user_verification=uv)
 
 # Write a large blob
-options = request_options["publicKey"]
-options.extensions = {"largeBlob": {"write": b"Here is some data to store!"}}
+options = dict(request_options["publicKey"])
+options["extensions"] = {"largeBlob": {"write": b"Here is some data to store!"}}
 
 # Authenticate the credential
 selection = client.get_assertion(options)
@@ -138,8 +138,8 @@ if not result.extension_results.get("written"):
 print("Blob written! Reading back the blob...")
 
 # Read the blob
-options = request_options["publicKey"]
-options.extensions = {"largeBlob": {"read": True}}
+options = dict(request_options["publicKey"])
+options["extensions"] = {"largeBlob": {"read": True}}
 
 # Authenticate the credential
 selection = client.get_assertion(options)
