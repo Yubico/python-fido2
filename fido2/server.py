@@ -27,11 +27,11 @@
 
 from __future__ import annotations
 
-from .rpid import verify_rp_id, verify_app_id
+from .rpid import verify_rp_id
 from .cose import CoseKey
-from .client import WEBAUTHN_TYPE, ClientData
 from .utils import websafe_encode, websafe_decode
 from .webauthn import (
+    CollectedClientData,
     AuthenticatorData,
     AttestationObject,
     AttestedCredentialData,
@@ -52,6 +52,7 @@ from .webauthn import (
 from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import replace
+from urllib.parse import urlparse
 from typing import Sequence, Mapping, Optional, Callable, Union, Tuple, Any
 
 import os
@@ -214,7 +215,10 @@ class Fido2Server:
         )
 
     def register_complete(
-        self, state, client_data: ClientData, attestation_object: AttestationObject
+        self,
+        state,
+        client_data: CollectedClientData,
+        attestation_object: AttestationObject,
     ) -> AuthenticatorData:
         """Verify the correctness of the registration data received from
         the client.
@@ -225,10 +229,10 @@ class Fido2Server:
         :param attestation_object: The attestation object.
         :return: The authenticator data
         """
-        if client_data.get("type") != WEBAUTHN_TYPE.MAKE_CREDENTIAL:
-            raise ValueError("Incorrect type in ClientData.")
-        if not self._verify(client_data.get("origin")):
-            raise ValueError("Invalid origin in ClientData.")
+        if client_data.type != CollectedClientData.TYPE.CREATE:
+            raise ValueError("Incorrect type in CollectedClientData.")
+        if not self._verify(client_data.origin):
+            raise ValueError("Invalid origin in CollectedClientData.")
         if not constant_time.bytes_eq(
             websafe_decode(state["challenge"]), client_data.challenge
         ):
@@ -311,7 +315,7 @@ class Fido2Server:
         state,
         credentials: Sequence[AttestedCredentialData],
         credential_id: bytes,
-        client_data: ClientData,
+        client_data: CollectedClientData,
         auth_data: AuthenticatorData,
         signature: bytes,
     ) -> AttestedCredentialData:
@@ -325,10 +329,10 @@ class Fido2Server:
         :param client_data: The client data.
         :param auth_data: The authenticator data.
         :param signature: The signature provided by the client."""
-        if client_data.get("type") != WEBAUTHN_TYPE.GET_ASSERTION:
-            raise ValueError("Incorrect type in ClientData.")
-        if not self._verify(client_data.get("origin")):
-            raise ValueError("Invalid origin in ClientData.")
+        if client_data.type != CollectedClientData.TYPE.GET:
+            raise ValueError("Incorrect type in CollectedClientData.")
+        if not self._verify(client_data.origin):
+            raise ValueError("Invalid origin in CollectedClientData.")
         if websafe_decode(state["challenge"]) != client_data.challenge:
             raise ValueError("Wrong challenge in response.")
         if not constant_time.bytes_eq(self.rp.id_hash, auth_data.rp_id_hash):
@@ -364,6 +368,22 @@ class Fido2Server:
         }
 
 
+def verify_app_id(app_id: str, origin: str) -> bool:
+    """Checks if a FIDO U2F App ID is usable for a given origin.
+
+    :param app_id: The App ID to validate.
+    :param origin: The origin of the request.
+    :return: True if the App ID is usable by the origin, False if not.
+    """
+    url = urlparse(app_id)
+    if url.scheme != "https":
+        return False
+    hostname = url.hostname
+    if not hostname:
+        return False
+    return verify_rp_id(hostname, origin)
+
+
 class U2FFido2Server(Fido2Server):
     """Fido2Server which can be used with existing U2F credentials.
 
@@ -373,7 +393,7 @@ class U2FFido2Server(Fido2Server):
 
     :param app_id: The appId which was used for U2F registration.
     :param verify_u2f_origin: (optional) Alternative function to validate an
-        origin for U2F credentials..
+        origin for U2F credentials.
     For other parameters, see Fido2Server.
     """
 

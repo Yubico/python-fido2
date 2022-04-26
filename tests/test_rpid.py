@@ -27,59 +27,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.rpid import verify_app_id, verify_rp_id
+from fido2.rpid import verify_rp_id
 import unittest
-
-
-class TestAppId(unittest.TestCase):
-    def test_valid_ids(self):
-        self.assertTrue(
-            verify_app_id("https://example.com", "https://register.example.com")
-        )
-        self.assertTrue(
-            verify_app_id("https://example.com", "https://fido.example.com")
-        )
-        self.assertTrue(
-            verify_app_id("https://example.com", "https://www.example.com:444")
-        )
-
-        self.assertTrue(
-            verify_app_id(
-                "https://companyA.hosting.example.com",
-                "https://fido.companyA.hosting.example.com",
-            )
-        )
-        self.assertTrue(
-            verify_app_id(
-                "https://companyA.hosting.example.com",
-                "https://xyz.companyA.hosting.example.com",
-            )
-        )
-
-    def test_invalid_ids(self):
-        self.assertFalse(verify_app_id("https://example.com", "http://example.com"))
-        self.assertFalse(verify_app_id("https://example.com", "http://www.example.com"))
-        self.assertFalse(
-            verify_app_id("https://example.com", "https://example-test.com")
-        )
-
-        self.assertFalse(
-            verify_app_id(
-                "https://companyA.hosting.example.com", "https://register.example.com"
-            )
-        )
-        self.assertFalse(
-            verify_app_id(
-                "https://companyA.hosting.example.com",
-                "https://companyB.hosting.example.com",
-            )
-        )
-
-    def test_effective_tld_names(self):
-        self.assertFalse(
-            verify_app_id("https://appspot.com", "https://foo.appspot.com")
-        )
-        self.assertFalse(verify_app_id("https://co.uk", "https://example.co.uk"))
 
 
 class TestRpId(unittest.TestCase):

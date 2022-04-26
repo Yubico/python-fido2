@@ -28,6 +28,7 @@
 from fido2.webauthn import (
     Aaguid,
     AuthenticatorSelectionCriteria,
+    CollectedClientData,
     ResidentKeyRequirement,
     PublicKeyCredentialRpEntity,
     PublicKeyCredentialUserEntity,
@@ -74,6 +75,32 @@ class TestAaguid(unittest.TestCase):
 
 
 class TestWebAuthnDataTypes(unittest.TestCase):
+    def test_collected_client_data(self):
+        o = CollectedClientData(
+            b'{"type":"webauthn.create","challenge":"cdySOP-1JI4J_BpOeO9ut25rlZJueF16aO6auTTYAis","origin":"https://demo.yubico.com","crossOrigin":false}'  # noqa
+        )
+
+        assert o.type == "webauthn.create"
+        assert o.origin == "https://demo.yubico.com"
+        assert o.challenge == bytes.fromhex(
+            "71dc9238ffb5248e09fc1a4e78ef6eb76e6b95926e785d7a68ee9ab934d8022b"
+        )
+        assert o.cross_origin is False
+
+        assert (
+            o.b64
+            == "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiY2R5U09QLTFKSTRKX0JwT2VPOXV0MjVybFpKdWVGMTZhTzZhdVRUWUFpcyIsIm9yaWdpbiI6Imh0dHBzOi8vZGVtby55dWJpY28uY29tIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ"  # noqa
+        )
+        assert o.hash == bytes.fromhex(
+            "8b20a0b904b4747aacae71d55bf60b4eb2583f7e639f55f40baac23c2600c178"
+        )
+
+        assert o == CollectedClientData.create(
+            "webauthn.create",
+            "cdySOP-1JI4J_BpOeO9ut25rlZJueF16aO6auTTYAis",
+            "https://demo.yubico.com",
+        )
+
     def test_authenticator_selection_criteria(self):
         o = AuthenticatorSelectionCriteria(
             "platform", require_resident_key=True, user_verification="required"

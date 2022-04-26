@@ -36,6 +36,7 @@ from .ctap2.extensions import Ctap2Extension
 from .webauthn import (
     Aaguid,
     AttestationObject,
+    CollectedClientData,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
@@ -44,16 +45,15 @@ from .webauthn import (
     AuthenticatorAssertionResponse,
 )
 from .cose import ES256
-from .rpid import verify_rp_id, verify_app_id
-from .utils import sha256, websafe_decode, websafe_encode
-from enum import Enum, IntEnum, unique
+from .rpid import verify_rp_id
+from .utils import sha256
+from enum import IntEnum, unique
 from urllib.parse import urlparse
 from dataclasses import replace
 from threading import Timer, Event
 from typing import (
     Type,
     Any,
-    Union,
     Callable,
     Optional,
     Mapping,
@@ -61,47 +61,11 @@ from typing import (
 )
 
 import abc
-import json
 import platform
 import inspect
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-class ClientData(bytes):
-    def __init__(self, _):
-        super().__init__()
-        self._data = json.loads(self.decode())
-
-    def get(self, key: str) -> Any:
-        return self._data[key]
-
-    @property
-    def challenge(self) -> bytes:
-        return websafe_decode(self.get("challenge"))
-
-    @property
-    def b64(self) -> str:
-        return websafe_encode(self)
-
-    @property
-    def hash(self) -> bytes:
-        return sha256(self)
-
-    @classmethod
-    def build(cls, **kwargs) -> ClientData:
-        return cls(json.dumps(kwargs).encode())
-
-    @classmethod
-    def from_b64(cls, data: Union[str, bytes]) -> ClientData:
-        return cls(websafe_decode(data))
-
-    def __repr__(self):
-        return self.decode()
-
-    def __str__(self):
-        return self.decode()
 
 
 class ClientError(Exception):
@@ -191,141 +155,6 @@ def _call_polling(poll_delay, event, on_keepalive, func, *args, **kwargs):
     raise ClientError.ERR.TIMEOUT()
 
 
-@unique
-class U2F_TYPE(str, Enum):
-    REGISTER = "navigator.id.finishEnrollment"
-    SIGN = "navigator.id.getAssertion"
-
-
-class U2fClient:
-    """U2F-like client implementation.
-
-    The client allows registration and authentication of U2F credentials against
-    an Authenticator using CTAP 1. Prefer using Fido2Client if possible.
-
-    :param device: CtapDevice to use.
-    :param str origin: The origin to use.
-    :param verify: Function to verify an APP ID for a given origin.
-    """
-
-    def __init__(
-        self,
-        device: CtapDevice,
-        origin: str,
-        verify: Callable[[str, str], bool] = verify_app_id,
-    ):
-        self.poll_delay = 0.25
-        self.ctap = Ctap1(device)
-        self.origin = origin
-        self._verify = verify
-
-    def _verify_app_id(self, app_id):
-        try:
-            if self._verify(app_id, self.origin):
-                return
-        except Exception:  # nosec
-            pass  # Fall through to ClientError
-        raise ClientError.ERR.BAD_REQUEST()
-
-    def register(
-        self,
-        app_id: str,
-        register_requests: Sequence[Mapping[str, str]],
-        registered_keys: Sequence[Mapping[str, Any]],
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> Mapping[str, str]:
-        self._verify_app_id(app_id)
-
-        version = self.ctap.get_version()
-        dummy_param = b"\0" * 32
-        for key in registered_keys:
-            if key["version"] != version:
-                continue
-            key_app_id = key.get("appId", app_id)
-            app_param = sha256(key_app_id.encode())
-            self._verify_app_id(key_app_id)
-            key_handle = websafe_decode(key["keyHandle"])
-            try:
-                self.ctap.authenticate(dummy_param, app_param, key_handle, True)
-                raise ClientError.ERR.DEVICE_INELIGIBLE()  # Bad response
-            except ApduError as e:
-                if e.code == APDU.USE_NOT_SATISFIED:
-                    raise ClientError.ERR.DEVICE_INELIGIBLE()
-            except CtapError as e:
-                raise _ctap2client_err(e)
-
-        for request in register_requests:
-            if request["version"] == version:
-                challenge = request["challenge"]
-                break
-        else:
-            raise ClientError.ERR.DEVICE_INELIGIBLE()
-
-        client_data = ClientData.build(
-            typ=U2F_TYPE.REGISTER, challenge=challenge, origin=self.origin
-        )
-        app_param = sha256(app_id.encode())
-
-        reg_data = _call_polling(
-            self.poll_delay,
-            event,
-            on_keepalive,
-            self.ctap.register,
-            client_data.hash,
-            app_param,
-        )
-
-        return {"registrationData": reg_data.b64, "clientData": client_data.b64}
-
-    def sign(
-        self,
-        app_id: str,
-        challenge: bytes,
-        registered_keys: Sequence[Mapping[str, Any]],
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> Mapping[str, str]:
-        client_data = ClientData.build(
-            typ=U2F_TYPE.SIGN, challenge=challenge, origin=self.origin
-        )
-
-        version = self.ctap.get_version()
-        for key in registered_keys:
-            if key["version"] == version:
-                key_app_id = key.get("appId", app_id)
-                self._verify_app_id(key_app_id)
-                key_handle = websafe_decode(key["keyHandle"])
-                app_param = sha256(key_app_id.encode())
-                try:
-                    signature_data = _call_polling(
-                        self.poll_delay,
-                        event,
-                        on_keepalive,
-                        self.ctap.authenticate,
-                        client_data.hash,
-                        app_param,
-                        key_handle,
-                    )
-                    break
-                except ClientError:  # nosec
-                    pass  # Ignore and try next key
-        else:
-            raise ClientError.ERR.DEVICE_INELIGIBLE()
-
-        return {
-            "clientData": client_data.b64,
-            "signatureData": signature_data.b64,
-            "keyHandle": key["keyHandle"],
-        }
-
-
-@unique
-class WEBAUTHN_TYPE(str, Enum):
-    MAKE_CREDENTIAL = "webauthn.create"
-    GET_ASSERTION = "webauthn.get"
-
-
 class _BaseClient:
     def __init__(self, origin: str, verify: Callable[[str, str], bool]):
         self.origin = origin
@@ -339,12 +168,12 @@ class _BaseClient:
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
-    def _build_client_data(self, typ, challenge, extensions={}):
-        return ClientData.build(
+    def _build_client_data(self, typ, challenge):
+        print(typ, self.origin, challenge)
+        return CollectedClientData.create(
             type=typ,
             origin=self.origin,
-            challenge=websafe_encode(challenge),
-            clientExtensions=extensions,
+            challenge=challenge,
         )
 
 
@@ -356,7 +185,7 @@ class AssertionSelection:
     """
 
     def __init__(
-        self, client_data: ClientData, assertions: Sequence[AssertionResponse]
+        self, client_data: CollectedClientData, assertions: Sequence[AssertionResponse]
     ):
         self._client_data = client_data
         self._assertions = assertions
@@ -580,7 +409,7 @@ class _Ctap1ClientBackend(_ClientBackend):
 class _Ctap2ClientAssertionSelection(AssertionSelection):
     def __init__(
         self,
-        client_data: ClientData,
+        client_data: CollectedClientData,
         assertions: Sequence[AssertionResponse],
         extensions: Sequence[Ctap2Extension],
         pin_token: Optional[str],
@@ -690,7 +519,7 @@ class _Ctap2ClientBackend(_ClientBackend):
     def _get_auth_params(
         self, client_data, rp_id, user_verification, permissions, event, on_keepalive
     ):
-        mc = client_data.get("type") == WEBAUTHN_TYPE.MAKE_CREDENTIAL
+        mc = client_data.type == CollectedClientData.TYPE.CREATE
         self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
 
         pin_protocol = None
@@ -937,7 +766,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         self._verify_rp_id(rp.id)
 
         client_data = self._build_client_data(
-            WEBAUTHN_TYPE.MAKE_CREDENTIAL, options.challenge
+            CollectedClientData.TYPE.CREATE, options.challenge
         )
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
@@ -982,7 +811,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         self._verify_rp_id(options.rp_id)
 
         client_data = self._build_client_data(
-            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
+            CollectedClientData.TYPE.GET, options.challenge
         )
 
         try:
@@ -1057,7 +886,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         self._verify_rp_id(options.rp.id)
 
         client_data = self._build_client_data(
-            WEBAUTHN_TYPE.MAKE_CREDENTIAL, options.challenge
+            CollectedClientData.TYPE.CREATE, options.challenge
         )
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
@@ -1104,7 +933,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         self._verify_rp_id(options.rp_id)
 
         client_data = self._build_client_data(
-            WEBAUTHN_TYPE.GET_ASSERTION, options.challenge
+            CollectedClientData.TYPE.GET, options.challenge
         )
 
         try:

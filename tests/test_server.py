@@ -1,9 +1,8 @@
-import json
 import unittest
 
-from fido2.client import WEBAUTHN_TYPE, ClientData
-from fido2.server import Fido2Server, U2FFido2Server
+from fido2.server import Fido2Server, U2FFido2Server, verify_app_id
 from fido2.webauthn import (
+    CollectedClientData,
     PublicKeyCredentialRpEntity,
     UserVerificationRequirement,
     AttestedCredentialData,
@@ -12,6 +11,57 @@ from fido2.webauthn import (
 
 from .test_ctap2 import _ATT_CRED_DATA, _CRED_ID
 from .utils import U2FDevice
+
+
+class TestAppId(unittest.TestCase):
+    def test_valid_ids(self):
+        self.assertTrue(
+            verify_app_id("https://example.com", "https://register.example.com")
+        )
+        self.assertTrue(
+            verify_app_id("https://example.com", "https://fido.example.com")
+        )
+        self.assertTrue(
+            verify_app_id("https://example.com", "https://www.example.com:444")
+        )
+
+        self.assertTrue(
+            verify_app_id(
+                "https://companyA.hosting.example.com",
+                "https://fido.companyA.hosting.example.com",
+            )
+        )
+        self.assertTrue(
+            verify_app_id(
+                "https://companyA.hosting.example.com",
+                "https://xyz.companyA.hosting.example.com",
+            )
+        )
+
+    def test_invalid_ids(self):
+        self.assertFalse(verify_app_id("https://example.com", "http://example.com"))
+        self.assertFalse(verify_app_id("https://example.com", "http://www.example.com"))
+        self.assertFalse(
+            verify_app_id("https://example.com", "https://example-test.com")
+        )
+
+        self.assertFalse(
+            verify_app_id(
+                "https://companyA.hosting.example.com", "https://register.example.com"
+            )
+        )
+        self.assertFalse(
+            verify_app_id(
+                "https://companyA.hosting.example.com",
+                "https://companyB.hosting.example.com",
+            )
+        )
+
+    def test_effective_tld_names(self):
+        self.assertFalse(
+            verify_app_id("https://appspot.com", "https://foo.appspot.com")
+        )
+        self.assertFalse(verify_app_id("https://co.uk", "https://example.co.uk"))
 
 
 class TestPublicKeyCredentialRpEntity(unittest.TestCase):
@@ -63,12 +113,11 @@ class TestFido2Server(unittest.TestCase):
             "challenge": "GAZPACHO!",
             "user_verification": UserVerificationRequirement.PREFERRED,
         }
-        client_data_dict = {
-            "challenge": "GAZPACHO!",
-            "origin": "https://example.com",
-            "type": WEBAUTHN_TYPE.GET_ASSERTION,
-        }
-        client_data = ClientData(json.dumps(client_data_dict).encode("utf-8"))
+        client_data = CollectedClientData.create(
+            CollectedClientData.TYPE.GET,
+            "GAZPACHO!",
+            "https://example.com",
+        )
         _AUTH_DATA = bytes.fromhex(
             "A379A6F6EEAFB9A55E378C118034E2751E682FAB9F2D30AB13D2125586CE1947010000001D"
         )
@@ -93,12 +142,11 @@ class TestU2FFido2Server(unittest.TestCase):
             "challenge": "GAZPACHO!",
             "user_verification": UserVerificationRequirement.PREFERRED,
         }
-        client_data_dict = {
-            "challenge": "GAZPACHO!",
-            "origin": "https://example.com",
-            "type": WEBAUTHN_TYPE.GET_ASSERTION,
-        }
-        client_data = ClientData(json.dumps(client_data_dict).encode("utf-8"))
+        client_data = CollectedClientData.create(
+            CollectedClientData.TYPE.GET,
+            "GAZPACHO!",
+            "https://example.com",
+        )
 
         param = b"TOMATO GIVES "
 
@@ -130,12 +178,12 @@ class TestU2FFido2Server(unittest.TestCase):
             "challenge": "GAZPACHO!",
             "user_verification": UserVerificationRequirement.PREFERRED,
         }
-        client_data_dict = {
-            "challenge": "GAZPACHO!",
-            "origin": "https://oauth.example.com",
-            "type": WEBAUTHN_TYPE.GET_ASSERTION,
-        }
-        client_data = ClientData(json.dumps(client_data_dict).encode("utf-8"))
+
+        client_data = CollectedClientData.create(
+            CollectedClientData.TYPE.GET,
+            "GAZPACHO!",
+            "https://oauth.example.com",
+        )
 
         param = b"TOMATO GIVES "
 
@@ -153,16 +201,17 @@ class TestU2FFido2Server(unittest.TestCase):
         )
 
         # Now with something not whitelisted
-        client_data_dict = {
-            "challenge": "GAZPACHO!",
-            "origin": "https://publicthingy.example.com",
-            "type": WEBAUTHN_TYPE.GET_ASSERTION,
-        }
-        client_data = ClientData(json.dumps(client_data_dict).encode("utf-8"))
+        client_data = CollectedClientData.create(
+            CollectedClientData.TYPE.GET,
+            "GAZPACHO!",
+            "https://publicthingy.example.com",
+        )
 
         authenticator_data, signature = device.sign(client_data)
 
-        with self.assertRaisesRegex(ValueError, "Invalid origin in ClientData."):
+        with self.assertRaisesRegex(
+            ValueError, "Invalid origin in CollectedClientData."
+        ):
             server.authenticate_complete(
                 state,
                 [auth_data],

@@ -29,11 +29,18 @@ from __future__ import annotations
 
 from . import cbor
 from .cose import CoseKey, ES256
-from .utils import sha256, ByteBuffer, _CamelCaseDataObject
+from .utils import (
+    sha256,
+    websafe_decode,
+    websafe_encode,
+    ByteBuffer,
+    _CamelCaseDataObject,
+)
 from enum import Enum, EnumMeta, unique, IntFlag
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, Mapping, Optional, Sequence, Tuple, Union, cast
 import struct
+import json
 
 """
 Data classes based on the W3C WebAuthn specification (https://www.w3.org/TR/webauthn/).
@@ -322,6 +329,65 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
             ),
             {"x5c": [registration.certificate], "sig": registration.signature},
         )
+
+
+@dataclass(init=False, frozen=True)
+class CollectedClientData(bytes):
+    @unique
+    class TYPE(str, Enum):
+        CREATE = "webauthn.create"
+        GET = "webauthn.get"
+
+    type: str
+    challenge: bytes
+    origin: str
+    cross_origin: bool = False
+
+    def __init__(self, *args):
+        super().__init__()
+
+        data = json.loads(self.decode())
+        object.__setattr__(self, "type", data["type"])
+        object.__setattr__(self, "challenge", websafe_decode(data["challenge"]))
+        object.__setattr__(self, "origin", data["origin"])
+        object.__setattr__(self, "cross_origin", data.get("crossOrigin", False))
+
+    @classmethod
+    def create(
+        cls,
+        type: str,
+        challenge: Union[bytes, str],
+        origin: str,
+        cross_origin: bool = False,
+        **kwargs,
+    ) -> CollectedClientData:
+        if isinstance(challenge, bytes):
+            encoded_challenge = websafe_encode(challenge)
+        else:
+            encoded_challenge = challenge
+        return cls(
+            json.dumps(
+                {
+                    "type": type,
+                    "challenge": encoded_challenge,
+                    "origin": origin,
+                    "cross_origin": cross_origin,
+                    **kwargs,
+                },
+                separators=(",", ":"),
+            ).encode()
+        )
+
+    def __str__(self):  # Override default implementation from bytes.
+        return repr(self)
+
+    @property
+    def b64(self) -> str:
+        return websafe_encode(self)
+
+    @property
+    def hash(self) -> bytes:
+        return sha256(self)
 
 
 class _StringEnumMeta(EnumMeta):

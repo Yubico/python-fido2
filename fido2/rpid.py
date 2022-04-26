@@ -69,19 +69,3 @@ def verify_rp_id(rp_id: str, origin: str) -> bool:
     if host and host.endswith("." + rp_id) and rp_id not in suffixes:
         return True
     return False
-
-
-def verify_app_id(app_id: str, origin: str) -> bool:
-    """Checks if a FIDO U2F App ID is usable for a given origin.
-
-    :param app_id: The App ID to validate.
-    :param origin: The origin of the request.
-    :return: True if the App ID is usable by the origin, False if not.
-    """
-    url = urlparse(app_id)
-    if url.scheme != "https":
-        return False
-    hostname = url.hostname
-    if not hostname:
-        return False
-    return verify_rp_id(hostname, origin)
