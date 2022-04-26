@@ -9,7 +9,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.6"
+python = "^3.7"
 Flask = "^2.0"
 fido2 = {path = "../.."}
 
