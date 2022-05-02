@@ -104,6 +104,6 @@ def list_descriptors():
                 _failed_cache.add(hidraw)
 
     # Remove entries from the cache that were not seen
-    _failed_cache.difference_update(hidraw)
+    _failed_cache.difference_update(stale)
 
     return devices
