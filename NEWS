@@ -1,4 +1,4 @@
-* Version 1.0.0rc1 (unreleased)
+* Version 1.0.0rc1 (released 2022-05-02)
  ** Release Candidate 1 of first stable release.
  ** Require Python 3.7 or later.
  ** APIs have updated to align with WebAuthn level 2.
