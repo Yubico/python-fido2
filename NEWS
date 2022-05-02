@@ -1,7 +1,7 @@
-* Version 1.0.0 (unreleased)
- ** First stable release.
+* Version 1.0.0rc1 (unreleased)
+ ** Release Candidate 1 of first stable release.
  ** Require Python 3.7 or later.
- ** APIs have updated to alight with WebAuthn level 2.
+ ** APIs have updated to align with WebAuthn level 2.
  ** Several CTAP 2.1 features have been implemented.
 
 * Version 0.9.3 (released 2021-11-09)

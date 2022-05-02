@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fido2"
-version = "1.0.0-dev0"
+version = "1.0.0rc1"
 description = "FIDO2/WebAuthn library for implementing clients and servers."
 authors = ["Dain Nilsson <dain@yubico.com>"]
 homepage = "https://github.com/Yubico/python-fido2"
