@@ -449,7 +449,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
     def selection(self, event):
         if "FIDO_2_1" in self.info.versions:
-            self.ctap2.selection(event)
+            self.ctap2.selection(event=event)
         else:
             try:
                 self.ctap2.make_credential(
@@ -610,8 +610,8 @@ class _Ctap2ClientBackend(_ClientBackend):
             options,
             pin_auth,
             pin_protocol.VERSION if pin_protocol else None,
-            event,
-            on_keepalive,
+            event=event,
+            on_keepalive=on_keepalive,
         )
 
         # Process extenstion outputs
@@ -684,8 +684,8 @@ class _Ctap2ClientBackend(_ClientBackend):
             options,
             pin_auth,
             pin_protocol.VERSION if pin_protocol else None,
-            event,
-            on_keepalive,
+            event=event,
+            on_keepalive=on_keepalive,
         )
 
         return _Ctap2ClientAssertionSelection(

@@ -220,6 +220,7 @@ class Ctap2:
         self,
         cmd: int,
         data: Optional[Mapping[int, Any]] = None,
+        *,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> Mapping[int, Any]:
@@ -270,6 +271,7 @@ class Ctap2:
         pin_hash_enc: Optional[bytes] = None,
         permissions: Optional[int] = None,
         permissions_rpid: Optional[str] = None,
+        *,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> Mapping[int, Any]:
@@ -311,6 +313,7 @@ class Ctap2:
 
     def reset(
         self,
+        *,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> None:
@@ -334,6 +337,7 @@ class Ctap2:
         options: Optional[Mapping[str, Any]] = None,
         pin_uv_param: Optional[bytes] = None,
         pin_uv_protocol: Optional[int] = None,
+        *,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> AttestationResponse:
@@ -368,8 +372,8 @@ class Ctap2:
                     pin_uv_param,
                     pin_uv_protocol,
                 ),
-                event,
-                on_keepalive,
+                event=event,
+                on_keepalive=on_keepalive,
             )
         )
 
@@ -382,6 +386,7 @@ class Ctap2:
         options: Optional[Mapping[str, Any]] = None,
         pin_uv_param: Optional[bytes] = None,
         pin_uv_protocol: Optional[int] = None,
+        *,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> AssertionResponse:
@@ -412,8 +417,8 @@ class Ctap2:
                     pin_uv_param,
                     pin_uv_protocol,
                 ),
-                event,
-                on_keepalive,
+                event=event,
+                on_keepalive=on_keepalive,
             )
         )
 
@@ -478,6 +483,7 @@ class Ctap2:
         pin_uv_protocol: Optional[int] = None,
         pin_uv_param: Optional[bytes] = None,
         get_modality: Optional[bool] = None,
+        *,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> Mapping[int, Any]:
@@ -519,6 +525,7 @@ class Ctap2:
 
     def selection(
         self,
+        *,
         event: Optional[Event] = None,
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> None:
