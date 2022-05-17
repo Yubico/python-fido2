@@ -170,15 +170,20 @@ def get_hidraw_descriptor(path):
         fcntl.ioctl(f, HIDIOCGRAWINFO, buf, True)
         _, vid, pid = struct.unpack("<IHH", buf)
 
+        # FreeBSD's hidraw(4) does not return string length for
+        # HIDIOCGRAWNAME and HIDIOCGRAWUNIQ, see https://reviews.freebsd.org/D35233
+
         # Read product
-        buf = array("B", [0] * 128)
-        length = fcntl.ioctl(f, HIDIOCGRAWNAME_128, buf, True)
+        buf = array("B", [0] * 129)
+        fcntl.ioctl(f, HIDIOCGRAWNAME_128, buf, True)
+        length = buf.index(0)
         name = bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
 
         # Read unique ID
         try:
-            buf = array("B", [0] * 64)
-            length = fcntl.ioctl(f, HIDIOCGRAWUNIQ_64, buf, True)
+            buf = array("B", [0] * 65)
+            fcntl.ioctl(f, HIDIOCGRAWUNIQ_64, buf, True)
+            length = buf.index(0)
             serial = (
                 bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
             )
