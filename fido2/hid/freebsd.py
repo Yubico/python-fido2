@@ -176,14 +176,14 @@ def get_hidraw_descriptor(path):
         # Read product
         buf = array("B", [0] * 129)
         fcntl.ioctl(f, HIDIOCGRAWNAME_128, buf, True)
-        length = buf.index(0)
+        length = buf.index(0) + 1  # emulate ioctl return value
         name = bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
 
         # Read unique ID
         try:
             buf = array("B", [0] * 65)
             fcntl.ioctl(f, HIDIOCGRAWUNIQ_64, buf, True)
-            length = buf.index(0)
+            length = buf.index(0) + 1  # emulate ioctl return value
             serial = (
                 bytearray(buf[: (length - 1)]).decode("utf-8") if length > 1 else None
             )
