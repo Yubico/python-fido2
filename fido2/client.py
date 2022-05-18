@@ -169,7 +169,6 @@ class _BaseClient:
         raise ClientError.ERR.BAD_REQUEST()
 
     def _build_client_data(self, typ, challenge):
-        print(typ, self.origin, challenge)
         return CollectedClientData.create(
             type=typ,
             origin=self.origin,
