@@ -43,6 +43,7 @@ from .webauthn import (
     UserVerificationRequirement,
     AuthenticatorAttestationResponse,
     AuthenticatorAssertionResponse,
+    AttestationConveyancePreference,
 )
 from .cose import ES256
 from .rpid import verify_rp_id
@@ -326,12 +327,14 @@ class _Ctap1ClientBackend(_ClientBackend):
         extensions,
         rk,
         user_verification,
+        enterprise_attestation,
         event,
     ):
         if (
             rk
             or user_verification == UserVerificationRequirement.REQUIRED
             or ES256.ALGORITHM not in [p.alg for p in key_params]
+            or enterprise_attestation
         ):
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
@@ -553,6 +556,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         extensions,
         rk,
         user_verification,
+        enterprise_attestation,
         event,
     ):
         if exclude_list:
@@ -609,6 +613,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             options,
             pin_auth,
             pin_protocol.VERSION if pin_protocol else None,
+            enterprise_attestation,
             event=event,
             on_keepalive=on_keepalive,
         )
@@ -717,6 +722,9 @@ class Fido2Client(WebAuthnClient, _BaseClient):
     ):
         super().__init__(origin, verify)
 
+        # TODO: Decide how to configure this list.
+        self._enterprise_rpid_list: Optional[Sequence[str]] = None
+
         try:
             self._backend: _ClientBackend = _Ctap2ClientBackend(
                 device, user_interaction, extension_types
@@ -769,6 +777,16 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         )
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
+        enterprise_attestation = None
+        if options.attestation == AttestationConveyancePreference.ENTERPRISE:
+            if self.info.options.get("ep"):
+                if self._enterprise_rpid_list is not None:
+                    # Platform facilitated
+                    if rp.id in self._enterprise_rpid_list:
+                        enterprise_attestation = 2
+                else:
+                    # Vendor facilitated
+                    enterprise_attestation = 1
 
         try:
             return self._backend.do_make_credential(
@@ -780,6 +798,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
                 options.extensions,
                 selection.require_resident_key,
                 selection.user_verification,
+                enterprise_attestation,
                 event,
             )
         except CtapError as e:

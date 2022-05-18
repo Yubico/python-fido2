@@ -153,6 +153,7 @@ class TestFido2Client(unittest.TestCase):
             None,
             None,
             None,
+            None,
             event=mock.ANY,
             on_keepalive=mock.ANY,
         )

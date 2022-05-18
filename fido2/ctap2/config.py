@@ -96,6 +96,13 @@ class Config:
             pin_uv_param = None
         return self.ctap.config(sub_cmd, params, pin_uv_protocol, pin_uv_param)
 
+    def enable_enterprise_attestation(self) -> None:
+        """Enables Enterprise Attestation.
+
+        If already enabled, this command is ignored.
+        """
+        self._call(Config.CMD.ENABLE_ENTERPRISE_ATT)
+
     def toggle_always_uv(self) -> None:
         """Toggle the alwaysUV setting.
 
