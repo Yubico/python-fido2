@@ -153,8 +153,8 @@ class TestFido2Client(unittest.TestCase):
             None,
             None,
             None,
-            mock.ANY,
-            mock.ANY,
+            event=mock.ANY,
+            on_keepalive=mock.ANY,
         )
 
         self.assertEqual(response.client_data.origin, APP_ID)
