@@ -31,7 +31,7 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.7"
-cryptography = ">=2.6, !=35, <39"
+cryptography = ">=2.6, !=35, <40"
 pyscard = {version = "^1.9 || ^2", optional = true}
 
 [tool.poetry.extras]
