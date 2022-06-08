@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "fido2-example-server"
 version = "0.1.0"
-description = ""
+description = "Example server for python-fido2"
 authors = ["Dain Nilsson <dain@yubico.com>"]
 license = "Apache-2"
 packages = [
