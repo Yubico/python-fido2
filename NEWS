@@ -1,3 +1,6 @@
+* Version 1.0.0 (released 2022-06-08)
+ ** First stable release.
+
 * Version 1.0.0rc1 (released 2022-05-02)
  ** Release Candidate 1 of first stable release.
  ** Require Python 3.7 or later.
