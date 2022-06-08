@@ -3,9 +3,8 @@
 
   $ git checkout -b release/x.y.z
 
-* Update the version in fido/__init__.py and make sure the NEWS file has an
-  entry for it, and the correct release date.
-* Update the debian/changelog file with the correct version.
+* Update the version in pyproject.toml and fido/__init__.py and make sure the
+  NEWS file has an entry for it, and the correct release date.
 * Commit the changes, and push the new branch.
 
   $ git push -u origin release/x.y.z
@@ -18,21 +17,21 @@
 
 * Build the release:
 
-  $ python setup.py sdist
+  $ poetry build
 
-* Sign the release, creating both binary and ascii signatures:
+* Sign the release:
 
   $ gpg --detach-sign -a dist/fido2-x.y.z.tar.gz
-  $ gpg --output dist/fido2-x.y.z.tar.gz.sig --dearmor dist/fido2-x.y.z.tar.gz.asc
+  $ gpg --detach-sign -a dist/fido2-x.y.z-py3-none-any.whl
 
 * Upload the release to PyPI:
 
-  $ twine upload dist/fido2-x.y.z.tar.gz dist/fido2-x.y.z.tar.gz.asc
+  $ poetry publish
 
-* Add the .tar.gz and .sig files to a new Github release, using the latest NEWS
-  entry as description.
+* Add the .tar.gz, the .whl and .sig files to a new Github release, using the
+  latest NEWS entry as description.
 
-* Merge (using --ff) and delete the release branch, and push the tag:
+* Merge and delete the release branch, and push the tag:
 
   $ git checkout master
   $ git merge --ff release/x.y.z
@@ -40,15 +39,10 @@
   $ git push && git push --tags
   $ git push origin :release/x.y.z
 
-* Bump the version number by incrementing the PATCH version and appending -dev0
+* Bump the version number by incrementing the PATCH version and appending -dev.0
   in fido2/__init__.py and add a new entry (unreleased) to the NEWS file.
 
-  __version__ = 'x.y.q-dev0'
-
-* Bump the version in debian/changelog by appending `+git` to it (don't
-  increment PATCH).
-
-  (x.y.z+git)
+  __version__ = 'x.y.q-dev.0'
 
 * Commit and push the change:
 
