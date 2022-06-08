@@ -26,7 +26,8 @@ include = [
   { path = "COPYING.APLv2", format = "sdist"},
   { path = "NEWS", format = "sdist"},
   { path = "README.adoc", format = "sdist"},
-  "tests/",
+  { path= "tests/", format = "sdist"},
+  { path= "examples/", format = "sdist"},
 ]
 
 [tool.poetry.dependencies]
