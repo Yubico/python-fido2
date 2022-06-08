@@ -1340,7 +1340,7 @@ tt.im
 tv.im
 
 // in : https://en.wikipedia.org/wiki/.in
-// see also: https://registry.in/Policies
+// see also: https://registry.in/policies
 // Please note, that nic.in is not an official eTLD, but used by most
 // government institutions.
 in
@@ -7130,7 +7130,7 @@ org.zw
 
 // newGTLDs
 
-// List of new gTLDs imported from https://www.icann.org/resources/registries/gtlds/v2/gtlds.json on 2022-04-14T15:15:34Z
+// List of new gTLDs imported from https://www.icann.org/resources/registries/gtlds/v2/gtlds.json on 2022-06-02T15:16:31Z
 // This list is auto-generated, don't edit it manually.
 // aaa : 2015-02-26 American Automobile Association, Inc.
 aaa
@@ -7687,7 +7687,7 @@ chanel
 // channel : 2014-05-08 Charleston Road Registry Inc.
 channel
 
-// charity : 2018-04-11 Binky Moon, LLC
+// charity : 2018-04-11 Public Interest Registry
 charity
 
 // chase : 2015-04-30 JPMorgan Chase Bank, National Association
@@ -7834,7 +7834,7 @@ coupon
 // coupons : 2015-03-26 Binky Moon, LLC
 coupons
 
-// courses : 2014-12-04 OPEN UNIVERSITIES AUSTRALIA PTY LTD
+// courses : 2014-12-04 Registry Services, LLC
 courses
 
 // cpa : 2019-06-10 American Institute of Certified Public Accountants
@@ -8227,7 +8227,7 @@ forsale
 // forum : 2015-04-02 Fegistry, LLC
 forum
 
-// foundation : 2013-12-05 Binky Moon, LLC
+// foundation : 2013-12-05 Public Interest Registry
 foundation
 
 // fox : 2015-09-11 FOX Registry, LLC
@@ -8326,7 +8326,7 @@ gift
 // gifts : 2014-07-03 Binky Moon, LLC
 gifts
 
-// gives : 2014-03-06 Dog Beach, LLC
+// gives : 2014-03-06 Public Interest Registry
 gives
 
 // giving : 2014-11-13 Giving Limited
@@ -8851,7 +8851,7 @@ lincoln
 // linde : 2014-12-04 Linde Aktiengesellschaft
 linde
 
-// link : 2013-11-14 UNR Corp.
+// link : 2013-11-14 Nova Registry Ltd
 link
 
 // lipsy : 2015-06-25 Lipsy Ltd
@@ -9841,7 +9841,7 @@ stream
 // studio : 2015-02-11 Dog Beach, LLC
 studio
 
-// study : 2014-12-11 OPEN UNIVERSITIES AUSTRALIA PTY LTD
+// study : 2014-12-11 Registry Services, LLC
 study
 
 // style : 2014-12-04 Binky Moon, LLC
@@ -9901,7 +9901,7 @@ tatamotors
 // tatar : 2014-04-24 Limited Liability Company "Coordination Center of Regional Domain of Tatarstan Republic"
 tatar
 
-// tattoo : 2013-08-30 UNR Corp.
+// tattoo : 2013-08-30 Top Level Design, LLC
 tattoo
 
 // tax : 2014-03-20 Binky Moon, LLC
@@ -12281,6 +12281,10 @@ blogspot.vn
 // Submitted by Niels Martignene <hello@goupile.fr>
 goupile.fr
 
+// Government of the Netherlands: https://www.government.nl
+// Submitted by <domeinnaam@minaz.nl>
+gov.nl
+
 // Group 53, LLC : https://www.group53.com
 // Submitted by Tyler Todd <noc@nova53.net>
 awsmppl.com
@@ -12357,7 +12361,6 @@ ltd.ng
 ngo.ng
 edu.scot
 sch.so
-org.yt
 
 // HostyHosting (hostyhosting.com)
 hostyhosting.io
@@ -13389,6 +13392,12 @@ rocky.page
 спб.рус
 я.рус
 
+// Salesforce.com, Inc. https://salesforce.com/
+// Submitted by Michael Biven <mbiven@salesforce.com>
+builder.code.com
+dev-builder.code.com
+stg-builder.code.com
+
 // Sandstorm Development Group, Inc. : https://sandcats.io/
 // Submitted by Asheesh Laroia <asheesh@sandstorm.io>
 sandcats.io
@@ -13811,6 +13820,15 @@ hk.com
 hk.org
 ltd.hk
 inc.hk
+
+// UNIVERSAL DOMAIN REGISTRY : https://www.udr.org.yt/
+// see also: whois -h whois.udr.org.yt help
+// Submitted by Atanunu Igbunuroghene <publicsuffixlist@udr.org.yt>
+name.pm
+sch.tf
+biz.wf
+sch.wf
+org.yt
 
 // United Gameserver GmbH : https://united-gameserver.de
 // Submitted by Stefan Schwarz <sysadm@united-gameserver.de>
