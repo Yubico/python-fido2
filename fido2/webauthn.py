@@ -371,7 +371,7 @@ class CollectedClientData(bytes):
                     "type": type,
                     "challenge": encoded_challenge,
                     "origin": origin,
-                    "cross_origin": cross_origin,
+                    "crossOrigin": cross_origin,
                     **kwargs,
                 },
                 separators=(",", ":"),

@@ -101,6 +101,14 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             "https://demo.yubico.com",
         )
 
+        o = CollectedClientData.create(
+            "webauthn.create",
+            "cdySOP-1JI4J_BpOeO9ut25rlZJueF16aO6auTTYAis",
+            "https://demo.yubico.com",
+            True,
+        )
+        assert o.cross_origin is True
+
     def test_authenticator_selection_criteria(self):
         o = AuthenticatorSelectionCriteria(
             "platform", require_resident_key=True, user_verification="required"
