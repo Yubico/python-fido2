@@ -24,7 +24,7 @@
 # uhid(4) - Classic method, default option on
 #           FreeBSD 13.x and earlier
 #
-# uhid is available since FreeBSD 13 and can be activated by adding
+# hidraw is available since FreeBSD 13 and can be activated by adding
 # `hw.usb.usbhid.enable="1"` to `/boot/loader.conf`. The actual kernel
 # module is loaded with `kldload hidraw`.
 
