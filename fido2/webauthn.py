@@ -113,7 +113,7 @@ class AttestedCredentialData(bytes):
     @classmethod
     def create(
         cls, aaguid: bytes, credential_id: bytes, public_key: CoseKey
-    ) -> "AttestedCredentialData":
+    ) -> AttestedCredentialData:
         """Create an AttestedCredentialData by providing its components.
 
         :param aaguid: The AAGUID of the authenticator.
@@ -129,7 +129,7 @@ class AttestedCredentialData(bytes):
         )
 
     @classmethod
-    def unpack_from(cls, data: bytes) -> Tuple["AttestedCredentialData", bytes]:
+    def unpack_from(cls, data: bytes) -> Tuple[AttestedCredentialData, bytes]:
         """Unpack an AttestedCredentialData from a byte string, returning it and
         any remaining data.
 
@@ -141,9 +141,7 @@ class AttestedCredentialData(bytes):
         return cls.create(aaguid, cred_id, pub_key), rest
 
     @classmethod
-    def from_ctap1(
-        cls, key_handle: bytes, public_key: bytes
-    ) -> "AttestedCredentialData":
+    def from_ctap1(cls, key_handle: bytes, public_key: bytes) -> AttestedCredentialData:
         """Create an AttestatedCredentialData from a CTAP1 RegistrationData instance.
 
         :param key_handle: The CTAP1 credential key_handle.
