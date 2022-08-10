@@ -36,6 +36,7 @@ from .utils import (
     ByteBuffer,
     _CamelCaseDataObject,
 )
+from .features import webauthn_json_mapping
 from enum import Enum, EnumMeta, unique, IntFlag
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Tuple, Union, cast
@@ -406,6 +407,12 @@ class _StringEnum(str, Enum, metaclass=_StringEnumMeta):
     """
 
 
+_b64_metadata = dict(
+    serialize=lambda x: websafe_encode(x) if webauthn_json_mapping.enabled else x,
+    deserialize=lambda x: websafe_decode(x) if webauthn_json_mapping.enabled else x,
+)
+
+
 @unique
 class AttestationConveyancePreference(_StringEnum):
     NONE = "none"
@@ -461,7 +468,7 @@ class PublicKeyCredentialRpEntity(_CamelCaseDataObject):
 @dataclass(eq=False, frozen=True)
 class PublicKeyCredentialUserEntity(_CamelCaseDataObject):
     name: str
-    id: bytes
+    id: bytes = field(metadata=_b64_metadata)
     display_name: Optional[str] = None
 
 
@@ -481,7 +488,7 @@ class PublicKeyCredentialParameters(_CamelCaseDataObject):
 @dataclass(eq=False, frozen=True)
 class PublicKeyCredentialDescriptor(_CamelCaseDataObject):
     type: PublicKeyCredentialType
-    id: bytes
+    id: bytes = field(metadata=_b64_metadata)
     transports: Optional[Sequence[AuthenticatorTransport]] = None
 
     @classmethod
@@ -521,7 +528,7 @@ class AuthenticatorSelectionCriteria(_CamelCaseDataObject):
 class PublicKeyCredentialCreationOptions(_CamelCaseDataObject):
     rp: PublicKeyCredentialRpEntity
     user: PublicKeyCredentialUserEntity
-    challenge: bytes
+    challenge: bytes = field(metadata=_b64_metadata)
     pub_key_cred_params: Sequence[PublicKeyCredentialParameters] = field(
         metadata=dict(deserialize=PublicKeyCredentialParameters._deserialize_list),
     )
@@ -537,12 +544,12 @@ class PublicKeyCredentialCreationOptions(_CamelCaseDataObject):
 
 @dataclass(eq=False, frozen=True)
 class PublicKeyCredentialRequestOptions(_CamelCaseDataObject):
-    challenge: bytes
+    challenge: bytes = field(metadata=_b64_metadata)
     timeout: Optional[int] = None
     rp_id: Optional[str] = None
     allow_credentials: Optional[Sequence[PublicKeyCredentialDescriptor]] = field(
         default=None,
-        metadata={"deserialize": PublicKeyCredentialDescriptor._deserialize_list},
+        metadata=dict(deserialize=PublicKeyCredentialDescriptor._deserialize_list),
     )
     user_verification: Optional[UserVerificationRequirement] = None
     extensions: Optional[Mapping[str, Any]] = None
@@ -550,16 +557,89 @@ class PublicKeyCredentialRequestOptions(_CamelCaseDataObject):
 
 @dataclass(eq=False, frozen=True)
 class AuthenticatorAttestationResponse(_CamelCaseDataObject):
-    client_data: bytes
-    attestation_object: AttestationObject
+    client_data: CollectedClientData = field(
+        metadata=dict(
+            _b64_metadata,
+            name="clientDataJSON",
+        )
+    )
+    attestation_object: AttestationObject = field(metadata=_b64_metadata)
     extension_results: Optional[Mapping[str, Any]] = None
+
+    def __getitem__(self, key):
+        if key == "clientData" and not webauthn_json_mapping.enabled:
+            return self.client_data
+        return super().__getitem__(key)
+
+    @classmethod
+    def from_dict(cls, data: Optional[Mapping[str, Any]]):
+        if data is not None and not webauthn_json_mapping.enabled:
+            value = dict(data)
+            value["clientDataJSON"] = value.pop("clientData", None)
+            data = value
+        return super().from_dict(data)
 
 
 @dataclass(eq=False, frozen=True)
 class AuthenticatorAssertionResponse(_CamelCaseDataObject):
-    client_data: bytes
-    authenticator_data: AuthenticatorData
-    signature: bytes
-    user_handle: bytes
-    credential_id: bytes
+    client_data: CollectedClientData = field(
+        metadata=dict(
+            _b64_metadata,
+            name="clientDataJSON",
+        )
+    )
+    authenticator_data: AuthenticatorData = field(metadata=_b64_metadata)
+    signature: bytes = field(metadata=_b64_metadata)
+    user_handle: Optional[bytes] = field(metadata=_b64_metadata, default=None)
+    credential_id: Optional[bytes] = field(metadata=_b64_metadata, default=None)
     extension_results: Optional[Mapping[str, Any]] = None
+
+    def __getitem__(self, key):
+        if key == "clientData" and not webauthn_json_mapping.enabled:
+            return self.client_data
+        return super().__getitem__(key)
+
+    @classmethod
+    def from_dict(cls, data: Optional[Mapping[str, Any]]):
+        if data is not None and not webauthn_json_mapping.enabled:
+            value = dict(data)
+            value["clientDataJSON"] = value.pop("clientData", None)
+            data = value
+        print("parse assertion from", data)
+        return super().from_dict(data)
+
+
+@dataclass(eq=False, frozen=True)
+class RegistrationResponse(_CamelCaseDataObject):
+    id: bytes = field(metadata=_b64_metadata)
+    response: AuthenticatorAttestationResponse
+    authenticator_attachment: Optional[AuthenticatorAttachment] = None
+    client_extension_results: Optional[Mapping] = None
+    type: Optional[PublicKeyCredentialType] = None
+
+    def __post_init__(self):
+        webauthn_json_mapping.require()
+        super().__post_init__()
+
+
+@dataclass(eq=False, frozen=True)
+class AuthenticationResponse(_CamelCaseDataObject):
+    id: bytes = field(metadata=_b64_metadata)
+    response: AuthenticatorAssertionResponse
+    authenticator_attachment: Optional[AuthenticatorAttachment] = None
+    client_extension_results: Optional[Mapping] = None
+    type: Optional[PublicKeyCredentialType] = None
+
+    def __post_init__(self):
+        webauthn_json_mapping.require()
+        super().__post_init__()
+
+
+@dataclass(eq=False, frozen=True)
+class CredentialCreationOptions(_CamelCaseDataObject):
+    public_key: PublicKeyCredentialCreationOptions
+
+
+@dataclass(eq=False, frozen=True)
+class CredentialRequestOptions(_CamelCaseDataObject):
+    public_key: PublicKeyCredentialRequestOptions
