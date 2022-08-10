@@ -47,13 +47,17 @@ from .webauthn import (
     UserVerificationRequirement,
     ResidentKeyRequirement,
     AuthenticatorAttachment,
+    RegistrationResponse,
+    AuthenticationResponse,
+    CredentialCreationOptions,
+    CredentialRequestOptions,
 )
 
 from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import replace
 from urllib.parse import urlparse
-from typing import Sequence, Mapping, Optional, Callable, Union, Tuple, Any
+from typing import Sequence, Mapping, Optional, Callable, Union, Tuple, Any, overload
 
 import os
 import logging
@@ -159,7 +163,7 @@ class Fido2Server:
         authenticator_attachment: Optional[AuthenticatorAttachment] = None,
         challenge: Optional[bytes] = None,
         extensions=None,
-    ) -> Tuple[Mapping[str, Any], Any]:
+    ) -> Tuple[CredentialCreationOptions, Any]:
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
         corresponding `register_complete` call.
@@ -186,8 +190,8 @@ class Fido2Server:
         )
 
         return (
-            {
-                "publicKey": PublicKeyCredentialCreationOptions(
+            CredentialCreationOptions(
+                PublicKeyCredentialCreationOptions(
                     self.rp,
                     user,
                     challenge,
@@ -210,16 +214,28 @@ class Fido2Server:
                     self.attestation,
                     extensions,
                 )
-            },
+            ),
             state,
         )
 
+    @overload
+    def register_complete(
+        self,
+        state,
+        response: Union[RegistrationResponse, Mapping[str, Any]],
+    ) -> AuthenticatorData:
+        pass
+
+    @overload
     def register_complete(
         self,
         state,
         client_data: CollectedClientData,
         attestation_object: AttestationObject,
     ) -> AuthenticatorData:
+        pass
+
+    def register_complete(self, state, *args, **kwargs):
         """Verify the correctness of the registration data received from
         the client.
 
@@ -229,6 +245,24 @@ class Fido2Server:
         :param attestation_object: The attestation object.
         :return: The authenticator data
         """
+        response = None
+        if len(args) == 1 and not kwargs:
+            response = args[0]
+        elif set(kwargs) == {"response"} and not args:
+            response = kwargs["response"]
+        if response:
+            registration = RegistrationResponse.from_dict(response)
+            client_data = registration.response.client_data
+            attestation_object = registration.response.attestation_object
+        else:
+            names = ["client_data", "attestation_object"]
+            pos = dict(zip(names, args))
+            data = {**kwargs, **pos}
+            if set(kwargs) & set(pos) or set(data) != set(names):
+                raise TypeError("incorrect arguments passed to register_complete()")
+            client_data = data[names[0]]
+            attestation_object = data[names[1]]
+
         if client_data.type != CollectedClientData.TYPE.CREATE:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
@@ -274,7 +308,8 @@ class Fido2Server:
         user_verification: Optional[UserVerificationRequirement] = None,
         challenge: Optional[bytes] = None,
         extensions=None,
-    ) -> Tuple[Mapping[str, Any], Any]:
+    ) -> Tuple[CredentialRequestOptions, Any]:
+
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
         `authenticate_complete` call.
@@ -297,8 +332,8 @@ class Fido2Server:
             )
 
         return (
-            {
-                "publicKey": PublicKeyCredentialRequestOptions(
+            CredentialRequestOptions(
+                PublicKeyCredentialRequestOptions(
                     challenge,
                     self.timeout,
                     self.rp.id,
@@ -306,10 +341,20 @@ class Fido2Server:
                     user_verification,
                     extensions,
                 )
-            },
+            ),
             state,
         )
 
+    @overload
+    def authenticate_complete(
+        self,
+        state,
+        credentials: Sequence[AttestedCredentialData],
+        response: Union[AuthenticationResponse, Mapping[str, Any]],
+    ) -> AttestedCredentialData:
+        pass
+
+    @overload
     def authenticate_complete(
         self,
         state,
@@ -319,6 +364,9 @@ class Fido2Server:
         auth_data: AuthenticatorData,
         signature: bytes,
     ) -> AttestedCredentialData:
+        pass
+
+    def authenticate_complete(self, state, credentials, *args, **kwargs):
         """Verify the correctness of the assertion data received from
         the client.
 
@@ -329,6 +377,29 @@ class Fido2Server:
         :param client_data: The client data.
         :param auth_data: The authenticator data.
         :param signature: The signature provided by the client."""
+
+        response = None
+        if len(args) == 1 and not kwargs:
+            response = args[0]
+        elif set(kwargs) == {"response"} and not args:
+            response = kwargs["response"]
+        if response:
+            authentication = AuthenticationResponse.from_dict(response)
+            credential_id = authentication.id
+            client_data = authentication.response.client_data
+            auth_data = authentication.response.authenticator_data
+            signature = authentication.response.signature
+        else:
+            names = ["credential_id", "client_data", "auth_data", "signature"]
+            pos = dict(zip(names, args))
+            data = {**kwargs, **pos}
+            if set(kwargs) & set(pos) or set(data) != set(names):
+                raise TypeError("incorrect arguments passed to authenticate_complete()")
+            credential_id = data[names[0]]
+            client_data = data[names[1]]
+            auth_data = data[names[2]]
+            signature = data[names[3]]
+
         if client_data.type != CollectedClientData.TYPE.GET:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
