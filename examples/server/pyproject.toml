@@ -21,4 +21,3 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 server = "server.server:main"
-server-u2f = "server.server_u2f:main"

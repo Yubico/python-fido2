@@ -33,17 +33,14 @@ See the file README.adoc in this directory for details.
 
 Navigate to https://localhost:5000 in a supported web browser.
 """
-from fido2.webauthn import (
-    CollectedClientData,
-    PublicKeyCredentialRpEntity,
-    AttestationObject,
-    AuthenticatorData,
-)
+from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
 from fido2.server import Fido2Server
-from fido2 import cbor
-from flask import Flask, session, request, redirect, abort
+from flask import Flask, session, request, redirect, abort, jsonify
 
 import os
+import fido2.features
+
+fido2.features.webauthn_json_mapping.enabled = True
 
 
 app = Flask(__name__, static_url_path="")
@@ -65,12 +62,12 @@ def index():
 
 @app.route("/api/register/begin", methods=["POST"])
 def register_begin():
-    registration_data, state = server.register_begin(
-        {
-            "id": b"user_id",
-            "name": "a_user",
-            "displayName": "A. User",
-        },
+    options, state = server.register_begin(
+        PublicKeyCredentialUserEntity(
+            id=b"user_id",
+            name="a_user",
+            display_name="A. User",
+        ),
         credentials,
         user_verification="discouraged",
         authenticator_attachment="cross-platform",
@@ -78,24 +75,21 @@ def register_begin():
 
     session["state"] = state
     print("\n\n\n\n")
-    print(registration_data)
+    print(options)
     print("\n\n\n\n")
-    return cbor.encode(registration_data)
+
+    return jsonify(dict(options))
 
 
 @app.route("/api/register/complete", methods=["POST"])
 def register_complete():
-    data = cbor.decode(request.get_data())
-    client_data = CollectedClientData(data["clientDataJSON"])
-    att_obj = AttestationObject(data["attestationObject"])
-    print("clientData", client_data)
-    print("AttestationObject:", att_obj)
-
-    auth_data = server.register_complete(session["state"], client_data, att_obj)
+    response = request.json
+    print("RegistrationResponse:", response)
+    auth_data = server.register_complete(session["state"], response)
 
     credentials.append(auth_data.credential_data)
     print("REGISTERED CREDENTIAL:", auth_data.credential_data)
-    return cbor.encode({"status": "OK"})
+    return jsonify({"status": "OK"})
 
 
 @app.route("/api/authenticate/begin", methods=["POST"])
@@ -103,9 +97,10 @@ def authenticate_begin():
     if not credentials:
         abort(404)
 
-    auth_data, state = server.authenticate_begin(credentials)
+    options, state = server.authenticate_begin(credentials)
     session["state"] = state
-    return cbor.encode(auth_data)
+
+    return jsonify(dict(options))
 
 
 @app.route("/api/authenticate/complete", methods=["POST"])
@@ -113,24 +108,15 @@ def authenticate_complete():
     if not credentials:
         abort(404)
 
-    data = cbor.decode(request.get_data())
-    credential_id = data["credentialId"]
-    client_data = CollectedClientData(data["clientDataJSON"])
-    auth_data = AuthenticatorData(data["authenticatorData"])
-    signature = data["signature"]
-    print("clientData", client_data)
-    print("AuthenticatorData", auth_data)
-
+    response = request.json
+    print("AuthenticationResponse:", response)
     server.authenticate_complete(
         session.pop("state"),
         credentials,
-        credential_id,
-        client_data,
-        auth_data,
-        signature,
+        response,
     )
     print("ASSERTION OK")
-    return cbor.encode({"status": "OK"})
+    return jsonify({"status": "OK"})
 
 
 def main():
