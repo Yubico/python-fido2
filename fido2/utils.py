@@ -212,7 +212,12 @@ class _DataClassMapping(Mapping[_T, Any]):
             value = getattr(self, f.name)
             if value is None:
                 continue
-            value = _parse_value(hints[f.name], value)
+            try:
+                value = _parse_value(hints[f.name], value)
+            except (TypeError, KeyError, ValueError):
+                raise ValueError(
+                    f"Error parsing field {f.name} for {self.__class__.__name__}"
+                )
             object.__setattr__(self, f.name, value)
 
     @classmethod
@@ -252,6 +257,11 @@ class _DataClassMapping(Mapping[_T, Any]):
             return None
         if isinstance(data, cls):
             return data
+        if not isinstance(data, Mapping):
+            raise TypeError(
+                f"{cls.__name__}.from_dict called with non-Mapping data of type"
+                f"{type(data)}"
+            )
 
         kwargs = {}
         for f in fields(cls):
