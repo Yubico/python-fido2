@@ -35,6 +35,7 @@ Consider this highly experimental.
 from fido2.hid import CtapHidDevice
 from fido2.ctap2 import Ctap2, FPBioEnrollment, CaptureError
 from fido2.ctap2.pin import ClientPin
+from fido2.ctap2.bio import BioEnrollment
 from getpass import getpass
 import sys
 
@@ -44,7 +45,7 @@ uv = "discouraged"
 for dev in CtapHidDevice.list_devices():
     try:
         ctap = Ctap2(dev)
-        if "bioEnroll" in ctap.info.options:
+        if BioEnrollment.is_supported(ctap.info):
             break
     except Exception:  # nosec
         continue

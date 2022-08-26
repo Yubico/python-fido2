@@ -86,9 +86,7 @@ class CredentialManagement:
         if info.options.get("credMgmt"):
             return True
         # We also support the Prototype command
-        if "FIDO_2_1_PRE" in info.versions and info.options.get(
-            "credentialMgmtPreview"
-        ):
+        if "FIDO_2_1_PRE" in info.versions and "credentialMgmtPreview" in info.options:
             return True
         return False
 
