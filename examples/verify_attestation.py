@@ -104,7 +104,6 @@ else:
     dev = next(CtapHidDevice.list_devices(), None)
     if dev is not None:
         print("Use USB HID channel.")
-        use_prompt = True
     else:
         try:
             from fido2.pcsc import CtapPcscDevice
@@ -141,9 +140,6 @@ create_options, state = server.register_begin(
 )
 
 # Create a credential
-if use_prompt:
-    print("\nTouch your authenticator device now...\n")
-
 result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
