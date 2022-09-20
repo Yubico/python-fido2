@@ -168,7 +168,7 @@ class AssertionResponse(_CborDataObject):
             credential=credential,
             auth_data=AuthenticatorData.create(
                 app_param,
-                authentication.user_presence & AuthenticatorData.FLAG.USER_PRESENT,
+                authentication.user_presence & AuthenticatorData.FLAG.UP,
                 authentication.counter,
             ),
             signature=authentication.signature,

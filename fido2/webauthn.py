@@ -168,15 +168,25 @@ class AuthenticatorData(bytes):
     :ivar extensions: Authenticator extensions, if available.
     """
 
-    @unique
     class FLAG(IntFlag):
         """Authenticator data flags
 
         See https://www.w3.org/TR/webauthn/#sec-authenticator-data for details
         """
 
+        # Names used in WebAuthn
+        UP = 0x01
+        UV = 0x04
+        BE = 0x08
+        BS = 0x10
+        AT = 0x40
+        ED = 0x80
+
+        # Aliases (for historical purposes)
         USER_PRESENT = 0x01
         USER_VERIFIED = 0x04
+        BACKUP_ELIGIBILITY = 0x08
+        BACKUP_STATE = 0x10
         ATTESTED = 0x40
         EXTENSION_DATA = 0x80
 
@@ -195,13 +205,13 @@ class AuthenticatorData(bytes):
         object.__setattr__(self, "counter", reader.unpack(">I"))
         rest = reader.read()
 
-        if self.flags & AuthenticatorData.FLAG.ATTESTED:
+        if self.flags & AuthenticatorData.FLAG.AT:
             credential_data, rest = AttestedCredentialData.unpack_from(rest)
         else:
             credential_data = None
         object.__setattr__(self, "credential_data", credential_data)
 
-        if self.flags & AuthenticatorData.FLAG.EXTENSION_DATA:
+        if self.flags & AuthenticatorData.FLAG.ED:
             extensions, rest = cbor.decode_from(rest)
         else:
             extensions = None
@@ -240,36 +250,28 @@ class AuthenticatorData(bytes):
         )
 
     def is_user_present(self) -> bool:
-        """Return true if the User Present flag is set.
-
-        :return: True if User Present is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAG.USER_PRESENT)
+        """Return true if the User Present flag is set."""
+        return bool(self.flags & AuthenticatorData.FLAG.UP)
 
     def is_user_verified(self) -> bool:
-        """Return true if the User Verified flag is set.
+        """Return true if the User Verified flag is set."""
+        return bool(self.flags & AuthenticatorData.FLAG.UV)
 
-        :return: True if User Verified is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAG.USER_VERIFIED)
+    def is_backup_eligible(self) -> bool:
+        """Return true if the Backup Eligibility flag is set."""
+        return bool(self.flags & AuthenticatorData.FLAG.BE)
+
+    def is_backed_up(self) -> bool:
+        """Return true if the Backup State flag is set."""
+        return bool(self.flags & AuthenticatorData.FLAG.BS)
 
     def is_attested(self) -> bool:
-        """Return true if the Attested credential data flag is set.
-
-        :return: True if Attested credential data is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAG.ATTESTED)
+        """Return true if the Attested credential data flag is set."""
+        return bool(self.flags & AuthenticatorData.FLAG.AT)
 
     def has_extension_data(self) -> bool:
-        """Return true if the Extenstion data flag is set.
-
-        :return: True if Extenstion data is set, False otherwise.
-        :rtype: bool
-        """
-        return bool(self.flags & AuthenticatorData.FLAG.EXTENSION_DATA)
+        """Return true if the Extenstion data flag is set."""
+        return bool(self.flags & AuthenticatorData.FLAG.ED)
 
 
 @dataclass(init=False, frozen=True)
@@ -320,7 +322,7 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
             "fido-u2f",
             AuthenticatorData.create(
                 app_param,
-                AuthenticatorData.FLAG.ATTESTED | AuthenticatorData.FLAG.USER_PRESENT,
+                AuthenticatorData.FLAG.AT | AuthenticatorData.FLAG.UP,
                 0,
                 AttestedCredentialData.from_ctap1(
                     registration.key_handle, registration.public_key
