@@ -9,6 +9,9 @@
  ** Update server example to use JSON serialization.
  ** Server: Add support for passing RegistrationResponse/AuthenticationResponse (or
     their deserialized JSON data) to register_complete/authenticate_complete.
+ ** Add new "hybrid" AuthenticatorTransport.
+ ** Add new AuthenticatorData flags, and use 2-letter names as in the WebAuthn spec
+    (long names are still available as aliases).
 
 * Version 1.0.0 (released 2022-06-08)
  ** First stable release.
