@@ -446,6 +446,7 @@ class AuthenticatorTransport(_StringEnum):
     USB = "usb"
     NFC = "nfc"
     BLE = "ble"
+    HYBRID = "hybrid"
     INTERNAL = "internal"
 
 
