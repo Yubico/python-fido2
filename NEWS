@@ -1,3 +1,15 @@
+* Version 1.1.0 (unreleased)
+ ** Bugfix: Fix name of "crossOrigin" in CollectedClientData.create().
+ ** Bugfix: Some incorrect type hints in the MDS3 classes were fixed.
+ ** Stricter checking of dataclass field types.
+ ** Add support for JSON-serialization of WebAuthn data classes.
+    This changes the objects dict representation to align with new additions in the
+    WebAuthn specification. As this may break compatibility, the new behavior
+    requires explicit opt-in until python-fido2 2.0 is released.
+ ** Update server example to use JSON serialization.
+ ** Server: Add support for passing RegistrationResponse/AuthenticationResponse (or
+    their deserialized JSON data) to register_complete/authenticate_complete.
+
 * Version 1.0.0 (released 2022-06-08)
  ** First stable release.
 

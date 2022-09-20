@@ -30,7 +30,7 @@
 import unittest
 from unittest import mock
 from fido2 import cbor
-from fido2.utils import sha256
+from fido2.utils import sha256, websafe_encode
 from fido2.hid import CAPABILITY
 from fido2.ctap import CtapError
 from fido2.ctap1 import RegistrationData
@@ -42,6 +42,7 @@ from fido2.webauthn import (
     CollectedClientData,
 )
 
+
 APP_ID = "https://foo.example.com"
 REG_DATA = RegistrationData(
     bytes.fromhex(
@@ -50,7 +51,7 @@ REG_DATA = RegistrationData(
 )
 
 rp = {"id": "example.com", "name": "Example RP"}
-user = {"id": b"user_id", "name": "A. User"}
+user = {"id": websafe_encode(b"user_id"), "name": "A. User"}
 challenge = b"Y2hhbGxlbmdl"
 _INFO_NO_PIN = bytes.fromhex(
     "a60182665532465f5632684649444f5f325f3002826375766d6b686d61632d7365637265740350f8a011f38c0a4d15800617111f9edc7d04a462726bf5627570f564706c6174f469636c69656e7450696ef4051904b0068101"  # noqa E501

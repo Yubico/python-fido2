@@ -175,17 +175,31 @@ def _parse_value(t, value):
         t = t.__args__[0]
         return [_parse_value(t, v) for v in value]
 
+    # Handle Mappings
+    if issubclass(getattr(t, "__origin__", object), Mapping) and isinstance(
+        value, Mapping
+    ):
+        return value
+
+    # Check if type is already correct
     try:
-        if issubclass(t, _DataClassMapping) and not isinstance(value, t):
-            # Recursively call from_dict for nested _DataClassMappings
-            return t.from_dict(value)
-        if not isinstance(value, t):
-            # Convert to enum values, other wrappers
-            return t(value)
+        if isinstance(value, t):
+            return value
     except TypeError:
         pass
 
-    return value
+    # Check for subclass of _DataClassMapping
+    try:
+        is_dataclass = issubclass(t, _DataClassMapping)
+    except TypeError:
+        is_dataclass = False
+
+    if is_dataclass:
+        # Recursively call from_dict for nested _DataClassMappings
+        return t.from_dict(value)
+
+    # Convert to enum values, other wrappers
+    return t(value)
 
 
 _T = TypeVar("_T", bound=Hashable)
@@ -198,7 +212,12 @@ class _DataClassMapping(Mapping[_T, Any]):
             value = getattr(self, f.name)
             if value is None:
                 continue
-            value = _parse_value(hints[f.name], value)
+            try:
+                value = _parse_value(hints[f.name], value)
+            except (TypeError, KeyError, ValueError):
+                raise ValueError(
+                    f"Error parsing field {f.name} for {self.__class__.__name__}"
+                )
             object.__setattr__(self, f.name, value)
 
     @classmethod
@@ -238,16 +257,22 @@ class _DataClassMapping(Mapping[_T, Any]):
             return None
         if isinstance(data, cls):
             return data
+        if not isinstance(data, Mapping):
+            raise TypeError(
+                f"{cls.__name__}.from_dict called with non-Mapping data of type"
+                f"{type(data)}"
+            )
 
         kwargs = {}
         for f in fields(cls):
             key = cls._get_field_key(f)
             if key in data:
                 value = data[key]
-                deserialize = f.metadata.get("deserialize")
-                if deserialize:
-                    value = deserialize(value)
-                kwargs[f.name] = value
+                if value is not None:
+                    deserialize = f.metadata.get("deserialize")
+                    if deserialize:
+                        value = deserialize(value)
+                    kwargs[f.name] = value
         return cls(**kwargs)
 
 

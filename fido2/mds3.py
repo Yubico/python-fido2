@@ -199,10 +199,10 @@ class MetadataStatement(_CamelCaseDataObject):
     user_verification_details: Sequence[Sequence[VerificationMethodDescriptor]] = field(
         metadata=dict(serialize=lambda xss: [[dict(x) for x in xs] for xs in xss])
     )
-    key_protection: int
-    matcher_protection: int
-    attachment_hint: int
-    tc_display: int
+    key_protection: Sequence[str]
+    matcher_protection: Sequence[str]
+    attachment_hint: Sequence[str]
+    tc_display: Sequence[str]
     attestation_root_certificates: Sequence[bytes] = field(
         metadata=dict(
             deserialize=lambda xs: [b64decode(x) for x in xs],
