@@ -1,4 +1,4 @@
-* Version 1.1.0 (unreleased)
+* Version 1.1.0 (released 2022-10-17)
  ** Bugfix: Fix name of "crossOrigin" in CollectedClientData.create().
  ** Bugfix: Some incorrect type hints in the MDS3 classes were fixed.
  ** Stricter checking of dataclass field types.
