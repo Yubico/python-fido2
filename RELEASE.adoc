@@ -33,15 +33,20 @@
 
 * Merge and delete the release branch, and push the tag:
 
-  $ git checkout master
+  $ git checkout main
   $ git merge --ff release/x.y.z
   $ git branch -d release/x.y.z
   $ git push && git push --tags
   $ git push origin :release/x.y.z
 
 * Bump the version number by incrementing the PATCH version and appending -dev.0
-  in fido2/__init__.py and add a new entry (unreleased) to the NEWS file.
+  in pyproject.toml and fido2/__init__.py and add a new entry (unreleased) to the
+  NEWS file.
 
+  # pyproject.toml:
+  version = "x.y.q-dev.0"
+
+  # fido2/__init__.py:
   __version__ = 'x.y.q-dev.0'
 
 * Commit and push the change:
