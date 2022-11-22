@@ -396,7 +396,8 @@ _Unique = Union[Tpm2bPublicKeyRsa, TpmsEccPoint]
 
 @dataclass
 class TpmPublicFormat:
-    """the public area structure is defined by [TPMv2-Part2] Section 12.2.4 (TPMT_PUBLIC)
+    """the public area structure is defined by [TPMv2-Part2] Section 12.2.4
+    (TPMT_PUBLIC)
     as:
       TPMI_ALG_PUBLIC - type
       TPMI_ALG_HASH - nameAlg
