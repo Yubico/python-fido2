@@ -608,7 +608,6 @@ class AuthenticatorAssertionResponse(_CamelCaseDataObject):
             value = dict(data)
             value["clientDataJSON"] = value.pop("clientData", None)
             data = value
-        print("parse assertion from", data)
         return super().from_dict(data)
 
 
