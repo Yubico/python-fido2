@@ -363,7 +363,7 @@ class MdsAttestationVerifier(AttestationVerifier):
         blob: MetadataBlobPayload,
         entry_filter: Optional[EntryFilter] = filter_revoked,
         attestation_filter: Optional[LookupFilter] = filter_attestation_key_compromised,
-        attestation_types: Sequence[Attestation] = None,
+        attestation_types: Optional[Sequence[Attestation]] = None,
     ):
         super().__init__(attestation_types)
         self._attestation_filter = attestation_filter or (

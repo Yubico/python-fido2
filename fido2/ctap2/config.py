@@ -113,7 +113,7 @@ class Config:
     def set_min_pin_length(
         self,
         min_pin_length: Optional[int] = None,
-        rp_ids: List[str] = None,
+        rp_ids: Optional[List[str]] = None,
         force_change_pin: bool = False,
     ) -> None:
         """Set the minimum PIN length allowed when setting/changing the PIN.

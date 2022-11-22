@@ -194,7 +194,7 @@ class AttestationVerifier(abc.ABC):
     to verify the trust path from the attestation.
     """
 
-    def __init__(self, attestation_types: Sequence[Attestation] = None):
+    def __init__(self, attestation_types: Optional[Sequence[Attestation]] = None):
         self._attestation_types = attestation_types or _default_attestations()
 
     @abc.abstractmethod
