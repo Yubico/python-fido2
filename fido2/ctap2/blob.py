@@ -166,7 +166,7 @@ class LargeBlobs:
             self.ctap.large_blobs(
                 offset,
                 set=_set,
-                length=ln,
+                length=size if offset == 0 else None,
                 pin_uv_protocol=pin_uv_protocol,
                 pin_uv_param=pin_uv_param,
             )
