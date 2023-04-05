@@ -8,6 +8,7 @@ dist/
 .ropeproject/
 ChangeLog
 man/*.1
+poetry.lock
 
 # Unit test / coverage reports
 htmlcov/
