@@ -1,4 +1,4 @@
-* Version 1.1.1 (unreleased)
+* Version 1.1.1 (released 2023-04-05)
  ** Add community provided support for NetBSD.
  ** Bugfix: Don't set length for largeBlob when offset is 0.
  ** Bugfix: Remove print statement in webauthn parsing.
