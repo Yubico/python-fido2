@@ -1,4 +1,7 @@
 * Version 1.1.1 (unreleased)
+ ** Add community provided support for NetBSD.
+ ** Bugfix: Don't set length for largeBlob when offset is 0.
+ ** Bugfix: Remove print statement in webauthn parsing.
 
 * Version 1.1.0 (released 2022-10-17)
  ** Bugfix: Fix name of "crossOrigin" in CollectedClientData.create().
