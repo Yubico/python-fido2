@@ -124,7 +124,9 @@ class HmacSecretExtension(Ctap2Extension):
         ):
             raise ValueError("Invalid salt length")
 
-        client_pin = ClientPin(self.ctap, self.pin_protocol)
+        # HMAC-secret extension requires clientPin even when
+        # clientPin is not advertised in CTAP info
+        client_pin = ClientPin(self.ctap, self.pin_protocol, require_support=False)
         key_agreement, self.shared_secret = client_pin._get_shared_secret()
         if self.pin_protocol is None:
             self.pin_protocol = client_pin.protocol

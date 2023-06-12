@@ -253,8 +253,13 @@ class ClientPin:
     def is_supported(info):
         return "clientPin" in info.options
 
-    def __init__(self, ctap: Ctap2, protocol: Optional[PinProtocol] = None):
-        if not self.is_supported(ctap.info):
+    def __init__(
+            self,
+            ctap: Ctap2,
+            protocol: Optional[PinProtocol] = None,
+            require_support: Optional[bool] = True
+    ):
+        if require_support and not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support ClientPin")
 
         self.ctap = ctap
