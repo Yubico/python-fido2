@@ -251,12 +251,19 @@ class ClientPin:
 
     @staticmethod
     def is_supported(info):
+        """Checks if ClientPin functionality is supported.
+
+        Note that the ClientPin function is still usable without support for client
+        PIN functionality, as UV token may still be supported.
+        """
         return "clientPin" in info.options
 
-    def __init__(self, ctap: Ctap2, protocol: Optional[PinProtocol] = None):
-        if not self.is_supported(ctap.info):
-            raise ValueError("Authenticator does not support ClientPin")
+    @staticmethod
+    def is_token_supported(info):
+        """Checks if pinUvAuthToken is supported."""
+        return info.options.get("pinUvAuthToken") is True
 
+    def __init__(self, ctap: Ctap2, protocol: Optional[PinProtocol] = None):
         self.ctap = ctap
         if protocol is None:
             for proto in ClientPin.PROTOCOLS:
@@ -267,7 +274,6 @@ class ClientPin:
                 raise ValueError("No compatible PIN/UV protocols supported!")
         else:
             self.protocol = protocol
-        self._supports_permissions = ctap.info.options.get("pinUvAuthToken")
 
     def _get_shared_secret(self):
         resp = self.ctap.client_pin(
@@ -290,12 +296,15 @@ class ClientPin:
         :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
+        if not ClientPin.is_supported(self.ctap.info):
+            raise ValueError("Authenticator does not support get_pin_token")
+
         key_agreement, shared_secret = self._get_shared_secret()
 
         pin_hash = sha256(pin.encode())[:16]
         pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
 
-        if self._supports_permissions and permissions:
+        if ClientPin.is_token_supported(self.ctap.info) and permissions:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN
         else:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN_LEGACY
@@ -335,7 +344,7 @@ class ClientPin:
             consecutive keep-alive messages with the same status.
         :return: A PIN/UV token.
         """
-        if not self.ctap.info.options.get("pinUvAuthToken"):
+        if not ClientPin.is_token_supported(self.ctap.info):
             raise ValueError("Authenticator does not support get_uv_token")
 
         key_agreement, shared_secret = self._get_shared_secret()
@@ -387,6 +396,9 @@ class ClientPin:
 
         :param pin: A PIN to set.
         """
+        if not ClientPin.is_supported(self.ctap.info):
+            raise ValueError("Authenticator does not support ClientPin")
+
         key_agreement, shared_secret = self._get_shared_secret()
 
         pin_enc = self.protocol.encrypt(shared_secret, _pad_pin(pin))
@@ -409,6 +421,9 @@ class ClientPin:
         :param old_pin: The currently set PIN.
         :param new_pin: The new PIN to set.
         """
+        if not ClientPin.is_supported(self.ctap.info):
+            raise ValueError("Authenticator does not support ClientPin")
+
         key_agreement, shared_secret = self._get_shared_secret()
 
         pin_hash = sha256(old_pin.encode())[:16]

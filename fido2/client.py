@@ -502,7 +502,7 @@ class _Ctap2ClientBackend(_ClientBackend):
     ):
         # Prefer UV
         if self.info.options.get("uv"):
-            if self.info.options.get("pinUvAuthToken"):
+            if ClientPin.is_token_supported(self.info):
                 if self.user_interaction.request_uv(permissions, rp_id):
                     return client_pin.get_uv_token(
                         permissions, rp_id, event, on_keepalive
