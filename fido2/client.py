@@ -453,6 +453,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         if "FIDO_2_1" in self.info.versions:
             self.ctap2.selection(event=event)
         else:
+            # Selection not supported, make dummy credential instead
             try:
                 self.ctap2.make_credential(
                     b"\0" * 32,
@@ -463,7 +464,11 @@ class _Ctap2ClientBackend(_ClientBackend):
                     event=event,
                 )
             except CtapError as e:
-                if e.code is CtapError.ERR.PIN_AUTH_INVALID:
+                if e.code in (
+                    CtapError.ERR.PIN_NOT_SET,
+                    CtapError.ERR.PIN_INVALID,
+                    CtapError.ERR.PIN_AUTH_INVALID,
+                ):
                     return
                 raise
 

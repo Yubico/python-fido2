@@ -56,8 +56,9 @@ class CliInteraction(UserInteraction):
         return True
 
 
+cli_interaction = CliInteraction()
 clients = [
-    Fido2Client(d, "https://example.com", user_interaction=CliInteraction())
+    Fido2Client(d, "https://example.com", user_interaction=cli_interaction)
     for d in devs
 ]
 
