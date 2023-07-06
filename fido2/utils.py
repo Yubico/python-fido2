@@ -46,8 +46,6 @@ from typing import (
     Any,
     TypeVar,
     Hashable,
-    ClassVar,
-    Dict,
     get_type_hints,
 )
 import struct
@@ -208,11 +206,12 @@ _T = TypeVar("_T", bound=Hashable)
 
 
 class _DataClassMapping(Mapping[_T, Any]):
-    __dataclass_fields__: ClassVar[Dict[str, Field[Any]]]
+    # TODO: This requires Python 3.9, and fixes the tpye errors we now ignore
+    # __dataclass_fields__: ClassVar[Dict[str, Field[Any]]]
 
     def __post_init__(self):
         hints = get_type_hints(type(self))
-        for f in fields(self):
+        for f in fields(self):  # type: ignore
             value = getattr(self, f.name)
             if value is None:
                 continue
@@ -230,7 +229,7 @@ class _DataClassMapping(Mapping[_T, Any]):
         raise NotImplementedError()
 
     def __getitem__(self, key):
-        for f in fields(self):
+        for f in fields(self):  # type: ignore
             if key == self._get_field_key(f):
                 value = getattr(self, f.name)
                 serialize = f.metadata.get("serialize")
@@ -248,7 +247,7 @@ class _DataClassMapping(Mapping[_T, Any]):
     def __iter__(self):
         return (
             self._get_field_key(f)
-            for f in fields(self)
+            for f in fields(self)  # type: ignore
             if getattr(self, f.name) is not None
         )
 
@@ -268,7 +267,7 @@ class _DataClassMapping(Mapping[_T, Any]):
             )
 
         kwargs = {}
-        for f in fields(cls):
+        for f in fields(cls):  # type: ignore
             key = cls._get_field_key(f)
             if key in data:
                 value = data[key]
