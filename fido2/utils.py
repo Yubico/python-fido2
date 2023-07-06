@@ -46,6 +46,8 @@ from typing import (
     Any,
     TypeVar,
     Hashable,
+    ClassVar,
+    Dict,
     get_type_hints,
 )
 import struct
@@ -206,6 +208,8 @@ _T = TypeVar("_T", bound=Hashable)
 
 
 class _DataClassMapping(Mapping[_T, Any]):
+    __dataclass_fields__: ClassVar[Dict[str, Field[Any]]]
+
     def __post_init__(self):
         hints = get_type_hints(type(self))
         for f in fields(self):

@@ -126,7 +126,6 @@ def _read_descriptor(vid, pid, name, serial, path):
 
 def _enumerate():
     for uhid in glob.glob(devdir + "uhid?*"):
-
         index = uhid[len(devdir) + len("uhid") :]
         if not index.isdigit():
             continue

@@ -160,7 +160,7 @@ class TestCborTestVectors(unittest.TestCase):
     """
 
     def test_vectors(self):
-        for (data, value) in _TEST_VECTORS:
+        for data, value in _TEST_VECTORS:
             try:
                 self.assertEqual(cbor.decode_from(bytes.fromhex(data)), (value, b""))
                 self.assertEqual(cbor.decode(bytes.fromhex(data)), value)

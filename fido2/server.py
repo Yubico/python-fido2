@@ -309,7 +309,6 @@ class Fido2Server:
         challenge: Optional[bytes] = None,
         extensions=None,
     ) -> Tuple[CredentialRequestOptions, Any]:
-
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
         `authenticate_complete` call.
