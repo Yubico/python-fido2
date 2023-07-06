@@ -1,3 +1,7 @@
+* Version 1.1.2 (released 2023-07-06)
+ ** Fix ClientPin usage for Authenticators that do not support passing a PIN.
+ ** Fix: Handle correct CTAP response codes in authenticatorSelection.
+
 * Version 1.1.1 (released 2023-04-05)
  ** Add community provided support for NetBSD.
  ** Bugfix: Don't set length for largeBlob when offset is 0.
