@@ -533,8 +533,10 @@ class _Ctap2ClientBackend(_ClientBackend):
         pin_token = None
         pin_auth = None
         internal_uv = False
+        client_pin = ClientPin(self.ctap2)
+        if client_pin.is_token_supported(self.info):
+            pin_protocol = client_pin.protocol
         if self._should_use_uv(user_verification, mc) or permissions:
-            client_pin = ClientPin(self.ctap2)
             allow_internal_uv = not permissions
             permissions |= (
                 ClientPin.PERMISSION.MAKE_CREDENTIAL
@@ -545,7 +547,6 @@ class _Ctap2ClientBackend(_ClientBackend):
                 client_pin, permissions, rp_id, event, on_keepalive, allow_internal_uv
             )
             if pin_token:
-                pin_protocol = client_pin.protocol
                 pin_auth = client_pin.protocol.authenticate(pin_token, client_data.hash)
             else:
                 internal_uv = True
