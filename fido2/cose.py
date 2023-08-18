@@ -150,7 +150,7 @@ class ES384(CoseKey):
     _HASH_ALG = hashes.SHA384()
 
     def verify(self, message, signature):
-        if self[-1] != 1:
+        if self[-1] != 2:
             raise ValueError("Unsupported elliptic curve")
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP384R1()
@@ -177,7 +177,7 @@ class ES512(CoseKey):
     _HASH_ALG = hashes.SHA512()
 
     def verify(self, message, signature):
-        if self[-1] != 1:
+        if self[-1] != 3:
             raise ValueError("Unsupported elliptic curve")
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP521R1()
