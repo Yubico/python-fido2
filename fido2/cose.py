@@ -165,7 +165,7 @@ class ES384(CoseKey):
             {
                 1: 2,
                 3: cls.ALGORITHM,
-                -1: 1,
+                -1: 2,
                 -2: int2bytes(pn.x, 48),
                 -3: int2bytes(pn.y, 48),
             }
@@ -192,7 +192,7 @@ class ES512(CoseKey):
             {
                 1: 2,
                 3: cls.ALGORITHM,
-                -1: 1,
+                -1: 3,
                 -2: int2bytes(pn.x, 64),
                 -3: int2bytes(pn.y, 64),
             }
