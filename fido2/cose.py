@@ -98,7 +98,15 @@ class CoseKey(dict):
     @staticmethod
     def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
-        algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, ES384, ES512, PS256, RS256, ES256K]
+        algs: Sequence[Type[CoseKey]] = [
+            ES256,
+            EdDSA,
+            ES384,
+            ES512,
+            PS256,
+            RS256,
+            ES256K,
+        ]
         return [cls.ALGORITHM for cls in algs]
 
 
