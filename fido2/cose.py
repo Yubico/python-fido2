@@ -98,7 +98,7 @@ class CoseKey(dict):
     @staticmethod
     def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
-        algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, ES384, ES512, PS256, RS256]
+        algs: Sequence[Type[CoseKey]] = [ES256, EdDSA, ES384, ES512, PS256, RS256, ES256K]
         return [cls.ALGORITHM for cls in algs]
 
 
@@ -271,3 +271,30 @@ class RS1(CoseKey):
     def from_cryptography_key(cls, public_key):
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
+
+
+class ES256K(CoseKey):
+    ALGORITHM = -47
+    _HASH_ALG = hashes.SHA256()
+
+    def verify(self, message, signature):
+        if self[-1] != 8:
+            raise ValueError("Unsupported elliptic curve")
+        ec.EllipticCurvePublicNumbers(
+            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256K1()
+        ).public_key(default_backend()).verify(
+            signature, message, ec.ECDSA(self._HASH_ALG)
+        )
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        pn = public_key.public_numbers()
+        return cls(
+            {
+                1: 2,
+                3: cls.ALGORITHM,
+                -1: 8,
+                -2: int2bytes(pn.x, 32),
+                -3: int2bytes(pn.y, 32),
+            }
+        )
