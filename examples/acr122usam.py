@@ -34,7 +34,6 @@ www.acs.com.hk/en/driver/100/acr122u-nfc-reader-with-sam-slot-proprietary/
 """
 
 import time
-import six
 
 from fido2.utils import sha256
 from fido2.ctap1 import CTAP1
@@ -78,7 +77,7 @@ class Acr122uSamPcscDevice(CtapPcscDevice):
         """
 
         # print('>> %s' % b2a_hex(apdu))
-        resp, sw1, sw2 = self._conn.transmit(list(six.iterbytes(apdu)), protocol)
+        resp, sw1, sw2 = self._conn.transmit(list(iter(apdu)), protocol)
         response = bytes(bytearray(resp))
         # print('<< [0x%04x] %s' % (sw1 * 0x100 + sw2, b2a_hex(response)))
 
