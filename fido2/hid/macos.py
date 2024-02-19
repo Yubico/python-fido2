@@ -317,13 +317,16 @@ class MacCtapHidConnection(CtapHidConnection):
             raise OSError(f"Failed to write report to device: {result}")
 
     def read_packet(self):
-        read_thread = threading.Thread(target=_dev_read_thread, args=(self,))
-        read_thread.start()
-        read_thread.join()
         try:
             return self.read_queue.get(False)
         except Empty:
-            raise OSError("Failed reading a response")
+            read_thread = threading.Thread(target=_dev_read_thread, args=(self,))
+            read_thread.start()
+            read_thread.join()
+            try:
+                return self.read_queue.get(False)
+            except Empty:
+                raise OSError("Failed reading a response")
 
 
 def get_int_property(dev, key):
