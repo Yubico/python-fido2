@@ -86,7 +86,7 @@ class Config:
             msg = (
                 b"\xff" * 32
                 + b"\x0d"
-                + struct.pack("<b", sub_cmd)
+                + struct.pack("<B", sub_cmd)
                 + (cbor.encode(params) if params else b"")
             )
             pin_uv_protocol = self.pin_uv.protocol.VERSION
