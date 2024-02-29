@@ -238,7 +238,9 @@ class CredProtectExtension(Ctap2Extension):
     def process_create_input(self, inputs):
         policy = inputs.get("credentialProtectionPolicy")
         if policy:
-            index = list(CredProtectExtension.POLICY).index(policy)
+            index = list(CredProtectExtension.POLICY).index(
+                CredProtectExtension.POLICY(policy)
+            )
             enforce = inputs.get("enforceCredentialProtectionPolicy", False)
             if enforce and not self.is_supported() and index > 0:
                 raise ValueError("Authenticator does not support Credential Protection")
