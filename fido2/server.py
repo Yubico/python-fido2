@@ -109,9 +109,11 @@ def _wrap_credentials(
     if creds is None:
         return None
     return [
-        to_descriptor(c)
-        if isinstance(c, AttestedCredentialData)
-        else PublicKeyCredentialDescriptor.from_dict(c)
+        (
+            to_descriptor(c)
+            if isinstance(c, AttestedCredentialData)
+            else PublicKeyCredentialDescriptor.from_dict(c)
+        )
         for c in creds
     ]
 
@@ -198,19 +200,21 @@ class Fido2Server:
                     self.allowed_algorithms,
                     self.timeout,
                     descriptors,
-                    AuthenticatorSelectionCriteria(
-                        authenticator_attachment,
-                        resident_key_requirement,
-                        user_verification,
-                    )
-                    if any(
-                        (
+                    (
+                        AuthenticatorSelectionCriteria(
                             authenticator_attachment,
                             resident_key_requirement,
                             user_verification,
                         )
-                    )
-                    else None,
+                        if any(
+                            (
+                                authenticator_attachment,
+                                resident_key_requirement,
+                                user_verification,
+                            )
+                        )
+                        else None
+                    ),
                     self.attestation,
                     extensions,
                 )

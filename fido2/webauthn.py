@@ -516,9 +516,11 @@ class AuthenticatorSelectionCriteria(_CamelCaseDataObject):
             object.__setattr__(
                 self,
                 "resident_key",
-                ResidentKeyRequirement.REQUIRED
-                if self.require_resident_key
-                else ResidentKeyRequirement.DISCOURAGED,
+                (
+                    ResidentKeyRequirement.REQUIRED
+                    if self.require_resident_key
+                    else ResidentKeyRequirement.DISCOURAGED
+                ),
             )
         object.__setattr__(
             self,
