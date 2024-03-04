@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ['3.7', '3.8', '3.9', '3.10', '3.11', 'pypy3.9']
+        python: ['3.8', '3.9', '3.10', '3.11', '3.12', 'pypy3.9']
         architecture: [x86, x64]
         exclude:
           - os: ubuntu-latest
@@ -23,10 +23,10 @@ jobs:
 
     name: ${{ matrix.os }} Py ${{ matrix.python }} ${{ matrix.architecture }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
           architecture: ${{ matrix.architecture }}
@@ -51,10 +51,10 @@ jobs:
     name: Build Python source .tar.gz
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
 
