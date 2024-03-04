@@ -49,6 +49,7 @@ from typing import (
     get_type_hints,
 )
 import struct
+import warnings
 
 __all__ = [
     "websafe_encode",
@@ -121,6 +122,13 @@ def websafe_decode(data: Union[str, bytes]) -> bytes:
     """
     if isinstance(data, str):
         data = data.encode("ascii")
+    else:
+        warnings.warn(
+            "Calling websafe_decode on a byte value is deprecated, "
+            "and will no longer be allowed starting in python-fido2 2.0",
+            DeprecationWarning,
+        )
+
     data += b"=" * (-len(data) % 4)
     return urlsafe_b64decode(data)
 
