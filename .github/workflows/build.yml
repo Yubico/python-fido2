@@ -64,7 +64,7 @@ jobs:
           poetry build
 
       - name: Upload source package
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
           name: fido2-python-sdist
           path: dist
