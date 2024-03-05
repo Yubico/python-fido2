@@ -84,7 +84,7 @@ class AttestedCredentialData(bytes):
     credential_id: bytes
     public_key: CoseKey
 
-    def __init__(self, _):
+    def __init__(self, _: bytes):
         super().__init__()
 
         parsed = AttestedCredentialData._parse(self)
