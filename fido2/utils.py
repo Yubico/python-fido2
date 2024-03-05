@@ -44,9 +44,11 @@ from typing import (
     Sequence,
     Mapping,
     Any,
+    Type,
     TypeVar,
     Hashable,
     get_type_hints,
+    overload,
 )
 import struct
 import warnings
@@ -207,14 +209,19 @@ def _parse_value(t, value):
         return t.from_dict(value)
 
     # Convert to enum values, other wrappers
-    return t(value)
+    try:
+        return t(value)
+    except Exception:
+        print("EXCEPTION", t, value)
+        raise
 
 
 _T = TypeVar("_T", bound=Hashable)
+_T2 = TypeVar("_T2", bound="_DataClassMapping")
 
 
 class _DataClassMapping(Mapping[_T, Any]):
-    # TODO: This requires Python 3.9, and fixes the tpye errors we now ignore
+    # TODO: This requires Python 3.9, and fixes the type errors we now ignore
     # __dataclass_fields__: ClassVar[Dict[str, Field[Any]]]
 
     def __post_init__(self):
@@ -233,7 +240,7 @@ class _DataClassMapping(Mapping[_T, Any]):
 
     @classmethod
     @abstractmethod
-    def _get_field_key(cls, field: Field) -> _T:
+    def _get_field_key(cls: Type[_T2], field: Field) -> _T:
         raise NotImplementedError()
 
     def __getitem__(self, key):
@@ -262,8 +269,18 @@ class _DataClassMapping(Mapping[_T, Any]):
     def __len__(self):
         return len(list(iter(self)))
 
+    @overload
     @classmethod
-    def from_dict(cls, data: Optional[Mapping[_T, Any]]):
+    def from_dict(cls: Type[_T2], data: None) -> None:
+        pass
+
+    @overload
+    @classmethod
+    def from_dict(cls: Type[_T2], data: Mapping[_T, Any]) -> _T2:
+        pass
+
+    @classmethod
+    def from_dict(cls: Type[_T2], data: Optional[Mapping[_T, Any]]) -> Optional[_T2]:
         if data is None:
             return None
         if isinstance(data, cls):

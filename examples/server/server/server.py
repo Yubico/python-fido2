@@ -33,14 +33,16 @@ See the file README.adoc in this directory for details.
 
 Navigate to https://localhost:5000 in a supported web browser.
 """
-from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
+from fido2.webauthn import (
+    PublicKeyCredentialRpEntity,
+    PublicKeyCredentialUserEntity,
+    RegistrationResponse,
+    AuthenticationResponse,
+)
 from fido2.server import Fido2Server
 from flask import Flask, session, request, redirect, abort, jsonify
 
 import os
-import fido2.features
-
-fido2.features.webauthn_json_mapping.enabled = True
 
 
 app = Flask(__name__, static_url_path="")
@@ -78,12 +80,12 @@ def register_begin():
     print(options)
     print("\n\n\n\n")
 
-    return jsonify(dict(options))
+    return jsonify(options.to_json())
 
 
 @app.route("/api/register/complete", methods=["POST"])
 def register_complete():
-    response = request.json
+    response = RegistrationResponse.from_json(request.json)
     print("RegistrationResponse:", response)
     auth_data = server.register_complete(session["state"], response)
 
@@ -100,7 +102,7 @@ def authenticate_begin():
     options, state = server.authenticate_begin(credentials)
     session["state"] = state
 
-    return jsonify(dict(options))
+    return jsonify(options.to_json())
 
 
 @app.route("/api/authenticate/complete", methods=["POST"])
@@ -108,7 +110,7 @@ def authenticate_complete():
     if not credentials:
         abort(404)
 
-    response = request.json
+    response = AuthenticationResponse.from_json(request.json)
     print("AuthenticationResponse:", response)
     server.authenticate_complete(
         session.pop("state"),

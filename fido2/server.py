@@ -144,6 +144,7 @@ class Fido2Server:
         verify_attestation: Optional[VerifyAttestation] = None,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
+        assert self.rp.id is not None  # nosec
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
         self.timeout = None
         self.attestation = AttestationConveyancePreference(attestation)

@@ -38,8 +38,19 @@ from .utils import (
 )
 from .features import webauthn_json_mapping
 from enum import Enum, EnumMeta, unique, IntFlag
-from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Sequence, Tuple, Union, cast
+from dataclasses import dataclass, field, fields
+from typing import (
+    Any,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    Type,
+    TypeVar,
+    cast,
+    get_type_hints,
+)
 import struct
 import json
 
@@ -457,8 +468,81 @@ class PublicKeyCredentialType(_StringEnum):
     PUBLIC_KEY = "public-key"
 
 
+_T2 = TypeVar("_T2", bound="_JsonDataObject")
+
+
+def _get_basetype(t):
+    if Optional[t] == t:  # Optional, get the type
+        t = t.__args__[0]
+
+    # Handle list of values
+    if issubclass(getattr(t, "__origin__", object), Sequence):
+        t = t.__args__[0]
+
+    return t
+
+
+def _dump_json(value):
+    if isinstance(value, _JsonDataObject):
+        return value.to_json()
+    if isinstance(value, bytes):
+        return websafe_encode(value)
+    if isinstance(value, list):
+        return [_dump_json(x) for x in value]
+    return value
+
+
+def _load_json(hint, value):
+    t = _get_basetype(hint)
+    if isinstance(value, str):
+        if issubclass(t, bytes):
+            value = websafe_decode(value)
+        return t(value)
+
+    # Handle lists
+    if isinstance(value, Sequence):
+        return [_load_json(t, v) for v in value]
+
+    # Check for subclass of _JsonDataObject
+    try:
+        is_json = issubclass(t, _JsonDataObject)
+    except TypeError:
+        is_json = False
+
+    if is_json:
+        # Recursively call from_json for nested _JsonDataObject
+        return t.from_json(value)
+
+    return value
+
+
+class _JsonDataObject(_CamelCaseDataObject):
+    def to_json(self) -> Mapping[str, Any]:
+        """Returns a dict of the object which can be serialized to JSON."""
+        data = {}
+        for f in fields(self):  # type: ignore
+            key = self._get_field_key(f)
+            value = getattr(self, f.name)
+            if value is not None:
+                data[key] = _dump_json(value)
+        return data
+
+    @classmethod
+    def from_json(cls: Type[_T2], data: Mapping[str, Any]) -> _T2:
+        """Instantiates an object from a JSON-compatible dict representation."""
+        hints = get_type_hints(cls)
+        resp = {}
+        for f in fields(cls):  # type: ignore
+            key = cls._get_field_key(f)
+            if key in data:
+                value = data[key]
+                hint = hints.get(f.name)
+                resp[key] = _load_json(hint, value)
+        return cls.from_dict(resp)
+
+
 @dataclass(eq=False, frozen=True)
-class PublicKeyCredentialRpEntity(_CamelCaseDataObject):
+class PublicKeyCredentialRpEntity(_JsonDataObject):
     name: str
     id: Optional[str] = None
 
@@ -469,14 +553,14 @@ class PublicKeyCredentialRpEntity(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class PublicKeyCredentialUserEntity(_CamelCaseDataObject):
+class PublicKeyCredentialUserEntity(_JsonDataObject):
     name: str
     id: bytes = field(metadata=_b64_metadata)
     display_name: Optional[str] = None
 
 
 @dataclass(eq=False, frozen=True)
-class PublicKeyCredentialParameters(_CamelCaseDataObject):
+class PublicKeyCredentialParameters(_JsonDataObject):
     type: PublicKeyCredentialType
     alg: int
 
@@ -489,7 +573,7 @@ class PublicKeyCredentialParameters(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class PublicKeyCredentialDescriptor(_CamelCaseDataObject):
+class PublicKeyCredentialDescriptor(_JsonDataObject):
     type: PublicKeyCredentialType
     id: bytes = field(metadata=_b64_metadata)
     transports: Optional[Sequence[AuthenticatorTransport]] = None
@@ -503,7 +587,7 @@ class PublicKeyCredentialDescriptor(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class AuthenticatorSelectionCriteria(_CamelCaseDataObject):
+class AuthenticatorSelectionCriteria(_JsonDataObject):
     authenticator_attachment: Optional[AuthenticatorAttachment] = None
     resident_key: Optional[ResidentKeyRequirement] = None
     user_verification: Optional[UserVerificationRequirement] = None
@@ -530,7 +614,7 @@ class AuthenticatorSelectionCriteria(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class PublicKeyCredentialCreationOptions(_CamelCaseDataObject):
+class PublicKeyCredentialCreationOptions(_JsonDataObject):
     rp: PublicKeyCredentialRpEntity
     user: PublicKeyCredentialUserEntity
     challenge: bytes = field(metadata=_b64_metadata)
@@ -548,7 +632,7 @@ class PublicKeyCredentialCreationOptions(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class PublicKeyCredentialRequestOptions(_CamelCaseDataObject):
+class PublicKeyCredentialRequestOptions(_JsonDataObject):
     challenge: bytes = field(metadata=_b64_metadata)
     timeout: Optional[int] = None
     rp_id: Optional[str] = None
@@ -561,7 +645,7 @@ class PublicKeyCredentialRequestOptions(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class AuthenticatorAttestationResponse(_CamelCaseDataObject):
+class AuthenticatorAttestationResponse(_JsonDataObject):
     client_data: CollectedClientData = field(
         metadata=dict(
             _b64_metadata,
@@ -578,7 +662,7 @@ class AuthenticatorAttestationResponse(_CamelCaseDataObject):
 
     @classmethod
     def from_dict(cls, data: Optional[Mapping[str, Any]]):
-        if data is not None and not webauthn_json_mapping.enabled:
+        if data is not None and "clientData" in data:
             value = dict(data)
             value["clientDataJSON"] = value.pop("clientData", None)
             data = value
@@ -586,7 +670,7 @@ class AuthenticatorAttestationResponse(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class AuthenticatorAssertionResponse(_CamelCaseDataObject):
+class AuthenticatorAssertionResponse(_JsonDataObject):
     client_data: CollectedClientData = field(
         metadata=dict(
             _b64_metadata,
@@ -606,7 +690,7 @@ class AuthenticatorAssertionResponse(_CamelCaseDataObject):
 
     @classmethod
     def from_dict(cls, data: Optional[Mapping[str, Any]]):
-        if data is not None and not webauthn_json_mapping.enabled:
+        if data is not None and "clientData" in data:
             value = dict(data)
             value["clientDataJSON"] = value.pop("clientData", None)
             data = value
@@ -614,36 +698,28 @@ class AuthenticatorAssertionResponse(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class RegistrationResponse(_CamelCaseDataObject):
+class RegistrationResponse(_JsonDataObject):
     id: bytes = field(metadata=_b64_metadata)
     response: AuthenticatorAttestationResponse
     authenticator_attachment: Optional[AuthenticatorAttachment] = None
     client_extension_results: Optional[Mapping] = None
     type: Optional[PublicKeyCredentialType] = None
 
-    def __post_init__(self):
-        webauthn_json_mapping.require()
-        super().__post_init__()
-
 
 @dataclass(eq=False, frozen=True)
-class AuthenticationResponse(_CamelCaseDataObject):
+class AuthenticationResponse(_JsonDataObject):
     id: bytes = field(metadata=_b64_metadata)
     response: AuthenticatorAssertionResponse
     authenticator_attachment: Optional[AuthenticatorAttachment] = None
     client_extension_results: Optional[Mapping] = None
     type: Optional[PublicKeyCredentialType] = None
 
-    def __post_init__(self):
-        webauthn_json_mapping.require()
-        super().__post_init__()
-
 
 @dataclass(eq=False, frozen=True)
-class CredentialCreationOptions(_CamelCaseDataObject):
+class CredentialCreationOptions(_JsonDataObject):
     public_key: PublicKeyCredentialCreationOptions
 
 
 @dataclass(eq=False, frozen=True)
-class CredentialRequestOptions(_CamelCaseDataObject):
+class CredentialRequestOptions(_JsonDataObject):
     public_key: PublicKeyCredentialRequestOptions

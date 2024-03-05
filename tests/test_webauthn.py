@@ -37,7 +37,6 @@ from fido2.webauthn import (
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
 )
-from fido2.utils import websafe_encode
 
 import unittest
 import json
@@ -187,7 +186,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(
             o,
             {
-                "id": websafe_encode(b"user"),
+                "id": b"user",
                 "name": "Example",
                 "displayName": "Display",
             },
@@ -219,9 +218,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
 
     def test_descriptor(self):
         o = PublicKeyCredentialDescriptor("public-key", b"credential_id")
-        self.assertEqual(
-            o, {"type": "public-key", "id": websafe_encode(b"credential_id")}
-        )
+        self.assertEqual(o, {"type": "public-key", "id": b"credential_id"})
         self.assertEqual(o.type, "public-key")
         self.assertEqual(o.id, b"credential_id")
         self.assertIsNone(o.transports)
@@ -233,7 +230,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             o,
             {
                 "type": "public-key",
-                "id": websafe_encode(b"credential_id"),
+                "id": b"credential_id",
                 "transports": ["usb", "nfc"],
             },
         )
@@ -257,7 +254,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             b"request_challenge",
             [{"type": "public-key", "alg": -7}],
             10000,
-            [{"type": "public-key", "id": websafe_encode(b"credential_id")}],
+            [{"type": "public-key", "id": b"credential_id"}],
             {
                 "authenticatorAttachment": "platform",
                 "residentKey": "required",
@@ -266,18 +263,21 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             "direct",
         )
         self.assertEqual(o.rp, {"id": "example.com", "name": "Example"})
-        self.assertEqual(o.user, {"id": websafe_encode(b"user_id"), "name": "A. User"})
+        self.assertEqual(o.user, {"id": b"user_id", "name": "A. User"})
         self.assertIsNone(o.extensions)
 
-        js = json.dumps(dict(o))
-        o2 = PublicKeyCredentialCreationOptions.from_dict(json.loads(js))
+        o2 = PublicKeyCredentialCreationOptions.from_dict(dict(o))
+        self.assertEqual(o, o2)
+
+        js = json.dumps(o.to_json())
+        o2 = PublicKeyCredentialCreationOptions.from_json(json.loads(js))
         self.assertEqual(o, o2)
 
         o = PublicKeyCredentialCreationOptions.from_dict(
             {
                 "rp": {"id": "example.com", "name": "Example"},
-                "user": {"id": websafe_encode(b"user_id"), "name": "A. User"},
-                "challenge": websafe_encode(b"request_challenge"),
+                "user": {"id": b"user_id", "name": "A. User"},
+                "challenge": b"request_challenge",
                 "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
             }
         )
@@ -290,15 +290,18 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertIsNone(
             PublicKeyCredentialCreationOptions(
                 {"id": "example.com", "name": "Example"},
-                {"id": websafe_encode(b"user_id"), "name": "A. User"},
+                {"id": b"user_id", "name": "A. User"},
                 b"request_challenge",
                 [{"type": "public-key", "alg": -7}],
                 attestation="invalid",
             ).attestation
         )
 
-        js = json.dumps(dict(o))
-        o2 = PublicKeyCredentialCreationOptions.from_dict(json.loads(js))
+        o2 = PublicKeyCredentialCreationOptions.from_dict(dict(o))
+        self.assertEqual(o, o2)
+
+        js = json.dumps(o.to_json())
+        o2 = PublicKeyCredentialCreationOptions.from_json(json.loads(js))
 
         self.assertEqual(o, o2)
 
@@ -315,8 +318,11 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.timeout, 10000)
         self.assertIsNone(o.extensions)
 
-        js = json.dumps(dict(o))
-        o2 = PublicKeyCredentialRequestOptions.from_dict(json.loads(js))
+        o2 = PublicKeyCredentialRequestOptions.from_dict(dict(o))
+        self.assertEqual(o, o2)
+
+        js = json.dumps(o.to_json())
+        o2 = PublicKeyCredentialRequestOptions.from_json(json.loads(js))
         self.assertEqual(o, o2)
 
         o = PublicKeyCredentialRequestOptions(b"request_challenge")

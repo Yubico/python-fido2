@@ -8,7 +8,6 @@ from fido2.webauthn import (
     AttestedCredentialData,
     AuthenticatorData,
 )
-from fido2.utils import websafe_encode
 
 from .test_ctap2 import _ATT_CRED_DATA, _CRED_ID
 from .utils import U2FDevice
@@ -96,7 +95,7 @@ class TestFido2Server(unittest.TestCase):
         challenge = b"1234567890123456"
         request, state = server.register_begin(USER, challenge=challenge)
 
-        self.assertEqual(request["publicKey"]["challenge"], websafe_encode(challenge))
+        self.assertEqual(request["publicKey"]["challenge"], challenge)
 
     def test_register_begin_custom_challenge_too_short(self):
         rp = PublicKeyCredentialRpEntity("Example", "example.com")
