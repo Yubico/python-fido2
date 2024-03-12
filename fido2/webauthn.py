@@ -53,8 +53,8 @@ See the specification for a description and details on their usage.
 
 
 class Aaguid(bytes):
-    def __init__(self, data):
-        if len(data) != 16:
+    def __init__(self, data: bytes):
+        if len(self) != 16:
             raise ValueError("AAGUID must be 16 bytes")
 
     def __bool__(self):
@@ -84,7 +84,7 @@ class AttestedCredentialData(bytes):
     credential_id: bytes
     public_key: CoseKey
 
-    def __init__(self, _):
+    def __init__(self, _: bytes):
         super().__init__()
 
         parsed = AttestedCredentialData._parse(self)
@@ -196,7 +196,7 @@ class AuthenticatorData(bytes):
     credential_data: Optional[AttestedCredentialData]
     extensions: Optional[Mapping]
 
-    def __init__(self, _):
+    def __init__(self, _: bytes):
         super().__init__()
 
         reader = ByteBuffer(self)
@@ -288,7 +288,7 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
     auth_data: AuthenticatorData
     att_stmt: Mapping[str, Any]
 
-    def __init__(self, _):
+    def __init__(self, _: bytes):
         super().__init__()
 
         data = cast(Mapping[str, Any], cbor.decode(bytes(self)))
@@ -344,7 +344,7 @@ class CollectedClientData(bytes):
     origin: str
     cross_origin: bool = False
 
-    def __init__(self, *args):
+    def __init__(self, _: bytes):
         super().__init__()
 
         data = json.loads(self.decode())

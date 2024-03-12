@@ -353,6 +353,7 @@ class Ctap2:
         :param options: Optional dict of options.
         :param pin_uv_param: Optional PIN/UV auth parameter.
         :param pin_uv_protocol: The version of PIN/UV protocol used, if any.
+        :param enterprise_attestation: Whether or not to request Enterprise Attestation.
         :param event: Optional threading.Event used to cancel the request.
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.

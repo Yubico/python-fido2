@@ -1,3 +1,12 @@
+* Version 1.1.3 (unreleased)
+ ** Fix USB HID issue on MacOS that sometimes caused a pause while waiting for a
+    timeout.
+ ** Fix argument to CredProp extension where an enum value was required instead of
+    also allowing a string.
+ ** Fix parsing of some key types (ES384, ES512) causing signature verification to fail.
+ ** Deprecation: Calling websafe_decode with a bytes argument instead of str.
+    This will raise a TypeError in the next major version of the library.
+
 * Version 1.1.2 (released 2023-07-06)
  ** Fix ClientPin usage for Authenticators that do not support passing a PIN.
  ** Fix: Handle correct CTAP response codes in authenticatorSelection.
