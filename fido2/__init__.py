@@ -26,4 +26,4 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 
-__version__ = "1.1.3"
+__version__ = "1.1.4-dev.0"
