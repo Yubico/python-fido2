@@ -121,7 +121,7 @@ def authenticate_complete():
 
 def main():
     print(__doc__)
-    app.run(host='localhost',debug=False)
+    app.run(host='localhost', debug=False)
 
 
 if __name__ == "__main__":
