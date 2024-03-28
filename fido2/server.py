@@ -450,9 +450,10 @@ def verify_app_id(app_id: str, origin: str) -> bool:
     :return: True if the App ID is usable by the origin, False if not.
     """
     url = urlparse(app_id)
-    if url.scheme != "https":
-        return False
     hostname = url.hostname
+    if url.scheme != "https":
+        if url.scheme != "http" or hostname != 'localhost':
+            return False
     if not hostname:
         return False
     return verify_rp_id(hostname, origin)
