@@ -61,9 +61,10 @@ def verify_rp_id(rp_id: str, origin: str) -> bool:
         return False
 
     url = urlparse(origin)
-    if url.scheme != "https":
-        return False
     host = url.hostname
+    if url.scheme != "https":
+        if url.scheme != "http" or host != 'localhost':
+            return False
     if host == rp_id:
         return True
     if host and host.endswith("." + rp_id) and rp_id not in suffixes:
