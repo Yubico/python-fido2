@@ -450,9 +450,12 @@ def verify_app_id(app_id: str, origin: str) -> bool:
     :return: True if the App ID is usable by the origin, False if not.
     """
     url = urlparse(app_id)
-    if url.scheme != "https":
-        return False
     hostname = url.hostname
+    # Note that FIDO U2F requires a secure context, i.e. an origin with https scheme.
+    # However, most browsers also treat http://localhost as a secure context. See
+    # https://groups.google.com/a/chromium.org/g/blink-dev/c/RC9dSw-O3fE/m/E3_0XaT0BAAJ
+    if url.scheme != "https" and (url.scheme, hostname) != ("http", "localhost"):
+        return False
     if not hostname:
         return False
     return verify_rp_id(hostname, origin)
