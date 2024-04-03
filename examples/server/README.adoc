@@ -17,11 +17,13 @@ Once the environment has been created, you can run the server by running:
   $ poetry run server
 
 When the server is running, use a browser supporting WebAuthn and open
-https://localhost:5000 to access the website.
+http://localhost:5000 to access the website.
 
-NOTE: As this server uses a self-signed certificate, you will get warnings in
-your browser about the connection not being secure. This is expected, and you
-can safely proceed to the site.
+NOTE: Webauthn requires a secure context (HTTPS), which involves
+obtaining a valid TLS certificate. However, most browsers also treat
+http://localhost as a secure context. This example runs without TLS
+as a demo, but otherwise you should always use HTTPS with a valid
+certificate when using Webauthn.
 
 === Using the website
 The site allows you to register a WebAuthn credential, and to authenticate it.
