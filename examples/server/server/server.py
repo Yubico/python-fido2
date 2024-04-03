@@ -31,7 +31,7 @@ to register and use a credential.
 
 See the file README.adoc in this directory for details.
 
-Navigate to https://localhost:5000 in a supported web browser.
+Navigate to http://localhost:5000 in a supported web browser.
 """
 from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
 from fido2.server import Fido2Server
@@ -121,7 +121,10 @@ def authenticate_complete():
 
 def main():
     print(__doc__)
-    app.run(host='localhost', debug=False)
+    # Note: using localhost without TLS, as some browsers do
+    # not allow Webauthn in case of TLS certificate errors.
+    # See https://lists.w3.org/Archives/Public/public-webauthn/2022Nov/0135.html
+    app.run(host="localhost", debug=False)
 
 
 if __name__ == "__main__":
