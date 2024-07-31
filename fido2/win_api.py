@@ -40,14 +40,17 @@ https://github.com/microsoft/webauthn
 from __future__ import annotations
 
 from .utils import websafe_decode
+from .webauthn import AttestationObject, AuthenticatorData, ResidentKeyRequirement
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND, WORD
 from threading import Thread
-from typing import Mapping
+from typing import Mapping, Dict, Any
 
 import ctypes
 from ctypes import WinDLL  # type: ignore
 from ctypes import LibraryLoader
+
+import warnings
 
 
 windll = LibraryLoader(WinDLL)
@@ -73,8 +76,8 @@ class BytesProperty:
         )
 
     def __set__(self, instance, value):
-        setattr(instance, self.cbName, len(value))
-        setattr(instance, self.pbName, ctypes.cast(value, PBYTE))
+        setattr(instance, self.cbName, len(value) if value is not None else 0)
+        setattr(instance, self.pbName, ctypes.cast(value or 0, PBYTE))
 
 
 class GUID(ctypes.Structure):
@@ -300,14 +303,14 @@ class WebAuthNHmacSecretSaltValues(ctypes.Structure):
         ("pCredWithHmacSecretSaltList", ctypes.POINTER(WebAuthNCredWithHmacSecretSalt)),
     ]
 
-    def __init__(self, global_salt, credential_salts=None):
+    def __init__(self, global_salt, credential_salts=[]):
         if global_salt:
-            self.pGlobalSalt = ctypes.pointer(global_salt)
-        if credential_salts:
-            self.cCredWithHmacSecretSaltList = len(credential_salts)
-            self.pCredWithHmacSecretSaltList = (
-                WebAuthNCredWithHmacSecretSalt * len(credential_salts)
-            )(*credential_salts)
+            self.pGlobalHmacSalt = ctypes.pointer(global_salt)
+
+        self.cCredWithHmacSecretSaltList = len(credential_salts)
+        self.pCredWithHmacSecretSaltList = (
+            WebAuthNCredWithHmacSecretSalt * len(credential_salts)
+        )(*credential_salts)
 
 
 class WebAuthNCredProtectExtensionIn(ctypes.Structure):
@@ -468,7 +471,7 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         ("dwUserVerificationRequirement", DWORD),
         ("dwFlags", DWORD),
         ("pwszU2fAppId", PCWSTR),
-        ("pbU2fAppId", BOOL),
+        ("pbU2fAppId", ctypes.POINTER(BOOL)),
         ("pCancellationId", ctypes.POINTER(GUID)),
         ("pAllowCredentialList", ctypes.POINTER(WebAuthNCredentialList)),
         ("dwCredLargeBlobOperation", DWORD),
@@ -496,14 +499,22 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         cred_large_blob,
         hmac_secret_salts=None,
         extensions=None,
+        flags=0,
+        u2f_appid=False,
+        u2f_appid_used=None,
     ):
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
         self.dwAuthenticatorAttachment = attachment
         self.dwUserVerificationRequirement = user_verification_requirement
+        self.dwFlags = flags
 
         if extensions:
             self.Extensions = WebAuthNExtensions(extensions)
+
+        if self.dwVersion >= 2:
+            self.pwszU2fAppId = u2f_appid
+            self.pbU2fAppId = ctypes.pointer(u2f_appid_used)
 
         if self.dwVersion >= 3:
             self.pCancellationId = cancellationId
@@ -515,7 +526,7 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
             self.CredentialList = WebAuthNCredentials(credentials)
 
         if self.dwVersion >= 5:
-            self.cred_large_blob_operation = cred_large_blob_operation
+            self.dwCredLargeBlobOperation = cred_large_blob_operation
             self.cred_large_blob = cred_large_blob
 
         if self.dwVersion >= 6 and hmac_secret_salts:
@@ -859,8 +870,6 @@ WEBAUTHN_STRUCT_VERSIONS: Mapping[int, Mapping[str, int]] = {
         "WebAuthNCredentialAttestation": 4,
         "WebAuthNAssertion": 2,
     },
-}
-{
     4: {
         "WebAuthNMakeCredentialOptions": 5,
         "WebAuthNGetAssertionOptions": 6,
@@ -931,8 +940,15 @@ class WinAPI:
 
     version = WEBAUTHN_API_VERSION
 
-    def __init__(self, handle=None):
+    def __init__(self, handle=None, return_extensions=False):
         self.handle = handle or windll.user32.GetForegroundWindow()
+        if not return_extensions:
+            warnings.warn(
+                "WinAPI will start returning extension outputs in the next major "
+                "version, to opt in to this behaivor now, set return_extensions=True.",
+                DeprecationWarning,
+            )
+        self._return_extensions = return_extensions
 
     def get_error_name(self, winerror):
         """Returns an error name given an error HRESULT value.
@@ -985,9 +1001,12 @@ class WinAPI:
         :param threading.Event event: (optional) Signal to abort the operation.
         """
 
-        if event:
-            t = CancelThread(event)
-            t.start()
+        if isinstance(resident_key, bool):
+            warnings.warn(
+                "Passing resident_key as a bool is deprecated. "
+                "Use ResidentKeyRequirement instead.",
+                DeprecationWarning,
+            )
 
         win_extensions = []
         large_blob_support = WebAuthNLargeBlobSupport.NONE
@@ -1007,17 +1026,26 @@ class WinAPI:
                 )
             if "credBlob" in extensions:
                 win_extensions.append(
-                    WebAuthNExtension("credBlob", extensions["credBlob"])
+                    WebAuthNExtension(
+                        "credBlob",
+                        WebAuthNCredBlobExtension(extensions["credBlob"]),
+                    )
                 )
             if "largeBlob" in extensions:
-                large_blob_support = extensions["largeBlob"].get("support", "none")
+                large_blob_support = WebAuthNLargeBlobSupport.from_string(
+                    extensions["largeBlob"].get("support", "none")
+                )
             if extensions.get("minPinLength", True):
-                win_extensions.append(WebAuthNExtension("minPinLength", True))
+                win_extensions.append(WebAuthNExtension("minPinLength", BOOL(True)))
             if "prf" in extensions:
                 enable_prf = True
-                win_extensions.append(WebAuthNExtension("hmac-secret", True))
+                win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
             elif "hmacCreateSecret" in extensions:
-                win_extensions.append(WebAuthNExtension("hmac-secret", True))
+                win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
+
+        if event:
+            t = CancelThread(event)
+            t.start()
 
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
         WEBAUTHN.WebAuthNAuthenticatorMakeCredential(
@@ -1029,7 +1057,7 @@ class WinAPI:
             ctypes.byref(
                 WebAuthNMakeCredentialOptions(
                     timeout,
-                    resident_key,
+                    resident_key in (True, ResidentKeyRequirement.REQUIRED),
                     platform_attachment,
                     user_verification,
                     attestation,
@@ -1037,7 +1065,7 @@ class WinAPI:
                     ctypes.pointer(t.guid) if event else None,
                     WebAuthNEnterpriseAttestation.NONE,  # TODO
                     large_blob_support,
-                    False,  # prefer resident key
+                    resident_key == ResidentKeyRequirement.PREFERRED,
                     enable_prf,
                     win_extensions,
                 )
@@ -1047,7 +1075,25 @@ class WinAPI:
         if event:
             t.complete()
 
-        return attestation_pointer.contents.attestation_object
+        obj = attestation_pointer.contents
+        att_obj = AttestationObject(obj.attestation_object)
+
+        extensions_out = att_obj.auth_data.extensions or {}
+        extension_outputs = {}
+        if "hmac-secret" in extensions_out:
+            if enable_prf:
+                extension_outputs["prf"] = {"enabled": extensions_out["hmac-secret"]}
+            else:
+                extension_outputs["hmacCreateSecret"] = extensions_out["hmac-secret"]
+        if "largeBlob" in extensions:
+            extension_outputs["largeBlob"] = {
+                "supported": bool(obj.bLargeBlobSupported)
+            }
+
+        if self._return_extensions:
+            return att_obj, extension_outputs
+        else:
+            return att_obj
 
     def get_assertion(
         self,
@@ -1075,13 +1121,18 @@ class WinAPI:
         :param threading.Event event: (optional) Signal to abort the operation.
         """
 
+        flags = 0
         large_blob = None
         large_blob_operation = WebAuthNLargeBlobOperation.NONE
         hmac_secret_salts = None
         win_extensions = []
+        u2f_appid = None
+        u2f_appid_used = BOOL(False)
         if extensions:
+            if extensions.get("appid"):
+                u2f_appid = extensions["appid"]
             if extensions.get("getCredBlob"):
-                win_extensions.append(WebAuthNExtension("credBlob", True))
+                win_extensions.append(WebAuthNExtension("credBlob", BOOL(True)))
             if "largeBlob" in extensions:
                 if extensions["largeBlob"].get("read", False):
                     large_blob_operation = WebAuthNLargeBlobOperation.GET
@@ -1102,6 +1153,7 @@ class WinAPI:
                     ],
                 )
             elif "hmacGetSecret" in extensions:
+                flags |= 0x00100000
                 salts = extensions["hmacGetSecret"]
                 hmac_secret_salts = WebAuthNHmacSecretSaltValues(
                     WebAuthNHmacSecretSalt(salts["salt1"], salts.get("salt2"))
@@ -1127,6 +1179,9 @@ class WinAPI:
                     large_blob,
                     hmac_secret_salts,
                     win_extensions,
+                    flags,
+                    u2f_appid,
+                    u2f_appid_used,
                 )
             ),
             ctypes.byref(assertion_pointer),
@@ -1136,4 +1191,40 @@ class WinAPI:
             t.complete()
 
         obj = assertion_pointer.contents
-        return obj.Credential.descriptor, obj.auth_data, obj.signature, obj.user_id
+        auth_data = AuthenticatorData(obj.auth_data)
+
+        extension_outputs: Dict[str, Any] = {}
+
+        if u2f_appid and obj.dwVersion >= 2:
+            extension_outputs["appid"] = bool(u2f_appid_used.value)
+
+        if hmac_secret_salts and obj.dwVersion >= 3:
+            secret = obj.pHmacSecret.contents
+            if "prf" in extensions:
+                result = {"first": secret.first}
+                if secret.second:
+                    result["second"] = secret.second
+                extension_outputs["prf"] = {"results": result}
+            else:
+                result = {"output1": secret.first}
+                if secret.second:
+                    result["output2"] = secret.second
+                extension_outputs["hmacGetSecret"] = result
+        if obj.dwCredLargeBlobStatus != 0:
+            if extensions["largeBlob"].get("read", False):
+                extension_outputs["largeBlob"] = {"blob": obj.cred_large_blob}
+            else:
+                extension_outputs["largeBlob"] = {
+                    "written": obj.dwCredLargeBlobStatus == 1
+                }
+
+        if self._return_extensions:
+            return (
+                obj.Credential.descriptor,
+                auth_data,
+                obj.signature,
+                obj.user_id,
+                extension_outputs,
+            )
+        else:
+            return obj.Credential.descriptor, auth_data, obj.signature, obj.user_id

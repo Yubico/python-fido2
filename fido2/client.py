@@ -185,10 +185,14 @@ class AssertionSelection:
     """
 
     def __init__(
-        self, client_data: CollectedClientData, assertions: Sequence[AssertionResponse]
+        self,
+        client_data: CollectedClientData,
+        assertions: Sequence[AssertionResponse],
+        extension_results=None,
     ):
         self._client_data = client_data
         self._assertions = assertions
+        self._extension_results = extension_results
 
     def get_assertions(self) -> Sequence[AssertionResponse]:
         """Get the raw AssertionResponses available to inspect before selecting one."""
@@ -197,7 +201,7 @@ class AssertionSelection:
     def _get_extension_results(
         self, assertion: AssertionResponse
     ) -> Optional[Mapping[str, Any]]:
-        return None  # Not implemented
+        return self._extension_results
 
     def get_response(self, index: int) -> AuthenticatorAssertionResponse:
         """Get a single response."""
@@ -887,7 +891,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         handle=None,
     ):
         super().__init__(origin, verify)
-        self.api = WinAPI(handle)
+        self.api = WinAPI(handle, return_extensions=True)
         self.info = Info(
             versions=["U2F_V2", "FIDO_2_0"], extensions=[], aaguid=Aaguid.NONE
         )
@@ -915,13 +919,13 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
 
         try:
-            result = self.api.make_credential(
+            result, extensions = self.api.make_credential(
                 options.rp,
                 options.user,
                 options.pub_key_cred_params,
                 client_data,
                 options.timeout or 0,
-                selection.require_resident_key or False,
+                selection.resident_key,
                 WebAuthNAuthenticatorAttachment.from_string(
                     selection.authenticator_attachment or "any"
                 ),
@@ -940,7 +944,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         logger.info("New credential registered")
         return AuthenticatorAttestationResponse(
-            client_data, AttestationObject(result), {}
+            client_data, AttestationObject(result), extensions
         )
 
     def get_assertion(self, options, **kwargs):
@@ -960,17 +964,19 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         )
 
         try:
-            (credential, auth_data, signature, user_id) = self.api.get_assertion(
-                options.rp_id,
-                client_data,
-                options.timeout or 0,
-                WebAuthNAuthenticatorAttachment.ANY,
-                WebAuthNUserVerificationRequirement.from_string(
-                    options.user_verification or "discouraged"
-                ),
-                options.allow_credentials,
-                options.extensions,
-                kwargs.get("event"),
+            (credential, auth_data, signature, user_id, extensions) = (
+                self.api.get_assertion(
+                    options.rp_id,
+                    client_data,
+                    options.timeout or 0,
+                    WebAuthNAuthenticatorAttachment.ANY,
+                    WebAuthNUserVerificationRequirement.from_string(
+                        options.user_verification or "discouraged"
+                    ),
+                    options.allow_credentials,
+                    options.extensions,
+                    kwargs.get("event"),
+                )
             )
         except OSError as e:
             raise ClientError.ERR.OTHER_ERROR(e)
@@ -986,4 +992,5 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     user=user,
                 )
             ],
+            extensions,
         )
