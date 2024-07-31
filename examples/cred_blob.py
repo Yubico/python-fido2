@@ -30,9 +30,10 @@ Connects to the first FIDO device found which supports the CredBlob extension,
 creates a new credential for it with the extension enabled, and stores some data.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, UserInteraction
+from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server
 from getpass import getpass
+import ctypes
 import sys
 import os
 
@@ -63,24 +64,32 @@ class CliInteraction(UserInteraction):
         return True
 
 
-# Locate a device
-for dev in enumerate_devices():
-    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
-    if "credBlob" in client.info.extensions:
-        break
-else:
-    print("No Authenticator with the CredBlob extension found!")
-    sys.exit(1)
-
-# Prefer UV token if supported
 uv = "discouraged"
-if client.info.options.get("pinUvAuthToken") or client.info.options.get("uv"):
-    uv = "preferred"
-    print("Authenticator supports UV token")
+
+if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
+    # Use the Windows WebAuthn API if available, and we're not running as admin
+    client = WindowsClient("https://example.com")
+else:
+    # Locate a device
+    for dev in enumerate_devices():
+        client = Fido2Client(
+            dev, "https://example.com", user_interaction=CliInteraction()
+        )
+        if "credBlob" in client.info.extensions:
+            break
+    else:
+        print("No Authenticator with the CredBlob extension found!")
+        sys.exit(1)
+
+    # Prefer UV token if supported
+    if client.info.options.get("pinUvAuthToken") or client.info.options.get("uv"):
+        uv = "preferred"
+        print("Authenticator supports UV token")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"})
 user = {"id": b"user_id", "name": "A. User"}
+
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
@@ -91,11 +100,14 @@ create_options, state = server.register_begin(
 
 # Add CredBlob extension, attach data
 blob = os.urandom(32)  # 32 random bytes
-options = dict(create_options["publicKey"])
-options["extensions"] = {"credBlob": blob}
 
 # Create a credential
-result = client.make_credential(options)
+result = client.make_credential(
+    {
+        **create_options["publicKey"],
+        "extensions": {"credBlob": blob},
+    }
+)
 
 # Complete registration
 auth_data = server.register_complete(
@@ -113,12 +125,15 @@ print("New credential created, with the CredBlob extension.")
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin()
-options = dict(request_options["publicKey"])
-options["extensions"] = {"getCredBlob": True}
 
 # Authenticate the credential
 # Only one cred in allowCredentials, only one response.
-result = client.get_assertion(options).get_response(0)
+result = client.get_assertion(
+    {
+        **request_options["publicKey"],
+        "extensions": {"getCredBlob": True},
+    }
+).get_response(0)
 
 blob_res = result.authenticator_data.extensions.get("credBlob")
 

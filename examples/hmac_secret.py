@@ -31,8 +31,10 @@ creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, UserInteraction
+from fido2.server import Fido2Server
+from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from getpass import getpass
+import ctypes
 import sys
 import os
 
@@ -63,30 +65,49 @@ class CliInteraction(UserInteraction):
         return True
 
 
-# Locate a device
-for dev in enumerate_devices():
-    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
-    if "hmac-secret" in client.info.extensions:
-        break
+uv = "discouraged"
+rk = "discouraged"
+
+if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
+    # Use the Windows WebAuthn API if available, and we're not running as admin
+    client = WindowsClient("https://example.com")
+    rk = "required"  # Windows requires resident key for hmac-secret
 else:
-    print("No Authenticator with the HmacSecret extension found!")
-    sys.exit(1)
+    # Locate a device
+    for dev in enumerate_devices():
+        client = Fido2Client(
+            dev, "https://example.com", user_interaction=CliInteraction()
+        )
+        if "hmac-secret" in client.info.extensions:
+            break
+    else:
+        print("No Authenticator with the HmacSecret extension found!")
+        sys.exit(1)
+
+server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
+user = {"id": b"user_id", "name": "A. User"}
 
 # Prepare parameters for makeCredential
-rp = {"id": "example.com", "name": "Example RP"}
-user = {"id": b"user_id", "name": "A. User"}
-challenge = b"Y2hhbGxlbmdl"
+create_options, state = server.register_begin(
+    user,
+    resident_key_requirement=rk,
+    user_verification=uv,
+    authenticator_attachment="cross-platform",
+)
 
-# Create a credential with a HmacSecret
+# Create a credential
 result = client.make_credential(
     {
-        "rp": rp,
-        "user": user,
-        "challenge": challenge,
-        "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+        **create_options["publicKey"],
         "extensions": {"hmacCreateSecret": True},
-    },
+    }
 )
+
+# Complete registration
+auth_data = server.register_complete(
+    state, result.client_data, result.attestation_object
+)
+credentials = [auth_data.credential_data]
 
 # HmacSecret result:
 if not result.extension_results.get("hmacCreateSecret"):
@@ -104,17 +125,17 @@ allow_list = [{"type": "public-key", "id": credential.credential_id}]
 salt = os.urandom(32)
 print("Authenticate with salt:", salt.hex())
 
+
+# Prepare parameters for getAssertion
+request_options, state = server.authenticate_begin(credentials, user_verification=uv)
+
 # Authenticate the credential
 result = client.get_assertion(
-    {
-        "rpId": rp["id"],
-        "challenge": challenge,
-        "allowCredentials": allow_list,
-        "extensions": {"hmacGetSecret": {"salt1": salt}},
-    },
-).get_response(
-    0
-)  # Only one cred in allowList, only one response.
+    {**request_options["publicKey"], "extensions": {"hmacGetSecret": {"salt1": salt}}}
+)
+
+# Only one cred in allowCredentials, only one response.
+result = result.get_response(0)
 
 output1 = result.extension_results["hmacGetSecret"]["output1"]
 print("Authenticated, secret:", output1.hex())
@@ -126,16 +147,16 @@ salt2 = os.urandom(32)
 print("Authenticate with second salt:", salt2.hex())
 
 # The first salt is reused, which should result in the same secret.
+
 result = client.get_assertion(
     {
-        "rpId": rp["id"],
-        "challenge": challenge,
-        "allowCredentials": allow_list,
+        **request_options["publicKey"],
         "extensions": {"hmacGetSecret": {"salt1": salt, "salt2": salt2}},
-    },
-).get_response(
-    0
-)  # One cred in allowCredentials, single response.
+    }
+)
+
+# Only one cred in allowCredentials, only one response.
+result = result.get_response(0)
 
 output = result.extension_results["hmacGetSecret"]
 print("Old secret:", output["output1"].hex())
