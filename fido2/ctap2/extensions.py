@@ -173,7 +173,9 @@ class LargeBlobExtension(Ctap2Extension):
             return True
 
     def process_create_output(self, attestation_response, *args):
-        return {"supported": attestation_response.large_blob_key is not None}
+        return {
+            "largeBlob": {"supported": attestation_response.large_blob_key is not None}
+        }
 
     def process_get_input_with_permissions(self, inputs):
         data = inputs.get("largeBlob", {})
@@ -195,11 +197,11 @@ class LargeBlobExtension(Ctap2Extension):
         if self._action is True:  # Read
             large_blobs = LargeBlobs(self.ctap)
             blob = large_blobs.get_blob(blob_key)
-            return {"blob": blob}
+            return {"largeBlob": {"blob": blob}}
         elif self._action:  # Write
             large_blobs = LargeBlobs(self.ctap, pin_protocol, token)
             large_blobs.put_blob(blob_key, self._action)
-            return {"written": True}
+            return {"largeBlob": {"written": True}}
 
 
 class CredBlobExtension(Ctap2Extension):
