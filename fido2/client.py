@@ -629,6 +629,9 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Process extenstion outputs
         extension_outputs = {}
+        # credProps is manually handled since it requires no Authenticator interaction
+        if client_inputs.get("credProps"):
+            extension_outputs["credProps"] = {"rk": rk}
         try:
             for ext in used_extensions:
                 output = ext.process_create_output(att_obj, pin_token, pin_protocol)

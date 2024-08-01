@@ -262,3 +262,6 @@ class MinPinLengthExtension(Ctap2Extension):
     def process_create_input(self, inputs):
         if self.is_supported() and inputs.get(self.NAME) is True:
             return True
+
+
+# NOTE: credProps is handled in fido2.client.Fido2Client

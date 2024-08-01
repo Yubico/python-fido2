@@ -1080,6 +1080,8 @@ class WinAPI:
 
         extensions_out = att_obj.auth_data.extensions or {}
         extension_outputs = {}
+        if extensions.get("credProps"):
+            extension_outputs["credProps"] = {"rk": bool(obj.bResidentKey)}
         if "hmac-secret" in extensions_out:
             if enable_prf:
                 extension_outputs["prf"] = {"enabled": extensions_out["hmac-secret"]}
