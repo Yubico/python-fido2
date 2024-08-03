@@ -58,3 +58,11 @@ class TestRpId(unittest.TestCase):
         self.assertTrue(
             verify_rp_id("example.appspot.com", "https://example.appspot.com")
         )
+
+    def test_localhost_http_secure_context(self):
+        # Localhost and subdomains are secure contexts in most browsers
+        self.assertTrue(verify_rp_id("localhost", "http://localhost"))
+        self.assertTrue(verify_rp_id("localhost", "http://example.localhost"))
+        self.assertTrue(verify_rp_id("example.localhost", "http://example.localhost"))
+        self.assertTrue(verify_rp_id("localhost", "http://localhost:8000"))
+
