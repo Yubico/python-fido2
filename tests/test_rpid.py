@@ -65,4 +65,4 @@ class TestRpId(unittest.TestCase):
         self.assertTrue(verify_rp_id("localhost", "http://example.localhost"))
         self.assertTrue(verify_rp_id("example.localhost", "http://example.localhost"))
         self.assertTrue(verify_rp_id("localhost", "http://localhost:8000"))
-
+        self.assertFalse(verify_rp_id("localhost", "http://"))

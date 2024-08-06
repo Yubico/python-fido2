@@ -68,7 +68,7 @@ def verify_rp_id(rp_id: str, origin: str) -> bool:
     if (
         url.scheme != "https"
         and (url.scheme, host) != ("http", "localhost")
-        and not (url.scheme == "http" and host.endswith(".localhost"))
+        and not (url.scheme == "http" and host and host.endswith(".localhost"))
     ):
         return False
     if host == rp_id:
