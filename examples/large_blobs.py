@@ -127,6 +127,10 @@ if not result.extension_results.get("largeBlob", {}).get("supported"):
 
 print("Credential created! Writing a blob...")
 
+# If UV is configured, it is required
+if auth_data.is_user_verified():
+    uv = "required"
+
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(user_verification=uv)
 
