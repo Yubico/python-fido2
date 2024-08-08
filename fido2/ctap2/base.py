@@ -79,8 +79,8 @@ class Info(_CborDataObject):
     """
 
     versions: List[str]
-    extensions: List[str]
-    aaguid: Aaguid
+    extensions: List[str] = field(default_factory=list)
+    aaguid: Aaguid = Aaguid.NONE
     options: Dict[str, bool] = field(default_factory=dict)
     max_msg_size: int = 1024
     pin_uv_protocols: List[int] = field(default_factory=list)
