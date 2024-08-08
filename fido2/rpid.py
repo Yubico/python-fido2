@@ -65,7 +65,11 @@ def verify_rp_id(rp_id: str, origin: str) -> bool:
     # Note that Webauthn requires a secure context, i.e. an origin with https scheme.
     # However, most browsers also treat http://localhost as a secure context. See
     # https://groups.google.com/a/chromium.org/g/blink-dev/c/RC9dSw-O3fE/m/E3_0XaT0BAAJ
-    if url.scheme != "https" and (url.scheme, host) != ("http", "localhost"):
+    if (
+        url.scheme != "https"
+        and (url.scheme, host) != ("http", "localhost")
+        and not (url.scheme == "http" and host and host.endswith(".localhost"))
+    ):
         return False
     if host == rp_id:
         return True
