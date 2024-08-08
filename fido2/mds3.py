@@ -428,7 +428,9 @@ class MdsAttestationVerifier(AttestationVerifier):
 
             # Figure out which root to use
             if not entry.metadata_statement:
-                logging.warning("Matched entry has no metadata_statement, can't validate!")
+                logging.warning(
+                    "Matched entry has no metadata_statement, can't validate!"
+                )
                 return None
 
             issuer = x509.load_der_x509_certificate(
