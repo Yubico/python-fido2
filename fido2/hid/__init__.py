@@ -62,6 +62,10 @@ get_descriptor = backend.get_descriptor
 open_connection = backend.open_connection
 
 
+class ConnectionFailure(Exception):
+    """The CTAP connection failed or returned an invalid response."""
+
+
 @unique
 class CTAPHID(IntEnum):
     PING = 0x01
@@ -109,7 +113,7 @@ class CtapHidDevice(CtapDevice):
         response = self.call(CTAPHID.INIT, nonce)
         r_nonce, response = response[:8], response[8:]
         if r_nonce != nonce:
-            raise Exception("Wrong nonce")
+            raise ConnectionFailure("Wrong nonce")
         (
             self._channel_id,
             self._u2fhid_version,
@@ -194,7 +198,7 @@ class CtapHidDevice(CtapDevice):
                 r_channel = struct.unpack_from(">I", recv)[0]
                 recv = recv[4:]
                 if r_channel != self._channel_id:
-                    raise Exception("Wrong channel")
+                    raise ConnectionFailure("Wrong channel")
 
                 if not response:  # Initialization packet
                     r_cmd, r_len = struct.unpack_from(">BH", recv)
@@ -220,7 +224,7 @@ class CtapHidDevice(CtapDevice):
                     r_seq = struct.unpack_from(">B", recv)[0]
                     recv = recv[1:]
                     if r_seq != seq:
-                        raise Exception("Wrong sequence number")
+                        raise ConnectionFailure("Wrong sequence number")
                     seq += 1
 
                 response += recv
