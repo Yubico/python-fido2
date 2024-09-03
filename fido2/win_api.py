@@ -580,7 +580,7 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         Authenticators.
     :param WebAuthNUserVerificationRequirement user_verification_requirement: User
         Verification Requirement.
-    :param WebAuthNAttestationConvoyancePreference attestation_convoyence:
+    :param WebAuthNAttestationConveyancePreference attestation_convoyence:
         Attestation Conveyance Preference.
     :param List[Dict[str,Any]] credentials: Credentials used for exclusion.
     """
@@ -712,7 +712,7 @@ class WebAuthNUserVerificationRequirement(_FromString, IntEnum):
 
 
 @unique
-class WebAuthNAttestationConvoyancePreference(_FromString, IntEnum):
+class WebAuthNAttestationConveyancePreference(_FromString, IntEnum):
     """Maps to WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_*.
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L340
@@ -975,10 +975,11 @@ class WinAPI:
         resident_key=False,
         platform_attachment=WebAuthNAuthenticatorAttachment.ANY,
         user_verification=WebAuthNUserVerificationRequirement.ANY,
-        attestation=WebAuthNAttestationConvoyancePreference.DIRECT,
+        attestation=WebAuthNAttestationConveyancePreference.DIRECT,
         exclude_credentials=None,
         extensions=None,
         event=None,
+        enterprise_attestation=WebAuthNEnterpriseAttestation.NONE,
     ):
         """Make credential using Windows WebAuthN API.
 
@@ -993,7 +994,7 @@ class WinAPI:
             Authenticator Attachment, default: any.
         :param WebAuthNUserVerificationRequirement user_verification: (optional)
             User Verification Requirement, default: any.
-        :param WebAuthNAttestationConvoyancePreference attestation: (optional)
+        :param WebAuthNAttestationConveyancePreference attestation: (optional)
             Attestation Conveyance Preference, default: direct.
         :param List[Dict[str,Any]] exclude_credentials: (optional) List of
             PublicKeyCredentialDescriptor of previously registered credentials.
@@ -1063,7 +1064,7 @@ class WinAPI:
                     attestation,
                     exclude_credentials or [],
                     ctypes.pointer(t.guid) if event else None,
-                    WebAuthNEnterpriseAttestation.NONE,  # TODO
+                    enterprise_attestation,
                     large_blob_support,
                     resident_key == ResidentKeyRequirement.PREFERRED,
                     enable_prf,
