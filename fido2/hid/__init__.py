@@ -167,6 +167,18 @@ class CtapHidDevice(CtapDevice):
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> bytes:
         event = event or Event()
+
+        while True:
+            try:
+                return self._do_call(cmd, data, event, on_keepalive)
+            except CtapError as e:
+                if e.code == CtapError.ERR.CHANNEL_BUSY:
+                    if not event.wait(0.1):
+                        logger.warning("CTAP channel busy, trying again...")
+                        continue  # Keep retrying on BUSY while not cancelled
+                raise
+
+    def _do_call(self, cmd, data, event, on_keepalive):
         remaining = data
         seq = 0
 
