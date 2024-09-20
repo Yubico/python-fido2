@@ -82,11 +82,10 @@ else:
         print("No Authenticator with support for resident key found!")
         sys.exit(1)
 
-    # Prefer UV if supported
-    if client.info.options.get("uv"):
+    # Prefer UV if supported and configured
+    if client.info.options.get("uv") or client.info.options.get("pinUvAuthToken"):
         uv = "preferred"
         print("Authenticator supports User Verification")
-
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
 
