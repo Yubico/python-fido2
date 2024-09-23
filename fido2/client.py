@@ -47,10 +47,10 @@ from .webauthn import (
 )
 from .cose import ES256
 from .rpid import verify_rp_id
-from .utils import sha256
+from .utils import sha256, _DataClassMapping
 from enum import IntEnum, unique
 from urllib.parse import urlparse
-from dataclasses import replace
+from dataclasses import replace, asdict
 from threading import Timer, Event
 from typing import (
     Type,
@@ -67,6 +67,17 @@ import inspect
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _as_cbor(data):
+    if data is None:
+        return None
+    if isinstance(data, Sequence):
+        return [_as_cbor(d) for d in data]
+    if isinstance(data, _DataClassMapping):
+        # Remove empty values and do not serialize value
+        return {k: v for k, v in asdict(data).items() if v is not None}  # type: ignore
+    return data
 
 
 class ClientError(Exception):
@@ -337,7 +348,7 @@ class _Ctap1ClientBackend(_ClientBackend):
         if (
             rk
             or user_verification == UserVerificationRequirement.REQUIRED
-            or ES256.ALGORITHM not in [p.alg for p in key_params]
+            or ES256.ALGORITHM not in [p["alg"] for p in key_params]
             or enterprise_attestation
         ):
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
@@ -803,10 +814,10 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         try:
             return self._backend.do_make_credential(
                 client_data,
-                rp,
-                options.user,
-                options.pub_key_cred_params,
-                options.exclude_credentials,
+                _as_cbor(rp),
+                _as_cbor(options.user),
+                _as_cbor(options.pub_key_cred_params),
+                _as_cbor(options.exclude_credentials),
                 options.extensions,
                 selection.require_resident_key,
                 selection.user_verification,
@@ -848,7 +859,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             return self._backend.do_get_assertion(
                 client_data,
                 options.rp_id,
-                options.allow_credentials,
+                _as_cbor(options.allow_credentials),
                 options.extensions,
                 options.user_verification,
                 event,
