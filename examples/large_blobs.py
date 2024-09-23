@@ -32,9 +32,10 @@ This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, UserInteraction
+from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server
 from getpass import getpass
+import ctypes
 import sys
 
 
@@ -65,26 +66,31 @@ class CliInteraction(UserInteraction):
         return True
 
 
-# Locate a device
-for dev in enumerate_devices():
-    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
-    if "largeBlobKey" in client.info.extensions:
-        break
-else:
-    print("No Authenticator with the largeBlobKey extension found!")
-    sys.exit(1)
-
-
-if not client.info.options.get("largeBlobs"):
-    print("Authenticator does not support large blobs!")
-    sys.exit(1)
-
-
-# Prefer UV token if supported
 uv = "discouraged"
-if client.info.options.get("pinUvAuthToken") or client.info.options.get("uv"):
-    uv = "preferred"
-    print("Authenticator supports UV token")
+
+# Locate a device
+if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
+    # Use the Windows WebAuthn API if available, and we're not running as admin
+    client = WindowsClient("https://example.com")
+else:
+    for dev in enumerate_devices():
+        client = Fido2Client(
+            dev, "https://example.com", user_interaction=CliInteraction()
+        )
+        if "largeBlobKey" in client.info.extensions:
+            break
+    else:
+        print("No Authenticator with the largeBlobKey extension found!")
+        sys.exit(1)
+
+    if not client.info.options.get("largeBlobs"):
+        print("Authenticator does not support large blobs!")
+        sys.exit(1)
+
+    # Prefer UV token if supported
+    if client.info.options.get("pinUvAuthToken") or client.info.options.get("uv"):
+        uv = "preferred"
+        print("Authenticator supports UV token")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"})
@@ -100,12 +106,14 @@ create_options, state = server.register_begin(
 
 print("Creating a credential with LargeBlob support...")
 
-# Enable largeBlob
-options = dict(create_options["publicKey"])
-options["extensions"] = {"largeBlob": {"support": "required"}}
-
 # Create a credential
-result = client.make_credential(options)
+result = client.make_credential(
+    {
+        **create_options["publicKey"],
+        # Enable largeBlob
+        "extensions": {"largeBlob": {"support": "required"}},
+    }
+)
 
 # Complete registration
 auth_data = server.register_complete(
@@ -113,37 +121,45 @@ auth_data = server.register_complete(
 )
 credentials = [auth_data.credential_data]
 
-if not result.extension_results.get("supported"):
+if not result.extension_results.get("largeBlob", {}).get("supported"):
     print("Credential does not support largeBlob, failure!")
     sys.exit(1)
 
 print("Credential created! Writing a blob...")
 
+# If UV is configured, it is required
+if auth_data.is_user_verified():
+    uv = "required"
+
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(user_verification=uv)
 
-# Write a large blob
-options = dict(request_options["publicKey"])
-options["extensions"] = {"largeBlob": {"write": b"Here is some data to store!"}}
-
 # Authenticate the credential
-selection = client.get_assertion(options)
+selection = client.get_assertion(
+    {
+        **request_options["publicKey"],
+        # Write a large blob
+        "extensions": {"largeBlob": {"write": b"Here is some data to store!"}},
+    }
+)
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-if not result.extension_results.get("written"):
+if not result.extension_results.get("largeBlob", {}).get("written"):
     print("Failed to write blob!")
     sys.exit(1)
 
 print("Blob written! Reading back the blob...")
 
-# Read the blob
-options = dict(request_options["publicKey"])
-options["extensions"] = {"largeBlob": {"read": True}}
-
 # Authenticate the credential
-selection = client.get_assertion(options)
+selection = client.get_assertion(
+    {
+        **request_options["publicKey"],
+        # Read the blob
+        "extensions": {"largeBlob": {"read": True}},
+    }
+)
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-print("Read blob:", result.extension_results.get("blob"))
+print("Read blob:", result.extension_results.get("largeBlob", {}).get("blob"))

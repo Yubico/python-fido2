@@ -185,10 +185,14 @@ class AssertionSelection:
     """
 
     def __init__(
-        self, client_data: CollectedClientData, assertions: Sequence[AssertionResponse]
+        self,
+        client_data: CollectedClientData,
+        assertions: Sequence[AssertionResponse],
+        extension_results=None,
     ):
         self._client_data = client_data
         self._assertions = assertions
+        self._extension_results = extension_results
 
     def get_assertions(self) -> Sequence[AssertionResponse]:
         """Get the raw AssertionResponses available to inspect before selecting one."""
@@ -197,7 +201,7 @@ class AssertionSelection:
     def _get_extension_results(
         self, assertion: AssertionResponse
     ) -> Optional[Mapping[str, Any]]:
-        return None  # Not implemented
+        return self._extension_results
 
     def get_response(self, index: int) -> AuthenticatorAssertionResponse:
         """Get a single response."""
@@ -625,6 +629,9 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Process extenstion outputs
         extension_outputs = {}
+        # credProps is manually handled since it requires no Authenticator interaction
+        if client_inputs.get("credProps"):
+            extension_outputs["credProps"] = {"rk": rk}
         try:
             for ext in used_extensions:
                 output = ext.process_create_output(att_obj, pin_token, pin_protocol)
@@ -859,7 +866,8 @@ if platform.system().lower() == "windows":
             WinAPI,
             WebAuthNAuthenticatorAttachment,
             WebAuthNUserVerificationRequirement,
-            WebAuthNAttestationConvoyancePreference,
+            WebAuthNAttestationConveyancePreference,
+            WebAuthNEnterpriseAttestation,
         )
     except Exception:  # nosec # TODO: Make this less generic
         pass
@@ -887,10 +895,13 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         handle=None,
     ):
         super().__init__(origin, verify)
-        self.api = WinAPI(handle)
+        self.api = WinAPI(handle, return_extensions=True)
         self.info = Info(
             versions=["U2F_V2", "FIDO_2_0"], extensions=[], aaguid=Aaguid.NONE
         )
+
+        # TODO: Decide how to configure this list.
+        self._enterprise_rpid_list: Optional[Sequence[str]] = None
 
     @staticmethod
     def is_available() -> bool:
@@ -914,33 +925,52 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
 
+        enterprise_attestation = WebAuthNEnterpriseAttestation.NONE
+        if options.attestation == AttestationConveyancePreference.ENTERPRISE:
+            attestation = WebAuthNAttestationConveyancePreference.ANY
+            if self.info.options.get("ep"):
+                if self._enterprise_rpid_list is not None:
+                    # Platform facilitated
+                    if options.rp.id in self._enterprise_rpid_list:
+                        enterprise_attestation = (
+                            WebAuthNEnterpriseAttestation.PLATFORM_MANAGED
+                        )
+                else:
+                    # Vendor facilitated
+                    enterprise_attestation = (
+                        WebAuthNEnterpriseAttestation.VENDOR_FACILITATED
+                    )
+        else:
+            attestation = WebAuthNAttestationConveyancePreference.from_string(
+                options.attestation or "none"
+            )
+
         try:
-            result = self.api.make_credential(
+            result, extensions = self.api.make_credential(
                 options.rp,
                 options.user,
                 options.pub_key_cred_params,
                 client_data,
                 options.timeout or 0,
-                selection.require_resident_key or False,
-                WebAuthNAuthenticatorAttachment.from_string(
-                    selection.authenticator_attachment or "any"
-                ),
+                selection.resident_key,
+                attestation,
                 WebAuthNUserVerificationRequirement.from_string(
                     selection.user_verification or "discouraged"
                 ),
-                WebAuthNAttestationConvoyancePreference.from_string(
+                WebAuthNAttestationConveyancePreference.from_string(
                     options.attestation or "none"
                 ),
                 options.exclude_credentials,
                 options.extensions,
                 kwargs.get("event"),
+                enterprise_attestation,
             )
         except OSError as e:
             raise ClientError.ERR.OTHER_ERROR(e)
 
         logger.info("New credential registered")
         return AuthenticatorAttestationResponse(
-            client_data, AttestationObject(result), {}
+            client_data, AttestationObject(result), extensions
         )
 
     def get_assertion(self, options, **kwargs):
@@ -960,17 +990,19 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         )
 
         try:
-            (credential, auth_data, signature, user_id) = self.api.get_assertion(
-                options.rp_id,
-                client_data,
-                options.timeout or 0,
-                WebAuthNAuthenticatorAttachment.ANY,
-                WebAuthNUserVerificationRequirement.from_string(
-                    options.user_verification or "discouraged"
-                ),
-                options.allow_credentials,
-                options.extensions,
-                kwargs.get("event"),
+            (credential, auth_data, signature, user_id, extensions) = (
+                self.api.get_assertion(
+                    options.rp_id,
+                    client_data,
+                    options.timeout or 0,
+                    WebAuthNAuthenticatorAttachment.ANY,
+                    WebAuthNUserVerificationRequirement.from_string(
+                        options.user_verification or "discouraged"
+                    ),
+                    options.allow_credentials,
+                    options.extensions,
+                    kwargs.get("event"),
+                )
             )
         except OSError as e:
             raise ClientError.ERR.OTHER_ERROR(e)
@@ -986,4 +1018,5 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     user=user,
                 )
             ],
+            extensions,
         )
