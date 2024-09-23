@@ -257,7 +257,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             b"request_challenge",
             [{"type": "public-key", "alg": -7}],
             10000,
-            [{"type": "public-key", "id": websafe_encode(b"credential_id")}],
+            [{"type": "public-key", "id": b"credential_id"}],
             {
                 "authenticatorAttachment": "platform",
                 "residentKey": "required",
@@ -290,7 +290,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertIsNone(
             PublicKeyCredentialCreationOptions(
                 {"id": "example.com", "name": "Example"},
-                {"id": websafe_encode(b"user_id"), "name": "A. User"},
+                {"id": b"user_id", "name": "A. User"},
                 b"request_challenge",
                 [{"type": "public-key", "alg": -7}],
                 attestation="invalid",

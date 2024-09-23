@@ -171,7 +171,7 @@ def _snake2camel(name: str) -> str:
     return parts[0] + "".join(p.title() for p in parts[1:])
 
 
-def _parse_value(t, value):
+def _parse_value(t, value, from_dict):
     if value is None:
         return None
 
@@ -181,7 +181,7 @@ def _parse_value(t, value):
     # Handle list of values
     if issubclass(getattr(t, "__origin__", object), Sequence):
         t = t.__args__[0]
-        return [_parse_value(t, v) for v in value]
+        return [_parse_value(t, v, from_dict) for v in value]
 
     # Handle Mappings
     if issubclass(getattr(t, "__origin__", object), Mapping) and isinstance(
@@ -196,6 +196,10 @@ def _parse_value(t, value):
     except TypeError:
         pass
 
+    # If called from "from_dict", recurse using the same
+    if from_dict and hasattr(t, "from_dict"):
+        return t.from_dict(value)
+
     # Check for subclass of _DataClassMapping
     try:
         is_dataclass = issubclass(t, _DataClassMapping)
@@ -203,8 +207,13 @@ def _parse_value(t, value):
         is_dataclass = False
 
     if is_dataclass:
-        # Recursively call from_dict for nested _DataClassMappings
-        return t.from_dict(value)
+        # Recursively call constructor for nested _DataClassMappings
+        kwargs = {}
+        for f in fields(t):  # type: ignore
+            key = t._get_field_key(f)
+            if key in value:
+                kwargs[f.name] = value[key]
+        return t(**kwargs)
 
     # Convert to enum values, other wrappers
     return t(value)
@@ -224,7 +233,7 @@ class _DataClassMapping(Mapping[_T, Any]):
             if value is None:
                 continue
             try:
-                value = _parse_value(hints[f.name], value)
+                value = _parse_value(hints[f.name], value, False)
             except (TypeError, KeyError, ValueError):
                 raise ValueError(
                     f"Error parsing field {f.name} for {self.__class__.__name__}"
@@ -275,6 +284,7 @@ class _DataClassMapping(Mapping[_T, Any]):
             )
 
         kwargs = {}
+        hints = get_type_hints(cls)
         for f in fields(cls):  # type: ignore
             key = cls._get_field_key(f)
             if key in data:
@@ -283,6 +293,8 @@ class _DataClassMapping(Mapping[_T, Any]):
                     deserialize = f.metadata.get("deserialize")
                     if deserialize:
                         value = deserialize(value)
+                    else:
+                        value = _parse_value(hints[f.name], value, True)
                     kwargs[f.name] = value
         return cls(**kwargs)
 
