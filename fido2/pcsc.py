@@ -135,7 +135,7 @@ class CtapPcscDevice(CtapDevice):
 
     def _select(self) -> None:
         apdu = b"\x00\xa4\x04\x00" + struct.pack("!B", len(AID_FIDO)) + AID_FIDO
-        resp, sw1, sw2 = self.apdu_exchange(apdu)
+        resp, sw1, sw2 = self._chained_apdu_exchange(apdu)
         if (sw1, sw2) != SW_SUCCESS:
             raise ValueError("FIDO applet selection failure.")
         if resp == b"U2F_V2":
@@ -165,7 +165,7 @@ class CtapPcscDevice(CtapDevice):
                 resp += lres
             return resp, sw1, sw2
 
-    def _call_apdu(self, apdu: bytes) -> bytes:
+    def _chained_apdu_exchange(self, apdu: bytes) -> Tuple[bytes, int, int]:
         if len(apdu) >= 7 and apdu[4] == 0:
             # Extended APDU
             data_len = struct.unpack("!H", apdu[5:7])[0]
@@ -178,7 +178,10 @@ class CtapPcscDevice(CtapDevice):
             data = apdu[5 : 5 + data_len]
         (cla, ins, p1, p2) = apdu[:4]
 
-        resp, sw1, sw2 = self._chain_apdus(cla, ins, p1, p2, data)
+        return self._chain_apdus(cla, ins, p1, p2, data)
+
+    def _call_apdu(self, apdu: bytes) -> bytes:
+        resp, sw1, sw2 = self._chained_apdu_exchange(apdu)
         return resp + struct.pack("!BB", sw1, sw2)
 
     def _call_cbor(
