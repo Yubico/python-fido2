@@ -31,7 +31,7 @@ from .. import cbor
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from enum import IntEnum, unique
 import struct
 
@@ -117,11 +117,9 @@ class Config:
         :param force_change_pin: True if the Authenticator should enforce changing the
             PIN before the next use.
         """
-        self._call(
-            Config.CMD.SET_MIN_PIN_LENGTH,
-            {
-                Config.PARAM.NEW_MIN_PIN_LENGTH: min_pin_length,
-                Config.PARAM.MIN_PIN_LENGTH_RPIDS: rp_ids,
-                Config.PARAM.FORCE_CHANGE_PIN: force_change_pin,
-            },
-        )
+        params: Dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
+        if min_pin_length is not None:
+            params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
+        if rp_ids is not None:
+            params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
+        self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)
