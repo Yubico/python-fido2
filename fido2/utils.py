@@ -305,6 +305,8 @@ class _DataClassMapping(Mapping[_T, Any]):
             value = getattr(self, f.name)
             if hasattr(value, "_to_cbor"):
                 value = value._to_cbor()
+            elif isinstance(value, list) and all(hasattr(v, "_to_cbor") for v in value):
+                value = [v._to_cbor() for v in value]
             if value is not None:
                 data[f.name] = value
         return data
