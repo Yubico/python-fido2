@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 from .. import cbor
-from .base import Ctap2, Info
+from .base import Ctap2, Info, _as_cbor
 from .pin import PinProtocol, _PinUv
 
 from typing import Optional, List
@@ -78,17 +78,11 @@ class Config:
         )
 
     def _call(self, sub_cmd, params=None):
-        if params:
-            params = {k: v for k, v in params.items() if v is not None}
-        else:
-            params = None
+        params = _as_cbor(params)
         if self.pin_uv:
-            msg = (
-                b"\xff" * 32
-                + b"\x0d"
-                + struct.pack("<B", sub_cmd)
-                + (cbor.encode(params) if params else b"")
-            )
+            msg = b"\xff" * 32 + b"\x0d" + struct.pack("<B", sub_cmd)
+            if params is not None:
+                msg += cbor.encode(params)
             pin_uv_protocol = self.pin_uv.protocol.VERSION
             pin_uv_param = self.pin_uv.protocol.authenticate(self.pin_uv.token, msg)
         else:

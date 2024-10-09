@@ -53,8 +53,10 @@ def _as_cbor(data):
     if isinstance(data, Sequence):
         return [_as_cbor(d) for d in data]
     if isinstance(data, _DataClassMapping):
-        # Remove empty values and do not serialize value
-        return {k: v for k, v in asdict(data).items() if v is not None}  # type: ignore
+        data = asdict(data)  # type: ignore
+    if isinstance(data, Mapping):
+        # Remove empty values and recurse
+        return {k: _as_cbor(v) for k, v in data.items() if v is not None}
     return data
 
 

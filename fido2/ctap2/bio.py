@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from .. import cbor
 from ..ctap import CtapError
-from .base import Ctap2, Info
+from .base import Ctap2, Info, _as_cbor
 from .pin import PinProtocol
 
 from enum import IntEnum, unique
@@ -203,8 +203,7 @@ class FPBioEnrollment(BioEnrollment):
         self.pin_uv_token = pin_uv_token
 
     def _call(self, sub_cmd, params=None, auth=True, event=None, on_keepalive=None):
-        if params is not None:
-            params = {k: v for k, v in params.items() if v is not None}
+        params = _as_cbor(params)
         kwargs = {
             "modality": self.modality,
             "sub_cmd": sub_cmd,

@@ -30,7 +30,7 @@ from __future__ import annotations
 from .. import cbor
 from ..ctap import CtapError
 from ..webauthn import PublicKeyCredentialDescriptor, PublicKeyCredentialUserEntity
-from .base import Ctap2, Info
+from .base import Ctap2, Info, _as_cbor
 from .pin import PinProtocol, _PinUv
 
 from enum import IntEnum, unique
@@ -108,6 +108,7 @@ class CredentialManagement:
         self.pin_uv = _PinUv(pin_uv_protocol, pin_uv_token)
 
     def _call(self, sub_cmd, params=None, auth=True):
+        params = _as_cbor(params)
         kwargs = {"sub_cmd": sub_cmd, "sub_cmd_params": params}
         if auth:
             msg = struct.pack(">B", sub_cmd)
