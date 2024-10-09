@@ -31,7 +31,7 @@ from .. import cbor
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from enum import IntEnum, unique
 import struct
 
@@ -78,17 +78,10 @@ class Config:
         )
 
     def _call(self, sub_cmd, params=None):
-        if params:
-            params = {k: v for k, v in params.items() if v is not None}
-        else:
-            params = None
         if self.pin_uv:
-            msg = (
-                b"\xff" * 32
-                + b"\x0d"
-                + struct.pack("<B", sub_cmd)
-                + (cbor.encode(params) if params else b"")
-            )
+            msg = b"\xff" * 32 + b"\x0d" + struct.pack("<B", sub_cmd)
+            if params is not None:
+                msg += cbor.encode(params)
             pin_uv_protocol = self.pin_uv.protocol.VERSION
             pin_uv_param = self.pin_uv.protocol.authenticate(self.pin_uv.token, msg)
         else:
@@ -124,11 +117,9 @@ class Config:
         :param force_change_pin: True if the Authenticator should enforce changing the
             PIN before the next use.
         """
-        self._call(
-            Config.CMD.SET_MIN_PIN_LENGTH,
-            {
-                Config.PARAM.NEW_MIN_PIN_LENGTH: min_pin_length,
-                Config.PARAM.MIN_PIN_LENGTH_RPIDS: rp_ids,
-                Config.PARAM.FORCE_CHANGE_PIN: force_change_pin,
-            },
-        )
+        params: Dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
+        if min_pin_length is not None:
+            params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
+        if rp_ids is not None:
+            params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
+        self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)

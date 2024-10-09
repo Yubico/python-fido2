@@ -34,7 +34,7 @@ from .pin import PinProtocol
 
 from enum import IntEnum, unique
 from threading import Event
-from typing import Optional, Callable, Mapping, Any, Tuple
+from typing import Optional, Callable, Mapping, Any, Tuple, Dict
 import struct
 import logging
 
@@ -203,8 +203,6 @@ class FPBioEnrollment(BioEnrollment):
         self.pin_uv_token = pin_uv_token
 
     def _call(self, sub_cmd, params=None, auth=True, event=None, on_keepalive=None):
-        if params is not None:
-            params = {k: v for k, v in params.items() if v is not None}
         kwargs = {
             "modality": self.modality,
             "sub_cmd": sub_cmd,
@@ -247,7 +245,11 @@ class FPBioEnrollment(BioEnrollment):
         logger.debug(f"Starting fingerprint enrollment (timeout={timeout})")
         result = self._call(
             FPBioEnrollment.CMD.ENROLL_BEGIN,
-            {FPBioEnrollment.PARAM.TIMEOUT_MS: timeout},
+            (
+                {FPBioEnrollment.PARAM.TIMEOUT_MS: timeout}
+                if timeout is not None
+                else None
+            ),
             event=event,
             on_keepalive=on_keepalive,
         )
@@ -277,12 +279,12 @@ class FPBioEnrollment(BioEnrollment):
             remaining to complete the enrollment.
         """
         logger.debug(f"Capturing next sample with (timeout={timeout})")
+        params: Dict[int, Any] = {FPBioEnrollment.PARAM.TEMPLATE_ID: template_id}
+        if timeout is not None:
+            params[FPBioEnrollment.PARAM.TIMEOUT_MS] = timeout
         result = self._call(
             FPBioEnrollment.CMD.ENROLL_CAPTURE_NEXT,
-            {
-                FPBioEnrollment.PARAM.TEMPLATE_ID: template_id,
-                FPBioEnrollment.PARAM.TIMEOUT_MS: timeout,
-            },
+            params,
             event=event,
             on_keepalive=on_keepalive,
         )

@@ -44,13 +44,14 @@ from .webauthn import (
     AuthenticatorAttestationResponse,
     AuthenticatorAssertionResponse,
     AttestationConveyancePreference,
+    _as_cbor,
 )
 from .cose import ES256
 from .rpid import verify_rp_id
-from .utils import sha256, _DataClassMapping
+from .utils import sha256
 from enum import IntEnum, unique
 from urllib.parse import urlparse
-from dataclasses import replace, asdict
+from dataclasses import replace
 from threading import Timer, Event
 from typing import (
     Type,
@@ -67,17 +68,6 @@ import inspect
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _as_cbor(data):
-    if data is None:
-        return None
-    if isinstance(data, Sequence):
-        return [_as_cbor(d) for d in data]
-    if isinstance(data, _DataClassMapping):
-        # Remove empty values and do not serialize value
-        return {k: v for k, v in asdict(data).items() if v is not None}  # type: ignore
-    return data
 
 
 class ClientError(Exception):
@@ -348,16 +338,16 @@ class _Ctap1ClientBackend(_ClientBackend):
         if (
             rk
             or user_verification == UserVerificationRequirement.REQUIRED
-            or ES256.ALGORITHM not in [p["alg"] for p in key_params]
+            or ES256.ALGORITHM not in [p.alg for p in key_params]
             or enterprise_attestation
         ):
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
-        app_param = sha256(rp["id"].encode())
+        app_param = sha256(rp.id.encode())
 
         dummy_param = b"\0" * 32
         for cred in exclude_list or []:
-            key_handle = cred["id"]
+            key_handle = cred.id
             try:
                 self.ctap1.authenticate(dummy_param, app_param, key_handle, True)
                 raise ClientError.ERR.OTHER_ERROR()  # Shouldn't happen
@@ -413,7 +403,7 @@ class _Ctap1ClientBackend(_ClientBackend):
                     self.ctap1.authenticate,
                     client_param,
                     app_param,
-                    cred["id"],
+                    cred.id,
                 )
                 assertions = [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
                 return AssertionSelection(client_data, assertions)
@@ -450,6 +440,12 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
         return extension_outputs
+
+
+def _cbor_list(values):
+    if not values:
+        return None
+    return [_as_cbor(v) for v in values]
 
 
 class _Ctap2ClientBackend(_ClientBackend):
@@ -611,7 +607,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Handle auth
         pin_protocol, pin_token, pin_auth, internal_uv = self._get_auth_params(
-            client_data, rp["id"], user_verification, permissions, event, on_keepalive
+            client_data, rp.id, user_verification, permissions, event, on_keepalive
         )
 
         if not (rk or internal_uv):
@@ -625,10 +621,10 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         att_obj = self.ctap2.make_credential(
             client_data.hash,
-            rp,
-            user,
-            key_params,
-            exclude_list or None,
+            _as_cbor(rp),
+            _as_cbor(user),
+            _cbor_list(key_params),
+            _cbor_list(exclude_list),
             extension_inputs or None,
             options,
             pin_auth,
@@ -706,7 +702,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         assertions = self.ctap2.get_assertions(
             rp_id,
             client_data.hash,
-            allow_list or None,
+            _cbor_list(allow_list),
             extension_inputs or None,
             options,
             pin_auth,
@@ -814,10 +810,10 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         try:
             return self._backend.do_make_credential(
                 client_data,
-                _as_cbor(rp),
-                _as_cbor(options.user),
-                _as_cbor(options.pub_key_cred_params),
-                _as_cbor(options.exclude_credentials),
+                rp,
+                options.user,
+                options.pub_key_cred_params,
+                options.exclude_credentials,
                 options.extensions,
                 selection.require_resident_key,
                 selection.user_verification,
@@ -859,7 +855,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             return self._backend.do_get_assertion(
                 client_data,
                 options.rp_id,
-                _as_cbor(options.allow_credentials),
+                options.allow_credentials,
                 options.extensions,
                 options.user_verification,
                 event,

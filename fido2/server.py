@@ -195,7 +195,7 @@ class Fido2Server:
             CredentialCreationOptions(
                 PublicKeyCredentialCreationOptions(
                     self.rp,
-                    user,
+                    PublicKeyCredentialUserEntity.from_dict(user),
                     challenge,
                     self.allowed_algorithms,
                     self.timeout,

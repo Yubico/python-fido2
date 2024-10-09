@@ -43,6 +43,7 @@ from typing import (
     Optional,
     Sequence,
     Mapping,
+    Dict,
     Any,
     TypeVar,
     Hashable,
@@ -166,59 +167,6 @@ class ByteBuffer(BytesIO):
         return data
 
 
-def _snake2camel(name: str) -> str:
-    parts = name.split("_")
-    return parts[0] + "".join(p.title() for p in parts[1:])
-
-
-def _parse_value(t, value, from_dict):
-    if value is None:
-        return None
-
-    if Optional[t] == t:  # Optional, get the type
-        t = t.__args__[0]
-
-    # Handle list of values
-    if issubclass(getattr(t, "__origin__", object), Sequence):
-        t = t.__args__[0]
-        return [_parse_value(t, v, from_dict) for v in value]
-
-    # Handle Mappings
-    if issubclass(getattr(t, "__origin__", object), Mapping) and isinstance(
-        value, Mapping
-    ):
-        return value
-
-    # Check if type is already correct
-    try:
-        if isinstance(value, t):
-            return value
-    except TypeError:
-        pass
-
-    # If called from "from_dict", recurse using the same
-    if from_dict and hasattr(t, "from_dict"):
-        return t.from_dict(value)
-
-    # Check for subclass of _DataClassMapping
-    try:
-        is_dataclass = issubclass(t, _DataClassMapping)
-    except TypeError:
-        is_dataclass = False
-
-    if is_dataclass:
-        # Recursively call constructor for nested _DataClassMappings
-        kwargs = {}
-        for f in fields(t):  # type: ignore
-            key = t._get_field_key(f)
-            if key in value:
-                kwargs[f.name] = value[key]
-        return t(**kwargs)
-
-    # Convert to enum values, other wrappers
-    return t(value)
-
-
 _T = TypeVar("_T", bound=Hashable)
 
 
@@ -228,48 +176,80 @@ class _DataClassMapping(Mapping[_T, Any]):
 
     def __post_init__(self):
         hints = get_type_hints(type(self))
+        self._field_keys: Dict[_T, Field[Any]]
+        object.__setattr__(self, "_field_keys", {})
+
         for f in fields(self):  # type: ignore
+            self._field_keys[self._get_field_key(f)] = f
             value = getattr(self, f.name)
-            if value is None:
-                continue
-            try:
-                value = _parse_value(hints[f.name], value, False)
-            except (TypeError, KeyError, ValueError):
-                raise ValueError(
-                    f"Error parsing field {f.name} for {self.__class__.__name__}"
-                )
-            object.__setattr__(self, f.name, value)
+            if value is not None:
+                try:
+                    value = self._parse_value(hints[f.name], value)
+                    object.__setattr__(self, f.name, value)
+                except (TypeError, KeyError, ValueError):
+                    raise ValueError(
+                        f"Error parsing field {f.name} for {self.__class__.__name__}"
+                    )
 
     @classmethod
     @abstractmethod
     def _get_field_key(cls, field: Field) -> _T:
         raise NotImplementedError()
 
-    def __getitem__(self, key):
-        for f in fields(self):  # type: ignore
-            if key == self._get_field_key(f):
-                value = getattr(self, f.name)
-                serialize = f.metadata.get("serialize")
-                if serialize:
-                    return serialize(value)
-                if isinstance(value, _DataClassMapping):
-                    return dict(value)
-                if isinstance(value, Sequence) and all(
-                    isinstance(x, _DataClassMapping) for x in value
-                ):
-                    return [dict(x) for x in value]
-                return value
-        raise KeyError(key)
-
     def __iter__(self):
         return (
-            self._get_field_key(f)
-            for f in fields(self)  # type: ignore
-            if getattr(self, f.name) is not None
+            k for k, f in self._field_keys.items() if getattr(self, f.name) is not None
         )
 
     def __len__(self):
         return len(list(iter(self)))
+
+    def __getitem__(self, key):
+        f = self._field_keys[key]
+        value = getattr(self, f.name)
+        if value is None:
+            raise KeyError(key)
+        serialize = f.metadata.get("serialize")
+        if serialize:
+            return serialize(value)
+        if isinstance(value, _DataClassMapping):
+            return dict(value)
+        if isinstance(value, list) and all(
+            isinstance(v, _DataClassMapping) for v in value
+        ):
+            return [dict(v) for v in value]
+        return value
+
+    @classmethod
+    def _parse_value(cls, t, value):
+        if Optional[t] == t:  # Optional, get the type
+            t = t.__args__[0]
+
+        # Check if type is already correct
+        try:
+            if isinstance(value, t):
+                return value
+        except TypeError:
+            pass
+
+        # Handle list of values
+        if issubclass(getattr(t, "__origin__", object), Sequence):
+            t = t.__args__[0]
+            return [cls._parse_value(t, v) for v in value]
+
+        # Handle Mappings
+        elif issubclass(getattr(t, "__origin__", object), Mapping) and isinstance(
+            value, Mapping
+        ):
+            # Note: We are not recursively parsing members of the mapping
+            return value
+
+        # Check if type has from_dict
+        if hasattr(t, "from_dict"):
+            return t.from_dict(value)
+
+        # Convert to enum values, other wrappers
+        return t(value)
 
     @classmethod
     def from_dict(cls, data: Optional[Mapping[_T, Any]]):
@@ -287,19 +267,37 @@ class _DataClassMapping(Mapping[_T, Any]):
         hints = get_type_hints(cls)
         for f in fields(cls):  # type: ignore
             key = cls._get_field_key(f)
-            if key in data:
-                value = data[key]
-                if value is not None:
-                    deserialize = f.metadata.get("deserialize")
-                    if deserialize:
-                        value = deserialize(value)
-                    else:
-                        value = _parse_value(hints[f.name], value, True)
-                    kwargs[f.name] = value
+            value = data.get(key)
+            if value is None:
+                continue
+            deserialize = f.metadata.get("deserialize")
+            if deserialize:
+                value = deserialize(value)
+            else:
+                t = hints[f.name]
+                value = cls._parse_value(t, value)
+
+            kwargs[f.name] = value
         return cls(**kwargs)
 
 
-class _CamelCaseDataObject(_DataClassMapping[str]):
+class _JsonDataObject(_DataClassMapping[str]):
     @classmethod
     def _get_field_key(cls, field: Field) -> str:
-        return field.metadata.get("name", _snake2camel(field.name))
+        name = field.metadata.get("name")
+        if name:
+            return name
+        parts = field.name.split("_")
+        return parts[0] + "".join(p.title() for p in parts[1:])
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        if isinstance(value, bytes):
+            return websafe_encode(value)
+        return value
+
+    @classmethod
+    def _parse_value(cls, t, value):
+        if isinstance(t, type) and issubclass(t, bytes) and isinstance(value, str):
+            return websafe_decode(value)
+        return super()._parse_value(t, value)

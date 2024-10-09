@@ -51,7 +51,7 @@ def args(*params) -> Dict[int, Any]:
     :param params: Arguments, in order, to add to the command.
     :return: The input parameters as a dict.
     """
-    return dict((i, v) for i, v in enumerate(params, 1) if v is not None)
+    return {i: v for i, v in enumerate(params, 1) if v is not None}
 
 
 class _CborDataObject(_DataClassMapping[int]):
