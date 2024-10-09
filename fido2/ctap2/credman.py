@@ -217,7 +217,8 @@ class CredentialManagement:
 
         :param cred_id: The PublicKeyCredentialDescriptor of the credential to delete.
         """
-        logger.debug(f"Deleting credential with ID: {cred_id['id'].hex()}")
+        cred_id = PublicKeyCredentialDescriptor.from_dict(cred_id)
+        logger.debug(f"Deleting credential with ID: {cred_id}")
         self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
             {CredentialManagement.PARAM.CREDENTIAL_ID: cred_id},
@@ -237,6 +238,7 @@ class CredentialManagement:
         if not CredentialManagement.is_update_supported(self.ctap.info):
             raise ValueError("Authenticator does not support update_user_info")
 
+        cred_id = PublicKeyCredentialDescriptor.from_dict(cred_id)
         logger.debug(f"Updating credential: {cred_id} with user info: {user_info}")
         self._call(
             CredentialManagement.CMD.UPDATE_USER_INFO,
