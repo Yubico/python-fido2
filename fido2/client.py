@@ -337,16 +337,16 @@ class _Ctap1ClientBackend(_ClientBackend):
         if (
             rk
             or user_verification == UserVerificationRequirement.REQUIRED
-            or ES256.ALGORITHM not in [p["alg"] for p in key_params]
+            or ES256.ALGORITHM not in [p.alg for p in key_params]
             or enterprise_attestation
         ):
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
-        app_param = sha256(rp["id"].encode())
+        app_param = sha256(rp.id.encode())
 
         dummy_param = b"\0" * 32
         for cred in exclude_list or []:
-            key_handle = cred["id"]
+            key_handle = cred.id
             try:
                 self.ctap1.authenticate(dummy_param, app_param, key_handle, True)
                 raise ClientError.ERR.OTHER_ERROR()  # Shouldn't happen
@@ -402,7 +402,7 @@ class _Ctap1ClientBackend(_ClientBackend):
                     self.ctap1.authenticate,
                     client_param,
                     app_param,
-                    cred["id"],
+                    cred.id,
                 )
                 assertions = [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
                 return AssertionSelection(client_data, assertions)
@@ -439,6 +439,12 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
         return extension_outputs
+
+
+def _cbor_list(values):
+    if not values:
+        return None
+    return [v._to_cbor() for v in values]
 
 
 class _Ctap2ClientBackend(_ClientBackend):
@@ -600,7 +606,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Handle auth
         pin_protocol, pin_token, pin_auth, internal_uv = self._get_auth_params(
-            client_data, rp["id"], user_verification, permissions, event, on_keepalive
+            client_data, rp.id, user_verification, permissions, event, on_keepalive
         )
 
         if not (rk or internal_uv):
@@ -614,10 +620,10 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         att_obj = self.ctap2.make_credential(
             client_data.hash,
-            rp,
-            user,
-            key_params,
-            exclude_list or None,
+            rp._to_cbor(),
+            user._to_cbor(),
+            _cbor_list(key_params),
+            _cbor_list(exclude_list),
             extension_inputs or None,
             options,
             pin_auth,
@@ -695,7 +701,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         assertions = self.ctap2.get_assertions(
             rp_id,
             client_data.hash,
-            allow_list or None,
+            _cbor_list(allow_list),
             extension_inputs or None,
             options,
             pin_auth,

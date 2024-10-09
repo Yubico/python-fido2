@@ -35,29 +35,13 @@ from ..hid import CTAPHID, CAPABILITY
 from ..webauthn import AuthenticatorData, Aaguid
 
 from enum import IntEnum, unique
-from dataclasses import dataclass, field, fields, Field, asdict
+from dataclasses import dataclass, field, fields, Field
 from threading import Event
-from typing import Mapping, Dict, Any, List, Optional, Callable, Sequence
+from typing import Mapping, Dict, Any, List, Optional, Callable
 import struct
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _as_cbor(data):
-    if data is None:
-        return None
-    # Avoid handling bytes | str as Sequence
-    if isinstance(data, (bytes, str)):
-        return data
-    if isinstance(data, Sequence):
-        return [_as_cbor(d) for d in data]
-    if isinstance(data, _DataClassMapping):
-        data = asdict(data)  # type: ignore
-    if isinstance(data, Mapping):
-        # Remove empty values and recurse
-        return {k: _as_cbor(v) for k, v in data.items() if v is not None}
-    return data
 
 
 def args(*params) -> Dict[int, Any]:
@@ -67,7 +51,7 @@ def args(*params) -> Dict[int, Any]:
     :param params: Arguments, in order, to add to the command.
     :return: The input parameters as a dict.
     """
-    return dict((i, _as_cbor(v)) for i, v in enumerate(params, 1) if v is not None)
+    return {i: v for i, v in enumerate(params, 1) if v is not None}
 
 
 class _CborDataObject(_DataClassMapping[int]):

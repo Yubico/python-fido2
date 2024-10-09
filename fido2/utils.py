@@ -32,6 +32,7 @@ This module contains various functions used throughout the rest of the project.
 
 from __future__ import annotations
 
+from .cbor import CborType
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hmac, hashes
@@ -297,6 +298,16 @@ class _DataClassMapping(Mapping[_T, Any]):
                         value = _parse_value(hints[f.name], value, True)
                     kwargs[f.name] = value
         return cls(**kwargs)
+
+    def _to_cbor(self) -> CborType:
+        data = {}
+        for f in fields(self):  # type: ignore
+            value = getattr(self, f.name)
+            if hasattr(value, "_to_cbor"):
+                value = value._to_cbor()
+            if value is not None:
+                data[f.name] = value
+        return data
 
 
 class _CamelCaseDataObject(_DataClassMapping[str]):

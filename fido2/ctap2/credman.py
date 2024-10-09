@@ -30,7 +30,7 @@ from __future__ import annotations
 from .. import cbor
 from ..ctap import CtapError
 from ..webauthn import PublicKeyCredentialDescriptor, PublicKeyCredentialUserEntity
-from .base import Ctap2, Info, _as_cbor
+from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
 
 from enum import IntEnum, unique
@@ -108,7 +108,6 @@ class CredentialManagement:
         self.pin_uv = _PinUv(pin_uv_protocol, pin_uv_token)
 
     def _call(self, sub_cmd, params=None, auth=True):
-        params = _as_cbor(params)
         kwargs = {"sub_cmd": sub_cmd, "sub_cmd_params": params}
         if auth:
             msg = struct.pack(">B", sub_cmd)
@@ -222,7 +221,7 @@ class CredentialManagement:
         logger.debug(f"Deleting credential with ID: {cred_id}")
         self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
-            {CredentialManagement.PARAM.CREDENTIAL_ID: cred_id},
+            {CredentialManagement.PARAM.CREDENTIAL_ID: cred_id._to_cbor()},
         )
         logger.info("Credential deleted")
 
@@ -240,12 +239,13 @@ class CredentialManagement:
             raise ValueError("Authenticator does not support update_user_info")
 
         cred_id = PublicKeyCredentialDescriptor.from_dict(cred_id)
+        user_info = PublicKeyCredentialUserEntity.from_dict(user_info)
         logger.debug(f"Updating credential: {cred_id} with user info: {user_info}")
         self._call(
             CredentialManagement.CMD.UPDATE_USER_INFO,
             {
-                CredentialManagement.PARAM.CREDENTIAL_ID: cred_id,
-                CredentialManagement.PARAM.USER: user_info,
+                CredentialManagement.PARAM.CREDENTIAL_ID: cred_id._to_cbor(),
+                CredentialManagement.PARAM.USER: user_info._to_cbor(),
             },
         )
         logger.info("Credential user info updated")

@@ -40,9 +40,6 @@ from fido2.webauthn import (
     PublicKeyCredentialCreationOptions,
     AttestationObject,
     CollectedClientData,
-    PublicKeyCredentialUserEntity,
-    PublicKeyCredentialRpEntity,
-    PublicKeyCredentialParameters,
 )
 
 
@@ -149,9 +146,9 @@ class TestFido2Client(unittest.TestCase):
 
         ctap2.make_credential.assert_called_with(
             response.client_data.hash,
-            PublicKeyCredentialRpEntity(**rp),
-            PublicKeyCredentialUserEntity(**user),
-            [PublicKeyCredentialParameters(**{"type": "public-key", "alg": -7})],
+            rp,
+            user,
+            [{"type": "public-key", "alg": -7}],
             None,
             None,
             None,
