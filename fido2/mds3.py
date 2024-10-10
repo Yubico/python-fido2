@@ -34,7 +34,7 @@ from .attestation import (
     verify_x509_chain,
     AttestationVerifier,
 )
-from .utils import websafe_decode, _CamelCaseDataObject
+from .utils import websafe_decode, _JsonDataObject
 from .cose import CoseKey
 
 from cryptography import x509
@@ -53,19 +53,19 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(eq=False, frozen=True)
-class Version(_CamelCaseDataObject):
+class Version(_JsonDataObject):
     major: int
     minor: int
 
 
 @dataclass(eq=False, frozen=True)
-class RogueListEntry(_CamelCaseDataObject):
+class RogueListEntry(_JsonDataObject):
     sk: bytes
     date: int
 
 
 @dataclass(eq=False, frozen=True)
-class BiometricStatusReport(_CamelCaseDataObject):
+class BiometricStatusReport(_JsonDataObject):
     cert_level: int
     modality: str
     effective_date: int
@@ -76,7 +76,7 @@ class BiometricStatusReport(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class CodeAccuracyDescriptor(_CamelCaseDataObject):
+class CodeAccuracyDescriptor(_JsonDataObject):
     base: int
     min_length: int
     max_retries: Optional[int] = None
@@ -84,7 +84,7 @@ class CodeAccuracyDescriptor(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class BiometricAccuracyDescriptor(_CamelCaseDataObject):
+class BiometricAccuracyDescriptor(_JsonDataObject):
     self_attested_frr: Optional[float] = field(
         default=None, metadata=dict(name="selfAttestedFRR")
     )
@@ -97,14 +97,14 @@ class BiometricAccuracyDescriptor(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class PatternAccuracyDescriptor(_CamelCaseDataObject):
+class PatternAccuracyDescriptor(_JsonDataObject):
     min_complexity: int
     max_retries: Optional[int] = None
     block_slowdown: Optional[int] = None
 
 
 @dataclass(eq=False, frozen=True)
-class VerificationMethodDescriptor(_CamelCaseDataObject):
+class VerificationMethodDescriptor(_JsonDataObject):
     user_verification_method: Optional[str] = None
     ca_desc: Optional[CodeAccuracyDescriptor] = None
     ba_desc: Optional[BiometricAccuracyDescriptor] = None
@@ -112,14 +112,14 @@ class VerificationMethodDescriptor(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class RgbPaletteEntry(_CamelCaseDataObject):
+class RgbPaletteEntry(_JsonDataObject):
     r: int
     g: int
     b: int
 
 
 @dataclass(eq=False, frozen=True)
-class DisplayPngCharacteristicsDescriptor(_CamelCaseDataObject):
+class DisplayPngCharacteristicsDescriptor(_JsonDataObject):
     width: int
     height: int
     bit_depth: int
@@ -131,7 +131,7 @@ class DisplayPngCharacteristicsDescriptor(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class EcdaaTrustAnchor(_CamelCaseDataObject):
+class EcdaaTrustAnchor(_JsonDataObject):
     x: str = field(metadata=dict(name="X"))
     y: str = field(metadata=dict(name="Y"))
     c: str
@@ -160,7 +160,7 @@ class AuthenticatorStatus(str, Enum):
 
 
 @dataclass(eq=False, frozen=True)
-class StatusReport(_CamelCaseDataObject):
+class StatusReport(_JsonDataObject):
     status: AuthenticatorStatus
     effective_date: Optional[date] = field(
         metadata=dict(
@@ -182,7 +182,7 @@ class StatusReport(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class ExtensionDescriptor(_CamelCaseDataObject):
+class ExtensionDescriptor(_JsonDataObject):
     fail_if_unknown: bool = field(metadata=dict(name="fail_if_unknown"))
     id: str
     tag: Optional[int] = None
@@ -190,7 +190,7 @@ class ExtensionDescriptor(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class MetadataStatement(_CamelCaseDataObject):
+class MetadataStatement(_JsonDataObject):
     description: str
     authenticator_version: int
     schema: int
@@ -247,7 +247,7 @@ class MetadataStatement(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class MetadataBlobPayloadEntry(_CamelCaseDataObject):
+class MetadataBlobPayloadEntry(_JsonDataObject):
     status_reports: Sequence[StatusReport]
     time_of_last_status_change: date = field(
         metadata=dict(
@@ -285,7 +285,7 @@ class MetadataBlobPayloadEntry(_CamelCaseDataObject):
 
 
 @dataclass(eq=False, frozen=True)
-class MetadataBlobPayload(_CamelCaseDataObject):
+class MetadataBlobPayload(_JsonDataObject):
     legal_header: str
     no: int
     next_update: date = field(

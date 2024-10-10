@@ -29,7 +29,11 @@ from __future__ import annotations
 
 from .. import cbor
 from ..ctap import CtapError
-from ..webauthn import PublicKeyCredentialDescriptor, PublicKeyCredentialUserEntity
+from ..webauthn import (
+    PublicKeyCredentialDescriptor,
+    PublicKeyCredentialUserEntity,
+    _as_cbor,
+)
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
 
@@ -221,7 +225,7 @@ class CredentialManagement:
         logger.debug(f"Deleting credential with ID: {cred_id}")
         self._call(
             CredentialManagement.CMD.DELETE_CREDENTIAL,
-            {CredentialManagement.PARAM.CREDENTIAL_ID: cred_id._to_cbor()},
+            {CredentialManagement.PARAM.CREDENTIAL_ID: _as_cbor(cred_id)},
         )
         logger.info("Credential deleted")
 
@@ -244,8 +248,8 @@ class CredentialManagement:
         self._call(
             CredentialManagement.CMD.UPDATE_USER_INFO,
             {
-                CredentialManagement.PARAM.CREDENTIAL_ID: cred_id._to_cbor(),
-                CredentialManagement.PARAM.USER: user_info._to_cbor(),
+                CredentialManagement.PARAM.CREDENTIAL_ID: _as_cbor(cred_id),
+                CredentialManagement.PARAM.USER: _as_cbor(user_info),
             },
         )
         logger.info("Credential user info updated")

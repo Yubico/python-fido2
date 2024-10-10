@@ -44,6 +44,7 @@ from .webauthn import (
     AuthenticatorAttestationResponse,
     AuthenticatorAssertionResponse,
     AttestationConveyancePreference,
+    _as_cbor,
 )
 from .cose import ES256
 from .rpid import verify_rp_id
@@ -444,7 +445,7 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
 def _cbor_list(values):
     if not values:
         return None
-    return [v._to_cbor() for v in values]
+    return [_as_cbor(v) for v in values]
 
 
 class _Ctap2ClientBackend(_ClientBackend):
@@ -620,8 +621,8 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         att_obj = self.ctap2.make_credential(
             client_data.hash,
-            rp._to_cbor(),
-            user._to_cbor(),
+            _as_cbor(rp),
+            _as_cbor(user),
             _cbor_list(key_params),
             _cbor_list(exclude_list),
             extension_inputs or None,
