@@ -104,13 +104,14 @@ class HmacSecretExtension(Ctap2Extension):
     NAME = "hmac-secret"
     SALT_LEN = 32
 
-    def __init__(self, ctap, pin_protocol=None):
+    def __init__(self, ctap, pin_protocol=None, allow_hmac_secret=False):
         super().__init__(ctap)
         self.pin_protocol = pin_protocol
+        self._allow_hmac_secret = allow_hmac_secret
 
     def process_create_input(self, inputs):
         if self.is_supported():
-            if inputs.get("hmacCreateSecret") is True:
+            if inputs.get("hmacCreateSecret") is True and self._allow_hmac_secret:
                 self.prf = False
                 return True
             elif inputs.get("prf") is not None:
@@ -138,7 +139,7 @@ class HmacSecretExtension(Ctap2Extension):
             self.prf = True
         else:
             data = inputs.get("hmacGetSecret")
-            if not data:
+            if not data or not self._allow_hmac_secret:
                 return
             salts = data["salt1"], data.get("salt2", b"")
             self.prf = False

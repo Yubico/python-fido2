@@ -29,10 +29,16 @@
 Connects to the first FIDO device found which supports the HmacSecret extension,
 creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
+
+NOTE: This extension is not enabled by default as direct access to the extension
+is now allowed in a browser setting. See also prf.py for an example which uses
+the PRF extension which is enabled by default.
 """
 from fido2.hid import CtapHidDevice
 from fido2.server import Fido2Server
 from fido2.client import Fido2Client, WindowsClient, UserInteraction
+from fido2.ctap2.extensions import HmacSecretExtension
+from functools import partial
 from getpass import getpass
 import ctypes
 import sys
@@ -70,13 +76,20 @@ rk = "discouraged"
 
 if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
     # Use the Windows WebAuthn API if available, and we're not running as admin
-    client = WindowsClient("https://example.com")
+    # By default only the PRF extension is allowed, we need to explicitly
+    # configure the client to allow hmac-secret
+    client = WindowsClient("https://example.com", allow_hmac_secret=True)
     rk = "required"  # Windows requires resident key for hmac-secret
 else:
     # Locate a device
     for dev in enumerate_devices():
         client = Fido2Client(
-            dev, "https://example.com", user_interaction=CliInteraction()
+            dev,
+            "https://example.com",
+            user_interaction=CliInteraction(),
+            # By default only the PRF extension is allowed, we need to explicitly
+            # configure the client to allow hmac-secret
+            extension_types=[partial(HmacSecretExtension, allow_hmac_secret=True)],
         )
         if "hmac-secret" in client.info.extensions:
             break
@@ -118,7 +131,6 @@ credential = result.attestation_object.auth_data.credential_data
 print("New credential created, with the HmacSecret extension.")
 
 # Prepare parameters for getAssertion
-challenge = b"Q0hBTExFTkdF"  # Use a new challenge for each call.
 allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Generate a salt for HmacSecret:
@@ -131,7 +143,10 @@ request_options, state = server.authenticate_begin(credentials, user_verificatio
 
 # Authenticate the credential
 result = client.get_assertion(
-    {**request_options["publicKey"], "extensions": {"hmacGetSecret": {"salt1": salt}}}
+    {
+        **request_options["publicKey"],
+        "extensions": {"hmacGetSecret": {"salt1": salt}},
+    }
 )
 
 # Only one cred in allowCredentials, only one response.

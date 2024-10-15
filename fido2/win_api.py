@@ -940,7 +940,7 @@ class WinAPI:
 
     version = WEBAUTHN_API_VERSION
 
-    def __init__(self, handle=None, return_extensions=False):
+    def __init__(self, handle=None, return_extensions=False, allow_hmac_secret=False):
         self.handle = handle or windll.user32.GetForegroundWindow()
         if not return_extensions:
             warnings.warn(
@@ -949,6 +949,7 @@ class WinAPI:
                 DeprecationWarning,
             )
         self._return_extensions = return_extensions
+        self._allow_hmac_secret = allow_hmac_secret
 
     def get_error_name(self, winerror):
         """Returns an error name given an error HRESULT value.
@@ -1041,7 +1042,7 @@ class WinAPI:
             if "prf" in extensions:
                 enable_prf = True
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
-            elif "hmacCreateSecret" in extensions:
+            elif "hmacCreateSecret" in extensions and self._allow_hmac_secret:
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
 
         if event:
@@ -1155,7 +1156,7 @@ class WinAPI:
                         for cred_id, salts in cred_salts.items()
                     ],
                 )
-            elif "hmacGetSecret" in extensions:
+            elif "hmacGetSecret" in extensions and self._allow_hmac_secret:
                 flags |= 0x00100000
                 salts = extensions["hmacGetSecret"]
                 hmac_secret_salts = WebAuthNHmacSecretSaltValues(

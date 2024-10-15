@@ -900,9 +900,12 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         origin: str,
         verify: Callable[[str, str], bool] = verify_rp_id,
         handle=None,
+        allow_hmac_secret=False,
     ):
         super().__init__(origin, verify)
-        self.api = WinAPI(handle, return_extensions=True)
+        self.api = WinAPI(
+            handle, return_extensions=True, allow_hmac_secret=allow_hmac_secret
+        )
         self.info = Info(
             versions=["U2F_V2", "FIDO_2_0"], extensions=[], aaguid=Aaguid.NONE
         )
