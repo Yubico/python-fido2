@@ -460,6 +460,37 @@ class _Ctap2ClientBackend(_ClientBackend):
         self.extensions = extensions
         self.user_interaction = user_interaction
 
+    def _filter_creds(self, rp_id, cred_list, event, on_keepalive):
+        # Filter out credential IDs which are too long
+        max_len = self.info.max_cred_id_length
+        if max_len:
+            cred_list = [e for e in cred_list if len(e) <= max_len]
+
+        max_creds = self.info.max_creds_in_list or 1
+        chunks = [
+            cred_list[i : i + max_creds] for i in range(0, len(cred_list), max_creds)
+        ]
+
+        matches = []
+        for chunk in chunks:
+            assertions = self.ctap2.get_assertions(
+                rp_id,
+                b"\0" * 32,
+                _cbor_list(chunk),
+                None,
+                {"up": False},
+                None,
+                None,
+                event=event,
+                on_keepalive=on_keepalive,
+            )
+            matches.extend([a.credential for a in assertions])
+
+        if len(matches) > max_creds:
+            # Too many matches? Just return as many as we can handle
+            return matches[:max_creds]
+        return matches
+
     def selection(self, event):
         if "FIDO_2_1" in self.info.versions:
             self.ctap2.selection(event=event)
@@ -575,16 +606,12 @@ class _Ctap2ClientBackend(_ClientBackend):
         enterprise_attestation,
         event,
     ):
-        if exclude_list:
-            # Filter out credential IDs which are too long
-            max_len = self.info.max_cred_id_length
-            if max_len:
-                exclude_list = [e for e in exclude_list if len(e) <= max_len]
+        on_keepalive = _user_keepalive(self.user_interaction)
 
-            # Reject the request if too many credentials remain.
-            max_creds = self.info.max_creds_in_list
-            if max_creds and len(exclude_list) > max_creds:
-                raise ClientError.ERR.BAD_REQUEST("exclude_list too long")
+        if exclude_list:
+            cred_list = self._filter_creds(rp.id, exclude_list, event, on_keepalive)
+        else:
+            cred_list = None
 
         # Process extensions
         client_inputs = extensions or {}
@@ -602,8 +629,6 @@ class _Ctap2ClientBackend(_ClientBackend):
                     extension_inputs[ext.NAME] = auth_input
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
-
-        on_keepalive = _user_keepalive(self.user_interaction)
 
         # Handle auth
         pin_protocol, pin_token, pin_auth, internal_uv = self._get_auth_params(
@@ -624,7 +649,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             _as_cbor(rp),
             _as_cbor(user),
             _cbor_list(key_params),
-            _cbor_list(exclude_list),
+            cred_list,
             extension_inputs or None,
             options,
             pin_auth,
@@ -662,18 +687,14 @@ class _Ctap2ClientBackend(_ClientBackend):
         user_verification,
         event,
     ):
-        if allow_list:
-            # Filter out credential IDs which are too long
-            max_len = self.info.max_cred_id_length
-            if max_len:
-                allow_list = [e for e in allow_list if len(e) <= max_len]
-            if not allow_list:
-                raise CtapError(CtapError.ERR.NO_CREDENTIALS)
+        on_keepalive = _user_keepalive(self.user_interaction)
 
-            # Reject the request if too many credentials remain.
-            max_creds = self.info.max_creds_in_list
-            if max_creds and len(allow_list) > max_creds:
-                raise ClientError.ERR.BAD_REQUEST("allow_list too long")
+        if allow_list:
+            cred_list = self._filter_creds(rp_id, allow_list, event, on_keepalive)
+            if not cred_list:
+                raise CtapError(CtapError.ERR.NO_CREDENTIALS)
+        else:
+            cred_list = None
 
         # Process extensions
         client_inputs = extensions or {}
@@ -692,8 +713,6 @@ class _Ctap2ClientBackend(_ClientBackend):
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
-        on_keepalive = _user_keepalive(self.user_interaction)
-
         pin_protocol, pin_token, pin_auth, internal_uv = self._get_auth_params(
             client_data, rp_id, user_verification, permissions, event, on_keepalive
         )
@@ -702,7 +721,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         assertions = self.ctap2.get_assertions(
             rp_id,
             client_data.hash,
-            _cbor_list(allow_list),
+            cred_list,
             extension_inputs or None,
             options,
             pin_auth,
