@@ -545,6 +545,9 @@ class _Ctap2ClientBackend(_ClientBackend):
             self.info.options.get(k) for k in ("uv", "clientPin", "bioEnroll")
         )
         mc = ClientPin.PERMISSION.MAKE_CREDENTIAL & permissions != 0
+        additional_perms = permissions & ~(
+            ClientPin.PERMISSION.MAKE_CREDENTIAL | ClientPin.PERMISSION.GET_ASSERTION
+        )
 
         if (
             user_verification == UserVerificationRequirement.REQUIRED
@@ -560,6 +563,8 @@ class _Ctap2ClientBackend(_ClientBackend):
                 )
             return True
         elif mc and uv_configured and not self.info.options.get("makeCredUvNotRqd"):
+            return True
+        elif uv_configured and additional_perms:
             return True
         return False
 
@@ -597,12 +602,16 @@ class _Ctap2ClientBackend(_ClientBackend):
         pin_protocol = None
         pin_token = None
         internal_uv = False
-        additional_perms = permissions & ~(
-            ClientPin.PERMISSION.MAKE_CREDENTIAL | ClientPin.PERMISSION.GET_ASSERTION
-        )
-        if self._should_use_uv(user_verification, permissions) or additional_perms:
+        if self._should_use_uv(user_verification, permissions):
             client_pin = ClientPin(self.ctap2)
-            allow_internal_uv = not additional_perms
+            allow_internal_uv = (
+                permissions
+                & ~(
+                    ClientPin.PERMISSION.MAKE_CREDENTIAL
+                    | ClientPin.PERMISSION.GET_ASSERTION
+                )
+                == 0
+            )
             pin_token = self._get_token(
                 client_pin, permissions, rp_id, event, on_keepalive, allow_internal_uv
             )
@@ -635,66 +644,83 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Get extension permissions
         extension_instances = [cls(self.ctap2) for cls in self.extensions]
+        used_extensions = []
         client_inputs = extensions or {}
         for ext in extension_instances:
             permissions |= ext.get_create_permissions(client_inputs)
 
-        # Handle auth
-        pin_protocol, pin_token, internal_uv = self._get_auth_params(
-            rp.id, user_verification, permissions, event, on_keepalive
-        )
-
-        if exclude_list:
-            cred_list = self._filter_creds(
-                rp.id, exclude_list, pin_protocol, pin_token, event, on_keepalive
+        def _do_make():
+            # Handle auth
+            pin_protocol, pin_token, internal_uv = self._get_auth_params(
+                rp.id, user_verification, permissions, event, on_keepalive
             )
-        else:
-            cred_list = None
 
-        # Process extensions
-        extension_inputs = {}
-        used_extensions = []
-        permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
+            if exclude_list:
+                cred_list = self._filter_creds(
+                    rp.id, exclude_list, pin_protocol, pin_token, event, on_keepalive
+                )
+            else:
+                cred_list = None
+
+            # Process extensions
+            extension_inputs = {}
+            try:
+                for ext in extension_instances:
+                    auth_input = ext.process_create_input(client_inputs)
+                    if auth_input is not None:
+                        used_extensions.append(ext)
+                        extension_inputs[ext.NAME] = auth_input
+            except ValueError as e:
+                raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
+
+            if not (rk or internal_uv):
+                options = None
+            else:
+                options = {}
+                if rk:
+                    options["rk"] = True
+                if internal_uv:
+                    options["uv"] = True
+
+            # Calculate pin_auth
+            client_data_hash = client_data.hash
+            if pin_token:
+                pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
+            else:
+                pin_auth = None
+
+            # Perform make credential
+            return (
+                self.ctap2.make_credential(
+                    client_data_hash,
+                    _as_cbor(rp),
+                    _as_cbor(user),
+                    _cbor_list(key_params),
+                    _cbor_list(cred_list),
+                    extension_inputs or None,
+                    options,
+                    pin_auth,
+                    pin_protocol.VERSION if pin_protocol else None,
+                    enterprise_attestation,
+                    event=event,
+                    on_keepalive=on_keepalive,
+                ),
+                pin_protocol,
+                pin_token,
+            )
+
         try:
-            for ext in extension_instances:
-                auth_input = ext.process_create_input(client_inputs)
-                if auth_input is not None:
-                    used_extensions.append(ext)
-                    extension_inputs[ext.NAME] = auth_input
-        except ValueError as e:
-            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
-
-        if not (rk or internal_uv):
-            options = None
-        else:
-            options = {}
-            if rk:
-                options["rk"] = True
-            if internal_uv:
-                options["uv"] = True
-
-        # Calculate pin_auth
-        client_data_hash = client_data.hash
-        if pin_token:
-            pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
-        else:
-            pin_auth = None
-
-        # Perform make credential
-        att_obj = self.ctap2.make_credential(
-            client_data_hash,
-            _as_cbor(rp),
-            _as_cbor(user),
-            _cbor_list(key_params),
-            _cbor_list(cred_list),
-            extension_inputs or None,
-            options,
-            pin_auth,
-            pin_protocol.VERSION if pin_protocol else None,
-            enterprise_attestation,
-            event=event,
-            on_keepalive=on_keepalive,
-        )
+            att_obj, pin_protocol, pin_token = _do_make()
+        except CtapError as e:
+            # The Authenticator may still require UV, try again
+            if (
+                e.code == CtapError.ERR.PUAT_REQUIRED
+                and user_verification == UserVerificationRequirement.DISCOURAGED
+            ):
+                user_verification = UserVerificationRequirement.REQUIRED
+                att_obj, pin_protocol, pin_token = _do_make()
+            else:
+                raise
 
         # Process extenstion outputs
         extension_outputs = {}
