@@ -483,17 +483,24 @@ class _Ctap2ClientBackend(_ClientBackend):
             version = None
         matches = []
         for chunk in chunks:
-            assertions = self.ctap2.get_assertions(
-                rp_id,
-                client_data_hash,
-                _cbor_list(chunk),
-                None,
-                {"up": False},
-                pin_auth,
-                version,
-                event=event,
-                on_keepalive=on_keepalive,
-            )
+            try:
+                assertions = self.ctap2.get_assertions(
+                    rp_id,
+                    client_data_hash,
+                    _cbor_list(chunk),
+                    None,
+                    {"up": False},
+                    pin_auth,
+                    version,
+                    event=event,
+                    on_keepalive=on_keepalive,
+                )
+            except CtapError as e:
+                if e.code == CtapError.ERR.NO_CREDENTIALS:
+                    # All creds in chunk are discarded
+                    continue
+                raise
+
             if len(chunk) == 1 and len(assertions) == 1:
                 # Credential ID might be omitted from assertions
                 matches.append(chunk[0])
