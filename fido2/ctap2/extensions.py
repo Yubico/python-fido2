@@ -35,7 +35,9 @@ from ..webauthn import (
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
+    AttestationObject,
 )
+from .. import cbor
 from enum import Enum, unique
 from typing import Dict, Tuple, Any, Optional
 import abc
@@ -337,6 +339,91 @@ class MinPinLengthExtension(Ctap2Extension):
     def process_create_input(self, inputs):
         if self.is_supported() and inputs.get(self.NAME) is True:
             return True
+
+
+class SignExtension(Ctap2Extension):
+    """
+    Implements the sign CTAP2 extension.
+    """
+
+    NAME = "sign"
+
+    def process_create_input(self, inputs):
+        data = inputs.get("sign", {})
+        if not data or not self.is_supported():
+            return
+
+        if "sign" in data or "generateKey" not in data:
+            raise ValueError("Invalid inputs")
+
+        gk = data["generateKey"]
+        """
+        phData = 0
+        kty = 1
+        kid = 2
+        alg = 3
+        flags = 4
+        key-refs = 5
+        sig = 6
+        att-obj = 7
+        """
+
+        outputs = {
+            3: gk["algorithms"],
+            4: 0b101,  # TODO: 0b001 if UV not "required"
+        }
+
+        if "phData" in gk:
+            outputs[0] = gk["phData"]
+
+        return outputs
+
+    def process_create_output(self, attestation_response, *args):
+        data = attestation_response.auth_data.extensions.get(self.NAME)
+        att_obj = AttestationObject(data[7])
+        cred_data = att_obj.auth_data.credential_data
+        assert cred_data is not None  # nosec
+        pk = cred_data.public_key
+        kh = cbor.encode({k: pk[k] for k in (1, 2, 3) if k in pk})
+
+        output = {
+            "generatedKey": {
+                "publicKey": cbor.encode(pk),
+                "keyHandle": kh,
+            }
+        }
+
+        if 6 in data:
+            output["signature"] = data[6]
+
+        return {"sign": output}
+
+    def process_get_input(self, inputs):
+        data = inputs.get("sign", {})
+        if not data or not self.is_supported():
+            return
+
+        if "sign" not in data or "generateKey" in data:
+            raise ValueError("Invalid inputs")
+
+        allow_list = self._get_options.allow_credentials
+        if not allow_list:
+            raise ValueError("None or empty allowCredential")
+
+        sign = data["sign"]
+        kh_map = sign["keyHandleByCredential"]
+        # We may have more keys, as allow_list has been filtered
+        khs = [kh_map[websafe_encode(cred.id)] for cred in allow_list]
+
+        return {
+            0: sign["phData"],
+            5: khs,
+        }
+
+    def process_get_output(self, assertion_response, *args):
+        data = assertion_response.auth_data.extensions.get(self.NAME)
+
+        return {"sign": {"signature": data[6]}}
 
 
 # NOTE: credProps is handled in fido2.client.Fido2Client
