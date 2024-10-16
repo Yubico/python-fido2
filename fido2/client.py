@@ -631,7 +631,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
         if exclude_list:
             # We need this for filtering the exclude_list
-            permissions = ClientPin.PERMISSION.GET_ASSERTION
+            permissions |= ClientPin.PERMISSION.GET_ASSERTION
 
         # Get extension permissions
         extension_instances = [cls(self.ctap2) for cls in self.extensions]
