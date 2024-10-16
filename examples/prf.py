@@ -149,12 +149,15 @@ result = result.get_response(0)
 output1 = result.extension_results["prf"]["results"]["first"]
 print("Authenticated, secret:", output1.hex())
 
-# Authenticate again, using two salts to generate two secrets:
+# Authenticate again, using two salts to generate two secrets.
+
+# This time we will use evalByCredential, which can be used if there are multiple
+# credentials which use different salts. Here it is not needed, but provided for
+# completeness of the example.
 
 # Generate a second salt for PRF:
 salt2 = os.urandom(32)
 print("Authenticate with second salt:", salt2.hex())
-
 # The first salt is reused, which should result in the same secret.
 
 result = client.get_assertion(
