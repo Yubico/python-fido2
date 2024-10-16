@@ -34,6 +34,7 @@ from ..utils import sha256
 from enum import Enum, unique
 from typing import Dict, Tuple, Any, Optional
 import abc
+import warnings
 
 
 class Ctap2Extension(abc.ABC):
@@ -51,6 +52,9 @@ class Ctap2Extension(abc.ABC):
         """Whether or not the extension is supported by the authenticator."""
         return self.NAME in self.ctap.info.extensions
 
+    def get_create_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
+        return ClientPin.PERMISSION(0)
+
     def process_create_input(self, inputs: Dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
@@ -60,7 +64,11 @@ class Ctap2Extension(abc.ABC):
     def process_create_input_with_permissions(
         self, inputs: Dict[str, Any]
     ) -> Tuple[Any, ClientPin.PERMISSION]:
-        return self.process_create_input(inputs), ClientPin.PERMISSION(0)
+        warnings.warn(
+            "This method is deprecated, use get_create_permissions.", DeprecationWarning
+        )
+
+        return self.process_create_input(inputs), self.get_create_permissions(inputs)
 
     def process_create_output(
         self,
@@ -71,6 +79,9 @@ class Ctap2Extension(abc.ABC):
         """Return client extension output given attestation_response, or None."""
         return None
 
+    def get_get_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
+        return ClientPin.PERMISSION(0)
+
     def process_get_input(self, inputs: Dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
@@ -80,7 +91,10 @@ class Ctap2Extension(abc.ABC):
     def process_get_input_with_permissions(
         self, inputs: Dict[str, Any]
     ) -> Tuple[Any, ClientPin.PERMISSION]:
-        return self.process_get_input(inputs), ClientPin.PERMISSION(0)
+        warnings.warn(
+            "This method is deprecated, use get_get_permissions.", DeprecationWarning
+        )
+        return self.process_get_input(inputs), self.get_get_permissions(inputs)
 
     def process_get_output(
         self,
@@ -209,9 +223,13 @@ class LargeBlobExtension(Ctap2Extension):
             "largeBlob": {"supported": attestation_response.large_blob_key is not None}
         }
 
-    def process_get_input_with_permissions(self, inputs):
+    def get_get_permissions(self, inputs):
+        if inputs.get("largeBlob", {}).get("write"):
+            return ClientPin.PERMISSION.LARGE_BLOB_WRITE
+        return ClientPin.PERMISSION(0)
+
+    def process_get_input(self, inputs):
         data = inputs.get("largeBlob", {})
-        permissions = ClientPin.PERMISSION(0)
         if data:
             if "support" in data or ("read" in data and "write" in data):
                 raise ValueError("Invalid set of parameters")
@@ -221,8 +239,7 @@ class LargeBlobExtension(Ctap2Extension):
                 self._action = True
             else:
                 self._action = data.get("write")
-                permissions = ClientPin.PERMISSION.LARGE_BLOB_WRITE
-        return True if data else None, permissions
+        return True if data else None
 
     def process_get_output(self, assertion_response, token, pin_protocol):
         blob_key = assertion_response.large_blob_key

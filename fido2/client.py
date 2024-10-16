@@ -460,7 +460,9 @@ class _Ctap2ClientBackend(_ClientBackend):
         self.extensions = extensions
         self.user_interaction = user_interaction
 
-    def _filter_creds(self, rp_id, cred_list, event, on_keepalive):
+    def _filter_creds(
+        self, rp_id, cred_list, pin_protocol, pin_token, event, on_keepalive
+    ):
         # Filter out credential IDs which are too long
         max_len = self.info.max_cred_id_length
         if max_len:
@@ -471,20 +473,31 @@ class _Ctap2ClientBackend(_ClientBackend):
             cred_list[i : i + max_creds] for i in range(0, len(cred_list), max_creds)
         ]
 
+        client_data_hash = b"\0" * 32
+        if pin_token:
+            pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
+            version = pin_protocol.VERSION
+        else:
+            pin_auth = None
+            version = None
         matches = []
         for chunk in chunks:
             assertions = self.ctap2.get_assertions(
                 rp_id,
-                b"\0" * 32,
+                client_data_hash,
                 _cbor_list(chunk),
                 None,
                 {"up": False},
-                None,
-                None,
+                pin_auth,
+                version,
                 event=event,
                 on_keepalive=on_keepalive,
             )
-            matches.extend([a.credential for a in assertions])
+            if len(chunk) == 1 and len(assertions) == 1:
+                # Credential ID might be omitted from assertions
+                matches.append(_cbor_list(chunk)[0])
+            else:
+                matches.extend([a.credential for a in assertions])
 
         if len(matches) > max_creds:
             # Too many matches? Just return as many as we can handle
@@ -568,21 +581,19 @@ class _Ctap2ClientBackend(_ClientBackend):
     def _get_auth_params(
         self, client_data, rp_id, user_verification, permissions, event, on_keepalive
     ):
-        mc = client_data.type == CollectedClientData.TYPE.CREATE
         self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
 
         pin_protocol = None
         pin_token = None
         pin_auth = None
         internal_uv = False
-        if self._should_use_uv(user_verification, mc) or permissions:
+        additional_perms = permissions & ~(
+            ClientPin.PERMISSION.MAKE_CREDENTIAL | ClientPin.PERMISSION.GET_ASSERTION
+        )
+        mc = client_data.type == CollectedClientData.TYPE.CREATE
+        if self._should_use_uv(user_verification, mc) or additional_perms:
             client_pin = ClientPin(self.ctap2)
-            allow_internal_uv = not permissions
-            permissions |= (
-                ClientPin.PERMISSION.MAKE_CREDENTIAL
-                if mc
-                else ClientPin.PERMISSION.GET_ASSERTION
-            )
+            allow_internal_uv = not additional_perms
             pin_token = self._get_token(
                 client_pin, permissions, rp_id, event, on_keepalive, allow_internal_uv
             )
@@ -608,32 +619,42 @@ class _Ctap2ClientBackend(_ClientBackend):
     ):
         on_keepalive = _user_keepalive(self.user_interaction)
 
+        # Gather up permissions
+        permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
         if exclude_list:
-            cred_list = self._filter_creds(rp.id, exclude_list, event, on_keepalive)
-        else:
-            cred_list = None
+            # We need this for filtering the exclude_list
+            permissions = ClientPin.PERMISSION.GET_ASSERTION
 
-        # Process extensions
+        # Get extension permissions
+        extension_instances = [cls(self.ctap2) for cls in self.extensions]
         client_inputs = extensions or {}
-        extension_inputs = {}
-        used_extensions = []
-        permissions = ClientPin.PERMISSION(0)
-        try:
-            for ext in [cls(self.ctap2) for cls in self.extensions]:
-                auth_input, req_perms = ext.process_create_input_with_permissions(
-                    client_inputs
-                )
-                if auth_input is not None:
-                    used_extensions.append(ext)
-                    permissions |= req_perms
-                    extension_inputs[ext.NAME] = auth_input
-        except ValueError as e:
-            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
+        for ext in extension_instances:
+            permissions |= ext.get_create_permissions(client_inputs)
 
         # Handle auth
         pin_protocol, pin_token, pin_auth, internal_uv = self._get_auth_params(
             client_data, rp.id, user_verification, permissions, event, on_keepalive
         )
+
+        if exclude_list:
+            cred_list = self._filter_creds(
+                rp.id, exclude_list, pin_protocol, pin_token, event, on_keepalive
+            )
+        else:
+            cred_list = None
+
+        # Process extensions
+        extension_inputs = {}
+        used_extensions = []
+        permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
+        try:
+            for ext in extension_instances:
+                auth_input = ext.process_create_input(client_inputs)
+                if auth_input is not None:
+                    used_extensions.append(ext)
+                    extension_inputs[ext.NAME] = auth_input
+        except ValueError as e:
+            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
         if not (rk or internal_uv):
             options = None
@@ -689,35 +710,42 @@ class _Ctap2ClientBackend(_ClientBackend):
     ):
         on_keepalive = _user_keepalive(self.user_interaction)
 
+        # Gather up permissions
+        permissions = ClientPin.PERMISSION.GET_ASSERTION
+
+        # Get extension permissions
+        extension_instances = [cls(self.ctap2) for cls in self.extensions]
+        client_inputs = extensions or {}
+        for ext in extension_instances:
+            permissions |= ext.get_get_permissions(client_inputs)
+
+        # Handle auth
+        pin_protocol, pin_token, pin_auth, internal_uv = self._get_auth_params(
+            client_data, rp_id, user_verification, permissions, event, on_keepalive
+        )
+
         if allow_list:
-            cred_list = self._filter_creds(rp_id, allow_list, event, on_keepalive)
+            cred_list = self._filter_creds(
+                rp_id, allow_list, pin_protocol, pin_token, event, on_keepalive
+            )
             if not cred_list:
                 raise CtapError(CtapError.ERR.NO_CREDENTIALS)
         else:
             cred_list = None
 
         # Process extensions
-        client_inputs = extensions or {}
         extension_inputs = {}
         used_extensions = []
-        permissions = ClientPin.PERMISSION(0)
         try:
-            for ext in [cls(self.ctap2) for cls in self.extensions]:
-                auth_input, req_perms = ext.process_get_input_with_permissions(
-                    client_inputs
-                )
+            for ext in extension_instances:
+                auth_input = ext.process_get_input(client_inputs)
                 if auth_input is not None:
                     used_extensions.append(ext)
-                    permissions |= req_perms
                     extension_inputs[ext.NAME] = auth_input
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
-        pin_protocol, pin_token, pin_auth, internal_uv = self._get_auth_params(
-            client_data, rp_id, user_verification, permissions, event, on_keepalive
-        )
         options = {"uv": True} if internal_uv else None
-
         assertions = self.ctap2.get_assertions(
             rp_id,
             client_data.hash,
