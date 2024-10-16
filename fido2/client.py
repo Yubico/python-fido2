@@ -37,6 +37,7 @@ from .webauthn import (
     Aaguid,
     AttestationObject,
     CollectedClientData,
+    PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
@@ -466,7 +467,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         # Filter out credential IDs which are too long
         max_len = self.info.max_cred_id_length
         if max_len:
-            cred_list = [e for e in cred_list if len(e) <= max_len]
+            cred_list = [c for c in cred_list if len(c.id) <= max_len]
 
         max_creds = self.info.max_creds_in_list or 1
         chunks = [
@@ -495,9 +496,11 @@ class _Ctap2ClientBackend(_ClientBackend):
             )
             if len(chunk) == 1 and len(assertions) == 1:
                 # Credential ID might be omitted from assertions
-                matches.append(_cbor_list(chunk)[0])
+                matches.append(chunk[0])
             else:
-                matches.extend([a.credential for a in assertions])
+                matches.extend(
+                    [PublicKeyCredentialDescriptor(**a.credential) for a in assertions]
+                )
 
         if len(matches) > max_creds:
             # Too many matches? Just return as many as we can handle
@@ -670,7 +673,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             _as_cbor(rp),
             _as_cbor(user),
             _cbor_list(key_params),
-            cred_list,
+            _cbor_list(cred_list),
             extension_inputs or None,
             options,
             pin_auth,
@@ -738,7 +741,9 @@ class _Ctap2ClientBackend(_ClientBackend):
         used_extensions = []
         try:
             for ext in extension_instances:
-                auth_input = ext.process_get_input(client_inputs)
+                auth_input = ext._process_get_input_w_allow_list(
+                    client_inputs, cred_list
+                )
                 if auth_input is not None:
                     used_extensions.append(ext)
                     extension_inputs[ext.NAME] = auth_input
@@ -749,7 +754,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         assertions = self.ctap2.get_assertions(
             rp_id,
             client_data.hash,
-            cred_list,
+            _cbor_list(cred_list),
             extension_inputs or None,
             options,
             pin_auth,

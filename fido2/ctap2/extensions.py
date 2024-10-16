@@ -30,11 +30,13 @@ from __future__ import annotations
 from .base import AttestationResponse, AssertionResponse, Ctap2
 from .pin import ClientPin, PinProtocol
 from .blob import LargeBlobs
-from ..utils import sha256
+from ..utils import sha256, websafe_encode
+from ..webauthn import PublicKeyCredentialDescriptor
 from enum import Enum, unique
-from typing import Dict, Tuple, Any, Optional
+from typing import Dict, Tuple, Any, Optional, List
 import abc
 import warnings
+import inspect
 
 
 class Ctap2Extension(abc.ABC):
@@ -82,11 +84,32 @@ class Ctap2Extension(abc.ABC):
     def get_get_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
         return ClientPin.PERMISSION(0)
 
-    def process_get_input(self, inputs: Dict[str, Any]) -> Any:
+    def process_get_input(
+        self,
+        inputs: Dict[str, Any],
+        allow_list: Optional[List[PublicKeyCredentialDescriptor]] = None,
+    ) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
         """
         return None
+
+    def _process_get_input_w_allow_list(
+        self,
+        inputs: Dict[str, Any],
+        allow_list: Optional[List[PublicKeyCredentialDescriptor]],
+    ) -> Any:
+        s = inspect.signature(self.process_get_input)
+        try:
+            s.bind(inputs, allow_list)
+        except TypeError:
+            warnings.warn(
+                f"{type(self)}.process_get_input() does not take allow_list, "
+                "which is deprecated.",
+                DeprecationWarning,
+            )
+            return self.process_get_input(inputs)
+        return self.process_get_input(inputs, allow_list)
 
     def process_get_input_with_permissions(
         self, inputs: Dict[str, Any]
@@ -139,13 +162,28 @@ class HmacSecretExtension(Ctap2Extension):
         else:
             return {"hmacCreateSecret": enabled}
 
-    def process_get_input(self, inputs):
+    def process_get_input(self, inputs, allow_list=None):
         if not self.is_supported():
             return
 
         data = inputs.get("prf")
         if data:
-            secrets = data.get("eval")
+            by_creds = data.get("evalByCredential")
+            if by_creds:
+                if not allow_list:
+                    raise ValueError("evalByCredentials requires allowList")
+                for cred in allow_list:
+                    key = websafe_encode(cred.id)
+                    if key in by_creds:
+                        secrets = by_creds[key]
+                        # Remove any other creds from the allow_list
+                        allow_list.clear()
+                        allow_list.append(cred)
+                        break
+                else:
+                    raise ValueError("No matching credential ID found")
+            else:
+                secrets = data.get("eval")
             salts = (
                 _prf_salt(secrets["first"]),
                 _prf_salt(secrets["second"]) if "second" in secrets else b"",

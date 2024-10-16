@@ -33,6 +33,7 @@ derive two separate secrets.
 from fido2.hid import CtapHidDevice
 from fido2.server import Fido2Server
 from fido2.client import Fido2Client, WindowsClient, UserInteraction
+from fido2.utils import websafe_encode
 from getpass import getpass
 import ctypes
 import sys
@@ -119,6 +120,10 @@ if not result.extension_results.get("prf", {}).get("enabled"):
 credential = result.attestation_object.auth_data.credential_data
 print("New credential created, with the PRF extension.")
 
+# If created with UV, keep using UV
+if result.attestation_object.auth_data.is_user_verified():
+    uv = "required"
+
 # Prepare parameters for getAssertion
 allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
@@ -155,7 +160,16 @@ print("Authenticate with second salt:", salt2.hex())
 result = client.get_assertion(
     {
         **request_options["publicKey"],
-        "extensions": {"prf": {"eval": {"first": salt, "second": salt2}}},
+        "extensions": {
+            "prf": {
+                "evalByCredential": {
+                    websafe_encode(credential.credential_id): {
+                        "first": salt,
+                        "second": salt2,
+                    }
+                }
+            }
+        },
     }
 )
 
