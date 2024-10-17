@@ -35,7 +35,8 @@ from ..webauthn import (
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
-    AttestationObject,
+    AuthenticatorSelectionCriteria,
+    UserVerificationRequirement,
 )
 from .. import cbor
 from enum import Enum, unique
@@ -357,21 +358,17 @@ class SignExtension(Ctap2Extension):
             raise ValueError("Invalid inputs")
 
         gk = data["generateKey"]
-        """
-        phData = 0
-        kty = 1
-        kid = 2
-        alg = 3
-        flags = 4
-        key-refs = 5
-        sig = 6
-        att-obj = 7
-        """
 
-        outputs = {
-            3: gk["algorithms"],
-            4: 0b101,  # TODO: 0b001 if UV not "required"
-        }
+        selection = (
+            self._create_options.authenticator_selection
+            or AuthenticatorSelectionCriteria()
+        )
+        flags = (
+            0b101
+            if selection.user_verification == UserVerificationRequirement.REQUIRED
+            else 0b001
+        )
+        outputs = {3: gk["algorithms"], 4: flags}
 
         if "phData" in gk:
             outputs[0] = gk["phData"]
@@ -380,16 +377,15 @@ class SignExtension(Ctap2Extension):
 
     def process_create_output(self, attestation_response, *args):
         data = attestation_response.auth_data.extensions.get(self.NAME)
-        att_obj = AttestationObject(data[7])
+        att_obj = AttestationResponse.from_dict(cbor.decode(data[7]))  # type: ignore
         cred_data = att_obj.auth_data.credential_data
         assert cred_data is not None  # nosec
         pk = cred_data.public_key
-        kh = cbor.encode({k: pk[k] for k in (1, 2, 3) if k in pk})
 
         output = {
             "generatedKey": {
                 "publicKey": cbor.encode(pk),
-                "keyHandle": kh,
+                "keyHandle": cbor.encode(pk.get_key_handle()),
             }
         }
 
@@ -406,18 +402,23 @@ class SignExtension(Ctap2Extension):
         if "sign" not in data or "generateKey" in data:
             raise ValueError("Invalid inputs")
 
+        sign = data["sign"]
+        by_creds = sign["keyHandleByCredential"]
+
+        # Make sure all keys are valid IDs from allow_credentials
         allow_list = self._get_options.allow_credentials
         if not allow_list:
-            raise ValueError("None or empty allowCredential")
-
-        sign = data["sign"]
-        kh_map = sign["keyHandleByCredential"]
-        # We may have more keys, as allow_list has been filtered
-        khs = [kh_map[websafe_encode(cred.id)] for cred in allow_list]
+            raise ValueError("sign requires allowCredentials")
+        ids = {websafe_encode(c.id) for c in allow_list}
+        if ids.difference(by_creds):
+            raise ValueError("keyHandleByCredential is not valid")
+        if not self._selected:
+            return
+        kh = by_creds[websafe_encode(self._selected.id)]
 
         return {
             0: sign["phData"],
-            5: khs,
+            5: [kh],
         }
 
     def process_get_output(self, assertion_response, *args):
