@@ -766,13 +766,14 @@ class _Ctap2ClientBackend(_ClientBackend):
             )
 
             if allow_list:
-                allow_cred = self._filter_creds(
+                selected_cred = self._filter_creds(
                     rp_id, allow_list, pin_protocol, pin_token, event, on_keepalive
                 )
-                if not allow_cred:
-                    raise CtapError(CtapError.ERR.NO_CREDENTIALS)
+                # We know the request will fail if selected_cred is None here
+                # BUT DO NOT FAIL EARLY! We still need to prompt for UP, so we keep
+                # processing the request
             else:
-                allow_cred = None
+                selected_cred = None
 
             # Process extensions
             extension_inputs = {}
@@ -780,7 +781,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             try:
                 for ext in extension_instances:
                     auth_input = ext._process_get_input_w_allow_list(
-                        client_inputs, allow_cred
+                        client_inputs, selected_cred
                     )
                     if auth_input is not None:
                         used_extensions.append(ext)
@@ -797,11 +798,16 @@ class _Ctap2ClientBackend(_ClientBackend):
             else:
                 pin_auth = None
 
+            if allow_list and not selected_cred:
+                # We still need to send a dummy value if there was an allow_list
+                # but no matches were found:
+                selected_cred = PublicKeyCredentialDescriptor(allow_list[0].type, b"\0")
+
             # Perform get assertion
             assertions = self.ctap2.get_assertions(
                 rp_id,
                 client_data_hash,
-                [_as_cbor(allow_cred)] if allow_cred else None,
+                [_as_cbor(selected_cred)] if selected_cred else None,
                 extension_inputs or None,
                 options,
                 pin_auth,
