@@ -33,7 +33,7 @@ from .blob import LargeBlobs
 from ..utils import sha256, websafe_encode
 from ..webauthn import PublicKeyCredentialDescriptor
 from enum import Enum, unique
-from typing import Dict, Tuple, Any, Optional, List
+from typing import Dict, Tuple, Any, Optional
 import abc
 import warnings
 import inspect
@@ -87,7 +87,7 @@ class Ctap2Extension(abc.ABC):
     def process_get_input(
         self,
         inputs: Dict[str, Any],
-        allow_list: Optional[List[PublicKeyCredentialDescriptor]] = None,
+        allow_credential: Optional[PublicKeyCredentialDescriptor] = None,
     ) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
@@ -97,19 +97,19 @@ class Ctap2Extension(abc.ABC):
     def _process_get_input_w_allow_list(
         self,
         inputs: Dict[str, Any],
-        allow_list: Optional[List[PublicKeyCredentialDescriptor]],
+        allow_credential: Optional[PublicKeyCredentialDescriptor],
     ) -> Any:
         s = inspect.signature(self.process_get_input)
         try:
-            s.bind(inputs, allow_list)
+            s.bind(inputs, allow_credential)
         except TypeError:
             warnings.warn(
-                f"{type(self)}.process_get_input() does not take allow_list, "
+                f"{type(self)}.process_get_input() does not take allow_credential, "
                 "which is deprecated.",
                 DeprecationWarning,
             )
             return self.process_get_input(inputs)
-        return self.process_get_input(inputs, allow_list)
+        return self.process_get_input(inputs, allow_credential)
 
     def process_get_input_with_permissions(
         self, inputs: Dict[str, Any]
@@ -162,7 +162,7 @@ class HmacSecretExtension(Ctap2Extension):
         else:
             return {"hmacCreateSecret": enabled}
 
-    def process_get_input(self, inputs, allow_list=None):
+    def process_get_input(self, inputs, allow_credential=None):
         if not self.is_supported():
             return
 
@@ -170,17 +170,10 @@ class HmacSecretExtension(Ctap2Extension):
         if data:
             by_creds = data.get("evalByCredential")
             if by_creds:
-                if not allow_list:
-                    raise ValueError("evalByCredentials requires allowList")
-                for cred in allow_list:
-                    key = websafe_encode(cred.id)
-                    if key in by_creds:
-                        secrets = by_creds[key]
-                        # Remove any other creds from the allow_list
-                        allow_list.clear()
-                        allow_list.append(cred)
-                        break
-                else:
+                if not allow_credential:
+                    raise ValueError("evalByCredentials requires allowCredentials")
+                secrets = by_creds.get(websafe_encode(allow_credential.id))
+                if not secrets:
                     raise ValueError("No matching credential ID found")
             else:
                 secrets = data.get("eval")

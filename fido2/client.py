@@ -481,7 +481,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         else:
             pin_auth = None
             version = None
-        matches = []
+
         for chunk in chunks:
             try:
                 assertions = self.ctap2.get_assertions(
@@ -495,24 +495,19 @@ class _Ctap2ClientBackend(_ClientBackend):
                     event=event,
                     on_keepalive=on_keepalive,
                 )
+                if len(chunk) == 1:
+                    # Credential ID might be omitted from assertions
+                    return chunk[0]
+                else:
+                    return PublicKeyCredentialDescriptor(**assertions[0].credential)
             except CtapError as e:
                 if e.code == CtapError.ERR.NO_CREDENTIALS:
                     # All creds in chunk are discarded
                     continue
                 raise
 
-            if len(chunk) == 1 and len(assertions) == 1:
-                # Credential ID might be omitted from assertions
-                matches.append(chunk[0])
-            else:
-                matches.extend(
-                    [PublicKeyCredentialDescriptor(**a.credential) for a in assertions]
-                )
-
-        if len(matches) > max_creds:
-            # Too many matches? Just return as many as we can handle
-            return matches[:max_creds]
-        return matches
+        # No matches found
+        return None
 
     def selection(self, event):
         if "FIDO_2_1" in self.info.versions:
@@ -656,11 +651,11 @@ class _Ctap2ClientBackend(_ClientBackend):
             )
 
             if exclude_list:
-                cred_list = self._filter_creds(
+                exclude_cred = self._filter_creds(
                     rp.id, exclude_list, pin_protocol, pin_token, event, on_keepalive
                 )
-            else:
-                cred_list = None
+                if exclude_cred:
+                    raise CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
 
             # Process extensions
             extension_inputs = {}
@@ -696,7 +691,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                     _as_cbor(rp),
                     _as_cbor(user),
                     _cbor_list(key_params),
-                    _cbor_list(cred_list),
+                    None,
                     extension_inputs or None,
                     options,
                     pin_auth,
@@ -768,13 +763,13 @@ class _Ctap2ClientBackend(_ClientBackend):
             )
 
             if allow_list:
-                cred_list = self._filter_creds(
+                allow_cred = self._filter_creds(
                     rp_id, allow_list, pin_protocol, pin_token, event, on_keepalive
                 )
-                if not cred_list:
+                if not allow_cred:
                     raise CtapError(CtapError.ERR.NO_CREDENTIALS)
             else:
-                cred_list = None
+                allow_cred = None
 
             # Process extensions
             extension_inputs = {}
@@ -782,7 +777,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             try:
                 for ext in extension_instances:
                     auth_input = ext._process_get_input_w_allow_list(
-                        client_inputs, cred_list
+                        client_inputs, allow_cred
                     )
                     if auth_input is not None:
                         used_extensions.append(ext)
@@ -803,7 +798,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             assertions = self.ctap2.get_assertions(
                 rp_id,
                 client_data_hash,
-                _cbor_list(cred_list),
+                [_as_cbor(allow_cred)] if allow_cred else None,
                 extension_inputs or None,
                 options,
                 pin_auth,
