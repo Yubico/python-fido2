@@ -654,8 +654,11 @@ class _Ctap2ClientBackend(_ClientBackend):
                 exclude_cred = self._filter_creds(
                     rp.id, exclude_list, pin_protocol, pin_token, event, on_keepalive
                 )
-                if exclude_cred:
-                    raise CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
+                # We know the request will fail if exclude_cred is not None here
+                # BUT DO NOT FAIL EARLY! We still need to prompt for UP, so we keep
+                # processing the request
+            else:
+                exclude_cred = None
 
             # Process extensions
             extension_inputs = {}
@@ -691,7 +694,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                     _as_cbor(rp),
                     _as_cbor(user),
                     _cbor_list(key_params),
-                    None,
+                    [_as_cbor(exclude_cred)] if exclude_cred else None,
                     extension_inputs or None,
                     options,
                     pin_auth,
