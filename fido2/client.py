@@ -634,6 +634,9 @@ class _Ctap2ClientBackend(_ClientBackend):
         rk = selection.require_resident_key
         user_verification = selection.user_verification
 
+        on_keepalive = _user_keepalive(self.user_interaction)
+
+        # Handle enterprise attestation
         enterprise_attestation = None
         if options.attestation == AttestationConveyancePreference.ENTERPRISE:
             if self.info.options.get("ep"):
@@ -644,8 +647,6 @@ class _Ctap2ClientBackend(_ClientBackend):
                 else:
                     # Vendor facilitated
                     enterprise_attestation = 1
-
-        on_keepalive = _user_keepalive(self.user_interaction)
 
         # Gather up permissions
         permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
@@ -658,6 +659,8 @@ class _Ctap2ClientBackend(_ClientBackend):
         used_extensions = []
         client_inputs = extensions or {}
         for ext in extension_instances:
+            # TODO: Move options to the constructor instead
+            ext._create_options = options
             permissions |= ext.get_create_permissions(client_inputs)
 
         def _do_make():
@@ -775,6 +778,8 @@ class _Ctap2ClientBackend(_ClientBackend):
         extension_instances = [cls(self.ctap2) for cls in self.extensions]
         client_inputs = extensions or {}
         for ext in extension_instances:
+            # TODO: Move options to get_get_permissions and process_get_input
+            ext._get_options = options
             permissions |= ext.get_get_permissions(client_inputs)
 
         def _do_auth():
@@ -798,9 +803,9 @@ class _Ctap2ClientBackend(_ClientBackend):
             used_extensions = []
             try:
                 for ext in extension_instances:
-                    auth_input = ext._process_get_input_w_allow_list(
-                        client_inputs, selected_cred
-                    )
+                    # TODO: Move to process_get_input()
+                    ext._selected = selected_cred
+                    auth_input = ext.process_get_input(client_inputs)
                     if auth_input is not None:
                         used_extensions.append(ext)
                         extension_inputs[ext.NAME] = auth_input

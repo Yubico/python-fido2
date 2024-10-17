@@ -31,12 +31,15 @@ from .base import AttestationResponse, AssertionResponse, Ctap2
 from .pin import ClientPin, PinProtocol
 from .blob import LargeBlobs
 from ..utils import sha256, websafe_encode
-from ..webauthn import PublicKeyCredentialDescriptor
+from ..webauthn import (
+    PublicKeyCredentialDescriptor,
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialRequestOptions,
+)
 from enum import Enum, unique
 from typing import Dict, Tuple, Any, Optional
 import abc
 import warnings
-import inspect
 
 
 class Ctap2Extension(abc.ABC):
@@ -49,6 +52,10 @@ class Ctap2Extension(abc.ABC):
 
     def __init__(self, ctap: Ctap2):
         self.ctap = ctap
+        # TODO: Pass options and selected to the various methods that need them instead
+        self._create_options: PublicKeyCredentialCreationOptions
+        self._get_options: PublicKeyCredentialRequestOptions
+        self._selected: Optional[PublicKeyCredentialDescriptor]
 
     def is_supported(self) -> bool:
         """Whether or not the extension is supported by the authenticator."""
@@ -84,32 +91,11 @@ class Ctap2Extension(abc.ABC):
     def get_get_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
         return ClientPin.PERMISSION(0)
 
-    def process_get_input(
-        self,
-        inputs: Dict[str, Any],
-        allow_credential: Optional[PublicKeyCredentialDescriptor] = None,
-    ) -> Any:
+    def process_get_input(self, inputs: Dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
         """
         return None
-
-    def _process_get_input_w_allow_list(
-        self,
-        inputs: Dict[str, Any],
-        allow_credential: Optional[PublicKeyCredentialDescriptor],
-    ) -> Any:
-        s = inspect.signature(self.process_get_input)
-        try:
-            s.bind(inputs, allow_credential)
-        except TypeError:
-            warnings.warn(
-                f"{type(self)}.process_get_input() does not take allow_credential, "
-                "which is deprecated.",
-                DeprecationWarning,
-            )
-            return self.process_get_input(inputs)
-        return self.process_get_input(inputs, allow_credential)
 
     def process_get_input_with_permissions(
         self, inputs: Dict[str, Any]
@@ -162,21 +148,30 @@ class HmacSecretExtension(Ctap2Extension):
         else:
             return {"hmacCreateSecret": enabled}
 
-    def process_get_input(self, inputs, allow_credential=None):
+    def process_get_input(self, inputs):
         if not self.is_supported():
             return
 
         data = inputs.get("prf")
         if data:
+            secrets = data.get("eval")
             by_creds = data.get("evalByCredential")
             if by_creds:
-                if not allow_credential:
+                # Make sure all keys are valid IDs from allow_credentials
+                allow_list = self._get_options.allow_credentials
+                if not allow_list:
                     raise ValueError("evalByCredentials requires allowCredentials")
-                secrets = by_creds.get(websafe_encode(allow_credential.id))
-                if not secrets:
-                    raise ValueError("No matching credential ID found")
-            else:
-                secrets = data.get("eval")
+                ids = {websafe_encode(c.id) for c in allow_list}
+                if not ids.issuperset(by_creds):
+                    raise ValueError("evalByCredentials contains invalid key")
+                if self._selected:
+                    key = websafe_encode(self._selected.id)
+                    if key in by_creds:
+                        secrets = by_creds[key]
+
+            if not secrets:
+                return
+
             salts = (
                 _prf_salt(secrets["first"]),
                 _prf_salt(secrets["second"]) if "second" in secrets else b"",
