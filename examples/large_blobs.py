@@ -88,9 +88,9 @@ else:
         sys.exit(1)
 
     # Prefer UV token if supported
-    if client.info.options.get("pinUvAuthToken") or client.info.options.get("uv"):
+    if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
         uv = "preferred"
-        print("Authenticator supports UV token")
+        print("Authenticator is configured for User Verification")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"})

@@ -112,9 +112,7 @@ class CtapPcscDevice(CtapDevice):
         logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", apdu.hex())
         resp, sw1, sw2 = self._conn.transmit(list(apdu), protocol)
         response = bytes(resp)
-        logger.log(
-            LOG_LEVEL_TRAFFIC, "RECV: %s SW=%04X", response.hex(), sw1 << 8 + sw2
-        )
+        logger.log(LOG_LEVEL_TRAFFIC, "RECV: %s SW=%02X%02X", response.hex(), sw1, sw2)
 
         return response, sw1, sw2
 

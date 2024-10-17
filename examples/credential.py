@@ -79,7 +79,7 @@ else:
     client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
 
     # Prefer UV if supported and configured
-    if client.info.options.get("uv") or client.info.options.get("pinUvAuthToken"):
+    if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
         uv = "preferred"
         print("Authenticator supports User Verification")
 
