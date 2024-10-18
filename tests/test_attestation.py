@@ -226,12 +226,13 @@ ee18128ed50dd7a855e54d2459db005""".replace(
         try:
             res = attestation.verify(statement, auth_data, client_param)
         except UnsupportedAlgorithm as e:
-            if e._reason is _Reasons.UNSUPPORTED_HASH:
+            if e._reason == _Reasons.UNSUPPORTED_HASH:
                 self.skipTest(
                     "SHA1 signature verification not supported on this machine"
                 )
+            else:
+                raise e
 
-        res = attestation.verify(statement, auth_data, client_param)
         self.assertEqual(res.attestation_type, AttestationType.ATT_CA)
         verify_x509_chain(res.trust_path)
 
