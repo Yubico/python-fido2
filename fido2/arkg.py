@@ -1,4 +1,5 @@
 from .cose import CoseKey
+from .utils import int2bytes, bytes2int
 
 from cryptography.hazmat.primitives.hashes import SHA256, Hash, HashAlgorithm
 from cryptography.hazmat.primitives.hmac import HMAC
@@ -64,7 +65,7 @@ def hash_to_field(msg, count, dst, p, L, H):
     for i in range(count):
         offset = L * i
         tv = uniform_bytes[offset : offset + L]
-        e_j = int.from_bytes(tv) % p
+        e_j = bytes2int(tv) % p
         elements.append(e_j)
     return elements
 
@@ -102,7 +103,7 @@ class HTF:
         for i in range(count):
             offset = self.L * i
             tv = uniform_bytes[offset : offset + self.L]
-            e_j = int.from_bytes(tv) % self.p
+            e_j = bytes2int(tv) % self.p
             elements.append(e_j)
         return elements
 
@@ -169,7 +170,7 @@ class KEM:
             c = Elliptic-Curve-Point-to-Octet-String(pk')
         """
         pk_prime, sk_prime = self.sub_kem_generate()
-        k = int.to_bytes((pk * sk_prime).x, 32)
+        k = int2bytes((pk * sk_prime).x, 32)
         c = SEC1Encoder().encode_public_key(pk_prime, compressed=False)
 
         return k, c
@@ -321,8 +322,8 @@ class ARKG_P256ADD_ECDH(CoseKey):
                 1: 2,
                 3: -7,
                 -1: 1,
-                -2: int.to_bytes(point.x, 32),
-                -3: int.to_bytes(point.y, 32),
+                -2: int2bytes(point.x, 32),
+                -3: int2bytes(point.y, 32),
             }
         )
         return pk, kh
