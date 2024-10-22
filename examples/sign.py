@@ -126,6 +126,7 @@ sign_key = sign_result.get("generatedKey")
 if not sign_key:
     print("Failed to create credential with sign extension", result.extension_results)
     sys.exit(1)
+print("New credential created, with the sign extension.")
 
 pk = CoseKey.parse(cbor.decode(sign_key["publicKey"]))  # COSE key in bytes
 kh = sign_key["keyHandle"]  # key handle in bytes
@@ -139,11 +140,6 @@ print("Signature verified!")
 
 message = b"New message"
 ph_data = sha256(message)
-credential = result.attestation_object.auth_data.credential_data
-print("New credential created, with the sign extension.")
-
-# Prepare parameters for getAssertion
-allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
@@ -157,7 +153,7 @@ result = client.get_assertion(
                 "sign": {
                     "phData": ph_data,
                     "keyHandleByCredential": {
-                        websafe_encode(credential.credential_id): kh,
+                        websafe_encode(credentials[0].credential_id): kh,
                     },
                 },
             }
