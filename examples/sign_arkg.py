@@ -142,6 +142,8 @@ info = b"my-info-here"
 # ARKG derive_public_key used blinding and KEM keys
 pk2, kh2 = pk.derive_public_key(info)
 
+# kty: Ref-ARKG-derived
+key_ref[1] = -65538
 # Key ref needs inner keyhandle and info from the derivation step
 key_ref[-1] = kh2
 key_ref[-2] = info
@@ -186,6 +188,5 @@ print("GET sign result", sign_result)
 signature = sign_result.get("signature")
 
 print("Test verify signature", signature.hex())
-# Is this the right public key to verify with?
 pk2.verify(message, signature)
 print("Signature verified!")
