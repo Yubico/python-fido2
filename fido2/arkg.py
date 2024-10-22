@@ -354,8 +354,8 @@ class ARKG_P256ADD_ECDH(CoseKey):
 
     def derive_public_key(self, info: bytes) -> Tuple[CoseKey, bytes]:
         point, kh = self._ARKG.derive_public_key(
-            _cose2point(self.blinding_key),
             _cose2point(self.kem_key),
+            _cose2point(self.blinding_key),
             info,
         )
         pk = CoseKey.parse(
