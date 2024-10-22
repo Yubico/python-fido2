@@ -1,5 +1,6 @@
 from .cose import CoseKey
 from .utils import int2bytes, bytes2int
+from . import cbor
 
 from cryptography.hazmat.primitives.hashes import SHA256, Hash, HashAlgorithm
 from cryptography.hazmat.primitives.hmac import HMAC
@@ -367,4 +368,17 @@ class ARKG_P256ADD_ECDH(CoseKey):
                 -3: int2bytes(point.y, 32),
             }
         )
-        return pk, kh
+
+        # Return the complete COSE key ref used as key handle to getAssertion
+        ref = dict(self.get_key_handle())
+        ref.update(
+            {
+                1: -65538,  # kty: Ref-ARKG-derived
+                -1: kh,
+                -2: info,
+            }
+        )
+
+        ref_kh = cbor.encode(ref)
+
+        return pk, ref_kh

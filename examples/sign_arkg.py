@@ -128,30 +128,17 @@ if not sign_key:
 pk = CoseKey.parse(cbor.decode(sign_key["publicKey"]))  # COSE key in bytes
 kh = sign_key["keyHandle"]  # key handle in bytes
 print("public key", pk)
-print("keyHandle", kh.hex())
+print("keyHandle from Authenticator", cbor.decode(kh))
 
 # Master public key contains blinding and KEM keys
+# ARKG derive_public_key uses these
 print("Blinding public key", pk.blinding_key)
 print("KEM public key", pk.kem_key)
 
-
-# Create new COSE key ref from the resulting keyhandle
-key_ref = cbor.decode(kh)
+# Arbitrary bytestring used for info
 info = b"my-info-here"
-
-# ARKG derive_public_key used blinding and KEM keys
-pk2, kh2 = pk.derive_public_key(info)
-
-# kty: Ref-ARKG-derived
-key_ref[1] = -65538
-# Key ref needs inner keyhandle and info from the derivation step
-key_ref[-1] = kh2
-key_ref[-2] = info
-
-print("Created key ref", key_ref)
-
-# Encode key ref as CBOR to send as the keyHandle to getAssertsion
-kh = cbor.encode(key_ref)
+# Derived public key to verify with, and kh to send to Authenticator
+pk2, kh = pk.derive_public_key(info)
 
 # Prepare a message to sign
 message = b"New message"
@@ -189,4 +176,4 @@ signature = sign_result.get("signature")
 
 print("Test verify signature", signature.hex())
 pk2.verify(message, signature)
-print("Signature verified!")
+print("Signature verified with derived public key!")
