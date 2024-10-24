@@ -128,8 +128,8 @@ if result.attestation_object.auth_data.is_user_verified():
 allow_list = [{"type": "public-key", "id": credential.credential_id}]
 
 # Generate a salt for PRF:
-salt = os.urandom(32)
-print("Authenticate with salt:", salt.hex())
+salt = websafe_encode(os.urandom(32))
+print("Authenticate with salt:", salt)
 
 
 # Prepare parameters for getAssertion
@@ -144,10 +144,10 @@ result = client.get_assertion(
 )
 
 # Only one cred in allowCredentials, only one response.
-result = result.get_response(0)
+response = result.get_response(0)
 
-output1 = result.extension_results["prf"]["results"]["first"]
-print("Authenticated, secret:", output1.hex())
+output1 = response.extension_results["prf"]["results"]["first"]
+print("Authenticated, secret:", output1)
 
 # Authenticate again, using two salts to generate two secrets.
 
@@ -156,8 +156,8 @@ print("Authenticated, secret:", output1.hex())
 # completeness of the example.
 
 # Generate a second salt for PRF:
-salt2 = os.urandom(32)
-print("Authenticate with second salt:", salt2.hex())
+salt2 = websafe_encode(os.urandom(32))
+print("Authenticate with second salt:", salt2)
 # The first salt is reused, which should result in the same secret.
 
 result = client.get_assertion(
@@ -177,8 +177,8 @@ result = client.get_assertion(
 )
 
 # Only one cred in allowCredentials, only one response.
-result = result.get_response(0)
+response = result.get_response(0)
 
-output = result.extension_results["prf"]["results"]
-print("Old secret:", output["first"].hex())
-print("New secret:", output["second"].hex())
+output = response.extension_results["prf"]["results"]
+print("Old secret:", output["first"])
+print("New secret:", output["second"])

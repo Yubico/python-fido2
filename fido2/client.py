@@ -32,7 +32,7 @@ from .ctap import CtapDevice, CtapError
 from .ctap1 import Ctap1, APDU, ApduError
 from .ctap2 import Ctap2, AssertionResponse, Info
 from .ctap2.pin import ClientPin, PinProtocol
-from .ctap2.extensions import Ctap2Extension
+from .ctap2.extensions import Ctap2Extension, ClientExtensionOutputs
 from .webauthn import (
     Aaguid,
     AttestationObject,
@@ -442,7 +442,7 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
                     extension_outputs.update(output)
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
-        return extension_outputs
+        return ClientExtensionOutputs(extension_outputs)
 
 
 def _cbor_list(values):
@@ -687,6 +687,9 @@ class _Ctap2ClientBackend(_ClientBackend):
                     if auth_input is not None:
                         used_extensions.append(ext)
                         extension_inputs[ext.NAME] = auth_input
+                    elif ext._used:
+                        # TODO: Make this cleaner
+                        used_extensions.append(ext)
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
@@ -741,9 +744,6 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Process extenstion outputs
         extension_outputs = {}
-        # credProps is manually handled since it requires no Authenticator interaction
-        if client_inputs.get("credProps"):
-            extension_outputs["credProps"] = {"rk": rk}
         try:
             for ext in used_extensions:
                 output = ext.process_create_output(att_obj, pin_token, pin_protocol)
@@ -755,7 +755,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         return AuthenticatorAttestationResponse(
             client_data,
             AttestationObject.create(att_obj.fmt, att_obj.auth_data, att_obj.att_stmt),
-            extension_outputs,
+            ClientExtensionOutputs(extension_outputs),
         )
 
     def do_get_assertion(
@@ -809,6 +809,9 @@ class _Ctap2ClientBackend(_ClientBackend):
                     if auth_input is not None:
                         used_extensions.append(ext)
                         extension_inputs[ext.NAME] = auth_input
+                    elif ext._used:
+                        # TODO: Make this cleaner
+                        used_extensions.append(ext)
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 

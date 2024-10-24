@@ -30,14 +30,16 @@ from __future__ import annotations
 from .base import AttestationResponse, AssertionResponse, Ctap2
 from .pin import ClientPin, PinProtocol
 from .blob import LargeBlobs
-from ..utils import sha256, websafe_encode
+from ..utils import sha256, websafe_encode, _JsonDataObject
 from ..webauthn import (
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
+    AuthenticatorSelectionCriteria,
 )
 from enum import Enum, unique
-from typing import Dict, Tuple, Any, Optional
+from dataclasses import dataclass
+from typing import Dict, Tuple, Any, Optional, Mapping
 import abc
 import warnings
 
@@ -56,6 +58,7 @@ class Ctap2Extension(abc.ABC):
         self._create_options: PublicKeyCredentialCreationOptions
         self._get_options: PublicKeyCredentialRequestOptions
         self._selected: Optional[PublicKeyCredentialDescriptor]
+        self._used = False
 
     def is_supported(self) -> bool:
         """Whether or not the extension is supported by the authenticator."""
@@ -115,13 +118,43 @@ class Ctap2Extension(abc.ABC):
         return None
 
 
+@dataclass(eq=False, frozen=True)
+class _HmacGetSecretInput(_JsonDataObject):
+    salt1: bytes
+    salt2: Optional[bytes] = None
+
+
+@dataclass(eq=False, frozen=True)
+class _HmacGetSecretOutput(_JsonDataObject):
+    output1: bytes
+    output2: Optional[bytes] = None
+
+
 def _prf_salt(secret):
     return sha256(b"WebAuthn PRF\0" + secret)
 
 
+@dataclass(eq=False, frozen=True)
+class _PrfValues(_JsonDataObject):
+    first: bytes
+    second: Optional[bytes] = None
+
+
+@dataclass(eq=False, frozen=True)
+class _PrfInputs(_JsonDataObject):
+    eval: Optional[_PrfValues] = None
+    evalByCredential: Optional[Mapping[str, _PrfValues]] = None
+
+
+@dataclass(eq=False, frozen=True)
+class _PrfOutputs(_JsonDataObject):
+    enabled: Optional[bool] = None
+    results: Optional[_PrfValues] = None
+
+
 class HmacSecretExtension(Ctap2Extension):
     """
-    Implements the hmac-secret CTAP2 extension.
+    Implements the PRF extension and the hmac-secret CTAP2 extension.
     """
 
     NAME = "hmac-secret"
@@ -144,7 +177,8 @@ class HmacSecretExtension(Ctap2Extension):
     def process_create_output(self, attestation_response, *args):
         enabled = attestation_response.auth_data.extensions.get(self.NAME, False)
         if self.prf:
-            return {"prf": {"enabled": enabled}}
+            return {"prf": _PrfOutputs(enabled=enabled)}
+
         else:
             return {"hmacCreateSecret": enabled}
 
@@ -154,8 +188,9 @@ class HmacSecretExtension(Ctap2Extension):
 
         data = inputs.get("prf")
         if data:
-            secrets = data.get("eval")
-            by_creds = data.get("evalByCredential")
+            prf = _PrfInputs.from_dict(data)
+            secrets = prf.eval
+            by_creds = prf.evalByCredential
             if by_creds:
                 # Make sure all keys are valid IDs from allow_credentials
                 allow_list = self._get_options.allow_credentials
@@ -173,15 +208,16 @@ class HmacSecretExtension(Ctap2Extension):
                 return
 
             salts = (
-                _prf_salt(secrets["first"]),
-                _prf_salt(secrets["second"]) if "second" in secrets else b"",
+                _prf_salt(secrets.first),
+                _prf_salt(secrets.second) if secrets.second is not None else b"",
             )
             self.prf = True
         else:
             data = inputs.get("hmacGetSecret")
             if not data or not self._allow_hmac_secret:
                 return
-            salts = data["salt1"], data.get("salt2", b"")
+            res = _HmacGetSecretInput.from_dict(data)
+            salts = res.salt1, res.salt2 or b""
             self.prf = False
 
         if not (
@@ -210,18 +246,26 @@ class HmacSecretExtension(Ctap2Extension):
 
         decrypted = self.pin_protocol.decrypt(self.shared_secret, value)
         output1 = decrypted[: HmacSecretExtension.SALT_LEN]
-        output2 = decrypted[HmacSecretExtension.SALT_LEN :]
+        output2 = decrypted[HmacSecretExtension.SALT_LEN :] or None
 
         if self.prf:
-            results = {"first": output1}
-            if output2:
-                results["second"] = output2
-            return {"prf": {"results": results}}
+            return {"prf": _PrfOutputs(results=_PrfValues(output1, output2))}
         else:
-            results = {"output1": output1}
-            if output2:
-                results["output2"] = output2
-            return {"hmacGetSecret": results}
+            return {"hmacGetSecret": _HmacGetSecretOutput(output1, output2)}
+
+
+@dataclass(eq=False, frozen=True)
+class _LargeBlobInputs(_JsonDataObject):
+    support: Optional[str] = None
+    read: Optional[bool] = None
+    write: Optional[bytes] = None
+
+
+@dataclass(eq=False, frozen=True)
+class _LargeBlobOutputs(_JsonDataObject):
+    supported: Optional[bool] = None
+    blob: Optional[bytes] = None
+    written: Optional[bool] = None
 
 
 class LargeBlobExtension(Ctap2Extension):
@@ -235,36 +279,37 @@ class LargeBlobExtension(Ctap2Extension):
         return super().is_supported() and self.ctap.info.options.get("largeBlobs")
 
     def process_create_input(self, inputs):
-        data = inputs.get("largeBlob", {})
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob", {}))
         if data:
-            if "read" in data or "write" in data:
+            if data.read or data.write:
                 raise ValueError("Invalid set of parameters")
-            is_supported = self.is_supported()
-            if data.get("support") == "required" and not is_supported:
+            if data.support == "required" and not self.is_supported():
                 raise ValueError("Authenticator does not support large blob storage")
             return True
 
     def process_create_output(self, attestation_response, *args):
         return {
-            "largeBlob": {"supported": attestation_response.large_blob_key is not None}
+            "largeBlob": _LargeBlobOutputs(
+                supported=attestation_response.large_blob_key is not None
+            )
         }
 
     def get_get_permissions(self, inputs):
-        if inputs.get("largeBlob", {}).get("write"):
+        if _LargeBlobInputs.from_dict(inputs.get("largeBlob", {})).write:
             return ClientPin.PERMISSION.LARGE_BLOB_WRITE
         return ClientPin.PERMISSION(0)
 
     def process_get_input(self, inputs):
-        data = inputs.get("largeBlob", {})
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob", {}))
         if data:
-            if "support" in data or ("read" in data and "write" in data):
+            if data.support or (data.read and data.write):
                 raise ValueError("Invalid set of parameters")
             if not self.is_supported():
                 raise ValueError("Authenticator does not support large blob storage")
-            if data.get("read") is True:
+            if data.read:
                 self._action = True
             else:
-                self._action = data.get("write")
+                self._action = data.write
         return True if data else None
 
     def process_get_output(self, assertion_response, token, pin_protocol):
@@ -272,11 +317,12 @@ class LargeBlobExtension(Ctap2Extension):
         if self._action is True:  # Read
             large_blobs = LargeBlobs(self.ctap)
             blob = large_blobs.get_blob(blob_key)
-            return {"largeBlob": {"blob": blob}}
+            return {"largeBlob": _LargeBlobOutputs(blob=blob)}
+
         elif self._action:  # Write
             large_blobs = LargeBlobs(self.ctap, pin_protocol, token)
             large_blobs.put_blob(blob_key, self._action)
-            return {"largeBlob": {"written": True}}
+            return {"largeBlob": _LargeBlobOutputs(written=True)}
 
 
 class CredBlobExtension(Ctap2Extension):
@@ -339,4 +385,52 @@ class MinPinLengthExtension(Ctap2Extension):
             return True
 
 
-# NOTE: credProps is handled in fido2.client.Fido2Client
+@dataclass(eq=False, frozen=True)
+class _CredPropsOutputs(_JsonDataObject):
+    rk: Optional[bool] = None
+
+
+class CredPropsExtension(Ctap2Extension):
+    """
+    Implements the Credential Properties WebAuthn extension.
+    """
+
+    NAME = "credProps"
+
+    def is_supported(self):  # NB: There is no key in the extensions field.
+        return True
+
+    def process_create_input(self, inputs):
+        if inputs.get(self.NAME) is True:
+            # This extension doesn't provide any input to the authenticator,
+            # but still needs to add output.
+            self._used = True
+
+    def process_create_output(self, attestation_response, *args):
+        selection = (
+            self._create_options.authenticator_selection
+            or AuthenticatorSelectionCriteria()
+        )
+        rk = selection.require_resident_key
+        return {"credProps": _CredPropsOutputs(rk=rk)}
+
+
+class ClientExtensionOutputs(Mapping[str, Any]):
+    def __init__(self, outputs: Mapping[str, Any]):
+        self._members = {k: v for k, v in outputs.items() if v is not None}
+
+    def __iter__(self):
+        return iter(self._members)
+
+    def __len__(self):
+        return len(self._members)
+
+    def __getitem__(self, key):
+        value = self._members[key]
+        return dict(value) if isinstance(value, Mapping) else value
+
+    def __getattr__(self, key):
+        return self._members.get(key)
+
+    def __repr__(self):
+        return repr(dict(self))

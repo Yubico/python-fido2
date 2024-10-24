@@ -227,7 +227,7 @@ class _DataClassMapping(Mapping[_T, Any]):
 
         # Check if type is already correct
         try:
-            if isinstance(value, t):
+            if t is Any or isinstance(value, t):
                 return value
         except TypeError:
             pass
@@ -241,8 +241,11 @@ class _DataClassMapping(Mapping[_T, Any]):
         elif issubclass(getattr(t, "__origin__", object), Mapping) and isinstance(
             value, Mapping
         ):
-            # Note: We are not recursively parsing members of the mapping
-            return value
+            t_k, t_v = t.__args__
+            return {
+                cls._parse_value(t_k, k): cls._parse_value(t_v, v)
+                for k, v in value.items()
+            }
 
         # Check if type has from_dict
         if hasattr(t, "from_dict"):
@@ -298,6 +301,12 @@ class _JsonDataObject(_DataClassMapping[str]):
 
     @classmethod
     def _parse_value(cls, t, value):
-        if isinstance(t, type) and issubclass(t, bytes) and isinstance(value, str):
+        if Optional[t] == t:  # Optional, get the type
+            t2 = t.__args__[0]
+        else:
+            t2 = t
+        # bytes are encoded as websafe_b64 strings
+        if isinstance(t2, type) and issubclass(t2, bytes) and isinstance(value, str):
             return websafe_decode(value)
+
         return super()._parse_value(t, value)
