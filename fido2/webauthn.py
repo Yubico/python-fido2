@@ -573,6 +573,13 @@ class AuthenticatorAttestationResponse(_WebAuthnDataObject):
             data = value
         return super().from_dict(data)
 
+    @classmethod
+    def _parse_value(cls, t, value):
+        if t == Optional[Mapping[str, Any]]:
+            # Don't convert extension_results
+            return value
+        return super()._parse_value(t, value)
+
 
 @dataclass(eq=False, frozen=True)
 class AuthenticatorAssertionResponse(_WebAuthnDataObject):
@@ -595,6 +602,13 @@ class AuthenticatorAssertionResponse(_WebAuthnDataObject):
             value["clientDataJSON"] = value.pop("clientData", None)
             data = value
         return super().from_dict(data)
+
+    @classmethod
+    def _parse_value(cls, t, value):
+        if t == Optional[Mapping[str, Any]]:
+            # Don't convert extension_results
+            return value
+        return super()._parse_value(t, value)
 
 
 @dataclass(eq=False, frozen=True)

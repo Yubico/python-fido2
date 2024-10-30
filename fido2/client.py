@@ -379,7 +379,7 @@ class _Ctap1ClientBackend(_ClientBackend):
         return AuthenticatorAttestationResponse(
             client_data,
             AttestationObject.create(att_obj.fmt, att_obj.auth_data, att_obj.att_stmt),
-            {},
+            ClientExtensionOutputs({}),
         )
 
     def do_get_assertion(
@@ -1103,7 +1103,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         logger.info("New credential registered")
         return AuthenticatorAttestationResponse(
-            client_data, AttestationObject(result), extensions
+            client_data, AttestationObject(result), ClientExtensionOutputs(extensions)
         )
 
     def get_assertion(self, options, **kwargs):
@@ -1151,5 +1151,5 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     user=user,
                 )
             ],
-            extensions,
+            ClientExtensionOutputs(extensions),
         )

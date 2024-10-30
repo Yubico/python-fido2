@@ -44,6 +44,31 @@ import abc
 import warnings
 
 
+class ClientExtensionOutputs(Mapping[str, Any]):
+    def __init__(self, outputs: Mapping[str, Any]):
+        self._members = {k: v for k, v in outputs.items() if v is not None}
+
+    def __iter__(self):
+        return iter(self._members)
+
+    def __len__(self):
+        return len(self._members)
+
+    def __getitem__(self, key):
+        value = self._members[key]
+        if isinstance(value, bytes):
+            return websafe_encode(value)
+        return dict(value) if isinstance(value, Mapping) else value
+
+    def __getattr__(self, key):
+        parts = key.split("_")
+        name = parts[0] + "".join(p.title() for p in parts[1:])
+        return self._members.get(name)
+
+    def __repr__(self):
+        return repr(dict(self))
+
+
 class Ctap2Extension(abc.ABC):
     """Base class for Ctap2 extensions.
     Subclasses are instantiated for a single request, if the Authenticator supports
@@ -143,7 +168,7 @@ class _PrfValues(_JsonDataObject):
 @dataclass(eq=False, frozen=True)
 class _PrfInputs(_JsonDataObject):
     eval: Optional[_PrfValues] = None
-    evalByCredential: Optional[Mapping[str, _PrfValues]] = None
+    eval_by_credential: Optional[Mapping[str, _PrfValues]] = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -186,11 +211,10 @@ class HmacSecretExtension(Ctap2Extension):
         if not self.is_supported():
             return
 
-        data = inputs.get("prf")
-        if data:
-            prf = _PrfInputs.from_dict(data)
+        prf = _PrfInputs.from_dict(inputs.get("prf"))
+        if prf:
             secrets = prf.eval
-            by_creds = prf.evalByCredential
+            by_creds = prf.eval_by_credential
             if by_creds:
                 # Make sure all keys are valid IDs from allow_credentials
                 allow_list = self._get_options.allow_credentials
@@ -213,11 +237,10 @@ class HmacSecretExtension(Ctap2Extension):
             )
             self.prf = True
         else:
-            data = inputs.get("hmacGetSecret")
-            if not data or not self._allow_hmac_secret:
+            get_secret = _HmacGetSecretInput.from_dict(inputs.get("hmacGetSecret"))
+            if not get_secret or not self._allow_hmac_secret:
                 return
-            res = _HmacGetSecretInput.from_dict(data)
-            salts = res.salt1, res.salt2 or b""
+            salts = get_secret.salt1, get_secret.salt2 or b""
             self.prf = False
 
         if not (
@@ -279,7 +302,7 @@ class LargeBlobExtension(Ctap2Extension):
         return super().is_supported() and self.ctap.info.options.get("largeBlobs")
 
     def process_create_input(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob", {}))
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
         if data:
             if data.read or data.write:
                 raise ValueError("Invalid set of parameters")
@@ -295,12 +318,13 @@ class LargeBlobExtension(Ctap2Extension):
         }
 
     def get_get_permissions(self, inputs):
-        if _LargeBlobInputs.from_dict(inputs.get("largeBlob", {})).write:
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        if data and data.write:
             return ClientPin.PERMISSION.LARGE_BLOB_WRITE
         return ClientPin.PERMISSION(0)
 
     def process_get_input(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob", {}))
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
         if data:
             if data.support or (data.read and data.write):
                 raise ValueError("Invalid set of parameters")
@@ -310,7 +334,7 @@ class LargeBlobExtension(Ctap2Extension):
                 self._action = True
             else:
                 self._action = data.write
-        return True if data else None
+            return True
 
     def process_get_output(self, assertion_response, token, pin_protocol):
         blob_key = assertion_response.large_blob_key
@@ -413,24 +437,3 @@ class CredPropsExtension(Ctap2Extension):
         )
         rk = selection.require_resident_key
         return {"credProps": _CredPropsOutputs(rk=rk)}
-
-
-class ClientExtensionOutputs(Mapping[str, Any]):
-    def __init__(self, outputs: Mapping[str, Any]):
-        self._members = {k: v for k, v in outputs.items() if v is not None}
-
-    def __iter__(self):
-        return iter(self._members)
-
-    def __len__(self):
-        return len(self._members)
-
-    def __getitem__(self, key):
-        value = self._members[key]
-        return dict(value) if isinstance(value, Mapping) else value
-
-    def __getattr__(self, key):
-        return self._members.get(key)
-
-    def __repr__(self):
-        return repr(dict(self))

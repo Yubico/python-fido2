@@ -152,7 +152,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-output1 = result.extension_results["hmacGetSecret"]["output1"]
+output1 = result.extension_results.hmac_get_secret.output1
 print("Authenticated, secret:", output1.hex())
 
 # Authenticate again, using two salts to generate two secrets:
@@ -173,6 +173,6 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-output = result.extension_results["hmacGetSecret"]
-print("Old secret:", output["output1"].hex())
-print("New secret:", output["output2"].hex())
+output = result.extension_results.hmac_get_secret
+print("Old secret:", output.output1.hex())
+print("New secret:", output.output2.hex())
