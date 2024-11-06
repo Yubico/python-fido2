@@ -57,8 +57,12 @@ create_options, state = server.register_begin(
 )
 
 # Create a credential
-result = client.make_credential(create_options["publicKey"])
-
+result = client.make_credential(
+    {
+        **create_options["publicKey"],
+        "extensions": {"credProps": True},
+    }
+)
 
 # Complete registration
 auth_data = server.register_complete(
@@ -72,6 +76,10 @@ print("CLIENT DATA:", result.client_data)
 print("ATTESTATION OBJECT:", result.attestation_object)
 print()
 print("CREDENTIAL DATA:", auth_data.credential_data)
+
+# credProps:
+cred_props = result.extension_results.get("credProps")
+print("CredProps", cred_props)
 
 
 # Prepare parameters for getAssertion

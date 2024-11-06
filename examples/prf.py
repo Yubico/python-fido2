@@ -65,29 +65,25 @@ result = client.make_credential(
 auth_data = server.register_complete(
     state, result.client_data, result.attestation_object
 )
-credentials = [auth_data.credential_data]
+credential = auth_data.credential_data
 
 # PRF result:
 if not result.extension_results.get("prf", {}).get("enabled"):
     print("Failed to create credential with PRF", result.extension_results)
     sys.exit(1)
 
-credential = result.attestation_object.auth_data.credential_data
 print("New credential created, with the PRF extension.")
 
 # If created with UV, keep using UV
 if result.attestation_object.auth_data.is_user_verified():
     uv = "required"
 
-# Prepare parameters for getAssertion
-allow_list = [{"type": "public-key", "id": credential.credential_id}]
-
 # Generate a salt for PRF:
 salt = os.urandom(32)
 print("Authenticate with salt:", salt.hex())
 
-
 # Prepare parameters for getAssertion
+credentials = [credential]
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
 # Authenticate the credential

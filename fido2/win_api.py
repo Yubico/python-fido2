@@ -1046,6 +1046,8 @@ class WinAPI:
             elif "hmacCreateSecret" in extensions and self._allow_hmac_secret:
                 resident_key = True  # Windows requires resident key for hmac-secret
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
+        else:
+            extensions = {}
 
         if event:
             t = CancelThread(event)

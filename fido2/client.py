@@ -1109,13 +1109,13 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                 client_data,
                 options.timeout or 0,
                 selection.resident_key,
-                attestation,
+                WebAuthNAuthenticatorAttachment.from_string(
+                    selection.authenticator_attachment or "any"
+                ),
                 WebAuthNUserVerificationRequirement.from_string(
                     selection.user_verification or "discouraged"
                 ),
-                WebAuthNAttestationConveyancePreference.from_string(
-                    options.attestation or "none"
-                ),
+                attestation,
                 options.exclude_credentials,
                 options.extensions,
                 event,

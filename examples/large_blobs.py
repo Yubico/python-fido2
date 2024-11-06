@@ -40,7 +40,7 @@ import sys
 client = get_client(lambda client: "largeBlobKey" in client.info.extensions)
 
 
-# LargeBlob requires UV if is it configured
+# LargeBlob requires UV if it is configured
 uv = "discouraged"
 if client.info.options.get("clientPin"):
     uv = "required"
@@ -74,6 +74,10 @@ auth_data = server.register_complete(
 )
 credentials = [auth_data.credential_data]
 
+if auth_data.is_user_verified():
+    # The WindowsClient doesn't know about authenticator config until now
+    uv = "required"
+
 if not result.extension_results.get("largeBlob", {}).get("supported"):
     print("Credential does not support largeBlob, failure!")
     sys.exit(1)
@@ -81,7 +85,7 @@ if not result.extension_results.get("largeBlob", {}).get("supported"):
 print("Credential created! Writing a blob...")
 
 # Prepare parameters for getAssertion
-request_options, state = server.authenticate_begin(user_verification=uv)
+request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
 # Authenticate the credential
 selection = client.get_assertion(
