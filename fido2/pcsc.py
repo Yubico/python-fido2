@@ -59,12 +59,11 @@ class CtapPcscDevice(CtapDevice):
     """
 
     def __init__(self, connection: CardConnection, name: str):
+        self._name = name
         self._capabilities = CAPABILITY(0)
         self.use_ext_apdu = False
         self._conn = connection
-        self._conn.connect()
-        self._name = name
-        self._select()
+        self.connect()
 
         try:  # Probe for CTAP2 by calling GET_INFO
             self.call(CTAPHID.CBOR, b"\x04")
@@ -72,6 +71,10 @@ class CtapPcscDevice(CtapDevice):
         except CtapError:
             if not self._capabilities:
                 raise ValueError("Unsupported device")
+
+    def connect(self):
+        self._conn.connect()
+        self._select()
 
     def __repr__(self):
         return f"CtapPcscDevice({self._name})"

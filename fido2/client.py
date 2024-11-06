@@ -726,17 +726,30 @@ class _Ctap2ClientBackend(_ClientBackend):
                 pin_token,
             )
 
-        try:
-            att_obj, pin_protocol, pin_token = _do_make()
-        except CtapError as e:
-            # The Authenticator may still require UV, try again
-            if (
-                e.code == CtapError.ERR.PUAT_REQUIRED
-                and user_verification == UserVerificationRequirement.DISCOURAGED
-            ):
-                user_verification = UserVerificationRequirement.REQUIRED
+        dev = self.ctap2.device
+        reconnected = False
+        while True:
+            try:
                 att_obj, pin_protocol, pin_token = _do_make()
-            else:
+                break
+            except CtapError as e:
+                # The Authenticator may still require UV, try again
+                if (
+                    e.code == CtapError.ERR.PUAT_REQUIRED
+                    and user_verification == UserVerificationRequirement.DISCOURAGED
+                ):
+                    user_verification = UserVerificationRequirement.REQUIRED
+                    continue
+                # NFC may require reconnect
+                if (
+                    e.code == CtapError.ERR.PIN_AUTH_BLOCKED
+                    and hasattr(dev, "connect")
+                    and not reconnected
+                ):
+                    dev.close()
+                    dev.connect()
+                    reconnected = True  # We only want to try this once
+                    continue
                 raise
 
         # Process extenstion outputs
@@ -847,17 +860,30 @@ class _Ctap2ClientBackend(_ClientBackend):
                 pin_protocol,
             )
 
-        try:
-            return _do_auth()
-        except CtapError as e:
-            # The Authenticator may still require UV, try again
-            if (
-                e.code == CtapError.ERR.PUAT_REQUIRED
-                and user_verification == UserVerificationRequirement.DISCOURAGED
-            ):
-                user_verification = UserVerificationRequirement.REQUIRED
+        dev = self.ctap2.device
+        reconnected = False
+        while True:
+            try:
                 return _do_auth()
-            raise
+            except CtapError as e:
+                # The Authenticator may still require UV, try again
+                if (
+                    e.code == CtapError.ERR.PUAT_REQUIRED
+                    and user_verification == UserVerificationRequirement.DISCOURAGED
+                ):
+                    user_verification = UserVerificationRequirement.REQUIRED
+                    continue
+                # NFC may require reconnect
+                if (
+                    e.code == CtapError.ERR.PIN_AUTH_BLOCKED
+                    and hasattr(dev, "connect")
+                    and not reconnected
+                ):
+                    dev.close()
+                    dev.connect()
+                    reconnected = True  # We only want to try this once
+                    continue
+                raise
 
 
 class Fido2Client(WebAuthnClient, _BaseClient):
@@ -1037,7 +1063,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
     def is_available() -> bool:
         return platform.system().lower() == "windows" and WinAPI.version > 0
 
-    def make_credential(self, options, **kwargs):
+    def make_credential(self, options, event=None):
         """Create a credential using Windows WebAuthN APIs.
 
         :param options: PublicKeyCredentialCreationOptions data.
@@ -1092,7 +1118,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                 ),
                 options.exclude_credentials,
                 options.extensions,
-                kwargs.get("event"),
+                event,
                 enterprise_attestation,
             )
         except OSError as e:
@@ -1103,7 +1129,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
             client_data, AttestationObject(result), extensions
         )
 
-    def get_assertion(self, options, **kwargs):
+    def get_assertion(self, options, event=None):
         """Get assertion using Windows WebAuthN APIs.
 
         :param options: PublicKeyCredentialRequestOptions data.
@@ -1131,7 +1157,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     ),
                     options.allow_credentials,
                     options.extensions,
-                    kwargs.get("event"),
+                    event,
                 )
             )
         except OSError as e:
