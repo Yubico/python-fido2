@@ -127,17 +127,17 @@ class PinProtocolV1(PinProtocol):
         shared_secret = self.kdf(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
         return key_agreement, shared_secret
 
-    def _get_cipher(self, secret):
+    def _get_cipher_v1(self, secret):
         be = default_backend()
         return Cipher(algorithms.AES(secret), modes.CBC(PinProtocolV1.IV), be)
 
     def encrypt(self, key, plaintext):
-        cipher = self._get_cipher(key)
+        cipher = self._get_cipher_v1(key)
         enc = cipher.encryptor()
         return enc.update(plaintext) + enc.finalize()
 
     def decrypt(self, key, ciphertext):
-        cipher = self._get_cipher(key)
+        cipher = self._get_cipher_v1(key)
         dec = cipher.decryptor()
         return dec.update(ciphertext) + dec.finalize()
 
@@ -181,7 +181,7 @@ class PinProtocolV2(PinProtocolV1):
         ).derive(z)
         return hmac_key + aes_key
 
-    def _get_cipher(self, secret, iv):
+    def _get_cipher_v2(self, secret, iv):
         be = default_backend()
         return Cipher(algorithms.AES(secret), modes.CBC(iv), be)
 
@@ -189,14 +189,14 @@ class PinProtocolV2(PinProtocolV1):
         aes_key = key[32:]
         iv = os.urandom(16)
 
-        cipher = self._get_cipher(aes_key, iv)
+        cipher = self._get_cipher_v2(aes_key, iv)
         enc = cipher.encryptor()
         return iv + enc.update(plaintext) + enc.finalize()
 
     def decrypt(self, key, ciphertext):
         aes_key = key[32:]
         iv, ciphertext = ciphertext[:16], ciphertext[16:]
-        cipher = self._get_cipher(aes_key, iv)
+        cipher = self._get_cipher_v2(aes_key, iv)
         dec = cipher.decryptor()
         return dec.update(ciphertext) + dec.finalize()
 
