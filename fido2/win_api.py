@@ -1040,9 +1040,11 @@ class WinAPI:
             if extensions.get("minPinLength", True):
                 win_extensions.append(WebAuthNExtension("minPinLength", BOOL(True)))
             if "prf" in extensions:
+                resident_key = True  # Windows requires resident key for hmac-secret
                 enable_prf = True
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
             elif "hmacCreateSecret" in extensions and self._allow_hmac_secret:
+                resident_key = True  # Windows requires resident key for hmac-secret
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
 
         if event:

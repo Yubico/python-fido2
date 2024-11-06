@@ -29,62 +29,21 @@
 Connects to the first FIDO device found which supports the CredBlob extension,
 creates a new credential for it with the extension enabled, and stores some data.
 """
-from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server
-from getpass import getpass
-import ctypes
+from exampleutils import get_client
 import sys
 import os
 
-try:
-    from fido2.pcsc import CtapPcscDevice
-except ImportError:
-    CtapPcscDevice = None
+
+# Locate a suitable FIDO authenticator
+client = get_client(lambda client: "credBlob" in client.info.extensions)
 
 
-def enumerate_devices():
-    for dev in CtapHidDevice.list_devices():
-        yield dev
-    if CtapPcscDevice:
-        for dev in CtapPcscDevice.list_devices():
-            yield dev
-
-
-# Handle user interaction
-class CliInteraction(UserInteraction):
-    def prompt_up(self):
-        print("\nTouch your authenticator device now...\n")
-
-    def request_pin(self, permissions, rd_id):
-        return getpass("Enter PIN: ")
-
-    def request_uv(self, permissions, rd_id):
-        print("User Verification required.")
-        return True
-
-
+# Prefer UV token if supported
 uv = "discouraged"
-
-if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
-    # Use the Windows WebAuthn API if available, and we're not running as admin
-    client = WindowsClient("https://example.com")
-else:
-    # Locate a device
-    for dev in enumerate_devices():
-        client = Fido2Client(
-            dev, "https://example.com", user_interaction=CliInteraction()
-        )
-        if "credBlob" in client.info.extensions:
-            break
-    else:
-        print("No Authenticator with the CredBlob extension found!")
-        sys.exit(1)
-
-    # Prefer UV token if supported
-    if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
-        uv = "preferred"
-        print("Authenticator is configured for User Verification")
+if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+    uv = "preferred"
+    print("Authenticator is configured for User Verification")
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"})

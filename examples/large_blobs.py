@@ -31,66 +31,19 @@ creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
-from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server
-from getpass import getpass
-import ctypes
+from exampleutils import get_client
 import sys
 
 
-try:
-    from fido2.pcsc import CtapPcscDevice
-except ImportError:
-    CtapPcscDevice = None
+# Locate a suitable FIDO authenticator
+client = get_client(lambda client: "largeBlobKey" in client.info.extensions)
 
 
-def enumerate_devices():
-    for dev in CtapHidDevice.list_devices():
-        yield dev
-    if CtapPcscDevice:
-        for dev in CtapPcscDevice.list_devices():
-            yield dev
-
-
-# Handle user interaction
-class CliInteraction(UserInteraction):
-    def prompt_up(self):
-        print("\nTouch your authenticator device now...\n")
-
-    def request_pin(self, permissions, rd_id):
-        return getpass("Enter PIN: ")
-
-    def request_uv(self, permissions, rd_id):
-        print("User Verification required.")
-        return True
-
-
+# LargeBlob requires UV if is it configured
 uv = "discouraged"
-
-# Locate a device
-if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
-    # Use the Windows WebAuthn API if available, and we're not running as admin
-    client = WindowsClient("https://example.com")
-else:
-    for dev in enumerate_devices():
-        client = Fido2Client(
-            dev, "https://example.com", user_interaction=CliInteraction()
-        )
-        if "largeBlobKey" in client.info.extensions:
-            break
-    else:
-        print("No Authenticator with the largeBlobKey extension found!")
-        sys.exit(1)
-
-    if not client.info.options.get("largeBlobs"):
-        print("Authenticator does not support large blobs!")
-        sys.exit(1)
-
-    # Prefer UV token if supported
-    if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
-        uv = "preferred"
-        print("Authenticator is configured for User Verification")
+if client.info.options.get("clientPin"):
+    uv = "required"
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"})
@@ -126,10 +79,6 @@ if not result.extension_results.get("largeBlob", {}).get("supported"):
     sys.exit(1)
 
 print("Credential created! Writing a blob...")
-
-# If UV is configured, it is required
-if auth_data.is_user_verified():
-    uv = "required"
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(user_verification=uv)

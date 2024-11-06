@@ -34,14 +34,10 @@ creates a new credential for it, and verifies that attestation is signed by the
 Yubico FIDO root CA (this will only work for Yubico devices).
 On Windows, the native WebAuthn API will be used.
 """
-from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server
 from fido2.attestation import AttestationVerifier
+from exampleutils import get_client
 from base64 import b64decode
-from getpass import getpass
-import sys
-import ctypes
 
 
 # Official Yubico root CA for FIDO Authenticators
@@ -80,51 +76,8 @@ class YubicoAttestationVerifier(AttestationVerifier):
         return YUBICO_CA
 
 
-uv = "discouraged"
-
-
-# Handle user interaction
-class CliInteraction(UserInteraction):
-    def prompt_up(self):
-        print("\nTouch your authenticator device now...\n")
-
-    def request_pin(self, permissions, rd_id):
-        return getpass("Enter PIN: ")
-
-    def request_uv(self, permissions, rd_id):
-        print("User Verification required.")
-        return True
-
-
-if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
-    # Use the Windows WebAuthn API if available, and we're not running as admin
-    client = WindowsClient("https://example.com")
-else:
-    # Locate a device
-    dev = next(CtapHidDevice.list_devices(), None)
-    if dev is not None:
-        print("Use USB HID channel.")
-    else:
-        try:
-            from fido2.pcsc import CtapPcscDevice
-
-            dev = next(CtapPcscDevice.list_devices(), None)
-            print("Use NFC channel.")
-        except Exception as e:
-            print("NFC channel search error:", e)
-
-    if not dev:
-        print("No FIDO device found")
-        sys.exit(1)
-
-    # Set up a FIDO 2 client using the origin https://example.com
-    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
-
-    # Prefer UV if supported
-    if client.info.options.get("uv"):
-        uv = "preferred"
-        print("Authenticator supports User Verification")
-
+# Locate a suitable FIDO authenticator
+client = get_client()
 
 server = Fido2Server(
     {"id": "example.com", "name": "Example RP"},
@@ -136,7 +89,7 @@ user = {"id": b"user_id", "name": "A. User"}
 
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
-    user, user_verification=uv, authenticator_attachment="cross-platform"
+    user, user_verification="discouraged", authenticator_attachment="cross-platform"
 )
 
 # Create a credential

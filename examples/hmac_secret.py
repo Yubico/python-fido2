@@ -36,10 +36,10 @@ the PRF extension which is enabled by default.
 """
 from fido2.hid import CtapHidDevice
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client, WindowsClient, UserInteraction
+from fido2.client import Fido2Client, WindowsClient
 from fido2.ctap2.extensions import HmacSecretExtension
+from exampleutils import CliInteraction
 from functools import partial
-from getpass import getpass
 import ctypes
 import sys
 import os
@@ -58,28 +58,13 @@ def enumerate_devices():
             yield dev
 
 
-# Handle user interaction
-class CliInteraction(UserInteraction):
-    def prompt_up(self):
-        print("\nTouch your authenticator device now...\n")
-
-    def request_pin(self, permissions, rd_id):
-        return getpass("Enter PIN: ")
-
-    def request_uv(self, permissions, rd_id):
-        print("User Verification required.")
-        return True
-
-
 uv = "discouraged"
-rk = "discouraged"
 
 if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
     # Use the Windows WebAuthn API if available, and we're not running as admin
     # By default only the PRF extension is allowed, we need to explicitly
     # configure the client to allow hmac-secret
     client = WindowsClient("https://example.com", allow_hmac_secret=True)
-    rk = "required"  # Windows requires resident key for hmac-secret
 else:
     # Locate a device
     for dev in enumerate_devices():
@@ -103,7 +88,7 @@ user = {"id": b"user_id", "name": "A. User"}
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
-    resident_key_requirement=rk,
+    resident_key_requirement="discouraged",
     user_verification=uv,
     authenticator_attachment="cross-platform",
 )

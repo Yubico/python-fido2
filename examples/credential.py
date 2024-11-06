@@ -31,57 +31,19 @@ creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
-from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.server import Fido2Server
-from getpass import getpass
-import sys
-import ctypes
+from exampleutils import get_client
+
+# Locate a suitable FIDO authenticator
+client = get_client()
 
 
-# Handle user interaction
-class CliInteraction(UserInteraction):
-    def prompt_up(self):
-        print("\nTouch your authenticator device now...\n")
-
-    def request_pin(self, permissions, rd_id):
-        return getpass("Enter PIN: ")
-
-    def request_uv(self, permissions, rd_id):
-        print("User Verification required.")
-        return True
-
-
-uv = "discouraged"
-
-if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
-    # Use the Windows WebAuthn API if available, and we're not running as admin
-    client = WindowsClient("https://example.com")
+# Prefer UV if supported and configured
+if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+    uv = "preferred"
+    print("Authenticator supports User Verification")
 else:
-    # Locate a device
-    dev = next(CtapHidDevice.list_devices(), None)
-    if dev is not None:
-        print("Use USB HID channel.")
-    else:
-        try:
-            from fido2.pcsc import CtapPcscDevice
-
-            dev = next(CtapPcscDevice.list_devices(), None)
-            print("Use NFC channel.")
-        except Exception as e:
-            print("NFC channel search error:", e)
-
-    if not dev:
-        print("No FIDO device found")
-        sys.exit(1)
-
-    # Set up a FIDO 2 client using the origin https://example.com
-    client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
-
-    # Prefer UV if supported and configured
-    if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
-        uv = "preferred"
-        print("Authenticator supports User Verification")
+    uv = "discouraged"
 
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")

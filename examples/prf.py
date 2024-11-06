@@ -30,62 +30,17 @@ Connects to the first FIDO device found which supports the PRF extension,
 creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
-from fido2.hid import CtapHidDevice
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client, WindowsClient, UserInteraction
 from fido2.utils import websafe_encode
-from getpass import getpass
-import ctypes
+from exampleutils import get_client
 import sys
 import os
 
-try:
-    from fido2.pcsc import CtapPcscDevice
-except ImportError:
-    CtapPcscDevice = None
 
-
-def enumerate_devices():
-    for dev in CtapHidDevice.list_devices():
-        yield dev
-    if CtapPcscDevice:
-        for dev in CtapPcscDevice.list_devices():
-            yield dev
-
-
-# Handle user interaction
-class CliInteraction(UserInteraction):
-    def prompt_up(self):
-        print("\nTouch your authenticator device now...\n")
-
-    def request_pin(self, permissions, rd_id):
-        return getpass("Enter PIN: ")
-
-    def request_uv(self, permissions, rd_id):
-        print("User Verification required.")
-        return True
-
+# Locate a suitable FIDO authenticator
+client = get_client(lambda client: "hmac-secret" in client.info.extensions)
 
 uv = "discouraged"
-rk = "discouraged"
-
-if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
-    # Use the Windows WebAuthn API if available, and we're not running as admin
-    client = WindowsClient("https://example.com")
-    rk = "required"  # Windows requires resident key for hmac-secret
-else:
-    # Locate a device
-    for dev in enumerate_devices():
-        client = Fido2Client(
-            dev,
-            "https://example.com",
-            user_interaction=CliInteraction(),
-        )
-        if "hmac-secret" in client.info.extensions:
-            break
-    else:
-        print("No Authenticator with the PRF extension found!")
-        sys.exit(1)
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
 user = {"id": b"user_id", "name": "A. User"}
@@ -93,7 +48,7 @@ user = {"id": b"user_id", "name": "A. User"}
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
-    resident_key_requirement=rk,
+    resident_key_requirement="discouraged",
     user_verification=uv,
     authenticator_attachment="cross-platform",
 )
