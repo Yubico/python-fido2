@@ -42,7 +42,7 @@ pcsc = ["pyscard"]
 pytest = "^7.0"
 Sphinx = {version = "^8.1", python = ">=3.10"}
 sphinx-rtd-theme = {version = "^3.0.1", python = ">=3.10"}
-sphinx-autodoc-typehints = {version = "^2.5.0", python = ">=3.10"}
+sphinx-autoapi = {version = "^3.3.3", python = ">=3.10"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

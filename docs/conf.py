@@ -47,12 +47,14 @@ version = ".".join(release.split(".")[:2])
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx.ext.autodoc",
-    "sphinx_autodoc_typehints",
+    "autoapi.extension",
+    "sphinx.ext.autodoc.typehints",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
 ]
+
+autodoc_typehints = "description"
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -191,3 +193,4 @@ intersphinx_mapping = {
 
 # Custom config
 autodoc_member_order = "bysource"
+autoapi_dirs = ["../fido2"]

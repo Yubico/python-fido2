@@ -10,7 +10,8 @@ Welcome to python-fido2's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   rst/packages
+   autoapi/index
+
 
 Indices and tables
 ==================
