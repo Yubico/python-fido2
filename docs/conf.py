@@ -194,3 +194,15 @@ intersphinx_mapping = {
 # Custom config
 autodoc_member_order = "bysource"
 autoapi_dirs = ["../fido2"]
+
+skip_patterns = ["fido2.hid", "fido2.win_api"]
+
+
+def skip_submodules(app, what, name, obj, skip, options):
+    if what == "module" and any(name.startswith(pattern) for pattern in skip_patterns):
+        skip = True
+    return skip
+
+
+def setup(sphinx):
+    sphinx.connect("autoapi-skip-member", skip_submodules)
