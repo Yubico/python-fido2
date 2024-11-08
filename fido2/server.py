@@ -471,6 +471,7 @@ class U2FFido2Server(Fido2Server):
     :param app_id: The appId which was used for U2F registration.
     :param verify_u2f_origin: (optional) Alternative function to validate an
         origin for U2F credentials.
+
     For other parameters, see Fido2Server.
     """
 
