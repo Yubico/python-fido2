@@ -110,13 +110,6 @@ fido2.webauthn module
    :undoc-members:
    :show-inheritance:
 
-fido2.win\_api module
----------------------
-
-.. automodule:: fido2.win_api
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 Module contents
 ---------------
