@@ -62,6 +62,10 @@ get_descriptor = backend.get_descriptor
 open_connection = backend.open_connection
 
 
+class ConnectionFailure(Exception):
+    """The CTAP connection failed or returned an invalid response."""
+
+
 @unique
 class CTAPHID(IntEnum):
     PING = 0x01
@@ -109,7 +113,7 @@ class CtapHidDevice(CtapDevice):
         response = self.call(CTAPHID.INIT, nonce)
         r_nonce, response = response[:8], response[8:]
         if r_nonce != nonce:
-            raise Exception("Wrong nonce")
+            raise ConnectionFailure("Wrong nonce")
         (
             self._channel_id,
             self._u2fhid_version,
@@ -163,6 +167,18 @@ class CtapHidDevice(CtapDevice):
         on_keepalive: Optional[Callable[[int], None]] = None,
     ) -> bytes:
         event = event or Event()
+
+        while True:
+            try:
+                return self._do_call(cmd, data, event, on_keepalive)
+            except CtapError as e:
+                if e.code == CtapError.ERR.CHANNEL_BUSY:
+                    if not event.wait(0.1):
+                        logger.warning("CTAP channel busy, trying again...")
+                        continue  # Keep retrying on BUSY while not cancelled
+                raise
+
+    def _do_call(self, cmd, data, event, on_keepalive):
         remaining = data
         seq = 0
 
@@ -194,7 +210,7 @@ class CtapHidDevice(CtapDevice):
                 r_channel = struct.unpack_from(">I", recv)[0]
                 recv = recv[4:]
                 if r_channel != self._channel_id:
-                    raise Exception("Wrong channel")
+                    raise ConnectionFailure("Wrong channel")
 
                 if not response:  # Initialization packet
                     r_cmd, r_len = struct.unpack_from(">BH", recv)
@@ -220,7 +236,7 @@ class CtapHidDevice(CtapDevice):
                     r_seq = struct.unpack_from(">B", recv)[0]
                     recv = recv[1:]
                     if r_seq != seq:
-                        raise Exception("Wrong sequence number")
+                        raise ConnectionFailure("Wrong sequence number")
                     seq += 1
 
                 response += recv
