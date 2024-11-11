@@ -9,6 +9,7 @@ dist/
 ChangeLog
 man/*.1
 poetry.lock
+**/_build
 
 # Unit test / coverage reports
 htmlcov/

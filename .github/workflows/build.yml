@@ -75,3 +75,30 @@ jobs:
         with:
           name: fido2-python-sdist
           path: dist
+
+  docs:
+    runs-on: ubuntu-latest
+    name: Build sphinx documentation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry
+          poetry install
+
+      - name: Build sphinx documentation
+        run: poetry run make -C docs/ html
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-fido2-docs
+          path: docs/_build/html
