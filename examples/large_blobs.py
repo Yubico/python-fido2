@@ -33,6 +33,7 @@ On Windows, the native WebAuthn API will be used.
 """
 from fido2.server import Fido2Server
 from exampleutils import get_client
+from fido2.utils import websafe_encode, websafe_decode
 import sys
 
 
@@ -92,7 +93,9 @@ selection = client.get_assertion(
     {
         **request_options["publicKey"],
         # Write a large blob
-        "extensions": {"largeBlob": {"write": b"Here is some data to store!"}},
+        "extensions": {
+            "largeBlob": {"write": websafe_encode(b"Here is some data to store!")}
+        },
     }
 )
 
@@ -115,4 +118,4 @@ selection = client.get_assertion(
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-print("Read blob:", result.extension_results.get("largeBlob", {}).get("blob"))
+print("Read blob:", websafe_decode(result.extension_results["largeBlob"]["blob"]))
