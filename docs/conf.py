@@ -192,7 +192,6 @@ intersphinx_mapping = {
 
 
 # Custom config
-autodoc_member_order = "bysource"
 autoapi_dirs = ["../fido2"]
 
 skip_patterns = ["fido2.hid", "fido2.win_api"]
