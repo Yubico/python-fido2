@@ -39,7 +39,6 @@ from fido2.server import Fido2Server
 from fido2.client import Fido2Client, WindowsClient
 from fido2.ctap2.extensions import HmacSecretExtension
 from exampleutils import CliInteraction
-from functools import partial
 import ctypes
 import sys
 import os
@@ -74,7 +73,7 @@ else:
             user_interaction=CliInteraction(),
             # By default only the PRF extension is allowed, we need to explicitly
             # configure the client to allow hmac-secret
-            extension_types=[partial(HmacSecretExtension, allow_hmac_secret=True)],
+            extensions=[HmacSecretExtension(allow_hmac_secret=True)],
         )
         if "hmac-secret" in client.info.extensions:
             break

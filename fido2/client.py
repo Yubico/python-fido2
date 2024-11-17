@@ -32,7 +32,11 @@ from .ctap import CtapDevice, CtapError
 from .ctap1 import Ctap1, APDU, ApduError
 from .ctap2 import Ctap2, AssertionResponse, Info
 from .ctap2.pin import ClientPin, PinProtocol
-from .ctap2.extensions import Ctap2Extension, ClientExtensionOutputs
+from .ctap2.extensions import (
+    Ctap2Extension,
+    ClientExtensionOutputs,
+    ExtensionProcessor,
+)
 from .webauthn import (
     Aaguid,
     AttestationObject,
@@ -422,7 +426,7 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         self,
         client_data: CollectedClientData,
         assertions: Sequence[AssertionResponse],
-        extensions: Sequence[Ctap2Extension],
+        extensions: Sequence[ExtensionProcessor],
         pin_token: Optional[str],
         pin_protocol: Optional[PinProtocol],
     ):
@@ -436,10 +440,10 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         extension_outputs = {}
         try:
             for ext in self._extensions:
-                output = ext.process_get_output(
+                output = ext.prepare_outputs(
                     assertion, self._pin_token, self._pin_protocol
                 )
-                if output is not None:
+                if output:
                     extension_outputs.update(output)
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
@@ -457,12 +461,20 @@ class _Ctap2ClientBackend(_ClientBackend):
         self,
         device: CtapDevice,
         user_interaction: UserInteraction,
-        extensions: Sequence[Type[Ctap2Extension]],
+        extension_types: Sequence[Type[Ctap2Extension]],
+        extensions: Sequence[Ctap2Extension],
     ):
         self.ctap2 = Ctap2(device)
         self.info = self.ctap2.info
-        self.extensions = extensions
+        self._extension_types = extension_types
+        self._extensions = extensions
         self.user_interaction = user_interaction
+
+    @property
+    def extensions(self) -> Sequence[Ctap2Extension]:
+        if self._extensions:
+            return self._extensions
+        return [ext(self.ctap2) for ext in self._extension_types]
 
     def _filter_creds(
         self, rp_id, cred_list, pin_protocol, pin_token, event, on_keepalive
@@ -630,7 +642,6 @@ class _Ctap2ClientBackend(_ClientBackend):
         user = options.user
         key_params = options.pub_key_cred_params
         exclude_list = options.exclude_credentials
-        extensions = options.extensions
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
         user_verification = selection.user_verification
 
@@ -648,20 +659,19 @@ class _Ctap2ClientBackend(_ClientBackend):
                     # Vendor facilitated
                     enterprise_attestation = 1
 
-        # Gather up permissions
+        # Gather UV permissions
         permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
         if exclude_list:
             # We need this for filtering the exclude_list
             permissions |= ClientPin.PERMISSION.GET_ASSERTION
 
-        # Get extension permissions
-        extension_instances = [cls(self.ctap2) for cls in self.extensions]
+        # Initialize extensions and add extension permissions
         used_extensions = []
-        client_inputs = extensions or {}
-        for ext in extension_instances:
-            # TODO: Move options to the constructor instead
-            ext._create_options = options
-            permissions |= ext.get_create_permissions(client_inputs)
+        for e in self.extensions:
+            ext = e.make_credential(self.ctap2, options)
+            if ext:
+                used_extensions.append(ext)
+                permissions |= ext.permissions
 
         def _do_make():
             # Handle auth
@@ -682,14 +692,10 @@ class _Ctap2ClientBackend(_ClientBackend):
             # Process extensions
             extension_inputs = {}
             try:
-                for ext in extension_instances:
-                    auth_input = ext.process_create_input(client_inputs)
-                    if auth_input is not None:
-                        used_extensions.append(ext)
-                        extension_inputs[ext.NAME] = auth_input
-                    elif ext._used:
-                        # TODO: Make this cleaner
-                        used_extensions.append(ext)
+                for ext in used_extensions:
+                    auth_input = ext.prepare_inputs(None)
+                    if auth_input:
+                        extension_inputs.update(auth_input)
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
@@ -768,7 +774,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         extension_outputs = {}
         try:
             for ext in used_extensions:
-                output = ext.process_create_output(att_obj, pin_token, pin_protocol)
+                output = ext.prepare_outputs(att_obj, pin_token, pin_protocol)
                 if output is not None:
                     extension_outputs.update(output)
         except ValueError as e:
@@ -788,21 +794,20 @@ class _Ctap2ClientBackend(_ClientBackend):
     ):
         rp_id = options.rp_id
         allow_list = options.allow_credentials
-        extensions = options.extensions
         user_verification = options.user_verification
 
         on_keepalive = _user_keepalive(self.user_interaction)
 
-        # Gather up permissions
+        # Gather UV permissions
         permissions = ClientPin.PERMISSION.GET_ASSERTION
 
-        # Get extension permissions
-        extension_instances = [cls(self.ctap2) for cls in self.extensions]
-        client_inputs = extensions or {}
-        for ext in extension_instances:
-            # TODO: Move options to get_get_permissions and process_get_input
-            ext._get_options = options
-            permissions |= ext.get_get_permissions(client_inputs)
+        # Initialize extensions and add extension permissions
+        used_extensions = []
+        for e in self.extensions:
+            ext = e.get_assertion(self.ctap2, options)
+            if ext:
+                used_extensions.append(ext)
+                permissions |= ext.permissions
 
         def _do_auth():
             # Handle auth
@@ -822,18 +827,11 @@ class _Ctap2ClientBackend(_ClientBackend):
 
             # Process extensions
             extension_inputs = {}
-            used_extensions = []
             try:
-                for ext in extension_instances:
-                    # TODO: Move to process_get_input()
-                    ext._selected = selected_cred
-                    auth_input = ext.process_get_input(client_inputs)
-                    if auth_input is not None:
-                        used_extensions.append(ext)
-                        extension_inputs[ext.NAME] = auth_input
-                    elif ext._used:
-                        # TODO: Make this cleaner
-                        used_extensions.append(ext)
+                for ext in used_extensions:
+                    inputs = ext.prepare_inputs(selected_cred)
+                    if inputs:
+                        extension_inputs.update(inputs)
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
@@ -914,8 +912,10 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         device: CtapDevice,
         origin: str,
         verify: Callable[[str, str], bool] = verify_rp_id,
+        # TODO 2.0: Replace extension_types with extensions
         extension_types: Sequence[Type[Ctap2Extension]] = _default_extensions(),
         user_interaction: UserInteraction = UserInteraction(),
+        extensions: Sequence[Ctap2Extension] = [],
     ):
         super().__init__(origin, verify)
 
@@ -924,7 +924,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
 
         try:
             self._backend: _ClientBackend = _Ctap2ClientBackend(
-                device, user_interaction, extension_types
+                device, user_interaction, extension_types, extensions
             )
         except (ValueError, CtapError):
             self._backend = _Ctap1ClientBackend(device, user_interaction)
