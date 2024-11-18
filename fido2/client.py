@@ -41,6 +41,7 @@ from .webauthn import (
     Aaguid,
     AttestationObject,
     CollectedClientData,
+    PublicKeyCredentialRpEntity,
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
@@ -57,7 +58,6 @@ from .rpid import verify_rp_id
 from .utils import sha256
 from enum import IntEnum, unique
 from urllib.parse import urlparse
-from dataclasses import replace
 from threading import Timer, Event
 from typing import (
     Type,
@@ -303,11 +303,25 @@ class _ClientBackend(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def do_make_credential(self, *args) -> AuthenticatorAttestationResponse:
+    def do_make_credential(
+        self,
+        options: PublicKeyCredentialCreationOptions,
+        client_data: CollectedClientData,
+        rp: PublicKeyCredentialRpEntity,
+        rp_id: str,
+        enterprise_rpid_list: Optional[Sequence[str]],
+        event: Event,
+    ) -> AuthenticatorAttestationResponse:
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def do_get_assertion(self, *args) -> AssertionSelection:
+    def do_get_assertion(
+        self,
+        options: PublicKeyCredentialRequestOptions,
+        client_data: CollectedClientData,
+        rp_id: str,
+        event: Event,
+    ) -> AssertionSelection:
         raise NotImplementedError()
 
 
@@ -333,6 +347,7 @@ class _Ctap1ClientBackend(_ClientBackend):
         options,
         client_data,
         rp,
+        rp_id,
         enterprise_rpid_list,
         event,
     ):
@@ -350,7 +365,7 @@ class _Ctap1ClientBackend(_ClientBackend):
         ):
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
-        app_param = sha256(rp.id.encode())
+        app_param = sha256(rp_id.encode())
 
         dummy_param = b"\0" * 32
         for cred in exclude_list or []:
@@ -391,9 +406,9 @@ class _Ctap1ClientBackend(_ClientBackend):
         self,
         options,
         client_data,
+        rp_id,
         event,
     ):
-        rp_id = options.rp_id
         allow_list = options.allow_credentials
         user_verification = options.user_verification
 
@@ -636,6 +651,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         options,
         client_data,
         rp,
+        rp_id,
         enterprise_rpid_list,
         event,
     ):
@@ -653,7 +669,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             if self.info.options.get("ep"):
                 if enterprise_rpid_list is not None:
                     # Platform facilitated
-                    if rp.id in enterprise_rpid_list:
+                    if rp_id in enterprise_rpid_list:
                         enterprise_attestation = 2
                 else:
                     # Vendor facilitated
@@ -676,12 +692,12 @@ class _Ctap2ClientBackend(_ClientBackend):
         def _do_make():
             # Handle auth
             pin_protocol, pin_token, internal_uv = self._get_auth_params(
-                rp.id, user_verification, permissions, event, on_keepalive
+                rp_id, user_verification, permissions, event, on_keepalive
             )
 
             if exclude_list:
                 exclude_cred = self._filter_creds(
-                    rp.id, exclude_list, pin_protocol, pin_token, event, on_keepalive
+                    rp_id, exclude_list, pin_protocol, pin_token, event, on_keepalive
                 )
                 # We know the request will fail if exclude_cred is not None here
                 # BUT DO NOT FAIL EARLY! We still need to prompt for UP, so we keep
@@ -719,7 +735,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
             # Calculate pin_auth
             client_data_hash = client_data.hash
-            if pin_token:
+            if pin_protocol and pin_token:
                 pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
             else:
                 pin_auth = None
@@ -790,6 +806,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         self,
         options,
         client_data,
+        rp_id,
         event,
     ):
         rp_id = options.rp_id
@@ -939,6 +956,17 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         except CtapError as e:
             raise _ctap2client_err(e)
 
+    def _get_rp_id(self, rp_id: Optional[str]) -> str:
+        if rp_id is None:
+            url = urlparse(self.origin)
+            if url.scheme != "https" or not url.netloc:
+                raise ClientError.ERR.BAD_REQUEST(
+                    "RP ID required for non-https origin."
+                )
+            return url.netloc
+        else:
+            return rp_id
+
     def make_credential(
         self,
         options: PublicKeyCredentialCreationOptions,
@@ -958,16 +986,10 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             timer.start()
 
         rp = options.rp
-        if rp.id is None:
-            url = urlparse(self.origin)
-            if url.scheme != "https" or not url.netloc:
-                raise ClientError.ERR.BAD_REQUEST(
-                    "RP ID required for non-https origin."
-                )
-            rp = replace(rp, id=url.netloc)
+        rp_id = self._get_rp_id(rp.id)
 
-        logger.debug(f"Register a new credential for RP ID: {rp.id}")
-        self._verify_rp_id(rp.id)
+        logger.debug(f"Register a new credential for RP ID: {rp_id}")
+        self._verify_rp_id(rp_id)
 
         client_data = self._build_client_data(
             CollectedClientData.TYPE.CREATE, options.challenge
@@ -978,6 +1000,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
                 options,
                 client_data,
                 rp,
+                rp_id,
                 self._enterprise_rpid_list,
                 event,
             )
@@ -1005,8 +1028,9 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             timer.daemon = True
             timer.start()
 
-        logger.debug(f"Assert a credential for RP ID: {options.rp_id}")
-        self._verify_rp_id(options.rp_id)
+        rp_id = self._get_rp_id(options.rp_id)
+        logger.debug(f"Assert a credential for RP ID: {rp_id}")
+        self._verify_rp_id(rp_id)
 
         client_data = self._build_client_data(
             CollectedClientData.TYPE.GET, options.challenge
@@ -1016,6 +1040,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             return self._backend.do_get_assertion(
                 options,
                 client_data,
+                rp_id,
                 event,
             )
         except CtapError as e:
