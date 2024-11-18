@@ -35,7 +35,7 @@ from .ctap2.pin import ClientPin, PinProtocol
 from .ctap2.extensions import (
     Ctap2Extension,
     ClientExtensionOutputs,
-    ExtensionProcessor,
+    AuthenticationExtensionProcessor,
 )
 from .webauthn import (
     Aaguid,
@@ -426,8 +426,8 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         self,
         client_data: CollectedClientData,
         assertions: Sequence[AssertionResponse],
-        extensions: Sequence[ExtensionProcessor],
-        pin_token: Optional[str],
+        extensions: Sequence[AuthenticationExtensionProcessor],
+        pin_token: Optional[bytes],
         pin_protocol: Optional[PinProtocol],
     ):
         super().__init__(client_data, assertions)
@@ -693,7 +693,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             extension_inputs = {}
             try:
                 for ext in used_extensions:
-                    auth_input = ext.prepare_inputs(None)
+                    auth_input = ext.prepare_inputs()
                     if auth_input:
                         extension_inputs.update(auth_input)
             except ValueError as e:
