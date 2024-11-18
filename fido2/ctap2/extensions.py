@@ -78,7 +78,19 @@ class ClientExtensionOutputs(Mapping[str, Any]):
         return repr(dict(self))
 
 
-class RegistrationExtensionProcessor:
+class ExtensionProcessor(abc.ABC):
+    def __init__(
+        self,
+        permissions: ClientPin.PERMISSION = ClientPin.PERMISSION(0),
+        inputs: Optional[Dict[str, Any]] = None,
+        outputs: Optional[Dict[str, Any]] = None,
+    ):
+        self.permissions = permissions
+        self._inputs = inputs
+        self._outputs = outputs
+
+
+class RegistrationExtensionProcessor(ExtensionProcessor):
     """Processing state for a CTAP2 extension, for single use.
 
     The ExtensionProcessor holds state and logic for client processing of an extension,
@@ -87,12 +99,9 @@ class RegistrationExtensionProcessor:
     :param permissions: PinUvAuthToken permissions required by the extension.
     """
 
-    def __init__(self, permissions: ClientPin.PERMISSION = ClientPin.PERMISSION(0)):
-        self.permissions = permissions
-
     def prepare_inputs(self) -> Optional[Dict[str, Any]]:
         "Prepare authenticator extension inputs, to be passed to the Authenenticator."
-        return None
+        return self._inputs
 
     def prepare_outputs(
         self,
@@ -101,10 +110,10 @@ class RegistrationExtensionProcessor:
         pin_protocol: Optional[PinProtocol],
     ) -> Optional[Dict[str, Any]]:
         "Prepare client extension outputs, to be returned to the caller."
-        return None
+        return self._outputs
 
 
-class AuthenticationExtensionProcessor:
+class AuthenticationExtensionProcessor(ExtensionProcessor):
     """Processing state for a CTAP2 extension, for single use.
 
     The ExtensionProcessor holds state and logic for client processing of an extension,
@@ -113,14 +122,11 @@ class AuthenticationExtensionProcessor:
     :param permissions: PinUvAuthToken permissions required by the extension.
     """
 
-    def __init__(self, permissions: ClientPin.PERMISSION = ClientPin.PERMISSION(0)):
-        self.permissions = permissions
-
     def prepare_inputs(
         self, selected: Optional[PublicKeyCredentialDescriptor]
     ) -> Optional[Dict[str, Any]]:
         "Prepare authenticator extension inputs, to be passed to the Authenenticator."
-        return None
+        return self._inputs
 
     def prepare_outputs(
         self,
@@ -129,7 +135,7 @@ class AuthenticationExtensionProcessor:
         pin_protocol: Optional[PinProtocol],
     ) -> Optional[Dict[str, Any]]:
         "Prepare client extension outputs, to be returned to the caller."
-        return None
+        return self._outputs
 
 
 # TODO 2.0: Make changes as described below
@@ -605,9 +611,6 @@ class LargeBlobExtension(Ctap2Extension):
                 raise ValueError("Authenticator does not support large blob storage")
 
             class Processor(AuthenticationExtensionProcessor):
-                def prepare_inputs(self, selected):
-                    return {LargeBlobExtension.NAME: True}
-
                 def prepare_outputs(self, response, pin_token, pin_protocol):
                     blob_key = response.large_blob_key
                     if blob_key:
@@ -621,9 +624,12 @@ class LargeBlobExtension(Ctap2Extension):
                             return {"largeBlob": _LargeBlobOutputs(written=True)}
 
             return Processor(
-                ClientPin.PERMISSION.LARGE_BLOB_WRITE
-                if data.write
-                else ClientPin.PERMISSION(0)
+                (
+                    ClientPin.PERMISSION.LARGE_BLOB_WRITE
+                    if data.write
+                    else ClientPin.PERMISSION(0)
+                ),
+                inputs={LargeBlobExtension.NAME: True},
             )
 
 
@@ -644,6 +650,19 @@ class CredBlobExtension(Ctap2Extension):
     def process_get_input(self, inputs):
         if self.is_supported() and inputs.get("getCredBlob") is True:
             return True
+
+    def make_credential(self, ctap, options):
+        inputs = options.extensions or {}
+        if self.is_supported():
+            blob = inputs.get("credBlob")
+            assert ctap.info.max_cred_blob_length is not None  # nosec
+            if blob and len(blob) <= ctap.info.max_cred_blob_length:
+                return RegistrationExtensionProcessor(inputs={self.NAME: blob})
+
+    def get_assertion(self, ctap, options):
+        inputs = options.extensions or {}
+        if self.is_supported(ctap) and inputs.get("getCredBlob") is True:
+            return AuthenticationExtensionProcessor(inputs={self.NAME: True})
 
 
 class CredProtectExtension(Ctap2Extension):
@@ -671,6 +690,19 @@ class CredProtectExtension(Ctap2Extension):
                 raise ValueError("Authenticator does not support Credential Protection")
             return index + 1
 
+    def make_credential(self, ctap, options):
+        inputs = options.extensions or {}
+        policy = inputs.get("credentialProtectionPolicy")
+        if policy:
+            index = list(CredProtectExtension.POLICY).index(
+                CredProtectExtension.POLICY(policy)
+            )
+            enforce = inputs.get("enforceCredentialProtectionPolicy", False)
+            if enforce and not self.is_supported(ctap) and index > 0:
+                raise ValueError("Authenticator does not support Credential Protection")
+
+            return RegistrationExtensionProcessor(inputs={self.NAME: index + 1})
+
 
 class MinPinLengthExtension(Ctap2Extension):
     """
@@ -692,12 +724,7 @@ class MinPinLengthExtension(Ctap2Extension):
     def make_credential(self, ctap, options):
         inputs = options.extensions or {}
         if self.is_supported(ctap) and inputs.get(self.NAME) is True:
-
-            class Processor(RegistrationExtensionProcessor):
-                def prepare_inputs(self):
-                    return {MinPinLengthExtension.NAME: True}
-
-            return Processor()
+            return RegistrationExtensionProcessor(inputs={self.NAME: True})
 
 
 @dataclass(eq=False, frozen=True)
@@ -718,17 +745,14 @@ class CredPropsExtension(Ctap2Extension):
     def make_credential(self, ctap, options):
         inputs = options.extensions or {}
         if inputs.get(self.NAME) is True:
+            selection = (
+                options.authenticator_selection or AuthenticatorSelectionCriteria()
+            )
+            rk = selection.resident_key == ResidentKeyRequirement.REQUIRED or (
+                selection.resident_key == ResidentKeyRequirement.PREFERRED
+                and ctap.info.options.get("rk")
+            )
 
-            class Processor(RegistrationExtensionProcessor):
-                def prepare_outputs(self, response, pin_token, pin_protocol):
-                    selection = (
-                        options.authenticator_selection
-                        or AuthenticatorSelectionCriteria()
-                    )
-                    rk = selection.resident_key == ResidentKeyRequirement.REQUIRED or (
-                        selection.resident_key == ResidentKeyRequirement.PREFERRED
-                        and ctap.info.options.get("rk")
-                    )
-                    return {CredPropsExtension.NAME: _CredPropsOutputs(rk=rk)}
-
-            return Processor()
+            return RegistrationExtensionProcessor(
+                outputs={self.NAME: _CredPropsOutputs(rk=rk)}
+            )
