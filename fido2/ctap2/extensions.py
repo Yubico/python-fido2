@@ -36,6 +36,7 @@ from ..webauthn import (
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
+    ResidentKeyRequirement,
 )
 from enum import Enum, unique
 from dataclasses import dataclass
@@ -435,5 +436,9 @@ class CredPropsExtension(Ctap2Extension):
             self._create_options.authenticator_selection
             or AuthenticatorSelectionCriteria()
         )
-        rk = selection.require_resident_key
+
+        rk = selection.resident_key == ResidentKeyRequirement.REQUIRED or (
+            selection.resident_key == ResidentKeyRequirement.PREFERRED
+            and self.ctap.info.options.get("rk")
+        )
         return {"credProps": _CredPropsOutputs(rk=rk)}

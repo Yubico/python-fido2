@@ -45,6 +45,7 @@ from .webauthn import (
     AuthenticatorAttestationResponse,
     AuthenticatorAssertionResponse,
     AttestationConveyancePreference,
+    ResidentKeyRequirement,
     _as_cbor,
 )
 from .cose import ES256
@@ -631,7 +632,6 @@ class _Ctap2ClientBackend(_ClientBackend):
         exclude_list = options.exclude_credentials
         extensions = options.extensions
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
-        rk = selection.require_resident_key
         user_verification = selection.user_verification
 
         on_keepalive = _user_keepalive(self.user_interaction)
@@ -693,11 +693,20 @@ class _Ctap2ClientBackend(_ClientBackend):
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
+            can_rk = self.info.options.get("rk")
+            rk = selection.resident_key == ResidentKeyRequirement.REQUIRED or (
+                selection.resident_key == ResidentKeyRequirement.PREFERRED and can_rk
+            )
+
             if not (rk or internal_uv):
                 options = None
             else:
                 options = {}
                 if rk:
+                    if not can_rk:
+                        raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
+                            "Resident key not supported"
+                        )
                     options["rk"] = True
                 if internal_uv:
                     options["uv"] = True
