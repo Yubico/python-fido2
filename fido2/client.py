@@ -485,8 +485,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         self._extensions = extensions
         self.user_interaction = user_interaction
 
-    @property
-    def extensions(self) -> Sequence[Ctap2Extension]:
+    def _get_extensions(self) -> Sequence[Ctap2Extension]:
         if self._extensions:
             return self._extensions
         return [ext(self.ctap2) for ext in self._extension_types]
@@ -683,7 +682,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Initialize extensions and add extension permissions
         used_extensions = []
-        for e in self.extensions:
+        for e in self._get_extensions():
             ext = e.make_credential(self.ctap2, options)
             if ext:
                 used_extensions.append(ext)
@@ -820,7 +819,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Initialize extensions and add extension permissions
         used_extensions = []
-        for e in self.extensions:
+        for e in self._get_extensions():
             ext = e.get_assertion(self.ctap2, options)
             if ext:
                 used_extensions.append(ext)
