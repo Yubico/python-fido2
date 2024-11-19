@@ -1148,7 +1148,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
             )
 
         try:
-            result, extensions = self.api.make_credential(
+            att_obj, extensions = self.api.make_credential(
                 options.rp,
                 options.user,
                 options.pub_key_cred_params,
@@ -1172,7 +1172,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         logger.info("New credential registered")
         return AuthenticatorAttestationResponse(
-            client_data, AttestationObject(result), ClientExtensionOutputs(extensions)
+            client_data, att_obj, ClientExtensionOutputs(extensions)
         )
 
     def get_assertion(self, options, event=None):

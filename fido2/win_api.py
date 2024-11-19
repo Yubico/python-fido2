@@ -44,7 +44,7 @@ from .webauthn import AttestationObject, AuthenticatorData, ResidentKeyRequireme
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND, WORD
 from threading import Thread
-from typing import Mapping, Dict, Any
+from typing import Mapping, Dict, Any, Tuple
 
 import ctypes
 from ctypes import WinDLL  # type: ignore
@@ -500,7 +500,7 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         hmac_secret_salts=None,
         extensions=None,
         flags=0,
-        u2f_appid=False,
+        u2f_appid=None,
         u2f_appid_used=None,
     ):
         self.dwVersion = get_version(self.__class__.__name__)
@@ -514,7 +514,8 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
 
         if self.dwVersion >= 2:
             self.pwszU2fAppId = u2f_appid
-            self.pbU2fAppId = ctypes.pointer(u2f_appid_used)
+            if u2f_appid_used is not None:
+                self.pbU2fAppId = ctypes.pointer(u2f_appid_used)
 
         if self.dwVersion >= 3:
             self.pCancellationId = cancellationId
@@ -942,6 +943,7 @@ class WinAPI:
 
     def __init__(self, handle=None, return_extensions=False, allow_hmac_secret=False):
         self.handle = handle or windll.user32.GetForegroundWindow()
+        # TODO 2.0: Remove return_extensions and always return them
         if not return_extensions:
             warnings.warn(
                 "WinAPI will start returning extension outputs in the next major "
@@ -981,7 +983,7 @@ class WinAPI:
         extensions=None,
         event=None,
         enterprise_attestation=WebAuthNEnterpriseAttestation.NONE,
-    ):
+    ) -> Tuple[AttestationObject, Dict[str, Any]]:
         """Make credential using Windows WebAuthN API.
 
         :param Dict[str,Any] rp: Relying Party Entity data.
@@ -1003,6 +1005,7 @@ class WinAPI:
         :param threading.Event event: (optional) Signal to abort the operation.
         """
 
+        # TODO 2.0: Require resident_key be ResidentKeyRequirement
         if isinstance(resident_key, bool):
             warnings.warn(
                 "Passing resident_key as a bool is deprecated. "
@@ -1101,7 +1104,7 @@ class WinAPI:
         if self._return_extensions:
             return att_obj, extension_outputs
         else:
-            return att_obj
+            return att_obj  # type: ignore
 
     def get_assertion(
         self,
@@ -1113,7 +1116,7 @@ class WinAPI:
         allow_credentials=None,
         extensions=None,
         event=None,
-    ):
+    ) -> Tuple[Dict[str, Any], AuthenticatorData, bytes, bytes, Dict[str, Any]]:
         """Get assertion using Windows WebAuthN API.
 
         :param str rp_id: Relying Party ID string.
@@ -1206,25 +1209,26 @@ class WinAPI:
         if u2f_appid and obj.dwVersion >= 2:
             extension_outputs["appid"] = bool(u2f_appid_used.value)
 
-        if hmac_secret_salts and obj.dwVersion >= 3:
-            secret = obj.pHmacSecret.contents
-            if "prf" in extensions:
-                result = {"first": secret.first}
-                if secret.second:
-                    result["second"] = secret.second
-                extension_outputs["prf"] = {"results": result}
-            else:
-                result = {"output1": secret.first}
-                if secret.second:
-                    result["output2"] = secret.second
-                extension_outputs["hmacGetSecret"] = result
-        if obj.dwCredLargeBlobStatus != 0:
-            if extensions["largeBlob"].get("read", False):
-                extension_outputs["largeBlob"] = {"blob": obj.cred_large_blob}
-            else:
-                extension_outputs["largeBlob"] = {
-                    "written": obj.dwCredLargeBlobStatus == 1
-                }
+        if extensions:
+            if hmac_secret_salts and obj.dwVersion >= 3:
+                secret = obj.pHmacSecret.contents
+                if "prf" in extensions:
+                    result = {"first": secret.first}
+                    if secret.second:
+                        result["second"] = secret.second
+                    extension_outputs["prf"] = {"results": result}
+                else:
+                    result = {"output1": secret.first}
+                    if secret.second:
+                        result["output2"] = secret.second
+                    extension_outputs["hmacGetSecret"] = result
+            if obj.dwCredLargeBlobStatus != 0:
+                if extensions["largeBlob"].get("read", False):
+                    extension_outputs["largeBlob"] = {"blob": obj.cred_large_blob}
+                else:
+                    extension_outputs["largeBlob"] = {
+                        "written": obj.dwCredLargeBlobStatus == 1
+                    }
 
         if self._return_extensions:
             return (
@@ -1235,4 +1239,9 @@ class WinAPI:
                 extension_outputs,
             )
         else:
-            return obj.Credential.descriptor, auth_data, obj.signature, obj.user_id
+            return (
+                obj.Credential.descriptor,
+                auth_data,
+                obj.signature,
+                obj.user_id,
+            )  # type: ignore
