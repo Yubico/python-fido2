@@ -57,6 +57,7 @@ from .cose import ES256
 from .rpid import verify_rp_id
 from .utils import sha256
 from enum import IntEnum, unique
+from dataclasses import replace
 from urllib.parse import urlparse
 from threading import Timer, Event
 from typing import (
@@ -748,7 +749,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             return (
                 self.ctap2.make_credential(
                     client_data_hash,
-                    _as_cbor(rp),
+                    _as_cbor(replace(rp, id=rp_id)),
                     _as_cbor(user),
                     _cbor_list(key_params),
                     [_as_cbor(exclude_cred)] if exclude_cred else None,
