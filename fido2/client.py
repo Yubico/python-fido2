@@ -787,13 +787,14 @@ class _Ctap2ClientBackend(_ClientBackend):
                     user_verification = UserVerificationRequirement.REQUIRED
                     continue
                 # NFC may require reconnect
+                connect = getattr(dev, "connect", None)
                 if (
                     e.code == CtapError.ERR.PIN_AUTH_BLOCKED
-                    and hasattr(dev, "connect")
+                    and connect
                     and not reconnected
                 ):
                     dev.close()
-                    dev.connect()
+                    connect()
                     reconnected = True  # We only want to try this once
                     continue
                 raise
@@ -919,13 +920,14 @@ class _Ctap2ClientBackend(_ClientBackend):
                     user_verification = UserVerificationRequirement.REQUIRED
                     continue
                 # NFC may require reconnect
+                connect = getattr(dev, "connect", None)
                 if (
                     e.code == CtapError.ERR.PIN_AUTH_BLOCKED
-                    and hasattr(dev, "connect")
+                    and connect
                     and not reconnected
                 ):
                     dev.close()
-                    dev.connect()
+                    connect()
                     reconnected = True  # We only want to try this once
                     continue
                 raise
