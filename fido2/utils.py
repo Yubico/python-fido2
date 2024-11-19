@@ -212,12 +212,10 @@ class _DataClassMapping(Mapping[_T, Any]):
         serialize = f.metadata.get("serialize")
         if serialize:
             return serialize(value)
-        if isinstance(value, _DataClassMapping):
+        if isinstance(value, Mapping) and not isinstance(value, dict):
             return dict(value)
-        if isinstance(value, list) and all(
-            isinstance(v, _DataClassMapping) for v in value
-        ):
-            return [dict(v) for v in value]
+        if isinstance(value, Sequence) and all(isinstance(v, Mapping) for v in value):
+            return [v if isinstance(v, dict) else dict(v) for v in value]
         return value
 
     @classmethod
