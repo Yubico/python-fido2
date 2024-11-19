@@ -247,6 +247,7 @@ class Ctap2Extension(abc.ABC):
 
         return Processor(self.get_get_permissions(inputs))
 
+    # TODO 2.0: Remove the remaining methods of this class
     def get_create_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
         return ClientPin.PERMISSION(0)
 
@@ -465,6 +466,7 @@ class HmacSecretExtension(Ctap2Extension):
 
             return Processing()
 
+    # TODO 2.0: Remove the remaining methods of this class
     def process_create_input(self, inputs):
         if self.is_supported() and inputs.get("hmacCreateSecret") is True:
             return True
@@ -541,22 +543,6 @@ class LargeBlobExtension(Ctap2Extension):
         assert ctap is not None  # nosec
         return super().is_supported(ctap) and ctap.info.options.get("largeBlobs", False)
 
-    def process_create_input(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
-        if data:
-            if data.read or data.write:
-                raise ValueError("Invalid set of parameters")
-            if data.support == "required" and not self.is_supported():
-                raise ValueError("Authenticator does not support large blob storage")
-            return True
-
-    def process_create_output(self, attestation_response, *args, **kwargs):
-        return {
-            "largeBlob": _LargeBlobOutputs(
-                supported=attestation_response.large_blob_key is not None
-            )
-        }
-
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
         data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
@@ -578,37 +564,6 @@ class LargeBlobExtension(Ctap2Extension):
                     }
 
             return Processor()
-
-    def get_get_permissions(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
-        if data and data.write:
-            return ClientPin.PERMISSION.LARGE_BLOB_WRITE
-        return ClientPin.PERMISSION(0)
-
-    def process_get_input(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
-        if data:
-            if data.support or (data.read and data.write):
-                raise ValueError("Invalid set of parameters")
-            if not self.is_supported():
-                raise ValueError("Authenticator does not support large blob storage")
-            if data.read:
-                self._action = True
-            else:
-                self._action = data.write
-            return True
-
-    def process_get_output(self, assertion_response, token, pin_protocol):
-        blob_key = assertion_response.large_blob_key
-        if blob_key:
-            if self._action is True:  # Read
-                large_blobs = LargeBlobs(self.ctap)
-                blob = large_blobs.get_blob(blob_key)
-                return {"largeBlob": _LargeBlobOutputs(blob=blob)}
-            elif self._action:  # Write
-                large_blobs = LargeBlobs(self.ctap, pin_protocol, token)
-                large_blobs.put_blob(blob_key, self._action)
-                return {"largeBlob": _LargeBlobOutputs(written=True)}
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
@@ -641,6 +596,54 @@ class LargeBlobExtension(Ctap2Extension):
                 inputs={LargeBlobExtension.NAME: True},
             )
 
+    # TODO 2.0: Remove the remaining methods of this class
+    def process_create_input(self, inputs):
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        if data:
+            if data.read or data.write:
+                raise ValueError("Invalid set of parameters")
+            if data.support == "required" and not self.is_supported():
+                raise ValueError("Authenticator does not support large blob storage")
+            return True
+
+    def process_create_output(self, attestation_response, *args, **kwargs):
+        return {
+            "largeBlob": _LargeBlobOutputs(
+                supported=attestation_response.large_blob_key is not None
+            )
+        }
+
+    def get_get_permissions(self, inputs):
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        if data and data.write:
+            return ClientPin.PERMISSION.LARGE_BLOB_WRITE
+        return ClientPin.PERMISSION(0)
+
+    def process_get_input(self, inputs):
+        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        if data:
+            if data.support or (data.read and data.write):
+                raise ValueError("Invalid set of parameters")
+            if not self.is_supported():
+                raise ValueError("Authenticator does not support large blob storage")
+            if data.read:
+                self._action = True
+            else:
+                self._action = data.write
+            return True
+
+    def process_get_output(self, assertion_response, token, pin_protocol):
+        blob_key = assertion_response.large_blob_key
+        if blob_key:
+            if self._action is True:  # Read
+                large_blobs = LargeBlobs(self.ctap)
+                blob = large_blobs.get_blob(blob_key)
+                return {"largeBlob": _LargeBlobOutputs(blob=blob)}
+            elif self._action:  # Write
+                large_blobs = LargeBlobs(self.ctap, pin_protocol, token)
+                large_blobs.put_blob(blob_key, self._action)
+                return {"largeBlob": _LargeBlobOutputs(written=True)}
+
 
 class CredBlobExtension(Ctap2Extension):
     """
@@ -648,17 +651,6 @@ class CredBlobExtension(Ctap2Extension):
     """
 
     NAME = "credBlob"
-
-    def process_create_input(self, inputs):
-        if self.is_supported():
-            blob = inputs.get("credBlob")
-            assert self.ctap.info.max_cred_blob_length is not None  # nosec
-            if blob and len(blob) <= self.ctap.info.max_cred_blob_length:
-                return blob
-
-    def process_get_input(self, inputs):
-        if self.is_supported() and inputs.get("getCredBlob") is True:
-            return True
 
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
@@ -672,6 +664,18 @@ class CredBlobExtension(Ctap2Extension):
         inputs = options.extensions or {}
         if self.is_supported(ctap) and inputs.get("getCredBlob") is True:
             return AuthenticationExtensionProcessor(inputs={self.NAME: True})
+
+    # TODO 2.0: Remove the remaining methods of this class
+    def process_create_input(self, inputs):
+        if self.is_supported():
+            blob = inputs.get("credBlob")
+            assert self.ctap.info.max_cred_blob_length is not None  # nosec
+            if blob and len(blob) <= self.ctap.info.max_cred_blob_length:
+                return blob
+
+    def process_get_input(self, inputs):
+        if self.is_supported() and inputs.get("getCredBlob") is True:
+            return True
 
 
 class CredProtectExtension(Ctap2Extension):
@@ -688,17 +692,6 @@ class CredProtectExtension(Ctap2Extension):
     ALWAYS_RUN = True
     NAME = "credProtect"
 
-    def process_create_input(self, inputs):
-        policy = inputs.get("credentialProtectionPolicy")
-        if policy:
-            index = list(CredProtectExtension.POLICY).index(
-                CredProtectExtension.POLICY(policy)
-            )
-            enforce = inputs.get("enforceCredentialProtectionPolicy", False)
-            if enforce and not self.is_supported() and index > 0:
-                raise ValueError("Authenticator does not support Credential Protection")
-            return index + 1
-
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
         policy = inputs.get("credentialProtectionPolicy")
@@ -711,6 +704,18 @@ class CredProtectExtension(Ctap2Extension):
                 raise ValueError("Authenticator does not support Credential Protection")
 
             return RegistrationExtensionProcessor(inputs={self.NAME: index + 1})
+
+    # TODO 2.0: Remove the remaining methods of this class
+    def process_create_input(self, inputs):
+        policy = inputs.get("credentialProtectionPolicy")
+        if policy:
+            index = list(CredProtectExtension.POLICY).index(
+                CredProtectExtension.POLICY(policy)
+            )
+            enforce = inputs.get("enforceCredentialProtectionPolicy", False)
+            if enforce and not self.is_supported() and index > 0:
+                raise ValueError("Authenticator does not support Credential Protection")
+            return index + 1
 
 
 class MinPinLengthExtension(Ctap2Extension):
@@ -726,14 +731,15 @@ class MinPinLengthExtension(Ctap2Extension):
         assert ctap is not None  # nosec
         return "setMinPINLength" in ctap.info.options
 
-    def process_create_input(self, inputs):
-        if self.is_supported() and inputs.get(self.NAME) is True:
-            return True
-
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
         if self.is_supported(ctap) and inputs.get(self.NAME) is True:
             return RegistrationExtensionProcessor(inputs={self.NAME: True})
+
+    # TODO 2.0: Remove the remaining methods of this class
+    def process_create_input(self, inputs):
+        if self.is_supported() and inputs.get(self.NAME) is True:
+            return True
 
 
 @dataclass(eq=False, frozen=True)
