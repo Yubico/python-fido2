@@ -710,7 +710,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             extension_inputs = {}
             try:
                 for ext in used_extensions:
-                    auth_input = ext.prepare_inputs()
+                    auth_input = ext.prepare_inputs(pin_token)
                     if auth_input:
                         extension_inputs.update(auth_input)
             except ValueError as e:
@@ -856,7 +856,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             extension_inputs = {}
             try:
                 for ext in used_extensions:
-                    inputs = ext.prepare_inputs(selected_cred)
+                    inputs = ext.prepare_inputs(selected_cred, pin_token)
                     if inputs:
                         extension_inputs.update(inputs)
             except ValueError as e:

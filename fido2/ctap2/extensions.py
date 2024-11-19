@@ -99,7 +99,7 @@ class RegistrationExtensionProcessor(ExtensionProcessor):
     :param permissions: PinUvAuthToken permissions required by the extension.
     """
 
-    def prepare_inputs(self) -> Optional[Dict[str, Any]]:
+    def prepare_inputs(self, pin_token: Optional[bytes]) -> Optional[Dict[str, Any]]:
         "Prepare authenticator extension inputs, to be passed to the Authenenticator."
         return self._inputs
 
@@ -122,7 +122,9 @@ class AuthenticationExtensionProcessor(ExtensionProcessor):
     """
 
     def prepare_inputs(
-        self, selected: Optional[PublicKeyCredentialDescriptor]
+        self,
+        selected: Optional[PublicKeyCredentialDescriptor],
+        pin_token: Optional[bytes],
     ) -> Optional[Dict[str, Any]]:
         "Prepare authenticator extension inputs, to be passed to the Authenenticator."
         return self._inputs
@@ -201,7 +203,7 @@ class Ctap2Extension(abc.ABC):
         ext = self
 
         class Processor(RegistrationExtensionProcessor):
-            def prepare_inputs(self):
+            def prepare_inputs(self, pin_token):
                 processed = ext.process_create_input(inputs)
                 self._has_input = processed is not None
                 return {ext.NAME: processed} if self._has_input else None
@@ -236,7 +238,7 @@ class Ctap2Extension(abc.ABC):
         class Processor(AuthenticationExtensionProcessor):
             _has_input: bool
 
-            def prepare_inputs(self, selected):
+            def prepare_inputs(self, selected, pin_token):
                 processed = ext.process_get_input(inputs)
                 self._has_input = processed is not None
                 return {ext.NAME: processed} if self._has_input else None
@@ -362,7 +364,7 @@ class HmacSecretExtension(Ctap2Extension):
         if self.is_supported(ctap) and (prf or hmac):
 
             class Processor(RegistrationExtensionProcessor):
-                def prepare_inputs(self):
+                def prepare_inputs(self, pin_token):
                     return {HmacSecretExtension.NAME: True}
 
                 def prepare_outputs(self, response, pin_token):
@@ -384,12 +386,12 @@ class HmacSecretExtension(Ctap2Extension):
             else None
         )
 
-        if self.is_supported(ctap) and (prf or hmac):
+        if pin_protocol and self.is_supported(ctap) and (prf or hmac):
             client_pin = ClientPin(ctap, pin_protocol)
             key_agreement, shared_secret = client_pin._get_shared_secret()
 
             class Processing(AuthenticationExtensionProcessor):
-                def prepare_inputs(self, selected):
+                def prepare_inputs(self, selected, pin_token):
                     if prf:
                         secrets = prf.eval
                         by_creds = prf.eval_by_credential
@@ -553,7 +555,7 @@ class LargeBlobExtension(Ctap2Extension):
                 raise ValueError("Authenticator does not support large blob storage")
 
             class Processor(RegistrationExtensionProcessor):
-                def prepare_inputs(self):
+                def prepare_inputs(self, pin_token):
                     return {LargeBlobExtension.NAME: True}
 
                 def prepare_outputs(self, response, pin_token):
