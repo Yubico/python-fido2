@@ -201,8 +201,8 @@ class ES512(CoseKey):
                 1: 2,
                 3: cls.ALGORITHM,
                 -1: 3,
-                -2: int2bytes(pn.x, 64),
-                -3: int2bytes(pn.y, 64),
+                -2: int2bytes(pn.x, 66),
+                -3: int2bytes(pn.y, 66),
             }
         )
 
