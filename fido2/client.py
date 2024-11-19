@@ -32,11 +32,16 @@ from .ctap import CtapDevice, CtapError
 from .ctap1 import Ctap1, APDU, ApduError
 from .ctap2 import Ctap2, AssertionResponse, Info
 from .ctap2.pin import ClientPin, PinProtocol
-from .ctap2.extensions import Ctap2Extension, ClientExtensionOutputs
+from .ctap2.extensions import (
+    Ctap2Extension,
+    ClientExtensionOutputs,
+    AuthenticationExtensionProcessor,
+)
 from .webauthn import (
     Aaguid,
     AttestationObject,
     CollectedClientData,
+    PublicKeyCredentialRpEntity,
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
@@ -45,6 +50,7 @@ from .webauthn import (
     AuthenticatorAttestationResponse,
     AuthenticatorAssertionResponse,
     AttestationConveyancePreference,
+    ResidentKeyRequirement,
     _as_cbor,
 )
 from .cose import ES256
@@ -52,7 +58,6 @@ from .rpid import verify_rp_id
 from .utils import sha256
 from enum import IntEnum, unique
 from urllib.parse import urlparse
-from dataclasses import replace
 from threading import Timer, Event
 from typing import (
     Type,
@@ -61,6 +66,7 @@ from typing import (
     Optional,
     Mapping,
     Sequence,
+    Tuple,
 )
 
 import abc
@@ -298,11 +304,25 @@ class _ClientBackend(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def do_make_credential(self, *args) -> AuthenticatorAttestationResponse:
+    def do_make_credential(
+        self,
+        options: PublicKeyCredentialCreationOptions,
+        client_data: CollectedClientData,
+        rp: PublicKeyCredentialRpEntity,
+        rp_id: str,
+        enterprise_rpid_list: Optional[Sequence[str]],
+        event: Event,
+    ) -> AuthenticatorAttestationResponse:
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def do_get_assertion(self, *args) -> AssertionSelection:
+    def do_get_assertion(
+        self,
+        options: PublicKeyCredentialRequestOptions,
+        client_data: CollectedClientData,
+        rp_id: str,
+        event: Event,
+    ) -> AssertionSelection:
         raise NotImplementedError()
 
 
@@ -328,6 +348,7 @@ class _Ctap1ClientBackend(_ClientBackend):
         options,
         client_data,
         rp,
+        rp_id,
         enterprise_rpid_list,
         event,
     ):
@@ -345,7 +366,7 @@ class _Ctap1ClientBackend(_ClientBackend):
         ):
             raise CtapError(CtapError.ERR.UNSUPPORTED_OPTION)
 
-        app_param = sha256(rp.id.encode())
+        app_param = sha256(rp_id.encode())
 
         dummy_param = b"\0" * 32
         for cred in exclude_list or []:
@@ -386,9 +407,9 @@ class _Ctap1ClientBackend(_ClientBackend):
         self,
         options,
         client_data,
+        rp_id,
         event,
     ):
-        rp_id = options.rp_id
         allow_list = options.allow_credentials
         user_verification = options.user_verification
 
@@ -421,24 +442,20 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         self,
         client_data: CollectedClientData,
         assertions: Sequence[AssertionResponse],
-        extensions: Sequence[Ctap2Extension],
-        pin_token: Optional[str],
-        pin_protocol: Optional[PinProtocol],
+        extensions: Sequence[AuthenticationExtensionProcessor],
+        pin_token: Optional[bytes],
     ):
         super().__init__(client_data, assertions)
         self._extensions = extensions
         self._pin_token = pin_token
-        self._pin_protocol = pin_protocol
 
     def _get_extension_results(self, assertion):
         # Process extenstion outputs
         extension_outputs = {}
         try:
             for ext in self._extensions:
-                output = ext.process_get_output(
-                    assertion, self._pin_token, self._pin_protocol
-                )
-                if output is not None:
+                output = ext.prepare_outputs(assertion, self._pin_token)
+                if output:
                     extension_outputs.update(output)
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
@@ -456,12 +473,19 @@ class _Ctap2ClientBackend(_ClientBackend):
         self,
         device: CtapDevice,
         user_interaction: UserInteraction,
-        extensions: Sequence[Type[Ctap2Extension]],
+        extension_types: Sequence[Type[Ctap2Extension]],
+        extensions: Sequence[Ctap2Extension],
     ):
         self.ctap2 = Ctap2(device)
         self.info = self.ctap2.info
-        self.extensions = extensions
+        self._extension_types = extension_types
+        self._extensions = extensions
         self.user_interaction = user_interaction
+
+    def _get_extensions(self) -> Sequence[Ctap2Extension]:
+        if self._extensions:
+            return self._extensions
+        return [ext(self.ctap2) for ext in self._extension_types]
 
     def _filter_creds(
         self, rp_id, cred_list, pin_protocol, pin_token, event, on_keepalive
@@ -592,15 +616,14 @@ class _Ctap2ClientBackend(_ClientBackend):
         )
 
     def _get_auth_params(
-        self, rp_id, user_verification, permissions, event, on_keepalive
+        self, pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
     ):
         self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
 
-        pin_protocol = None
         pin_token = None
         internal_uv = False
         if self._should_use_uv(user_verification, permissions):
-            client_pin = ClientPin(self.ctap2)
+            client_pin = ClientPin(self.ctap2, pin_protocol)
             allow_internal_uv = (
                 permissions
                 & ~(
@@ -612,26 +635,23 @@ class _Ctap2ClientBackend(_ClientBackend):
             pin_token = self._get_token(
                 client_pin, permissions, rp_id, event, on_keepalive, allow_internal_uv
             )
-            if pin_token:
-                pin_protocol = client_pin.protocol
-            else:
+            if not pin_token:
                 internal_uv = True
-        return pin_protocol, pin_token, internal_uv
+        return pin_token, internal_uv
 
     def do_make_credential(
         self,
         options,
         client_data,
         rp,
+        rp_id,
         enterprise_rpid_list,
         event,
     ):
         user = options.user
         key_params = options.pub_key_cred_params
         exclude_list = options.exclude_credentials
-        extensions = options.extensions
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
-        rk = selection.require_resident_key
         user_verification = selection.user_verification
 
         on_keepalive = _user_keepalive(self.user_interaction)
@@ -642,36 +662,43 @@ class _Ctap2ClientBackend(_ClientBackend):
             if self.info.options.get("ep"):
                 if enterprise_rpid_list is not None:
                     # Platform facilitated
-                    if rp.id in enterprise_rpid_list:
+                    if rp_id in enterprise_rpid_list:
                         enterprise_attestation = 2
                 else:
                     # Vendor facilitated
                     enterprise_attestation = 1
 
-        # Gather up permissions
+        # Negotiate PIN/UV protocol version
+        for proto in ClientPin.PROTOCOLS:
+            if proto.VERSION in self.info.pin_uv_protocols:
+                pin_protocol: Optional[PinProtocol] = proto()
+                break
+        else:
+            pin_protocol = None
+
+        # Gather UV permissions
         permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
         if exclude_list:
             # We need this for filtering the exclude_list
             permissions |= ClientPin.PERMISSION.GET_ASSERTION
 
-        # Get extension permissions
-        extension_instances = [cls(self.ctap2) for cls in self.extensions]
+        # Initialize extensions and add extension permissions
         used_extensions = []
-        client_inputs = extensions or {}
-        for ext in extension_instances:
-            # TODO: Move options to the constructor instead
-            ext._create_options = options
-            permissions |= ext.get_create_permissions(client_inputs)
+        for e in self._get_extensions():
+            ext = e.make_credential(self.ctap2, options, pin_protocol)
+            if ext:
+                used_extensions.append(ext)
+                permissions |= ext.permissions
 
         def _do_make():
             # Handle auth
-            pin_protocol, pin_token, internal_uv = self._get_auth_params(
-                rp.id, user_verification, permissions, event, on_keepalive
+            pin_token, internal_uv = self._get_auth_params(
+                pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
             )
 
             if exclude_list:
                 exclude_cred = self._filter_creds(
-                    rp.id, exclude_list, pin_protocol, pin_token, event, on_keepalive
+                    rp_id, exclude_list, pin_protocol, pin_token, event, on_keepalive
                 )
                 # We know the request will fail if exclude_cred is not None here
                 # BUT DO NOT FAIL EARLY! We still need to prompt for UP, so we keep
@@ -682,32 +709,40 @@ class _Ctap2ClientBackend(_ClientBackend):
             # Process extensions
             extension_inputs = {}
             try:
-                for ext in extension_instances:
-                    auth_input = ext.process_create_input(client_inputs)
-                    if auth_input is not None:
-                        used_extensions.append(ext)
-                        extension_inputs[ext.NAME] = auth_input
-                    elif ext._used:
-                        # TODO: Make this cleaner
-                        used_extensions.append(ext)
+                for ext in used_extensions:
+                    auth_input = ext.prepare_inputs(pin_token)
+                    if auth_input:
+                        extension_inputs.update(auth_input)
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
+
+            can_rk = self.info.options.get("rk")
+            rk = selection.resident_key == ResidentKeyRequirement.REQUIRED or (
+                selection.resident_key == ResidentKeyRequirement.PREFERRED and can_rk
+            )
 
             if not (rk or internal_uv):
                 options = None
             else:
                 options = {}
                 if rk:
+                    if not can_rk:
+                        raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
+                            "Resident key not supported"
+                        )
                     options["rk"] = True
                 if internal_uv:
                     options["uv"] = True
 
             # Calculate pin_auth
             client_data_hash = client_data.hash
-            if pin_token:
-                pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
+            if pin_protocol and pin_token:
+                pin_auth: Tuple[Optional[bytes], Optional[int]] = (
+                    pin_protocol.authenticate(pin_token, client_data_hash),
+                    pin_protocol.VERSION,
+                )
             else:
-                pin_auth = None
+                pin_auth = (None, None)
 
             # Perform make credential
             return (
@@ -719,13 +754,11 @@ class _Ctap2ClientBackend(_ClientBackend):
                     [_as_cbor(exclude_cred)] if exclude_cred else None,
                     extension_inputs or None,
                     options,
-                    pin_auth,
-                    pin_protocol.VERSION if pin_protocol else None,
+                    *pin_auth,
                     enterprise_attestation,
                     event=event,
                     on_keepalive=on_keepalive,
                 ),
-                pin_protocol,
                 pin_token,
             )
 
@@ -733,7 +766,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         reconnected = False
         while True:
             try:
-                att_obj, pin_protocol, pin_token = _do_make()
+                att_obj, pin_token = _do_make()
                 break
             except CtapError as e:
                 # The Authenticator may still require UV, try again
@@ -759,7 +792,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         extension_outputs = {}
         try:
             for ext in used_extensions:
-                output = ext.process_create_output(att_obj, pin_token, pin_protocol)
+                output = ext.prepare_outputs(att_obj, pin_token)
                 if output is not None:
                     extension_outputs.update(output)
         except ValueError as e:
@@ -775,30 +808,38 @@ class _Ctap2ClientBackend(_ClientBackend):
         self,
         options,
         client_data,
+        rp_id,
         event,
     ):
         rp_id = options.rp_id
         allow_list = options.allow_credentials
-        extensions = options.extensions
         user_verification = options.user_verification
 
         on_keepalive = _user_keepalive(self.user_interaction)
 
-        # Gather up permissions
+        # Negotiate PIN/UV protocol version
+        for proto in ClientPin.PROTOCOLS:
+            if proto.VERSION in self.info.pin_uv_protocols:
+                pin_protocol: Optional[PinProtocol] = proto()
+                break
+        else:
+            pin_protocol = None
+
+        # Gather UV permissions
         permissions = ClientPin.PERMISSION.GET_ASSERTION
 
-        # Get extension permissions
-        extension_instances = [cls(self.ctap2) for cls in self.extensions]
-        client_inputs = extensions or {}
-        for ext in extension_instances:
-            # TODO: Move options to get_get_permissions and process_get_input
-            ext._get_options = options
-            permissions |= ext.get_get_permissions(client_inputs)
+        # Initialize extensions and add extension permissions
+        used_extensions = []
+        for e in self._get_extensions():
+            ext = e.get_assertion(self.ctap2, options, pin_protocol)
+            if ext:
+                used_extensions.append(ext)
+                permissions |= ext.permissions
 
         def _do_auth():
             # Handle auth
-            pin_protocol, pin_token, internal_uv = self._get_auth_params(
-                rp_id, user_verification, permissions, event, on_keepalive
+            pin_token, internal_uv = self._get_auth_params(
+                pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
             )
 
             if allow_list:
@@ -813,18 +854,11 @@ class _Ctap2ClientBackend(_ClientBackend):
 
             # Process extensions
             extension_inputs = {}
-            used_extensions = []
             try:
-                for ext in extension_instances:
-                    # TODO: Move to process_get_input()
-                    ext._selected = selected_cred
-                    auth_input = ext.process_get_input(client_inputs)
-                    if auth_input is not None:
-                        used_extensions.append(ext)
-                        extension_inputs[ext.NAME] = auth_input
-                    elif ext._used:
-                        # TODO: Make this cleaner
-                        used_extensions.append(ext)
+                for ext in used_extensions:
+                    inputs = ext.prepare_inputs(selected_cred, pin_token)
+                    if inputs:
+                        extension_inputs.update(inputs)
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
@@ -832,10 +866,13 @@ class _Ctap2ClientBackend(_ClientBackend):
 
             # Calculate pin_auth
             client_data_hash = client_data.hash
-            if pin_token:
-                pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
+            if pin_protocol and pin_token:
+                pin_auth: Tuple[Optional[bytes], Optional[int]] = (
+                    pin_protocol.authenticate(pin_token, client_data_hash),
+                    pin_protocol.VERSION,
+                )
             else:
-                pin_auth = None
+                pin_auth = (None, None)
 
             if allow_list and not selected_cred:
                 # We still need to send a dummy value if there was an allow_list
@@ -849,18 +886,13 @@ class _Ctap2ClientBackend(_ClientBackend):
                 [_as_cbor(selected_cred)] if selected_cred else None,
                 extension_inputs or None,
                 options,
-                pin_auth,
-                pin_protocol.VERSION if pin_protocol else None,
+                *pin_auth,
                 event=event,
                 on_keepalive=on_keepalive,
             )
 
             return _Ctap2ClientAssertionSelection(
-                client_data,
-                assertions,
-                used_extensions,
-                pin_token,
-                pin_protocol,
+                client_data, assertions, used_extensions, pin_token
             )
 
         dev = self.ctap2.device
@@ -905,8 +937,10 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         device: CtapDevice,
         origin: str,
         verify: Callable[[str, str], bool] = verify_rp_id,
+        # TODO 2.0: Replace extension_types with extensions
         extension_types: Sequence[Type[Ctap2Extension]] = _default_extensions(),
         user_interaction: UserInteraction = UserInteraction(),
+        extensions: Sequence[Ctap2Extension] = [],
     ):
         super().__init__(origin, verify)
 
@@ -915,7 +949,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
 
         try:
             self._backend: _ClientBackend = _Ctap2ClientBackend(
-                device, user_interaction, extension_types
+                device, user_interaction, extension_types, extensions
             )
         except (ValueError, CtapError):
             self._backend = _Ctap1ClientBackend(device, user_interaction)
@@ -929,6 +963,17 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             self._backend.selection(event)
         except CtapError as e:
             raise _ctap2client_err(e)
+
+    def _get_rp_id(self, rp_id: Optional[str]) -> str:
+        if rp_id is None:
+            url = urlparse(self.origin)
+            if url.scheme != "https" or not url.netloc:
+                raise ClientError.ERR.BAD_REQUEST(
+                    "RP ID required for non-https origin."
+                )
+            return url.netloc
+        else:
+            return rp_id
 
     def make_credential(
         self,
@@ -949,16 +994,10 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             timer.start()
 
         rp = options.rp
-        if rp.id is None:
-            url = urlparse(self.origin)
-            if url.scheme != "https" or not url.netloc:
-                raise ClientError.ERR.BAD_REQUEST(
-                    "RP ID required for non-https origin."
-                )
-            rp = replace(rp, id=url.netloc)
+        rp_id = self._get_rp_id(rp.id)
 
-        logger.debug(f"Register a new credential for RP ID: {rp.id}")
-        self._verify_rp_id(rp.id)
+        logger.debug(f"Register a new credential for RP ID: {rp_id}")
+        self._verify_rp_id(rp_id)
 
         client_data = self._build_client_data(
             CollectedClientData.TYPE.CREATE, options.challenge
@@ -969,6 +1008,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
                 options,
                 client_data,
                 rp,
+                rp_id,
                 self._enterprise_rpid_list,
                 event,
             )
@@ -996,8 +1036,9 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             timer.daemon = True
             timer.start()
 
-        logger.debug(f"Assert a credential for RP ID: {options.rp_id}")
-        self._verify_rp_id(options.rp_id)
+        rp_id = self._get_rp_id(options.rp_id)
+        logger.debug(f"Assert a credential for RP ID: {rp_id}")
+        self._verify_rp_id(rp_id)
 
         client_data = self._build_client_data(
             CollectedClientData.TYPE.GET, options.challenge
@@ -1007,6 +1048,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
             return self._backend.do_get_assertion(
                 options,
                 client_data,
+                rp_id,
                 event,
             )
         except CtapError as e:
