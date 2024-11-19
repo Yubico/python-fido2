@@ -135,7 +135,7 @@ class AssertionResponse(_CborDataObject):
         (only set for the first response, if > 1).
     """
 
-    credential: Dict[str, Any]
+    credential: Mapping[str, Any]
     auth_data: AuthenticatorData
     signature: bytes
     user: Optional[Dict[str, Any]] = None
@@ -154,7 +154,7 @@ class AssertionResponse(_CborDataObject):
 
     @classmethod
     def from_ctap1(
-        cls, app_param: bytes, credential: Dict[str, Any], authentication
+        cls, app_param: bytes, credential: Mapping[str, Any], authentication
     ) -> "AssertionResponse":
         """Create an AssertionResponse from a CTAP1 SignatureData instance.
 

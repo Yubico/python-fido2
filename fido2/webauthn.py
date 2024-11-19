@@ -464,7 +464,7 @@ class _WebAuthnDataObject(_JsonDataObject):
         return super(_JsonDataObject, cls)._parse_value(t, value)
 
     @classmethod
-    def from_dict(cls, data: Optional[Mapping[str, Any]]):
+    def from_dict(cls, data):
         webauthn_json_mapping.warn()
         return super().from_dict(data)
 
@@ -566,7 +566,7 @@ class AuthenticatorAttestationResponse(_WebAuthnDataObject):
         return super().__getitem__(key)
 
     @classmethod
-    def from_dict(cls, data: Optional[Mapping[str, Any]]):
+    def from_dict(cls, data):
         if data is not None and not webauthn_json_mapping.enabled:
             value = dict(data)
             value["clientDataJSON"] = value.pop("clientData", None)
@@ -596,7 +596,7 @@ class AuthenticatorAssertionResponse(_WebAuthnDataObject):
         return super().__getitem__(key)
 
     @classmethod
-    def from_dict(cls, data: Optional[Mapping[str, Any]]):
+    def from_dict(cls, data):
         if data is not None and not webauthn_json_mapping.enabled:
             value = dict(data)
             value["clientDataJSON"] = value.pop("clientData", None)

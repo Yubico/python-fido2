@@ -48,6 +48,8 @@ from typing import (
     TypeVar,
     Hashable,
     get_type_hints,
+    overload,
+    Type,
 )
 import struct
 import warnings
@@ -168,6 +170,7 @@ class ByteBuffer(BytesIO):
 
 
 _T = TypeVar("_T", bound=Hashable)
+_S = TypeVar("_S", bound="_DataClassMapping")
 
 
 class _DataClassMapping(Mapping[_T, Any]):
@@ -252,8 +255,16 @@ class _DataClassMapping(Mapping[_T, Any]):
         # Convert to enum values, other wrappers
         return t(value)
 
+    @overload
     @classmethod
-    def from_dict(cls, data: Optional[Mapping[_T, Any]]):
+    def from_dict(cls: Type[_S], data: None) -> None: ...
+
+    @overload
+    @classmethod
+    def from_dict(cls: Type[_S], data: Mapping[_T, Any]) -> _S: ...
+
+    @classmethod
+    def from_dict(cls, data):
         if data is None:
             return None
         if isinstance(data, cls):

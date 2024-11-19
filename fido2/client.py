@@ -68,6 +68,7 @@ from typing import (
     Mapping,
     Sequence,
     Tuple,
+    overload,
 )
 
 import abc
@@ -461,6 +462,14 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
         return ClientExtensionOutputs(extension_outputs)
+
+
+@overload
+def _cbor_list(values: Sequence) -> list: ...
+
+
+@overload
+def _cbor_list(values: None) -> None: ...
 
 
 def _cbor_list(values):
