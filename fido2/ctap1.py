@@ -80,7 +80,7 @@ class RegistrationData(bytes):
     certificate: bytes
     signature: bytes
 
-    def __init__(self, _):
+    def __init__(self, _: bytes):
         super().__init__()
 
         reader = ByteBuffer(self)
@@ -145,7 +145,7 @@ class SignatureData(bytes):
     counter: int
     signature: bytes
 
-    def __init__(self, _):
+    def __init__(self, _: bytes):
         super().__init__()
 
         reader = ByteBuffer(self)

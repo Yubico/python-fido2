@@ -82,6 +82,7 @@ To silence this warning but retain the current behavior, instead set enabled to 
             )
 
 
+# TODO 2.0: Remove this feature
 webauthn_json_mapping = _Feature(
     "webauthn_json_mapping",
     """JSON values for WebAuthn data class Mapping interface.

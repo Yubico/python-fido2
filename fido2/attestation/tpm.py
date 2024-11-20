@@ -78,7 +78,7 @@ class TpmAlgHash(IntEnum):
     SHA384 = 0x000C
     SHA512 = 0x000D
 
-    def _hash_alg(self) -> hashes.Hash:
+    def _hash_alg(self) -> hashes.HashAlgorithm:
         if self == TpmAlgHash.SHA1:
             return hashes.SHA1()  # nosec
         elif self == TpmAlgHash.SHA256:
@@ -88,7 +88,7 @@ class TpmAlgHash(IntEnum):
         elif self == TpmAlgHash.SHA512:
             return hashes.SHA512()
 
-        return NotImplementedError(f"_hash_alg is not implemented for {self!r}")
+        raise NotImplementedError(f"_hash_alg is not implemented for {self!r}")
 
 
 @dataclass

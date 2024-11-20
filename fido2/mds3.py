@@ -409,20 +409,21 @@ class MdsAttestationVerifier(AttestationVerifier):
                 return self._ski_table[ski]
         return None
 
-    def ca_lookup(self, result, auth_data):
+    def ca_lookup(self, attestation_result, auth_data):
+        assert auth_data.credential_data is not None  # nosec
         aaguid = auth_data.credential_data.aaguid
         if aaguid:
             logging.debug(f"Using AAGUID: {aaguid} to look up metadata")
             entry = self.find_entry_by_aaguid(aaguid)
         else:
             logging.debug("Using trust_path chain to look up metadata")
-            entry = self.find_entry_by_chain(result.trust_path)
+            entry = self.find_entry_by_chain(attestation_result.trust_path)
 
         if entry:
             logging.debug(f"Found entry: {entry}")
 
             # Check attestation filter
-            if not self._attestation_filter(entry, result.trust_path):
+            if not self._attestation_filter(entry, attestation_result.trust_path):
                 logging.debug("Matched entry did not pass attestation filter")
                 return None
 
@@ -434,7 +435,7 @@ class MdsAttestationVerifier(AttestationVerifier):
                 return None
 
             issuer = x509.load_der_x509_certificate(
-                result.trust_path[-1], default_backend()
+                attestation_result.trust_path[-1], default_backend()
             ).issuer
 
             for root in entry.metadata_statement.attestation_root_certificates:
@@ -444,7 +445,7 @@ class MdsAttestationVerifier(AttestationVerifier):
                 if subject == issuer:
                     _last_entry.set(entry)
                     return root
-            logger.info(f"No attestation root matching subject: {subject}")
+            logger.info(f"No attestation root matching subject: {issuer}")
         return None
 
     def find_entry(

@@ -108,6 +108,7 @@ def verify_x509_chain(chain: List[bytes]) -> None:
         pub = cert.public_key()
         try:
             if isinstance(pub, rsa.RSAPublicKey):
+                assert child.signature_hash_algorithm is not None  # nosec
                 pub.verify(
                     child.signature,
                     child.tbs_certificate_bytes,
@@ -115,11 +116,14 @@ def verify_x509_chain(chain: List[bytes]) -> None:
                     child.signature_hash_algorithm,
                 )
             elif isinstance(pub, ec.EllipticCurvePublicKey):
+                assert child.signature_hash_algorithm is not None  # nosec
                 pub.verify(
                     child.signature,
                     child.tbs_certificate_bytes,
                     ec.ECDSA(child.signature_hash_algorithm),
                 )
+            else:
+                raise ValueError("Unsupported signature key type")
         except _InvalidSignature:
             raise InvalidSignature()
 

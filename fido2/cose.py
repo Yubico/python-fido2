@@ -30,8 +30,8 @@ from __future__ import annotations
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519
-from typing import Sequence, Type, Mapping, Any, Union, TypeVar
+from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519, types
+from typing import Sequence, Type, Mapping, Any, TypeVar
 
 
 class CoseKey(dict):
@@ -53,8 +53,7 @@ class CoseKey(dict):
 
     @classmethod
     def from_cryptography_key(
-        cls: Type[T_CoseKey],
-        public_key: Union[rsa.RSAPublicKey, ec.EllipticCurvePublicKey],
+        cls: Type[T_CoseKey], public_key: types.PublicKeyTypes
     ) -> T_CoseKey:
         """Converts a PublicKey object from Cryptography into a COSE key.
 
@@ -132,6 +131,7 @@ class ES256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
         pn = public_key.public_numbers()
         return cls(
             {
@@ -168,6 +168,7 @@ class ES384(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
         pn = public_key.public_numbers()
         return cls(
             {
@@ -195,6 +196,7 @@ class ES512(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
         pn = public_key.public_numbers()
         return cls(
             {
@@ -218,6 +220,7 @@ class RS256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -240,6 +243,7 @@ class PS256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -254,6 +258,7 @@ class EdDSA(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, ed25519.Ed25519PublicKey)  # nosec
         return cls(
             {
                 1: 1,
@@ -277,6 +282,7 @@ class RS1(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -296,6 +302,7 @@ class ES256K(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
         pn = public_key.public_numbers()
         return cls(
             {

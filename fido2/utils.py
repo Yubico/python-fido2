@@ -235,25 +235,30 @@ class _DataClassMapping(Mapping[_T, Any]):
 
         # Handle list of values
         if issubclass(getattr(t, "__origin__", object), Sequence):
-            t = t.__args__[0]
+            t = getattr(t, "__args__")[0]
             return [cls._parse_value(t, v) for v in value]
 
         # Handle Mappings
         elif issubclass(getattr(t, "__origin__", object), Mapping) and isinstance(
             value, Mapping
         ):
-            t_k, t_v = t.__args__
+            t_k, t_v = getattr(t, "__args__")
             return {
                 cls._parse_value(t_k, k): cls._parse_value(t_v, v)
                 for k, v in value.items()
             }
 
         # Check if type has from_dict
-        if hasattr(t, "from_dict"):
-            return t.from_dict(value)
+        from_dict = getattr(t, "from_dict", None)
+        if from_dict:
+            return from_dict(value)
 
         # Convert to enum values, other wrappers
-        return t(value)
+        wrap = getattr(t, "__call__", None)
+        if wrap:
+            return wrap(value)
+
+        raise ValueError(f"Unparseable value of type {type(value)} for {t}")
 
     @overload
     @classmethod
