@@ -554,6 +554,7 @@ class PublicKeyCredentialRequestOptions(_WebAuthnDataObject):
     extensions: Optional[Mapping[str, Any]] = None
 
 
+# TODO 2.0: Move extension results to RegistrationResponse, remove methods
 @dataclass(eq=False, frozen=True)
 class AuthenticatorAttestationResponse(_WebAuthnDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
@@ -581,6 +582,7 @@ class AuthenticatorAttestationResponse(_WebAuthnDataObject):
         return super()._parse_value(t, value)
 
 
+# TODO 2.0: Move extension results to AuthenticationResponse, remove methods
 @dataclass(eq=False, frozen=True)
 class AuthenticatorAssertionResponse(_WebAuthnDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
@@ -611,6 +613,7 @@ class AuthenticatorAssertionResponse(_WebAuthnDataObject):
         return super()._parse_value(t, value)
 
 
+# TODO 2.0: Re-align against WebAuthn spec and use in client
 @dataclass(eq=False, frozen=True)
 class RegistrationResponse(_WebAuthnDataObject):
     id: bytes
@@ -624,6 +627,7 @@ class RegistrationResponse(_WebAuthnDataObject):
         super().__post_init__()
 
 
+# TODO 2.0: Re-align against WebAuthn spec and use in client
 @dataclass(eq=False, frozen=True)
 class AuthenticationResponse(_WebAuthnDataObject):
     id: bytes
