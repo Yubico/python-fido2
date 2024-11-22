@@ -34,7 +34,6 @@ from .ctap2 import Ctap2, AssertionResponse, Info
 from .ctap2.pin import ClientPin, PinProtocol
 from .ctap2.extensions import (
     Ctap2Extension,
-    ClientExtensionOutputs,
     AuthenticationExtensionProcessor,
 )
 from .webauthn import (
@@ -45,6 +44,7 @@ from .webauthn import (
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
+    AuthenticationExtensionsClientOutputs,
     AuthenticatorSelectionCriteria,
     UserVerificationRequirement,
     AuthenticatorAttestationResponse,
@@ -402,7 +402,7 @@ class _Ctap1ClientBackend(_ClientBackend):
         return AuthenticatorAttestationResponse(
             client_data,
             AttestationObject.create(att_obj.fmt, att_obj.auth_data, att_obj.att_stmt),
-            ClientExtensionOutputs({}),
+            AuthenticationExtensionsClientOutputs({}),
         )
 
     def do_get_assertion(
@@ -461,7 +461,7 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
                     extension_outputs.update(output)
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
-        return ClientExtensionOutputs(extension_outputs)
+        return AuthenticationExtensionsClientOutputs(extension_outputs)
 
 
 @overload
@@ -812,7 +812,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         return AuthenticatorAttestationResponse(
             client_data,
             AttestationObject.create(att_obj.fmt, att_obj.auth_data, att_obj.att_stmt),
-            ClientExtensionOutputs(extension_outputs),
+            AuthenticationExtensionsClientOutputs(extension_outputs),
         )
 
     def do_get_assertion(
@@ -1183,7 +1183,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         logger.info("New credential registered")
         return AuthenticatorAttestationResponse(
-            client_data, att_obj, ClientExtensionOutputs(extensions)
+            client_data, att_obj, AuthenticationExtensionsClientOutputs(extensions)
         )
 
     def get_assertion(self, options, event=None):
@@ -1231,5 +1231,5 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     user=user,
                 )
             ],
-            ClientExtensionOutputs(extensions),
+            AuthenticationExtensionsClientOutputs(extensions),
         )

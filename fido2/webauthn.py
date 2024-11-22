@@ -619,7 +619,7 @@ class RegistrationResponse(_WebAuthnDataObject):
     id: bytes
     response: AuthenticatorAttestationResponse
     authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    client_extension_results: Optional[Mapping] = None
+    client_extension_results: Optional[AuthenticationExtensionsClientOutputs] = None
     type: Optional[PublicKeyCredentialType] = None
 
     def __post_init__(self):
@@ -633,7 +633,7 @@ class AuthenticationResponse(_WebAuthnDataObject):
     id: bytes
     response: AuthenticatorAssertionResponse
     authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    client_extension_results: Optional[Mapping] = None
+    client_extension_results: Optional[AuthenticationExtensionsClientOutputs] = None
     type: Optional[PublicKeyCredentialType] = None
 
     def __post_init__(self):
@@ -649,3 +649,38 @@ class CredentialCreationOptions(_WebAuthnDataObject):
 @dataclass(eq=False, frozen=True)
 class CredentialRequestOptions(_WebAuthnDataObject):
     public_key: PublicKeyCredentialRequestOptions
+
+
+class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
+    """Holds extension output from a call to MakeCredential or GetAssertion.
+
+    When accessed as a dict, all bytes values will be serialized to base64url encoding,
+    capable of being serialized to JSON.
+
+    When accessed using attributes, richer types will instead be returned.
+    """
+
+    def __init__(self, outputs: Mapping[str, Any]):
+        self._members = {k: v for k, v in outputs.items() if v is not None}
+
+    def __iter__(self):
+        return iter(self._members)
+
+    def __len__(self):
+        return len(self._members)
+
+    def __getitem__(self, key):
+        value = self._members[key]
+        if isinstance(value, bytes):
+            return websafe_encode(value)
+        elif isinstance(value, Mapping) and not isinstance(value, dict):
+            return dict(value)
+        return value
+
+    def __getattr__(self, key):
+        parts = key.split("_")
+        name = parts[0] + "".join(p.title() for p in parts[1:])
+        return self._members.get(name)
+
+    def __repr__(self):
+        return repr(dict(self))
