@@ -201,15 +201,13 @@ autoapi_options = [
     "special-members",
     "imported-members",
 ]
+autoapi_ignore = ["*/fido2/hid/*", "*/fido2/win_api.py"]
 
-skip_patterns = ["fido2.hid", "fido2.win_api"]
 
-
-def skip_submodules(app, what, name, obj, skip, options):
-    if what == "module" and any(name.startswith(pattern) for pattern in skip_patterns):
-        skip = True
-    return skip
+def skip_member(app, what, name, obj, skip, options):
+    if what == "data" and name.endswith(".logger"):
+        return True
 
 
 def setup(sphinx):
-    sphinx.connect("autoapi-skip-member", skip_submodules)
+    sphinx.connect("autoapi-skip-member", skip_member)
