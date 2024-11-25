@@ -174,7 +174,9 @@ _S = TypeVar("_S", bound="_DataClassMapping")
 
 
 class _DataClassMapping(Mapping[_T, Any]):
-    # TODO: This requires Python 3.9, and fixes the tpye errors we now ignore
+    """A data class with members also accessible as a Mapping."""
+
+    # TODO: This requires Python 3.9, and fixes the type errors we now ignore
     # __dataclass_fields__: ClassVar[Dict[str, Field[Any]]]
 
     def __post_init__(self):
@@ -299,6 +301,8 @@ class _DataClassMapping(Mapping[_T, Any]):
 
 
 class _JsonDataObject(_DataClassMapping[str]):
+    """A data class with members also accessible as a JSON-serializable Mapping."""
+
     @classmethod
     def _get_field_key(cls, field: Field) -> str:
         name = field.metadata.get("name")

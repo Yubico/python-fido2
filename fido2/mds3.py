@@ -142,6 +142,8 @@ class EcdaaTrustAnchor(_JsonDataObject):
 
 @unique
 class AuthenticatorStatus(str, Enum):
+    """Status of an Authenitcator."""
+
     NOT_FIDO_CERTIFIED = "NOT_FIDO_CERTIFIED"
     FIDO_CERTIFIED = "FIDO_CERTIFIED"
     USER_VERIFICATION_BYPASS = "USER_VERIFICATION_BYPASS"

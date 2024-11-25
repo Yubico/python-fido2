@@ -29,6 +29,12 @@
 """
 Minimal CBOR implementation supporting a subset of functionality and types
 required for FIDO 2 CTAP.
+
+Use the :func:`encode`, :func:`decode` and :func:`decode_from` functions to encode
+and decode objects to/from CBOR.
+
+DO NOT use the dump_x/load_x functions directly, these will be made private in
+python-fido2 2.0.
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ from typing import Any, Tuple, Union, Sequence, Mapping, Type, Callable
 CborType = Union[int, bool, str, bytes, Sequence[Any], Mapping[Any, Any]]
 
 
+# TODO 2.0: Make dump_x/load_x functions private
 def dump_int(data: int, mt: int = 0) -> bytes:
     if data < 0:
         mt = 1
@@ -95,13 +102,6 @@ _SERIALIZERS: Sequence[Tuple[Type, Callable[[Any], bytes]]] = [
     (Mapping, dump_dict),
     (Sequence, dump_list),
 ]
-
-
-def encode(data: CborType) -> bytes:
-    for k, v in _SERIALIZERS:
-        if isinstance(data, k):
-            return v(data)
-    raise ValueError(f"Unsupported value: {data!r}")
 
 
 def load_int(ai: int, data: bytes) -> Tuple[int, bytes]:
@@ -167,12 +167,29 @@ _DESERIALIZERS = {
 }
 
 
+def encode(data: CborType) -> bytes:
+    """Encodes data to a CBOR byte string."""
+    for k, v in _SERIALIZERS:
+        if isinstance(data, k):
+            return v(data)
+    raise ValueError(f"Unsupported value: {data!r}")
+
+
 def decode_from(data: bytes) -> Tuple[Any, bytes]:
+    """Decodes a CBOR-encoded value from the start of a byte string.
+
+    Additional data after a valid CBOR object is returned as well.
+
+    :return: The decoded object, and any remaining data."""
     fb = data[0]
     return _DESERIALIZERS[fb >> 5](fb & 0b11111, data[1:])
 
 
 def decode(data) -> CborType:
+    """Decodes data from a CBOR-encoded byte string.
+
+    Also validates that no extra data follows the encoded object.
+    """
     value, rest = decode_from(data)
     if rest != b"":
         raise ValueError("Extraneous data")

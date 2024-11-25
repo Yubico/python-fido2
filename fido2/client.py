@@ -80,8 +80,12 @@ logger = logging.getLogger(__name__)
 
 
 class ClientError(Exception):
+    """Base error raised by clients."""
+
     @unique
     class ERR(IntEnum):
+        """Error codes for ClientError."""
+
         OTHER_ERROR = 1
         BAD_REQUEST = 2
         CONFIGURATION_UNSUPPORTED = 3
@@ -142,6 +146,8 @@ def _ctap2client_err(e, err_cls=ClientError):
 
 
 class PinRequiredError(ClientError):
+    """Raised when a call cannot be completed without providing PIN."""
+
     def __init__(
         self, code=ClientError.ERR.BAD_REQUEST, cause="PIN required but not provided"
     ):
@@ -228,6 +234,8 @@ class AssertionSelection:
 
 
 class WebAuthnClient(abc.ABC):
+    """Base class for a WebAuthn client, supporting registration and authentication."""
+
     @abc.abstractmethod
     def make_credential(
         self,

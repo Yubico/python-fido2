@@ -41,22 +41,24 @@ import abc
 
 
 class InvalidAttestation(Exception):
-    pass
+    """Base exception for attestation-related errors."""
 
 
 class InvalidData(InvalidAttestation):
-    pass
+    """Attestation contains invalid data."""
 
 
 class InvalidSignature(InvalidAttestation):
-    pass
+    """The signature of the attestation could not be verified."""
 
 
 class UntrustedAttestation(InvalidAttestation):
-    pass
+    """The CA of the attestation is not trusted."""
 
 
 class UnsupportedType(InvalidAttestation):
+    """The attestation format is not supported."""
+
     def __init__(self, auth_data, fmt=None):
         super().__init__(
             f'Attestation format "{fmt}" is not supported'
@@ -69,6 +71,8 @@ class UnsupportedType(InvalidAttestation):
 
 @unique
 class AttestationType(IntEnum):
+    """Supported attestation types."""
+
     BASIC = 1
     SELF = 2
     ATT_CA = 3
@@ -78,11 +82,15 @@ class AttestationType(IntEnum):
 
 @dataclass
 class AttestationResult:
+    """The result of verifying an attestation."""
+
     attestation_type: AttestationType
     trust_path: List[bytes]
 
 
 def catch_builtins(f):
+    """Utility decoractor to wrap common exceptions related to InvalidData."""
+
     @wraps(f)
     def inner(*args, **kwargs):
         try:
@@ -129,6 +137,8 @@ def verify_x509_chain(chain: List[bytes]) -> None:
 
 
 class Attestation(abc.ABC):
+    """Implements verification of a specific attestation type."""
+
     @abc.abstractmethod
     def verify(
         self,
@@ -143,6 +153,7 @@ class Attestation(abc.ABC):
 
     @staticmethod
     def for_type(fmt: str) -> Type[Attestation]:
+        """Get an Attestation subclass type for the given format."""
         for cls in Attestation.__subclasses__():
             if getattr(cls, "FORMAT", None) == fmt:
                 return cls

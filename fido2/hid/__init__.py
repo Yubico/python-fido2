@@ -164,7 +164,7 @@ class CtapHidDevice(CtapDevice):
         cmd: int,
         data: bytes = b"",
         event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        on_keepalive: Optional[Callable[[STATUS], None]] = None,
     ) -> bytes:
         event = event or Event()
 
@@ -218,13 +218,12 @@ class CtapHidDevice(CtapDevice):
                     if r_cmd == TYPE_INIT | cmd:
                         pass  # first data packet
                     elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
-                        ka_status = struct.unpack_from(">B", recv)[0]
-                        logger.debug(f"Got keepalive status: {ka_status:02x}")
+                        try:
+                            ka_status = STATUS(struct.unpack_from(">B", recv)[0])
+                            logger.debug(f"Got keepalive status: {ka_status:02x}")
+                        except ValueError:
+                            raise ConnectionFailure("Invalid keepalive status")
                         if on_keepalive and ka_status != last_ka:
-                            try:
-                                ka_status = STATUS(ka_status)
-                            except ValueError:
-                                pass  # Unknown status value
                             last_ka = ka_status
                             on_keepalive(ka_status)
                         continue

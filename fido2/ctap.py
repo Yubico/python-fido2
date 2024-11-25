@@ -36,14 +36,18 @@ from typing import Optional, Callable, Iterator
 
 @unique
 class STATUS(IntEnum):
+    """Status code for CTAP keep-alive message."""
+
     PROCESSING = 1
     UPNEEDED = 2
 
 
 class CtapDevice(abc.ABC):
     """
-    CTAP-capable device. Subclasses of this should implement call, as well as
-    list_devices, which should return a generator over discoverable devices.
+    CTAP-capable device.
+
+    Subclasses of this should implement :func:`call`, as well as :func:`list_devices`,
+    which should return a generator over discoverable devices.
     """
 
     @property
@@ -57,7 +61,7 @@ class CtapDevice(abc.ABC):
         cmd: int,
         data: bytes = b"",
         event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        on_keepalive: Optional[Callable[[STATUS], None]] = None,
     ) -> bytes:
         """Sends a command to the authenticator, and reads the response.
 
@@ -87,7 +91,11 @@ class CtapDevice(abc.ABC):
 
 
 class CtapError(Exception):
+    """Error returned from the Authenticator when a command fails."""
+
     class UNKNOWN_ERR(int):
+        """CTAP error status code that is not recognized."""
+
         name = "UNKNOWN_ERR"
 
         @property
@@ -102,6 +110,11 @@ class CtapError(Exception):
 
     @unique
     class ERR(IntEnum):
+        """CTAP status codes.
+
+        https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#error-responses
+        """
+
         SUCCESS = 0x00
         INVALID_COMMAND = 0x01
         INVALID_PARAMETER = 0x02

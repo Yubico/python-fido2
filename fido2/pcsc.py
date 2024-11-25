@@ -189,7 +189,7 @@ class CtapPcscDevice(CtapDevice):
         self,
         data: bytes = b"",
         event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        on_keepalive: Optional[Callable[[STATUS], None]] = None,
     ) -> bytes:
         event = event or Event()
         # NFCCTAP_MSG
@@ -198,12 +198,8 @@ class CtapPcscDevice(CtapDevice):
 
         while not event.is_set():
             while (sw1, sw2) == SW_UPDATE:
-                ka_status = resp[0]
+                ka_status = STATUS(resp[0])
                 if on_keepalive and last_ka != ka_status:
-                    try:
-                        ka_status = STATUS(ka_status)
-                    except ValueError:
-                        pass  # Unknown status value
                     last_ka = ka_status
                     on_keepalive(ka_status)
 
@@ -222,7 +218,7 @@ class CtapPcscDevice(CtapDevice):
         cmd: int,
         data: bytes = b"",
         event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        on_keepalive: Optional[Callable[[STATUS], None]] = None,
     ) -> bytes:
         if cmd == CTAPHID.CBOR:
             return self._call_cbor(data, event, on_keepalive)
