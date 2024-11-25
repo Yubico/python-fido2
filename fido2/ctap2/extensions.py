@@ -46,6 +46,12 @@ import warnings
 
 
 class ExtensionProcessor(abc.ABC):
+    """Base class for CTAP2 extension processing.
+
+    See: :class:`RegistrationExtensionProcessor` and
+    :class:`AuthenticationExtensionProcessor`.
+    """
+
     def __init__(
         self,
         permissions: ClientPin.PERMISSION = ClientPin.PERMISSION(0),
@@ -64,6 +70,8 @@ class RegistrationExtensionProcessor(ExtensionProcessor):
     for a registration (MakeCredential) call.
 
     :param permissions: PinUvAuthToken permissions required by the extension.
+    :param inputs: Default authenticator inputs, if prepare_inputs is not overridden.
+    :param outputs: Default client outputs, if prepare_outputs is not overridden.
     """
 
     def prepare_inputs(self, pin_token: Optional[bytes]) -> Optional[Dict[str, Any]]:
@@ -86,6 +94,8 @@ class AuthenticationExtensionProcessor(ExtensionProcessor):
     for an authentication (GetAssertion) call.
 
     :param permissions: PinUvAuthToken permissions required by the extension.
+    :param inputs: Default authenticator inputs, if prepare_inputs is not overridden.
+    :param outputs: Default client outputs, if prepare_outputs is not overridden.
     """
 
     def prepare_inputs(
@@ -121,13 +131,20 @@ class Ctap2Extension(abc.ABC):
         process_get_input_with_permissions.
 
     The following changes will also be made:
-        __init__() will no longer allow passing a ctap2 instance.
-        is_supported() will require a ctap2 instance to be passed.
+        :func:`__init__` will no longer allow passing a ctap2 instance.
+        :func:`is_supported` will require a ctap2 instance to be passed.
+        :attr:`NAME` and :attr:`ctap` will be removed.
     """
 
     NAME: str = None  # type: ignore
 
     def __init__(self, ctap: Optional[Ctap2] = None):
+        if ctap:
+            warnings.warn(
+                "Calling __init__ with a Ctap2 instance is deprecated.",
+                DeprecationWarning,
+            )
+
         self._ctap = ctap
 
     @property
@@ -218,17 +235,30 @@ class Ctap2Extension(abc.ABC):
 
     # TODO 2.0: Remove the remaining methods of this class
     def get_create_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
+        """Get PinUvAuthToken permissions required for Registration.
+
+        .. deprecated:: 1.2.0
+           Implement :func:`make_credential` instead.
+        """
         return ClientPin.PERMISSION(0)
 
     def process_create_input(self, inputs: Dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
+
+        .. deprecated:: 1.2.0
+           Implement :func:`make_credential` instead.
         """
         return None
 
     def process_create_input_with_permissions(
         self, inputs: Dict[str, Any]
     ) -> Tuple[Any, ClientPin.PERMISSION]:
+        """
+
+        .. deprecated:: 1.2.0
+           Implement :func:`make_credential` instead.
+        """
         warnings.warn(
             "This method is deprecated, use make_credential().", DeprecationWarning
         )
@@ -241,21 +271,36 @@ class Ctap2Extension(abc.ABC):
         token: Optional[bytes],
         pin_protocol: Optional[PinProtocol],
     ) -> Optional[Dict[str, Any]]:
-        """Return client extension output given attestation_response, or None."""
+        """Return client extension output given attestation_response, or None.
+
+        .. deprecated:: 1.2.0
+           Implement :func:`make_credential` instead.
+        """
         return None
 
     def get_get_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
+        """
+        .. deprecated:: 1.2.0
+           Implement :func:`get_assertion` instead.
+        """
         return ClientPin.PERMISSION(0)
 
     def process_get_input(self, inputs: Dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
+
+        .. deprecated:: 1.2.0
+           Implement :func:`get_assertion` instead.
         """
         return None
 
     def process_get_input_with_permissions(
         self, inputs: Dict[str, Any]
     ) -> Tuple[Any, ClientPin.PERMISSION]:
+        """
+        .. deprecated:: 1.2.0
+           Implement :func:`get_assertion` instead.
+        """
         warnings.warn(
             "This method is deprecated, use get_assertion().", DeprecationWarning
         )
@@ -267,18 +312,26 @@ class Ctap2Extension(abc.ABC):
         token: Optional[bytes],
         pin_protocol: Optional[PinProtocol],
     ) -> Optional[Dict[str, Any]]:
-        """Return client extension output given assertion_response, or None."""
+        """Return client extension output given assertion_response, or None.
+
+        .. deprecated:: 1.2.0
+           Implement :func:`get_assertion` instead.
+        """
         return None
 
 
 @dataclass(eq=False, frozen=True)
-class _HmacGetSecretInput(_JsonDataObject):
+class HMACGetSecretInput(_JsonDataObject):
+    """Client inputs for hmac-secret."""
+
     salt1: bytes
     salt2: Optional[bytes] = None
 
 
 @dataclass(eq=False, frozen=True)
-class _HmacGetSecretOutput(_JsonDataObject):
+class HMACGetSecretOutput(_JsonDataObject):
+    """Client outputs for hmac-secret."""
+
     output1: bytes
     output2: Optional[bytes] = None
 
@@ -288,26 +341,41 @@ def _prf_salt(secret):
 
 
 @dataclass(eq=False, frozen=True)
-class _PrfValues(_JsonDataObject):
+class AuthenticatorExtensionsPRFValues(_JsonDataObject):
+    """Salt values for use with prf."""
+
     first: bytes
     second: Optional[bytes] = None
 
 
 @dataclass(eq=False, frozen=True)
-class _PrfInputs(_JsonDataObject):
-    eval: Optional[_PrfValues] = None
-    eval_by_credential: Optional[Mapping[str, _PrfValues]] = None
+class AuthenticatorExtensionsPRFInputs(_JsonDataObject):
+    """Client inputs for prf."""
+
+    eval: Optional[AuthenticatorExtensionsPRFValues] = None
+    eval_by_credential: Optional[Mapping[str, AuthenticatorExtensionsPRFValues]] = None
 
 
 @dataclass(eq=False, frozen=True)
-class _PrfOutputs(_JsonDataObject):
+class AuthenticatorExtensionsPRFOutputs(_JsonDataObject):
+    """Client outputs for prf."""
+
     enabled: Optional[bool] = None
-    results: Optional[_PrfValues] = None
+    results: Optional[AuthenticatorExtensionsPRFValues] = None
 
 
 class HmacSecretExtension(Ctap2Extension):
     """
-    Implements the PRF extension and the hmac-secret CTAP2 extension.
+    Implements the Pseudo-random function (prf) and the hmac-secret CTAP2 extensions.
+
+    The hmac-secret extension is not directly available to clients by default, instead
+    the prf extension is used.
+
+    https://www.w3.org/TR/webauthn-3/#prf-extension
+
+    https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-hmac-secret-extension
+
+    :param allow_hmac_secret: Set to True to allow hmac-secret, in addition to prf.
     """
 
     NAME = "hmac-secret"
@@ -338,7 +406,9 @@ class HmacSecretExtension(Ctap2Extension):
                     extensions = response.auth_data.extensions or {}
                     enabled = extensions.get(HmacSecretExtension.NAME, False)
                     if prf:
-                        return {"prf": _PrfOutputs(enabled=enabled)}
+                        return {
+                            "prf": AuthenticatorExtensionsPRFOutputs(enabled=enabled)
+                        }
                     else:
                         return {"hmacCreateSecret": enabled}
 
@@ -346,9 +416,9 @@ class HmacSecretExtension(Ctap2Extension):
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        prf = _PrfInputs.from_dict(inputs.get("prf"))
+        prf = AuthenticatorExtensionsPRFInputs.from_dict(inputs.get("prf"))
         hmac = (
-            _HmacGetSecretInput.from_dict(inputs.get("hmacGetSecret"))
+            HMACGetSecretInput.from_dict(inputs.get("hmacGetSecret"))
             if self._allow_hmac_secret
             else None
         )
@@ -428,10 +498,14 @@ class HmacSecretExtension(Ctap2Extension):
 
                     if prf:
                         return {
-                            "prf": _PrfOutputs(results=_PrfValues(output1, output2))
+                            "prf": AuthenticatorExtensionsPRFOutputs(
+                                results=AuthenticatorExtensionsPRFValues(
+                                    output1, output2
+                                )
+                            )
                         }
                     else:
-                        return {"hmacGetSecret": _HmacGetSecretOutput(output1, output2)}
+                        return {"hmacGetSecret": HMACGetSecretOutput(output1, output2)}
 
             return Processing()
 
@@ -448,7 +522,7 @@ class HmacSecretExtension(Ctap2Extension):
         if not self.is_supported():
             return
 
-        get_secret = _HmacGetSecretInput.from_dict(inputs.get("hmacGetSecret"))
+        get_secret = HMACGetSecretInput.from_dict(inputs.get("hmacGetSecret"))
         if not get_secret:
             return
         salts = get_secret.salt1, get_secret.salt2 or b""
@@ -483,18 +557,22 @@ class HmacSecretExtension(Ctap2Extension):
         decrypted = self.pin_protocol.decrypt(self.shared_secret, value)
         output1 = decrypted[: HmacSecretExtension.SALT_LEN]
         output2 = decrypted[HmacSecretExtension.SALT_LEN :] or None
-        return {"hmacGetSecret": _HmacGetSecretOutput(output1, output2)}
+        return {"hmacGetSecret": HMACGetSecretOutput(output1, output2)}
 
 
 @dataclass(eq=False, frozen=True)
-class _LargeBlobInputs(_JsonDataObject):
+class AuthenticatorExtensionsLargeBlobInputs(_JsonDataObject):
+    """Client inputs for largeBlob."""
+
     support: Optional[str] = None
     read: Optional[bool] = None
     write: Optional[bytes] = None
 
 
 @dataclass(eq=False, frozen=True)
-class _LargeBlobOutputs(_JsonDataObject):
+class AuthenticatorExtensionsLargeBlobOutputs(_JsonDataObject):
+    """Client outputs for largeBlob."""
+
     supported: Optional[bool] = None
     blob: Optional[bytes] = None
     written: Optional[bool] = None
@@ -502,7 +580,9 @@ class _LargeBlobOutputs(_JsonDataObject):
 
 class LargeBlobExtension(Ctap2Extension):
     """
-    Implements the Large Blob WebAuthn extension.
+    Implements the Large Blob storage (largeBlob) WebAuthn extension.
+
+    https://www.w3.org/TR/webauthn-3/#sctn-large-blob-extension
     """
 
     NAME = "largeBlobKey"
@@ -514,7 +594,7 @@ class LargeBlobExtension(Ctap2Extension):
 
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(inputs.get("largeBlob"))
         if data:
             if data.read or data.write:
                 raise ValueError("Invalid set of parameters")
@@ -527,7 +607,7 @@ class LargeBlobExtension(Ctap2Extension):
 
                 def prepare_outputs(self, response, pin_token):
                     return {
-                        "largeBlob": _LargeBlobOutputs(
+                        "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(
                             supported=response.large_blob_key is not None
                         )
                     }
@@ -536,7 +616,7 @@ class LargeBlobExtension(Ctap2Extension):
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(inputs.get("largeBlob"))
         if data:
             if data.support or (data.read and data.write):
                 raise ValueError("Invalid set of parameters")
@@ -550,11 +630,19 @@ class LargeBlobExtension(Ctap2Extension):
                         if data.read:
                             large_blobs = LargeBlobs(ctap)
                             blob = large_blobs.get_blob(blob_key)
-                            return {"largeBlob": _LargeBlobOutputs(blob=blob)}
+                            return {
+                                "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(
+                                    blob=blob
+                                )
+                            }
                         elif data.write:
                             large_blobs = LargeBlobs(ctap, pin_protocol, pin_token)
                             large_blobs.put_blob(blob_key, data.write)
-                            return {"largeBlob": _LargeBlobOutputs(written=True)}
+                            return {
+                                "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(
+                                    written=True
+                                )
+                            }
 
             return Processor(
                 (
@@ -567,7 +655,7 @@ class LargeBlobExtension(Ctap2Extension):
 
     # TODO 2.0: Remove the remaining methods of this class
     def process_create_input(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(inputs.get("largeBlob"))
         if data:
             if data.read or data.write:
                 raise ValueError("Invalid set of parameters")
@@ -577,19 +665,19 @@ class LargeBlobExtension(Ctap2Extension):
 
     def process_create_output(self, attestation_response, *args, **kwargs):
         return {
-            "largeBlob": _LargeBlobOutputs(
+            "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(
                 supported=attestation_response.large_blob_key is not None
             )
         }
 
     def get_get_permissions(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(inputs.get("largeBlob"))
         if data and data.write:
             return ClientPin.PERMISSION.LARGE_BLOB_WRITE
         return ClientPin.PERMISSION(0)
 
     def process_get_input(self, inputs):
-        data = _LargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(inputs.get("largeBlob"))
         if data:
             if data.support or (data.read and data.write):
                 raise ValueError("Invalid set of parameters")
@@ -607,16 +695,20 @@ class LargeBlobExtension(Ctap2Extension):
             if self._action is True:  # Read
                 large_blobs = LargeBlobs(self.ctap)
                 blob = large_blobs.get_blob(blob_key)
-                return {"largeBlob": _LargeBlobOutputs(blob=blob)}
+                return {"largeBlob": AuthenticatorExtensionsLargeBlobOutputs(blob=blob)}
             elif self._action:  # Write
                 large_blobs = LargeBlobs(self.ctap, pin_protocol, token)
                 large_blobs.put_blob(blob_key, self._action)
-                return {"largeBlob": _LargeBlobOutputs(written=True)}
+                return {
+                    "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(written=True)
+                }
 
 
 class CredBlobExtension(Ctap2Extension):
     """
-    Implements the Credential Blob CTAP2 extension.
+    Implements the Credential Blob (credBlob) CTAP2 extension.
+
+    https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-credBlob-extension
     """
 
     NAME = "credBlob"
@@ -650,6 +742,8 @@ class CredBlobExtension(Ctap2Extension):
 class CredProtectExtension(Ctap2Extension):
     """
     Implements the Credential Protection CTAP2 extension.
+
+    https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-credProtect-extension
     """
 
     @unique
@@ -658,7 +752,6 @@ class CredProtectExtension(Ctap2Extension):
         OPTIONAL_WITH_LIST = "userVerificationOptionalWithCredentialIDList"
         REQUIRED = "userVerificationRequired"
 
-    ALWAYS_RUN = True
     NAME = "credProtect"
 
     def make_credential(self, ctap, options, pin_protocol):
@@ -689,7 +782,9 @@ class CredProtectExtension(Ctap2Extension):
 
 class MinPinLengthExtension(Ctap2Extension):
     """
-    Implements the Minimum PIN Length CTAP2 extension.
+    Implements the Minimum PIN Length (minPinLength) CTAP2 extension.
+
+    https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-minpinlength-extension
     """
 
     NAME = "minPinLength"
@@ -712,13 +807,17 @@ class MinPinLengthExtension(Ctap2Extension):
 
 
 @dataclass(eq=False, frozen=True)
-class _CredPropsOutputs(_JsonDataObject):
+class CredentialPropertiesOutput(_JsonDataObject):
+    """Client outputs for credProps."""
+
     rk: Optional[bool] = None
 
 
 class CredPropsExtension(Ctap2Extension):
     """
-    Implements the Credential Properties WebAuthn extension.
+    Implements the Credential Properties (credProps) WebAuthn extension.
+
+    https://www.w3.org/TR/webauthn-3/#sctn-authenticator-credential-properties-extension
     """
 
     NAME = "credProps"
@@ -738,5 +837,5 @@ class CredPropsExtension(Ctap2Extension):
             )
 
             return RegistrationExtensionProcessor(
-                outputs={self.NAME: _CredPropsOutputs(rk=rk)}
+                outputs={self.NAME: CredentialPropertiesOutput(rk=rk)}
             )

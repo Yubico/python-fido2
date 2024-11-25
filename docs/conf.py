@@ -193,6 +193,14 @@ intersphinx_mapping = {
 
 # Custom config
 autoapi_dirs = ["../fido2"]
+autoapi_options = [
+    "members",
+    "undoc-members",
+    "show-inheritance",
+    "show-module-summary",
+    "special-members",
+    "imported-members",
+]
 
 skip_patterns = ["fido2.hid", "fido2.win_api"]
 
