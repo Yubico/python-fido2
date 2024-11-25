@@ -442,12 +442,16 @@ class Fido2Server:
         }
 
 
+# TODO 2.0: Delete, or move to an example
 def verify_app_id(app_id: str, origin: str) -> bool:
     """Checks if a FIDO U2F App ID is usable for a given origin.
 
     :param app_id: The App ID to validate.
     :param origin: The origin of the request.
     :return: True if the App ID is usable by the origin, False if not.
+
+    .. deprecated:: 1.2.0
+       This will be removed in python-fido2 2.0.
     """
     url = urlparse(app_id)
     hostname = url.hostname
@@ -461,6 +465,7 @@ def verify_app_id(app_id: str, origin: str) -> bool:
     return verify_rp_id(hostname, origin)
 
 
+# TODO 2.0: Delete, or move to an example
 class U2FFido2Server(Fido2Server):
     """Fido2Server which can be used with existing U2F credentials.
 
@@ -473,6 +478,9 @@ class U2FFido2Server(Fido2Server):
         origin for U2F credentials.
 
     For other parameters, see Fido2Server.
+
+    .. deprecated:: 1.2.0
+       This will be removed in python-fido2 2.0.
     """
 
     def __init__(
