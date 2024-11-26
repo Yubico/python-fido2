@@ -1,3 +1,19 @@
+* Version 1.2.0 (released 2024-11-27)
+ ** Improved extension handling:
+    Several new extensions are now supported, both for Fido2Client and WindowsClient.
+    Extension APIs have been redesigned, and old APIs have been deprecated, slated for
+    removal in version 2.0.
+  *** Disable hmac-secret extension by default, preferring prf.
+ ** Improved (de-)serialization of dataclasses to/from JSON-friendly dicts.
+ ** Fido2Client:
+  *** Support allowCredentials/excludeCredentials of arbitrary length.
+  *** Handle PUAT_REQUIRED by re-attempting with PIN/UV.
+ ** Allow localhost (and subdomains) to use http:// in RP ID verification by default.
+ ** NFC: Support for Authenticators that return SW=61XX on SELECT.
+ ** USB: Improve connection recovery and use more specific exceptions for errors.
+ ** Fix: Handle residentKey=preferred properly.
+ ** Fix: Handle Authentictors that do not pass extensions in GetInfo.
+
 * Version 1.1.3 (released 2024-03-13)
  ** Fix USB HID issue on MacOS that sometimes caused a pause while waiting for a
     timeout.
