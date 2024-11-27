@@ -5,8 +5,8 @@
 // Please pull this list from, and only from https://publicsuffix.org/list/public_suffix_list.dat,
 // rather than any other VCS sites. Pulling from any other URL is not guaranteed to be supported.
 
-// VERSION: 2024-11-19_13-44-10_UTC
-// COMMIT: e14b1e1a25ab0aab3fe7dd5e9850c926e6bfba37
+// VERSION: 2024-11-23_08-19-30_UTC
+// COMMIT: 931546b3beb45b544d0692aa116b420fb34b9dfa
 
 // Instructions on pulling and using this list can be found at https://publicsuffix.org/list/.
 
@@ -135,13 +135,13 @@ union.aero
 workinggroup.aero
 works.aero
 
-// af : http://www.nic.af/help.jsp
+// af : https://www.nic.af/domain-price
 af
-gov.af
 com.af
-org.af
-net.af
 edu.af
+gov.af
+net.af
+org.af
 
 // ag : http://www.nic.ag/prices.htm
 ag
@@ -439,15 +439,16 @@ gov.bn
 net.bn
 org.bn
 
-// bo : https://nic.bo/delegacion2015.php#h-1.10
+// bo : https://nic.bo
+// Confirmed by registry <soporte@nic.bo> 2024-11-19
 bo
 com.bo
 edu.bo
 gob.bo
 int.bo
-org.bo
-net.bo
 mil.bo
+net.bo
+org.bo
 tv.bo
 web.bo
 // Social Domains
@@ -473,9 +474,9 @@ natural.bo
 nombre.bo
 noticias.bo
 patria.bo
+plurinacional.bo
 politica.bo
 profesional.bo
-plurinacional.bo
 pueblo.bo
 revista.bo
 salud.bo
@@ -883,8 +884,8 @@ int.cv
 nome.cv
 org.cv
 
-// cw : http://www.una.cw/cw_registry/
-// Confirmed by registry <registry@una.net> 2013-03-26
+// cw : https://www.uoc.cw/cw-registry
+// Confirmed by registry <registry@uoc.cw> 2024-11-19
 cw
 com.cw
 edu.cw
@@ -929,12 +930,15 @@ dj
 dk
 
 // dm : https://www.iana.org/domains/root/db/dm.html
+// https://nic.dm/policies/pdf/DMRulesandGuidelines2024v1.pdf
+// Confirmed by registry <admin@dotdm.dm> 2024-11-19
 dm
+co.dm
 com.dm
-net.dm
-org.dm
 edu.dm
 gov.dm
+net.dm
+org.dm
 
 // do : https://www.iana.org/domains/root/db/do.html
 do
@@ -1092,15 +1096,16 @@ edu.gd
 gov.gd
 gd
 
-// ge : http://www.nic.net.ge/policy_en.pdf
+// ge : https://nic.ge/en/administrator/the-ge-domain-regulations
+// Confirmed by registry <info@nic.ge> 2024-11-20
 ge
 com.ge
 edu.ge
 gov.ge
-org.ge
-mil.ge
 net.ge
+org.ge
 pvt.ge
+school.ge
 
 // gf : https://www.iana.org/domains/root/db/gf.html
 gf
@@ -3983,17 +3988,16 @@ gov.me
 its.me
 priv.me
 
-// mg : http://nic.mg/nicmg/?page_id=39
+// mg : https://nic.mg
 mg
-org.mg
-nom.mg
-gov.mg
-prd.mg
-tm.mg
-edu.mg
-mil.mg
-com.mg
 co.mg
+com.mg
+edu.mg
+gov.mg
+mil.mg
+nom.mg
+org.mg
+prd.mg
 
 // mh : https://www.iana.org/domains/root/db/mh.html
 mh
@@ -15254,8 +15258,8 @@ w-staticblitz.com
 // Submitted by Adrien Gillon <adrien+public-suffix-list@stackhero.io>
 stackhero-network.com
 
-// STACKIT : https://www.stackit.de/en/
-// Submitted by STACKIT-DNS Team (Simon Stier) <stackit-dns@mail.schwarz>
+// STACKIT GmbH & Co. KG : https://www.stackit.de/en/
+// Submitted by STACKIT-DNS Team (Simon Stier) <dns@stackit.cloud>
 runs.onstackit.cloud
 stackit.gg
 stackit.rocks

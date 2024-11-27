@@ -166,7 +166,7 @@ test-randomorder = ["pytest-randomly"]
 
 [[package]]
 name = "fido2"
-version = "1.1.4-dev.0"
+version = "1.2.0"
 description = "FIDO2/WebAuthn library for implementing clients and servers."
 optional = false
 python-versions = "^3.8"
