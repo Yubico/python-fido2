@@ -25,6 +25,7 @@ dependencies = ["cryptography (>=2.6, !=35, <48)"]
 
 [project.optional-dependencies]
 pcsc = ["pyscard (>=1.9, <3)"]
+arkg = ["ecdsa (>=0.19, <1)"]
 
 [project.urls]
 Homepage = "https://github.com/Yubico/python-fido2"
