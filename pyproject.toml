@@ -34,9 +34,11 @@ include = [
 python = "^3.8"
 cryptography = ">=2.6, !=35, <45"
 pyscard = {version = "^1.9 || ^2", optional = true}
+ecdsa = {version = "^0.19", optional = true}
 
 [tool.poetry.extras]
 pcsc = ["pyscard"]
+arkg = ["ecdsa"]
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.0"
