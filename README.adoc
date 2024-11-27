@@ -11,7 +11,8 @@ the `fido2.client` and `fido2.server` modules implement higher level operations
 which are useful when interfacing with an Authenticator, or when implementing
 WebAuthn support for a Relying Party.
 
-For usage, see the `examples/` directory.
+For usage, see the `examples/` directory and
+link:https://developers.yubico.com/python-fido2/API_Documentation/[API documentation].
 
 
 === References
