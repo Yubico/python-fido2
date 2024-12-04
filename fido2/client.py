@@ -590,10 +590,6 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         if (
             user_verification == UserVerificationRequirement.REQUIRED
-            or (
-                user_verification == UserVerificationRequirement.PREFERRED
-                and uv_supported
-            )
             or self.info.options.get("alwaysUv")
         ):
             if not uv_configured:
