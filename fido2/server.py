@@ -58,6 +58,7 @@ from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import replace
 from urllib.parse import urlparse
 from typing import Sequence, Mapping, Optional, Callable, Union, Tuple, Any, overload
+from time import time
 
 import os
 import logging
@@ -123,12 +124,17 @@ def _ignore_attestation(
 ) -> None:
     """Ignore attestation."""
 
+def _get_timestamp() -> int:
+    """Returns time current timestamp in seconds in UTC."""
+    return int(time())
+
 
 class Fido2Server:
     """FIDO2 server.
 
     :param rp: Relying party data as `PublicKeyCredentialRpEntity` instance.
     :param attestation: (optional) Requirement on authenticator attestation.
+    :param timeout: (optional) Timeout for credential create and authenticate operations in seconds as 'int' value.
     :param verify_origin: (optional) Alternative function to validate an origin.
     :param verify_attestation: (optional) function to validate attestation, which is
         invoked with attestation_object and client_data_hash. It should return nothing
@@ -140,12 +146,13 @@ class Fido2Server:
         self,
         rp: PublicKeyCredentialRpEntity,
         attestation: Optional[AttestationConveyancePreference] = None,
+        timeout: Optional[int] = None,
         verify_origin: Optional[VerifyOrigin] = None,
         verify_attestation: Optional[VerifyAttestation] = None,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
-        self.timeout = None
+        self.timeout = timeout
         self.attestation = AttestationConveyancePreference(attestation)
         self.allowed_algorithms = [
             PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, alg)
@@ -290,6 +297,15 @@ class Fido2Server:
                 "User verification required, but User Verified flag not set."
             )
 
+        if (
+            self.timeout
+            and _get_timestamp()-state["timestamp"] > self.timeout
+        ):
+            raise ValueError(
+                f"Request timed out. Timeout was set for {str(self.timeout)} seconds"
+            )
+
+
         if self.attestation not in (None, AttestationConveyancePreference.NONE):
             logger.debug(f"Verifying attestation of type {attestation_object.fmt}")
             self._verify_attestation(attestation_object, client_data.hash)
@@ -422,6 +438,16 @@ class Fido2Server:
                 "User verification required, but user verified flag not set."
             )
 
+        if (
+            self.timeout
+            and _get_timestamp()-state["timestamp"] > self.timeout
+        ):
+            raise ValueError(
+                f"Request timed out. Timeout was set for {str(self.timeout)} seconds"
+            )
+
+
+
         for cred in credentials:
             if cred.credential_id == credential_id:
                 try:
@@ -439,6 +465,7 @@ class Fido2Server:
         return {
             "challenge": websafe_encode(challenge),
             "user_verification": user_verification,
+            "timestamp": _get_timestamp(),
         }
 
 

@@ -46,7 +46,7 @@ else:
     uv = "discouraged"
 
 
-server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
+server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct", timeout=3600)
 
 user = {"id": b"user_id", "name": "A. User"}
 
