@@ -44,7 +44,7 @@ from enum import Enum, unique
 from datetime import date
 from base64 import b64decode, b64encode
 from contextvars import ContextVar
-from typing import Sequence, Mapping, Any, Optional, Callable
+from typing import Sequence, Mapping, Any, Callable
 
 import json
 import logging
@@ -79,36 +79,36 @@ class BiometricStatusReport(_JsonDataObject):
 class CodeAccuracyDescriptor(_JsonDataObject):
     base: int
     min_length: int
-    max_retries: Optional[int] = None
-    block_slowdown: Optional[int] = None
+    max_retries: int | None = None
+    block_slowdown: int | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class BiometricAccuracyDescriptor(_JsonDataObject):
-    self_attested_frr: Optional[float] = field(
+    self_attested_frr: float | None = field(
         default=None, metadata=dict(name="selfAttestedFRR")
     )
-    self_attested_far: Optional[float] = field(
+    self_attested_far: float | None = field(
         default=None, metadata=dict(name="selfAttestedFAR")
     )
-    max_templates: Optional[int] = None
-    max_retries: Optional[int] = None
-    block_slowdown: Optional[int] = None
+    max_templates: int | None = None
+    max_retries: int | None = None
+    block_slowdown: int | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class PatternAccuracyDescriptor(_JsonDataObject):
     min_complexity: int
-    max_retries: Optional[int] = None
-    block_slowdown: Optional[int] = None
+    max_retries: int | None = None
+    block_slowdown: int | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class VerificationMethodDescriptor(_JsonDataObject):
-    user_verification_method: Optional[str] = None
-    ca_desc: Optional[CodeAccuracyDescriptor] = None
-    ba_desc: Optional[BiometricAccuracyDescriptor] = None
-    pa_desc: Optional[PatternAccuracyDescriptor] = None
+    user_verification_method: str | None = None
+    ca_desc: CodeAccuracyDescriptor | None = None
+    ba_desc: BiometricAccuracyDescriptor | None = None
+    pa_desc: PatternAccuracyDescriptor | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -127,7 +127,7 @@ class DisplayPngCharacteristicsDescriptor(_JsonDataObject):
     compression: int
     filter: int
     interlace: int
-    plte: Optional[Sequence[RgbPaletteEntry]] = None
+    plte: Sequence[RgbPaletteEntry] | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -164,31 +164,31 @@ class AuthenticatorStatus(str, Enum):
 @dataclass(eq=False, frozen=True)
 class StatusReport(_JsonDataObject):
     status: AuthenticatorStatus
-    effective_date: Optional[date] = field(
+    effective_date: date | None = field(
         metadata=dict(
             deserialize=date.fromisoformat,
             serialize=lambda x: x.isoformat(),
         ),
         default=None,
     )
-    authenticator_version: Optional[int] = None
-    certificate: Optional[bytes] = field(
+    authenticator_version: int | None = None
+    certificate: bytes | None = field(
         metadata=dict(deserialize=b64decode, serialize=lambda x: b64encode(x).decode()),
         default=None,
     )
-    url: Optional[str] = None
-    certification_descriptor: Optional[str] = None
-    certificate_number: Optional[str] = None
-    certification_policy_version: Optional[str] = None
-    certification_requirements_version: Optional[str] = None
+    url: str | None = None
+    certification_descriptor: str | None = None
+    certificate_number: str | None = None
+    certification_policy_version: str | None = None
+    certification_requirements_version: str | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class ExtensionDescriptor(_JsonDataObject):
     fail_if_unknown: bool = field(metadata=dict(name="fail_if_unknown"))
     id: str
-    tag: Optional[int] = None
-    data: Optional[str] = None
+    tag: int | None = None
+    data: str | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -211,41 +211,41 @@ class MetadataStatement(_JsonDataObject):
             serialize=lambda xs: [b64encode(x).decode() for x in xs],
         )
     )
-    legal_header: Optional[str] = None
-    aaid: Optional[str] = None
-    aaguid: Optional[Aaguid] = field(
+    legal_header: str | None = None
+    aaid: str | None = None
+    aaguid: Aaguid | None = field(
         metadata=dict(
             deserialize=Aaguid.parse,
             serialize=lambda x: str(x),
         ),
         default=None,
     )
-    attestation_certificate_key_identifiers: Optional[Sequence[bytes]] = field(
+    attestation_certificate_key_identifiers: Sequence[bytes] | None = field(
         metadata=dict(
             deserialize=lambda xs: [bytes.fromhex(x) for x in xs],
             serialize=lambda xs: [x.hex() for x in xs],
         ),
         default=None,
     )
-    alternative_descriptions: Optional[Mapping[str, str]] = None
-    protocol_family: Optional[str] = None
-    authentication_algorithms: Optional[Sequence[str]] = None
-    public_key_alg_and_encodings: Optional[Sequence[str]] = None
-    is_key_restricted: Optional[bool] = None
-    is_fresh_user_verification_required: Optional[bool] = None
-    crypto_strength: Optional[int] = None
-    operating_env: Optional[str] = None
-    tc_display_content_type: Optional[str] = None
-    tc_display_png_characteristics: Optional[
-        Sequence[DisplayPngCharacteristicsDescriptor]
-    ] = field(
+    alternative_descriptions: Mapping[str, str] | None = None
+    protocol_family: str | None = None
+    authentication_algorithms: Sequence[str] | None = None
+    public_key_alg_and_encodings: Sequence[str] | None = None
+    is_key_restricted: bool | None = None
+    is_fresh_user_verification_required: bool | None = None
+    crypto_strength: int | None = None
+    operating_env: str | None = None
+    tc_display_content_type: str | None = None
+    tc_display_png_characteristics: (
+        Sequence[DisplayPngCharacteristicsDescriptor] | None
+    ) = field(
         metadata=dict(name="tcDisplayPNGCharacteristics"),
         default=None,
     )
-    ecdaa_trust_anchors: Optional[Sequence[EcdaaTrustAnchor]] = None
-    icon: Optional[str] = None
-    supported_extensions: Optional[Sequence[ExtensionDescriptor]] = None
-    authenticator_get_info: Optional[Mapping[str, Any]] = None
+    ecdaa_trust_anchors: Sequence[EcdaaTrustAnchor] | None = None
+    icon: str | None = None
+    supported_extensions: Sequence[ExtensionDescriptor] | None = None
+    authenticator_get_info: Mapping[str, Any] | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -257,27 +257,25 @@ class MetadataBlobPayloadEntry(_JsonDataObject):
             serialize=lambda x: x.isoformat(),
         )
     )
-    aaid: Optional[str] = None
-    aaguid: Optional[Aaguid] = field(
+    aaid: str | None = None
+    aaguid: Aaguid | None = field(
         metadata=dict(
             deserialize=Aaguid.parse,
             serialize=lambda x: str(x),
         ),
         default=None,
     )
-    attestation_certificate_key_identifiers: Optional[Sequence[bytes]] = field(
+    attestation_certificate_key_identifiers: Sequence[bytes] | None = field(
         metadata=dict(
             deserialize=lambda xs: [bytes.fromhex(x) for x in xs],
             serialize=lambda xs: [x.hex() for x in xs],
         ),
         default=None,
     )
-    metadata_statement: Optional[MetadataStatement] = None
-    biometric_status_reports: Optional[Sequence[BiometricStatusReport]] = None
-    rogue_list_url: Optional[str] = field(
-        metadata=dict(name="rogueListURL"), default=None
-    )
-    rogue_list_hash: Optional[bytes] = field(
+    metadata_statement: MetadataStatement | None = None
+    biometric_status_reports: Sequence[BiometricStatusReport] | None = None
+    rogue_list_url: str | None = field(metadata=dict(name="rogueListURL"), default=None)
+    rogue_list_hash: bytes | None = field(
         metadata=dict(
             deserialize=bytes.fromhex,
             serialize=lambda x: x.hex(),
@@ -329,7 +327,7 @@ def filter_attestation_key_compromised(
     return True
 
 
-_last_entry: ContextVar[Optional[MetadataBlobPayloadEntry]] = ContextVar("_last_entry")
+_last_entry: ContextVar[MetadataBlobPayloadEntry | None] = ContextVar("_last_entry")
 
 
 class MdsAttestationVerifier(AttestationVerifier):
@@ -363,9 +361,9 @@ class MdsAttestationVerifier(AttestationVerifier):
     def __init__(
         self,
         blob: MetadataBlobPayload,
-        entry_filter: Optional[EntryFilter] = filter_revoked,
-        attestation_filter: Optional[LookupFilter] = filter_attestation_key_compromised,
-        attestation_types: Optional[Sequence[Attestation]] = None,
+        entry_filter: EntryFilter | None = filter_revoked,
+        attestation_filter: LookupFilter | None = filter_attestation_key_compromised,
+        attestation_types: Sequence[Attestation] | None = None,
     ):
         super().__init__(attestation_types)
         self._attestation_filter = attestation_filter or (
@@ -384,9 +382,7 @@ class MdsAttestationVerifier(AttestationVerifier):
             for ski in e.attestation_certificate_key_identifiers or []
         }
 
-    def find_entry_by_aaguid(
-        self, aaguid: Aaguid
-    ) -> Optional[MetadataBlobPayloadEntry]:
+    def find_entry_by_aaguid(self, aaguid: Aaguid) -> MetadataBlobPayloadEntry | None:
         """Find an entry by AAGUID.
 
         Returns a MetadataBlobPayloadEntry with a matching aaguid field, if found.
@@ -396,7 +392,7 @@ class MdsAttestationVerifier(AttestationVerifier):
 
     def find_entry_by_chain(
         self, certificate_chain: Sequence[bytes]
-    ) -> Optional[MetadataBlobPayloadEntry]:
+    ) -> MetadataBlobPayloadEntry | None:
         """Find an entry by trust chain.
 
         Returns a MetadataBlobPayloadEntry containing an
@@ -452,7 +448,7 @@ class MdsAttestationVerifier(AttestationVerifier):
 
     def find_entry(
         self, attestation_object: AttestationObject, client_data_hash: bytes
-    ) -> Optional[MetadataBlobPayloadEntry]:
+    ) -> MetadataBlobPayloadEntry | None:
         """Lookup a Metadata entry based on an Attestation.
 
         Returns the first Metadata entry matching the given attestation and verifies it,
@@ -468,7 +464,7 @@ class MdsAttestationVerifier(AttestationVerifier):
             _last_entry.reset(token)
 
 
-def parse_blob(blob: bytes, trust_root: Optional[bytes]) -> MetadataBlobPayload:
+def parse_blob(blob: bytes, trust_root: bytes | None) -> MetadataBlobPayload:
     """Parse a FIDO MDS3 blob and verifies its signature.
 
     See https://fidoalliance.org/metadata/ for details on obtaining the blob, as well as

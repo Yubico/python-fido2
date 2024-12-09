@@ -20,7 +20,7 @@ from __future__ import annotations
 from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
 
 from ctypes import wintypes, LibraryLoader
-from typing import Dict, cast
+from typing import cast
 
 import ctypes
 import platform
@@ -314,7 +314,7 @@ def open_connection(descriptor):
 
 
 _SKIP = cast(HidDescriptor, object())
-_descriptor_cache: Dict[bytes, HidDescriptor] = {}
+_descriptor_cache: dict[bytes, HidDescriptor] = {}
 
 
 def list_descriptors():

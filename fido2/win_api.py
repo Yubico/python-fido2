@@ -44,7 +44,7 @@ from .webauthn import AttestationObject, AuthenticatorData, ResidentKeyRequireme
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND, WORD
 from threading import Thread
-from typing import Mapping, Dict, Any, Tuple
+from typing import Mapping, Any
 
 import ctypes
 from ctypes import WinDLL  # type: ignore
@@ -110,7 +110,7 @@ class WebAuthNCoseCredentialParameter(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L185
 
-    :param Dict[str, Any] cred_params: Dict of Credential parameters.
+    :param dict[str, Any] cred_params: Dict of Credential parameters.
     """
 
     _fields_ = [
@@ -130,7 +130,7 @@ class WebAuthNCoseCredentialParameters(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L191
 
-    :param List[Dict[str, Any]] params: List of Credential parameter dicts.
+    :param list[dict[str, Any]] params: List of Credential parameter dicts.
     """
 
     _fields_ = [
@@ -173,7 +173,7 @@ class WebAuthNRpEntityInformation(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L98
 
-    :param Dict[str, Any] rp: Dict of RP information.
+    :param dict[str, Any] rp: Dict of RP information.
     """
 
     _fields_ = [
@@ -195,7 +195,7 @@ class WebAuthNUserEntityInformation(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L127
 
-    :param Dict[str, Any] user: Dict of User information.
+    :param dict[str, Any] user: Dict of User information.
     """
 
     _fields_ = [
@@ -222,7 +222,7 @@ class WebAuthNCredentialEx(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L250
 
-    :param Dict[str, Any] cred: Dict of Credential Descriptor data.
+    :param dict[str, Any] cred: Dict of Credential Descriptor data.
     """
 
     _fields_ = [
@@ -247,7 +247,7 @@ class WebAuthNCredentialList(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L261
 
-    :param List[Dict[str, Any]] credentials: List of dict of
+    :param list[dict[str, Any]] credentials: List of dict of
         Credential Descriptor data.
     """
 
@@ -380,7 +380,7 @@ class WebAuthNCredential(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L212
 
-    :param Dict[str, Any] cred: Dict of Credential Descriptor data.
+    :param dict[str, Any] cred: Dict of Credential Descriptor data.
     """
 
     _fields_ = [
@@ -406,7 +406,7 @@ class WebAuthNCredentials(ctypes.Structure):
 
     https://github.com/microsoft/webauthn/blob/master/webauthn.h#L219
 
-    :param List[Dict[str, Any]] credentials: List of dict of
+    :param list[dict[str, Any]] credentials: List of dict of
         Credential Descriptor data.
     """
 
@@ -459,7 +459,7 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         Authenticators.
     :param WebAuthNUserVerificationRequirement user_verification_requirement: User
         Verification Requirement.
-    :param List[Dict[str,Any]] credentials: Allowed Credentials List.
+    :param list[dict[str,Any]] credentials: Allowed Credentials List.
     """
 
     _fields_ = [
@@ -583,7 +583,7 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         Verification Requirement.
     :param WebAuthNAttestationConveyancePreference attestation_convoyence:
         Attestation Conveyance Preference.
-    :param List[Dict[str,Any]] credentials: Credentials used for exclusion.
+    :param list[dict[str,Any]] credentials: Credentials used for exclusion.
     """
 
     _fields_ = [
@@ -983,12 +983,12 @@ class WinAPI:
         extensions=None,
         event=None,
         enterprise_attestation=WebAuthNEnterpriseAttestation.NONE,
-    ) -> Tuple[AttestationObject, Dict[str, Any]]:
+    ) -> tuple[AttestationObject, dict[str, Any]]:
         """Make credential using Windows WebAuthN API.
 
-        :param Dict[str,Any] rp: Relying Party Entity data.
-        :param Dict[str,Any] user: User Entity data.
-        :param List[Dict[str,Any]] pub_key_cred_params: List of
+        :param dict[str,Any] rp: Relying Party Entity data.
+        :param dict[str,Any] user: User Entity data.
+        :param list[dict[str,Any]] pub_key_cred_params: List of
             PubKeyCredentialParams data.
         :param bytes client_data: ClientData JSON.
         :param int timeout: (optional) Timeout value, in ms.
@@ -999,7 +999,7 @@ class WinAPI:
             User Verification Requirement, default: any.
         :param WebAuthNAttestationConveyancePreference attestation: (optional)
             Attestation Conveyance Preference, default: direct.
-        :param List[Dict[str,Any]] exclude_credentials: (optional) List of
+        :param list[dict[str,Any]] exclude_credentials: (optional) List of
             PublicKeyCredentialDescriptor of previously registered credentials.
         :param Any extensions: Currently not supported.
         :param threading.Event event: (optional) Signal to abort the operation.
@@ -1116,7 +1116,7 @@ class WinAPI:
         allow_credentials=None,
         extensions=None,
         event=None,
-    ) -> Tuple[Dict[str, Any], AuthenticatorData, bytes, bytes, Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], AuthenticatorData, bytes, bytes, dict[str, Any]]:
         """Get assertion using Windows WebAuthN API.
 
         :param str rp_id: Relying Party ID string.
@@ -1126,7 +1126,7 @@ class WinAPI:
             Authenticator Attachment, default: any.
         :param WebAuthNUserVerificationRequirement user_verification: (optional)
             User Verification Requirement, default: any.
-        :param List[Dict[str,Any]] allow_credentials: (optional) List of
+        :param list[dict[str,Any]] allow_credentials: (optional) List of
             PublicKeyCredentialDescriptor of previously registered credentials.
         :param Any extensions: Currently not supported.
         :param threading.Event event: (optional) Signal to abort the operation.
@@ -1204,7 +1204,7 @@ class WinAPI:
         obj = assertion_pointer.contents
         auth_data = AuthenticatorData(obj.auth_data)
 
-        extension_outputs: Dict[str, Any] = {}
+        extension_outputs: dict[str, Any] = {}
 
         if u2f_appid and obj.dwVersion >= 2:
             extension_outputs["appid"] = bool(u2f_appid_used.value)

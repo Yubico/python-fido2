@@ -37,7 +37,7 @@ from smartcard.pcsc.PCSCExceptions import ListReadersException
 from smartcard.pcsc.PCSCContext import PCSCContext
 
 from threading import Event
-from typing import Tuple, Optional, Callable, Iterator
+from typing import Callable, Iterator
 import struct
 import logging
 
@@ -90,12 +90,12 @@ class CtapPcscDevice(CtapDevice):
         return self._capabilities
 
     @property
-    def product_name(self) -> Optional[str]:
+    def product_name(self) -> str | None:
         """Product name of device."""
         return None
 
     @property
-    def serial_number(self) -> Optional[int]:
+    def serial_number(self) -> int | None:
         """Serial number of device."""
         return None
 
@@ -104,8 +104,8 @@ class CtapPcscDevice(CtapDevice):
         return bytes(self._conn.getATR())
 
     def apdu_exchange(
-        self, apdu: bytes, protocol: Optional[int] = None
-    ) -> Tuple[bytes, int, int]:
+        self, apdu: bytes, protocol: int | None = None
+    ) -> tuple[bytes, int, int]:
         """Exchange data with smart card.
 
         :param apdu: byte string. data to exchange with card
@@ -144,7 +144,7 @@ class CtapPcscDevice(CtapDevice):
 
     def _chain_apdus(
         self, cla: int, ins: int, p1: int, p2: int, data: bytes = b""
-    ) -> Tuple[bytes, int, int]:
+    ) -> tuple[bytes, int, int]:
         if self.use_ext_apdu:
             header = struct.pack("!BBBBBH", cla, ins, p1, p2, 0x00, len(data))
             resp, sw1, sw2 = self.apdu_exchange(header + data)
@@ -166,7 +166,7 @@ class CtapPcscDevice(CtapDevice):
                 resp += lres
             return resp, sw1, sw2
 
-    def _chained_apdu_exchange(self, apdu: bytes) -> Tuple[bytes, int, int]:
+    def _chained_apdu_exchange(self, apdu: bytes) -> tuple[bytes, int, int]:
         if len(apdu) >= 7 and apdu[4] == 0:
             # Extended APDU
             data_len = struct.unpack("!H", apdu[5:7])[0]
@@ -188,8 +188,8 @@ class CtapPcscDevice(CtapDevice):
     def _call_cbor(
         self,
         data: bytes = b"",
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[STATUS], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[STATUS], None] | None = None,
     ) -> bytes:
         event = event or Event()
         # NFCCTAP_MSG
@@ -217,8 +217,8 @@ class CtapPcscDevice(CtapDevice):
         self,
         cmd: int,
         data: bytes = b"",
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[STATUS], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[STATUS], None] | None = None,
     ) -> bytes:
         if cmd == CTAPHID.CBOR:
             return self._call_cbor(data, event, on_keepalive)

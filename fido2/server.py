@@ -57,7 +57,7 @@ from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import replace
 from urllib.parse import urlparse
-from typing import Sequence, Mapping, Optional, Callable, Union, Tuple, Any, overload
+from typing import Sequence, Mapping, Callable, Any, overload
 
 import os
 import logging
@@ -73,7 +73,7 @@ def _verify_origin_for_rp(rp_id: str) -> VerifyOrigin:
     return lambda o: verify_rp_id(rp_id, o)
 
 
-def _validata_challenge(challenge: Optional[bytes]) -> bytes:
+def _validata_challenge(challenge: bytes | None) -> bytes:
     if challenge is None:
         challenge = os.urandom(32)
     else:
@@ -102,10 +102,8 @@ def to_descriptor(
 
 
 def _wrap_credentials(
-    creds: Optional[
-        Sequence[Union[AttestedCredentialData, PublicKeyCredentialDescriptor]]
-    ],
-) -> Optional[Sequence[PublicKeyCredentialDescriptor]]:
+    creds: Sequence[AttestedCredentialData | PublicKeyCredentialDescriptor] | None,
+) -> Sequence[PublicKeyCredentialDescriptor] | None:
     if creds is None:
         return None
     return [
@@ -139,9 +137,9 @@ class Fido2Server:
     def __init__(
         self,
         rp: PublicKeyCredentialRpEntity,
-        attestation: Optional[AttestationConveyancePreference] = None,
-        verify_origin: Optional[VerifyOrigin] = None,
-        verify_attestation: Optional[VerifyAttestation] = None,
+        attestation: AttestationConveyancePreference | None = None,
+        verify_origin: VerifyOrigin | None = None,
+        verify_attestation: VerifyAttestation | None = None,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
@@ -157,15 +155,15 @@ class Fido2Server:
     def register_begin(
         self,
         user: PublicKeyCredentialUserEntity,
-        credentials: Optional[
-            Sequence[Union[AttestedCredentialData, PublicKeyCredentialDescriptor]]
-        ] = None,
-        resident_key_requirement: Optional[ResidentKeyRequirement] = None,
-        user_verification: Optional[UserVerificationRequirement] = None,
-        authenticator_attachment: Optional[AuthenticatorAttachment] = None,
-        challenge: Optional[bytes] = None,
+        credentials: (
+            Sequence[AttestedCredentialData | PublicKeyCredentialDescriptor] | None
+        ) = None,
+        resident_key_requirement: ResidentKeyRequirement | None = None,
+        user_verification: UserVerificationRequirement | None = None,
+        authenticator_attachment: AuthenticatorAttachment | None = None,
+        challenge: bytes | None = None,
         extensions=None,
-    ) -> Tuple[CredentialCreationOptions, Any]:
+    ) -> tuple[CredentialCreationOptions, Any]:
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
         corresponding `register_complete` call.
@@ -226,7 +224,7 @@ class Fido2Server:
     def register_complete(
         self,
         state,
-        response: Union[RegistrationResponse, Mapping[str, Any]],
+        response: RegistrationResponse | Mapping[str, Any],
     ) -> AuthenticatorData:
         pass
 
@@ -306,13 +304,13 @@ class Fido2Server:
 
     def authenticate_begin(
         self,
-        credentials: Optional[
-            Sequence[Union[AttestedCredentialData, PublicKeyCredentialDescriptor]]
-        ] = None,
-        user_verification: Optional[UserVerificationRequirement] = None,
-        challenge: Optional[bytes] = None,
+        credentials: (
+            Sequence[AttestedCredentialData | PublicKeyCredentialDescriptor] | None
+        ) = None,
+        user_verification: UserVerificationRequirement | None = None,
+        challenge: bytes | None = None,
         extensions=None,
-    ) -> Tuple[CredentialRequestOptions, Any]:
+    ) -> tuple[CredentialRequestOptions, Any]:
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
         `authenticate_complete` call.
@@ -353,7 +351,7 @@ class Fido2Server:
         self,
         state,
         credentials: Sequence[AttestedCredentialData],
-        response: Union[AuthenticationResponse, Mapping[str, Any]],
+        response: AuthenticationResponse | Mapping[str, Any],
     ) -> AttestedCredentialData:
         pass
 
@@ -434,7 +432,7 @@ class Fido2Server:
 
     @staticmethod
     def _make_internal_state(
-        challenge: bytes, user_verification: Optional[UserVerificationRequirement]
+        challenge: bytes, user_verification: UserVerificationRequirement | None
     ):
         return {
             "challenge": websafe_encode(challenge),
@@ -487,7 +485,7 @@ class U2FFido2Server(Fido2Server):
         self,
         app_id: str,
         rp: PublicKeyCredentialRpEntity,
-        verify_u2f_origin: Optional[VerifyOrigin] = None,
+        verify_u2f_origin: VerifyOrigin | None = None,
         *args,
         **kwargs,
     ):

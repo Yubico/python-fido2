@@ -39,17 +39,15 @@ from io import BytesIO
 from dataclasses import fields, Field
 from abc import abstractmethod
 from typing import (
-    Union,
-    Optional,
     Sequence,
     Mapping,
-    Dict,
     Any,
     TypeVar,
     Hashable,
     get_type_hints,
     overload,
     Type,
+    ClassVar,
 )
 import struct
 import warnings
@@ -115,7 +113,7 @@ def int2bytes(value: int, minlen: int = -1) -> bytes:
     return bytes(reversed(ba))
 
 
-def websafe_decode(data: Union[str, bytes]) -> bytes:
+def websafe_decode(data: str | bytes) -> bytes:
     """Decodes a websafe-base64 encoded string.
     See: "Base 64 Encoding with URL and Filename Safe Alphabet" from Section 5
     in RFC4648 without padding.
@@ -157,7 +155,7 @@ class ByteBuffer(BytesIO):
         s = struct.Struct(fmt)
         return s.unpack(self.read(s.size))[0]
 
-    def read(self, size: Optional[int] = -1) -> bytes:
+    def read(self, size: int | None = -1) -> bytes:
         """Like BytesIO.read(), but checks the number of bytes read and raises an error
         if fewer bytes were read than expected.
         """
@@ -176,15 +174,14 @@ _S = TypeVar("_S", bound="_DataClassMapping")
 class _DataClassMapping(Mapping[_T, Any]):
     """A data class with members also accessible as a Mapping."""
 
-    # TODO: This requires Python 3.9, and fixes the type errors we now ignore
-    # __dataclass_fields__: ClassVar[Dict[str, Field[Any]]]
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
 
     def __post_init__(self):
         hints = get_type_hints(type(self))
-        self._field_keys: Dict[_T, Field[Any]]
+        self._field_keys: dict[_T, Field[Any]]
         object.__setattr__(self, "_field_keys", {})
 
-        for f in fields(self):  # type: ignore
+        for f in fields(self):
             self._field_keys[self._get_field_key(f)] = f
             value = getattr(self, f.name)
             if value is not None:
@@ -225,7 +222,7 @@ class _DataClassMapping(Mapping[_T, Any]):
 
     @classmethod
     def _parse_value(cls, t, value):
-        if Optional[t] == t:  # Optional, get the type
+        if (t | None) == t:  # Optional, get the type
             t = t.__args__[0]
 
         # Check if type is already correct
@@ -284,7 +281,7 @@ class _DataClassMapping(Mapping[_T, Any]):
 
         kwargs = {}
         hints = get_type_hints(cls)
-        for f in fields(cls):  # type: ignore
+        for f in fields(cls):
             key = cls._get_field_key(f)
             value = data.get(key)
             if value is None:
@@ -319,7 +316,7 @@ class _JsonDataObject(_DataClassMapping[str]):
 
     @classmethod
     def _parse_value(cls, t, value):
-        if Optional[t] == t:  # Optional, get the type
+        if (t | None) == t:  # Optional, get the type
             t2 = t.__args__[0]
         else:
             t2 = t

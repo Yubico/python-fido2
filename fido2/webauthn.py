@@ -39,7 +39,7 @@ from .utils import (
 from .features import webauthn_json_mapping
 from enum import Enum, EnumMeta, unique, IntFlag
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Mapping, Sequence, cast
 import struct
 import json
 
@@ -98,7 +98,7 @@ class AttestedCredentialData(bytes):
         return repr(self)
 
     @staticmethod
-    def _parse(data: bytes) -> Tuple[bytes, bytes, CoseKey, bytes]:
+    def _parse(data: bytes) -> tuple[bytes, bytes, CoseKey, bytes]:
         """Parse the components of an AttestedCredentialData from a binary
         string, and return them.
 
@@ -130,7 +130,7 @@ class AttestedCredentialData(bytes):
         )
 
     @classmethod
-    def unpack_from(cls, data: bytes) -> Tuple[AttestedCredentialData, bytes]:
+    def unpack_from(cls, data: bytes) -> tuple[AttestedCredentialData, bytes]:
         """Unpack an AttestedCredentialData from a byte string, returning it and
         any remaining data.
 
@@ -193,8 +193,8 @@ class AuthenticatorData(bytes):
     rp_id_hash: bytes
     flags: AuthenticatorData.FLAG
     counter: int
-    credential_data: Optional[AttestedCredentialData]
-    extensions: Optional[Mapping]
+    credential_data: AttestedCredentialData | None
+    extensions: Mapping | None
 
     def __init__(self, _: bytes):
         super().__init__()
@@ -230,7 +230,7 @@ class AuthenticatorData(bytes):
         flags: AuthenticatorData.FLAG,
         counter: int,
         credential_data: bytes = b"",
-        extensions: Optional[Mapping] = None,
+        extensions: Mapping | None = None,
     ):
         """Create an AuthenticatorData instance.
 
@@ -357,7 +357,7 @@ class CollectedClientData(bytes):
     def create(
         cls,
         type: str,
-        challenge: Union[bytes, str],
+        challenge: bytes | str,
         origin: str,
         cross_origin: bool = False,
         **kwargs,
@@ -476,10 +476,10 @@ def _as_cbor(data: _WebAuthnDataObject) -> Mapping[str, Any]:
 @dataclass(eq=False, frozen=True)
 class PublicKeyCredentialRpEntity(_WebAuthnDataObject):
     name: str
-    id: Optional[str] = None
+    id: str | None = None
 
     @property
-    def id_hash(self) -> Optional[bytes]:
+    def id_hash(self) -> bytes | None:
         """Return SHA256 hash of the identifier."""
         return sha256(self.id.encode("utf8")) if self.id else None
 
@@ -488,7 +488,7 @@ class PublicKeyCredentialRpEntity(_WebAuthnDataObject):
 class PublicKeyCredentialUserEntity(_WebAuthnDataObject):
     name: str
     id: bytes
-    display_name: Optional[str] = None
+    display_name: str | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -501,15 +501,15 @@ class PublicKeyCredentialParameters(_WebAuthnDataObject):
 class PublicKeyCredentialDescriptor(_WebAuthnDataObject):
     type: PublicKeyCredentialType
     id: bytes
-    transports: Optional[Sequence[AuthenticatorTransport]] = None
+    transports: Sequence[AuthenticatorTransport] | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class AuthenticatorSelectionCriteria(_WebAuthnDataObject):
-    authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    resident_key: Optional[ResidentKeyRequirement] = None
-    user_verification: Optional[UserVerificationRequirement] = None
-    require_resident_key: Optional[bool] = False
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    resident_key: ResidentKeyRequirement | None = None
+    user_verification: UserVerificationRequirement | None = None
+    require_resident_key: bool | None = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -537,21 +537,21 @@ class PublicKeyCredentialCreationOptions(_WebAuthnDataObject):
     user: PublicKeyCredentialUserEntity
     challenge: bytes
     pub_key_cred_params: Sequence[PublicKeyCredentialParameters]
-    timeout: Optional[int] = None
-    exclude_credentials: Optional[Sequence[PublicKeyCredentialDescriptor]] = None
-    authenticator_selection: Optional[AuthenticatorSelectionCriteria] = None
-    attestation: Optional[AttestationConveyancePreference] = None
-    extensions: Optional[Mapping[str, Any]] = None
+    timeout: int | None = None
+    exclude_credentials: Sequence[PublicKeyCredentialDescriptor] | None = None
+    authenticator_selection: AuthenticatorSelectionCriteria | None = None
+    attestation: AttestationConveyancePreference | None = None
+    extensions: Mapping[str, Any] | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class PublicKeyCredentialRequestOptions(_WebAuthnDataObject):
     challenge: bytes
-    timeout: Optional[int] = None
-    rp_id: Optional[str] = None
-    allow_credentials: Optional[Sequence[PublicKeyCredentialDescriptor]] = None
-    user_verification: Optional[UserVerificationRequirement] = None
-    extensions: Optional[Mapping[str, Any]] = None
+    timeout: int | None = None
+    rp_id: str | None = None
+    allow_credentials: Sequence[PublicKeyCredentialDescriptor] | None = None
+    user_verification: UserVerificationRequirement | None = None
+    extensions: Mapping[str, Any] | None = None
 
 
 # TODO 2.0: Move extension results to RegistrationResponse, remove methods
@@ -559,7 +559,7 @@ class PublicKeyCredentialRequestOptions(_WebAuthnDataObject):
 class AuthenticatorAttestationResponse(_WebAuthnDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     attestation_object: AttestationObject
-    extension_results: Optional[Mapping[str, Any]] = None
+    extension_results: Mapping[str, Any] | None = None
 
     def __getitem__(self, key):
         if key == "clientData" and not webauthn_json_mapping.enabled:
@@ -576,7 +576,7 @@ class AuthenticatorAttestationResponse(_WebAuthnDataObject):
 
     @classmethod
     def _parse_value(cls, t, value):
-        if t == Optional[Mapping[str, Any]]:
+        if t == Mapping[str, Any] | None:
             # Don't convert extension_results
             return value
         return super()._parse_value(t, value)
@@ -588,9 +588,9 @@ class AuthenticatorAssertionResponse(_WebAuthnDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     authenticator_data: AuthenticatorData
     signature: bytes
-    user_handle: Optional[bytes] = None
-    credential_id: Optional[bytes] = None
-    extension_results: Optional[Mapping[str, Any]] = None
+    user_handle: bytes | None = None
+    credential_id: bytes | None = None
+    extension_results: Mapping[str, Any] | None = None
 
     def __getitem__(self, key):
         if key == "clientData" and not webauthn_json_mapping.enabled:
@@ -607,7 +607,7 @@ class AuthenticatorAssertionResponse(_WebAuthnDataObject):
 
     @classmethod
     def _parse_value(cls, t, value):
-        if t == Optional[Mapping[str, Any]]:
+        if t == Mapping[str, Any] | None:
             # Don't convert extension_results
             return value
         return super()._parse_value(t, value)
@@ -618,9 +618,9 @@ class AuthenticatorAssertionResponse(_WebAuthnDataObject):
 class RegistrationResponse(_WebAuthnDataObject):
     id: bytes
     response: AuthenticatorAttestationResponse
-    authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    client_extension_results: Optional[AuthenticationExtensionsClientOutputs] = None
-    type: Optional[PublicKeyCredentialType] = None
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    client_extension_results: AuthenticationExtensionsClientOutputs | None = None
+    type: PublicKeyCredentialType | None = None
 
     def __post_init__(self):
         webauthn_json_mapping.require()
@@ -632,9 +632,9 @@ class RegistrationResponse(_WebAuthnDataObject):
 class AuthenticationResponse(_WebAuthnDataObject):
     id: bytes
     response: AuthenticatorAssertionResponse
-    authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    client_extension_results: Optional[AuthenticationExtensionsClientOutputs] = None
-    type: Optional[PublicKeyCredentialType] = None
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    client_extension_results: AuthenticationExtensionsClientOutputs | None = None
+    type: PublicKeyCredentialType | None = None
 
     def __post_init__(self):
         webauthn_json_mapping.require()
