@@ -78,17 +78,3 @@ To silence this warning but retain the current behavior, instead set enabled to 
             """,
                 DeprecationWarning,
             )
-
-
-# TODO 2.0: Remove this feature
-webauthn_json_mapping = _Feature(
-    "webauthn_json_mapping",
-    """JSON values for WebAuthn data class Mapping interface.
-
-This changes the keys and values used by the webauthn data classes when accessed using
-the Mapping (dict) interface (eg. user_entity["id"] and the from_dict() methods) to be
-JSON-friendly and align with the current draft of the next WebAuthn Level specification.
-For the most part, this means that binary values (bytes) are represented as URL-safe
-base64 encoded strings instead.
-""",
-)

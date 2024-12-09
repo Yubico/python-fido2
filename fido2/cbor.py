@@ -33,7 +33,7 @@ required for FIDO 2 CTAP.
 Use the :func:`encode`, :func:`decode` and :func:`decode_from` functions to encode
 and decode objects to/from CBOR.
 
-DO NOT use the dump_x/load_x functions directly, these will be made private in
+DO NOT use the _dump_x/_load_x functions directly, these will be made private in
 python-fido2 2.0.
 """
 
@@ -46,8 +46,7 @@ from typing import Any, Sequence, Mapping, Type, Callable
 CborType = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
 
 
-# TODO 2.0: Make dump_x/load_x functions private
-def dump_int(data: int, mt: int = 0) -> bytes:
+def _dump_int(data: int, mt: int = 0) -> bytes:
     if data < 0:
         mt = 1
         data = -1 - data
@@ -66,12 +65,12 @@ def dump_int(data: int, mt: int = 0) -> bytes:
     return struct.pack(*args)
 
 
-def dump_bool(data: bool) -> bytes:
+def _dump_bool(data: bool) -> bytes:
     return b"\xf5" if data else b"\xf4"
 
 
-def dump_list(data: Sequence[CborType]) -> bytes:
-    return dump_int(len(data), mt=4) + b"".join([encode(x) for x in data])
+def _dump_list(data: Sequence[CborType]) -> bytes:
+    return _dump_int(len(data), mt=4) + b"".join([encode(x) for x in data])
 
 
 def _sort_keys(entry):
@@ -79,32 +78,32 @@ def _sort_keys(entry):
     return key[0], len(key), key
 
 
-def dump_dict(data: Mapping[CborType, CborType]) -> bytes:
+def _dump_dict(data: Mapping[CborType, CborType]) -> bytes:
     items = [(encode(k), encode(v)) for k, v in data.items()]
     items.sort(key=_sort_keys)
-    return dump_int(len(items), mt=5) + b"".join([k + v for (k, v) in items])
+    return _dump_int(len(items), mt=5) + b"".join([k + v for (k, v) in items])
 
 
-def dump_bytes(data: bytes) -> bytes:
-    return dump_int(len(data), mt=2) + data
+def _dump_bytes(data: bytes) -> bytes:
+    return _dump_int(len(data), mt=2) + data
 
 
-def dump_text(data: str) -> bytes:
+def _dump_text(data: str) -> bytes:
     data_bytes = data.encode("utf8")
-    return dump_int(len(data_bytes), mt=3) + data_bytes
+    return _dump_int(len(data_bytes), mt=3) + data_bytes
 
 
 _SERIALIZERS: Sequence[tuple[Type, Callable[[Any], bytes]]] = [
-    (bool, dump_bool),
-    (int, dump_int),
-    (str, dump_text),
-    (bytes, dump_bytes),
-    (Mapping, dump_dict),
-    (Sequence, dump_list),
+    (bool, _dump_bool),
+    (int, _dump_int),
+    (str, _dump_text),
+    (bytes, _dump_bytes),
+    (Mapping, _dump_dict),
+    (Sequence, _dump_list),
 ]
 
 
-def load_int(ai: int, data: bytes) -> tuple[int, bytes]:
+def _load_int(ai: int, data: bytes) -> tuple[int, bytes]:
     if ai < 24:
         return ai, data
     elif ai == 24:
@@ -118,27 +117,27 @@ def load_int(ai: int, data: bytes) -> tuple[int, bytes]:
     raise ValueError("Invalid additional information")
 
 
-def load_nint(ai: int, data: bytes) -> tuple[int, bytes]:
-    val, rest = load_int(ai, data)
+def _load_nint(ai: int, data: bytes) -> tuple[int, bytes]:
+    val, rest = _load_int(ai, data)
     return -1 - val, rest
 
 
-def load_bool(ai: int, data: bytes) -> tuple[bool, bytes]:
+def _load_bool(ai: int, data: bytes) -> tuple[bool, bytes]:
     return ai == 21, data
 
 
-def load_bytes(ai: int, data: bytes) -> tuple[bytes, bytes]:
-    l, data = load_int(ai, data)
+def _load_bytes(ai: int, data: bytes) -> tuple[bytes, bytes]:
+    l, data = _load_int(ai, data)
     return data[:l], data[l:]
 
 
-def load_text(ai: int, data: bytes) -> tuple[str, bytes]:
-    enc, rest = load_bytes(ai, data)
+def _load_text(ai: int, data: bytes) -> tuple[str, bytes]:
+    enc, rest = _load_bytes(ai, data)
     return enc.decode("utf8"), rest
 
 
-def load_array(ai: int, data: bytes) -> tuple[Sequence[CborType], bytes]:
-    l, data = load_int(ai, data)
+def _load_array(ai: int, data: bytes) -> tuple[Sequence[CborType], bytes]:
+    l, data = _load_int(ai, data)
     values = []
     for i in range(l):
         val, data = decode_from(data)
@@ -146,8 +145,8 @@ def load_array(ai: int, data: bytes) -> tuple[Sequence[CborType], bytes]:
     return values, data
 
 
-def load_map(ai: int, data: bytes) -> tuple[Mapping[CborType, CborType], bytes]:
-    l, data = load_int(ai, data)
+def _load_map(ai: int, data: bytes) -> tuple[Mapping[CborType, CborType], bytes]:
+    l, data = _load_int(ai, data)
     values = {}
     for i in range(l):
         k, data = decode_from(data)
@@ -157,13 +156,13 @@ def load_map(ai: int, data: bytes) -> tuple[Mapping[CborType, CborType], bytes]:
 
 
 _DESERIALIZERS = {
-    0: load_int,
-    1: load_nint,
-    2: load_bytes,
-    3: load_text,
-    4: load_array,
-    5: load_map,
-    7: load_bool,
+    0: _load_int,
+    1: _load_nint,
+    2: _load_bytes,
+    3: _load_text,
+    4: _load_array,
+    5: _load_map,
+    7: _load_bool,
 }
 
 
