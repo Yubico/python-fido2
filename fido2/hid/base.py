@@ -28,7 +28,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple, Union, Optional
 import struct
 import abc
 import os
@@ -39,13 +38,13 @@ FIDO_USAGE = 0x1
 
 @dataclass
 class HidDescriptor:
-    path: Union[str, bytes]
+    path: str | bytes
     vid: int
     pid: int
     report_size_in: int
     report_size_out: int
-    product_name: Optional[str]
-    serial_number: Optional[str]
+    product_name: str | None
+    serial_number: str | None
 
 
 class CtapHidConnection(abc.ABC):
@@ -91,7 +90,7 @@ USAGE_PAGE = 0x04
 USAGE = 0x08
 
 
-def parse_report_descriptor(data: bytes) -> Tuple[int, int]:
+def parse_report_descriptor(data: bytes) -> tuple[int, int]:
     # Parse report descriptor data
     usage, usage_page = None, None
     max_input_size, max_output_size = None, None

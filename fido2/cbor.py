@@ -40,10 +40,10 @@ python-fido2 2.0.
 from __future__ import annotations
 
 import struct
-from typing import Any, Tuple, Union, Sequence, Mapping, Type, Callable
+from typing import Any, Sequence, Mapping, Type, Callable
 
 
-CborType = Union[int, bool, str, bytes, Sequence[Any], Mapping[Any, Any]]
+CborType = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
 
 
 # TODO 2.0: Make dump_x/load_x functions private
@@ -94,7 +94,7 @@ def dump_text(data: str) -> bytes:
     return dump_int(len(data_bytes), mt=3) + data_bytes
 
 
-_SERIALIZERS: Sequence[Tuple[Type, Callable[[Any], bytes]]] = [
+_SERIALIZERS: Sequence[tuple[Type, Callable[[Any], bytes]]] = [
     (bool, dump_bool),
     (int, dump_int),
     (str, dump_text),
@@ -104,7 +104,7 @@ _SERIALIZERS: Sequence[Tuple[Type, Callable[[Any], bytes]]] = [
 ]
 
 
-def load_int(ai: int, data: bytes) -> Tuple[int, bytes]:
+def load_int(ai: int, data: bytes) -> tuple[int, bytes]:
     if ai < 24:
         return ai, data
     elif ai == 24:
@@ -118,26 +118,26 @@ def load_int(ai: int, data: bytes) -> Tuple[int, bytes]:
     raise ValueError("Invalid additional information")
 
 
-def load_nint(ai: int, data: bytes) -> Tuple[int, bytes]:
+def load_nint(ai: int, data: bytes) -> tuple[int, bytes]:
     val, rest = load_int(ai, data)
     return -1 - val, rest
 
 
-def load_bool(ai: int, data: bytes) -> Tuple[bool, bytes]:
+def load_bool(ai: int, data: bytes) -> tuple[bool, bytes]:
     return ai == 21, data
 
 
-def load_bytes(ai: int, data: bytes) -> Tuple[bytes, bytes]:
+def load_bytes(ai: int, data: bytes) -> tuple[bytes, bytes]:
     l, data = load_int(ai, data)
     return data[:l], data[l:]
 
 
-def load_text(ai: int, data: bytes) -> Tuple[str, bytes]:
+def load_text(ai: int, data: bytes) -> tuple[str, bytes]:
     enc, rest = load_bytes(ai, data)
     return enc.decode("utf8"), rest
 
 
-def load_array(ai: int, data: bytes) -> Tuple[Sequence[CborType], bytes]:
+def load_array(ai: int, data: bytes) -> tuple[Sequence[CborType], bytes]:
     l, data = load_int(ai, data)
     values = []
     for i in range(l):
@@ -146,7 +146,7 @@ def load_array(ai: int, data: bytes) -> Tuple[Sequence[CborType], bytes]:
     return values, data
 
 
-def load_map(ai: int, data: bytes) -> Tuple[Mapping[CborType, CborType], bytes]:
+def load_map(ai: int, data: bytes) -> tuple[Mapping[CborType, CborType], bytes]:
     l, data = load_int(ai, data)
     values = {}
     for i in range(l):
@@ -175,7 +175,7 @@ def encode(data: CborType) -> bytes:
     raise ValueError(f"Unsupported value: {data!r}")
 
 
-def decode_from(data: bytes) -> Tuple[Any, bytes]:
+def decode_from(data: bytes) -> tuple[Any, bytes]:
     """Decodes a CBOR-encoded value from the start of a byte string.
 
     Additional data after a valid CBOR object is returned as well.

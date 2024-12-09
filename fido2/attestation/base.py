@@ -35,7 +35,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import dataclass
 from functools import wraps
-from typing import List, Type, Mapping, Sequence, Optional, Any
+from typing import Type, Mapping, Sequence, Any
 
 import abc
 
@@ -85,7 +85,7 @@ class AttestationResult:
     """The result of verifying an attestation."""
 
     attestation_type: AttestationType
-    trust_path: List[bytes]
+    trust_path: list[bytes]
 
 
 def catch_builtins(f):
@@ -102,7 +102,7 @@ def catch_builtins(f):
 
 
 @catch_builtins
-def verify_x509_chain(chain: List[bytes]) -> None:
+def verify_x509_chain(chain: list[bytes]) -> None:
     """Verifies a chain of certificates.
 
     Checks that the first item in the chain is signed by the next, and so on.
@@ -209,13 +209,13 @@ class AttestationVerifier(abc.ABC):
     to verify the trust path from the attestation.
     """
 
-    def __init__(self, attestation_types: Optional[Sequence[Attestation]] = None):
+    def __init__(self, attestation_types: Sequence[Attestation] | None = None):
         self._attestation_types = attestation_types or _default_attestations()
 
     @abc.abstractmethod
     def ca_lookup(
         self, attestation_result: AttestationResult, auth_data: AuthenticatorData
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         """Lookup a CA certificate to be used to verify a trust path.
 
         :param attestation_result: The result of the attestation

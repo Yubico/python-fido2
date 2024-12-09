@@ -40,7 +40,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from enum import IntEnum, IntFlag, unique
 from dataclasses import dataclass
 from threading import Event
-from typing import Optional, Any, Mapping, ClassVar, Tuple, Callable
+from typing import Any, Mapping, ClassVar, Callable
 
 import abc
 import os
@@ -65,7 +65,7 @@ class PinProtocol(abc.ABC):
     VERSION: ClassVar[int]
 
     @abc.abstractmethod
-    def encapsulate(self, peer_cose_key: CoseKey) -> Tuple[Mapping[int, Any], bytes]:
+    def encapsulate(self, peer_cose_key: CoseKey) -> tuple[Mapping[int, Any], bytes]:
         """Generates an encapsulation of the public key.
         Returns the message to transmit and the shared secret.
         """
@@ -263,7 +263,7 @@ class ClientPin:
         """Checks if pinUvAuthToken is supported."""
         return info.options.get("pinUvAuthToken") is True
 
-    def __init__(self, ctap: Ctap2, protocol: Optional[PinProtocol] = None):
+    def __init__(self, ctap: Ctap2, protocol: PinProtocol | None = None):
         self.ctap = ctap
         if protocol is None:
             for proto in ClientPin.PROTOCOLS:
@@ -286,8 +286,8 @@ class ClientPin:
     def get_pin_token(
         self,
         pin: str,
-        permissions: Optional[ClientPin.PERMISSION] = None,
-        permissions_rpid: Optional[str] = None,
+        permissions: ClientPin.PERMISSION | None = None,
+        permissions_rpid: str | None = None,
     ) -> bytes:
         """Get a PIN/UV token from the authenticator using PIN.
 
@@ -328,10 +328,10 @@ class ClientPin:
 
     def get_uv_token(
         self,
-        permissions: Optional[ClientPin.PERMISSION] = None,
-        permissions_rpid: Optional[str] = None,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        permissions: ClientPin.PERMISSION | None = None,
+        permissions_rpid: str | None = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> bytes:
         """Get a PIN/UV token from the authenticator using built-in UV.
 
@@ -365,7 +365,7 @@ class ClientPin:
             self.protocol.decrypt(shared_secret, pin_token_enc)
         )
 
-    def get_pin_retries(self) -> Tuple[int, Optional[int]]:
+    def get_pin_retries(self) -> tuple[int, int | None]:
         """Get the number of PIN retries remaining.
 
         :return: A tuple of the number of PIN attempts remaining until the

@@ -40,7 +40,7 @@ from ..webauthn import (
 )
 from enum import Enum, unique
 from dataclasses import dataclass
-from typing import Dict, Tuple, Any, Optional, Mapping
+from typing import Any, Mapping
 import abc
 import warnings
 
@@ -55,8 +55,8 @@ class ExtensionProcessor(abc.ABC):
     def __init__(
         self,
         permissions: ClientPin.PERMISSION = ClientPin.PERMISSION(0),
-        inputs: Optional[Dict[str, Any]] = None,
-        outputs: Optional[Dict[str, Any]] = None,
+        inputs: dict[str, Any] | None = None,
+        outputs: dict[str, Any] | None = None,
     ):
         self.permissions = permissions
         self._inputs = inputs
@@ -74,15 +74,15 @@ class RegistrationExtensionProcessor(ExtensionProcessor):
     :param outputs: Default client outputs, if prepare_outputs is not overridden.
     """
 
-    def prepare_inputs(self, pin_token: Optional[bytes]) -> Optional[Dict[str, Any]]:
+    def prepare_inputs(self, pin_token: bytes | None) -> dict[str, Any] | None:
         "Prepare authenticator extension inputs, to be passed to the Authenenticator."
         return self._inputs
 
     def prepare_outputs(
         self,
         response: AttestationResponse,
-        pin_token: Optional[bytes],
-    ) -> Optional[Dict[str, Any]]:
+        pin_token: bytes | None,
+    ) -> dict[str, Any] | None:
         "Prepare client extension outputs, to be returned to the caller."
         return self._outputs
 
@@ -100,17 +100,17 @@ class AuthenticationExtensionProcessor(ExtensionProcessor):
 
     def prepare_inputs(
         self,
-        selected: Optional[PublicKeyCredentialDescriptor],
-        pin_token: Optional[bytes],
-    ) -> Optional[Dict[str, Any]]:
+        selected: PublicKeyCredentialDescriptor | None,
+        pin_token: bytes | None,
+    ) -> dict[str, Any] | None:
         "Prepare authenticator extension inputs, to be passed to the Authenenticator."
         return self._inputs
 
     def prepare_outputs(
         self,
         response: AssertionResponse,
-        pin_token: Optional[bytes],
-    ) -> Optional[Dict[str, Any]]:
+        pin_token: bytes | None,
+    ) -> dict[str, Any] | None:
         "Prepare client extension outputs, to be returned to the caller."
         return self._outputs
 
@@ -138,7 +138,7 @@ class Ctap2Extension(abc.ABC):
 
     NAME: str = None  # type: ignore
 
-    def __init__(self, ctap: Optional[Ctap2] = None):
+    def __init__(self, ctap: Ctap2 | None = None):
         if ctap:
             warnings.warn(
                 "Calling __init__ with a Ctap2 instance is deprecated.",
@@ -156,7 +156,7 @@ class Ctap2Extension(abc.ABC):
             )
         return ctap
 
-    def is_supported(self, ctap: Optional[Ctap2] = None) -> bool:
+    def is_supported(self, ctap: Ctap2 | None = None) -> bool:
         """Whether or not the extension is supported by the authenticator."""
         if not ctap:
             warnings.warn(
@@ -172,8 +172,8 @@ class Ctap2Extension(abc.ABC):
         self,
         ctap: Ctap2,
         options: PublicKeyCredentialCreationOptions,
-        pin_protocol: Optional[PinProtocol],
-    ) -> Optional[RegistrationExtensionProcessor]:
+        pin_protocol: PinProtocol | None,
+    ) -> RegistrationExtensionProcessor:
         """Start client extension processing for registration."""
         # This implementation is for LEGACY PURPOSES!
         # Subclasses should override this method instead of:
@@ -205,8 +205,8 @@ class Ctap2Extension(abc.ABC):
         self,
         ctap: Ctap2,
         options: PublicKeyCredentialRequestOptions,
-        pin_protocol: Optional[PinProtocol],
-    ) -> Optional[AuthenticationExtensionProcessor]:
+        pin_protocol: PinProtocol | None,
+    ) -> AuthenticationExtensionProcessor:
         """Start client extension processing for authentication."""
         # This implementation is for LEGACY PURPOSES!
         # Subclasses should override this method instead of:
@@ -234,7 +234,7 @@ class Ctap2Extension(abc.ABC):
         return Processor(self.get_get_permissions(inputs))
 
     # TODO 2.0: Remove the remaining methods of this class
-    def get_create_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
+    def get_create_permissions(self, inputs: dict[str, Any]) -> ClientPin.PERMISSION:
         """Get PinUvAuthToken permissions required for Registration.
 
         .. deprecated:: 1.2.0
@@ -242,7 +242,7 @@ class Ctap2Extension(abc.ABC):
         """
         return ClientPin.PERMISSION(0)
 
-    def process_create_input(self, inputs: Dict[str, Any]) -> Any:
+    def process_create_input(self, inputs: dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
 
@@ -252,8 +252,8 @@ class Ctap2Extension(abc.ABC):
         return None
 
     def process_create_input_with_permissions(
-        self, inputs: Dict[str, Any]
-    ) -> Tuple[Any, ClientPin.PERMISSION]:
+        self, inputs: dict[str, Any]
+    ) -> tuple[Any, ClientPin.PERMISSION]:
         """
 
         .. deprecated:: 1.2.0
@@ -268,9 +268,9 @@ class Ctap2Extension(abc.ABC):
     def process_create_output(
         self,
         attestation_response: AttestationResponse,
-        token: Optional[bytes],
-        pin_protocol: Optional[PinProtocol],
-    ) -> Optional[Dict[str, Any]]:
+        token: bytes | None,
+        pin_protocol: PinProtocol | None,
+    ) -> dict[str, Any] | None:
         """Return client extension output given attestation_response, or None.
 
         .. deprecated:: 1.2.0
@@ -278,14 +278,14 @@ class Ctap2Extension(abc.ABC):
         """
         return None
 
-    def get_get_permissions(self, inputs: Dict[str, Any]) -> ClientPin.PERMISSION:
+    def get_get_permissions(self, inputs: dict[str, Any]) -> ClientPin.PERMISSION:
         """
         .. deprecated:: 1.2.0
            Implement :func:`get_assertion` instead.
         """
         return ClientPin.PERMISSION(0)
 
-    def process_get_input(self, inputs: Dict[str, Any]) -> Any:
+    def process_get_input(self, inputs: dict[str, Any]) -> Any:
         """Returns a value to include in the authenticator extension input,
         or None.
 
@@ -295,8 +295,8 @@ class Ctap2Extension(abc.ABC):
         return None
 
     def process_get_input_with_permissions(
-        self, inputs: Dict[str, Any]
-    ) -> Tuple[Any, ClientPin.PERMISSION]:
+        self, inputs: dict[str, Any]
+    ) -> tuple[Any, ClientPin.PERMISSION]:
         """
         .. deprecated:: 1.2.0
            Implement :func:`get_assertion` instead.
@@ -309,9 +309,9 @@ class Ctap2Extension(abc.ABC):
     def process_get_output(
         self,
         assertion_response: AssertionResponse,
-        token: Optional[bytes],
-        pin_protocol: Optional[PinProtocol],
-    ) -> Optional[Dict[str, Any]]:
+        token: bytes | None,
+        pin_protocol: PinProtocol | None,
+    ) -> dict[str, Any] | None:
         """Return client extension output given assertion_response, or None.
 
         .. deprecated:: 1.2.0
@@ -325,7 +325,7 @@ class HMACGetSecretInput(_JsonDataObject):
     """Client inputs for hmac-secret."""
 
     salt1: bytes
-    salt2: Optional[bytes] = None
+    salt2: bytes | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -333,7 +333,7 @@ class HMACGetSecretOutput(_JsonDataObject):
     """Client outputs for hmac-secret."""
 
     output1: bytes
-    output2: Optional[bytes] = None
+    output2: bytes | None = None
 
 
 def _prf_salt(secret):
@@ -345,23 +345,23 @@ class AuthenticatorExtensionsPRFValues(_JsonDataObject):
     """Salt values for use with prf."""
 
     first: bytes
-    second: Optional[bytes] = None
+    second: bytes | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class AuthenticatorExtensionsPRFInputs(_JsonDataObject):
     """Client inputs for prf."""
 
-    eval: Optional[AuthenticatorExtensionsPRFValues] = None
-    eval_by_credential: Optional[Mapping[str, AuthenticatorExtensionsPRFValues]] = None
+    eval: AuthenticatorExtensionsPRFValues | None = None
+    eval_by_credential: Mapping[str, AuthenticatorExtensionsPRFValues] | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class AuthenticatorExtensionsPRFOutputs(_JsonDataObject):
     """Client outputs for prf."""
 
-    enabled: Optional[bool] = None
-    results: Optional[AuthenticatorExtensionsPRFValues] = None
+    enabled: bool | None = None
+    results: AuthenticatorExtensionsPRFValues | None = None
 
 
 class HmacSecretExtension(Ctap2Extension):
@@ -564,18 +564,18 @@ class HmacSecretExtension(Ctap2Extension):
 class AuthenticatorExtensionsLargeBlobInputs(_JsonDataObject):
     """Client inputs for largeBlob."""
 
-    support: Optional[str] = None
-    read: Optional[bool] = None
-    write: Optional[bytes] = None
+    support: str | None = None
+    read: bool | None = None
+    write: bytes | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class AuthenticatorExtensionsLargeBlobOutputs(_JsonDataObject):
     """Client outputs for largeBlob."""
 
-    supported: Optional[bool] = None
-    blob: Optional[bytes] = None
-    written: Optional[bool] = None
+    supported: bool | None = None
+    blob: bytes | None = None
+    written: bool | None = None
 
 
 class LargeBlobExtension(Ctap2Extension):
@@ -810,7 +810,7 @@ class MinPinLengthExtension(Ctap2Extension):
 class CredentialPropertiesOutput(_JsonDataObject):
     """Client outputs for credProps."""
 
-    rk: Optional[bool] = None
+    rk: bool | None = None
 
 
 class CredPropsExtension(Ctap2Extension):

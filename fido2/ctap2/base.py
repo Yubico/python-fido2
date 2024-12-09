@@ -37,14 +37,14 @@ from ..webauthn import AuthenticatorData, Aaguid
 from enum import IntEnum, unique
 from dataclasses import dataclass, field, fields, Field
 from threading import Event
-from typing import Mapping, Dict, Any, List, Optional, Callable
+from typing import Mapping, Any, Callable
 import struct
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def args(*params) -> Dict[int, Any]:
+def args(*params) -> dict[int, Any]:
     """Constructs a dict from a list of arguments for sending a CBOR command.
     None elements will be omitted.
 
@@ -78,27 +78,27 @@ class Info(_CborDataObject):
     :ivar data: The Info members, in the form of a dict.
     """
 
-    versions: List[str]
-    extensions: List[str] = field(default_factory=list)
+    versions: list[str]
+    extensions: list[str] = field(default_factory=list)
     aaguid: Aaguid = Aaguid.NONE
-    options: Dict[str, bool] = field(default_factory=dict)
+    options: dict[str, bool] = field(default_factory=dict)
     max_msg_size: int = 1024
-    pin_uv_protocols: List[int] = field(default_factory=list)
-    max_creds_in_list: Optional[int] = None
-    max_cred_id_length: Optional[int] = None
-    transports: List[str] = field(default_factory=list)
-    algorithms: Optional[List[Dict[str, Any]]] = None
-    max_large_blob: Optional[int] = None
+    pin_uv_protocols: list[int] = field(default_factory=list)
+    max_creds_in_list: int | None = None
+    max_cred_id_length: int | None = None
+    transports: list[str] = field(default_factory=list)
+    algorithms: list[dict[str, Any]] | None = None
+    max_large_blob: int | None = None
     force_pin_change: bool = False
     min_pin_length: int = 4
-    firmware_version: Optional[int] = None
-    max_cred_blob_length: Optional[int] = None
+    firmware_version: int | None = None
+    max_cred_blob_length: int | None = None
     max_rpids_for_min_pin: int = 0
-    preferred_platform_uv_attempts: Optional[int] = None
-    uv_modality: Optional[int] = None
-    certifications: Optional[Dict] = None
-    remaining_disc_creds: Optional[int] = None
-    vendor_prototype_config_commands: Optional[List[int]] = None
+    preferred_platform_uv_attempts: int | None = None
+    uv_modality: int | None = None
+    certifications: dict | None = None
+    remaining_disc_creds: int | None = None
+    vendor_prototype_config_commands: list[int] | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -112,14 +112,14 @@ class AttestationResponse(_CborDataObject):
     :ivar auth_data: The attested authenticator data.
     :type auth_data: AuthenticatorData
     :ivar att_stmt: The attestation statement.
-    :type att_stmt: Dict[str, Any]
+    :type att_stmt: dict[str, Any]
     """
 
     fmt: str
     auth_data: AuthenticatorData
-    att_stmt: Dict[str, Any]
-    ep_att: Optional[bool] = None
-    large_blob_key: Optional[bytes] = None
+    att_stmt: dict[str, Any]
+    ep_att: bool | None = None
+    large_blob_key: bytes | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -138,10 +138,10 @@ class AssertionResponse(_CborDataObject):
     credential: Mapping[str, Any]
     auth_data: AuthenticatorData
     signature: bytes
-    user: Optional[Dict[str, Any]] = None
-    number_of_credentials: Optional[int] = None
-    user_selected: Optional[bool] = None
-    large_blob_key: Optional[bytes] = None
+    user: dict[str, Any] | None = None
+    number_of_credentials: int | None = None
+    user_selected: bool | None = None
+    large_blob_key: bytes | None = None
 
     def verify(self, client_param: bytes, public_key: CoseKey):
         """Verify the digital signature of the response with regard to the
@@ -219,10 +219,10 @@ class Ctap2:
     def send_cbor(
         self,
         cmd: int,
-        data: Optional[Mapping[int, Any]] = None,
+        data: Mapping[int, Any] | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]:
         """Sends a CBOR message to the device, and waits for a response.
 
@@ -265,15 +265,15 @@ class Ctap2:
         self,
         pin_uv_protocol: int,
         sub_cmd: int,
-        key_agreement: Optional[Mapping[int, Any]] = None,
-        pin_uv_param: Optional[bytes] = None,
-        new_pin_enc: Optional[bytes] = None,
-        pin_hash_enc: Optional[bytes] = None,
-        permissions: Optional[int] = None,
-        permissions_rpid: Optional[str] = None,
+        key_agreement: Mapping[int, Any] | None = None,
+        pin_uv_param: bytes | None = None,
+        new_pin_enc: bytes | None = None,
+        pin_hash_enc: bytes | None = None,
+        permissions: int | None = None,
+        permissions_rpid: str | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 clientPin command, used for various PIN operations.
 
@@ -314,8 +314,8 @@ class Ctap2:
     def reset(
         self,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> None:
         """CTAP2 reset command, erases all credentials and PIN.
 
@@ -331,16 +331,16 @@ class Ctap2:
         client_data_hash: bytes,
         rp: Mapping[str, Any],
         user: Mapping[str, Any],
-        key_params: List[Mapping[str, Any]],
-        exclude_list: Optional[List[Mapping[str, Any]]] = None,
-        extensions: Optional[Mapping[str, Any]] = None,
-        options: Optional[Mapping[str, Any]] = None,
-        pin_uv_param: Optional[bytes] = None,
-        pin_uv_protocol: Optional[int] = None,
-        enterprise_attestation: Optional[int] = None,
+        key_params: list[Mapping[str, Any]],
+        exclude_list: list[Mapping[str, Any]] | None = None,
+        extensions: Mapping[str, Any] | None = None,
+        options: Mapping[str, Any] | None = None,
+        pin_uv_param: bytes | None = None,
+        pin_uv_protocol: int | None = None,
+        enterprise_attestation: int | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> AttestationResponse:
         """CTAP2 makeCredential operation.
 
@@ -384,14 +384,14 @@ class Ctap2:
         self,
         rp_id: str,
         client_data_hash: bytes,
-        allow_list: Optional[List[Mapping[str, Any]]] = None,
-        extensions: Optional[Mapping[str, Any]] = None,
-        options: Optional[Mapping[str, Any]] = None,
-        pin_uv_param: Optional[bytes] = None,
-        pin_uv_protocol: Optional[int] = None,
+        allow_list: list[Mapping[str, Any]] | None = None,
+        extensions: Mapping[str, Any] | None = None,
+        options: Mapping[str, Any] | None = None,
+        pin_uv_param: bytes | None = None,
+        pin_uv_protocol: int | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> AssertionResponse:
         """CTAP2 getAssertion command.
 
@@ -432,7 +432,7 @@ class Ctap2:
         """
         return AssertionResponse.from_dict(self.send_cbor(Ctap2.CMD.GET_NEXT_ASSERTION))
 
-    def get_assertions(self, *args, **kwargs) -> List[AssertionResponse]:
+    def get_assertions(self, *args, **kwargs) -> list[AssertionResponse]:
         """Convenience method to get list of assertions.
 
         See get_assertion and get_next_assertion for details.
@@ -447,9 +447,9 @@ class Ctap2:
     def credential_mgmt(
         self,
         sub_cmd: int,
-        sub_cmd_params: Optional[Mapping[int, Any]] = None,
-        pin_uv_protocol: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
+        sub_cmd_params: Mapping[int, Any] | None = None,
+        pin_uv_protocol: int | None = None,
+        pin_uv_param: bytes | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 credentialManagement command, used to manage resident
         credentials.
@@ -480,15 +480,15 @@ class Ctap2:
 
     def bio_enrollment(
         self,
-        modality: Optional[int] = None,
-        sub_cmd: Optional[int] = None,
-        sub_cmd_params: Optional[Mapping[int, Any]] = None,
-        pin_uv_protocol: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
-        get_modality: Optional[bool] = None,
+        modality: int | None = None,
+        sub_cmd: int | None = None,
+        sub_cmd_params: Mapping[int, Any] | None = None,
+        pin_uv_protocol: int | None = None,
+        pin_uv_param: bytes | None = None,
+        get_modality: bool | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 bio enrollment command. Used to provision/enumerate/delete bio
         enrollments in the authenticator.
@@ -529,8 +529,8 @@ class Ctap2:
     def selection(
         self,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> None:
         """CTAP2 authenticator selection command.
 
@@ -546,11 +546,11 @@ class Ctap2:
     def large_blobs(
         self,
         offset: int,
-        get: Optional[int] = None,
-        set: Optional[bytes] = None,
-        length: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
-        pin_uv_protocol: Optional[int] = None,
+        get: int | None = None,
+        set: bytes | None = None,
+        length: int | None = None,
+        pin_uv_param: bytes | None = None,
+        pin_uv_protocol: int | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 authenticator large blobs command.
 
@@ -574,9 +574,9 @@ class Ctap2:
     def config(
         self,
         sub_cmd: int,
-        sub_cmd_params: Optional[Mapping[int, Any]] = None,
-        pin_uv_protocol: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
+        sub_cmd_params: Mapping[int, Any] | None = None,
+        pin_uv_protocol: int | None = None,
+        pin_uv_param: bytes | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 authenticator config command.
 

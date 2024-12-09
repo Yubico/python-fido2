@@ -64,10 +64,8 @@ from typing import (
     Type,
     Any,
     Callable,
-    Optional,
     Mapping,
     Sequence,
-    Tuple,
     overload,
 )
 
@@ -216,7 +214,7 @@ class AssertionSelection:
 
     def _get_extension_results(
         self, assertion: AssertionResponse
-    ) -> Optional[Mapping[str, Any]]:
+    ) -> Mapping[str, Any] | None:
         return self._extension_results
 
     def get_response(self, index: int) -> AuthenticatorAssertionResponse:
@@ -240,7 +238,7 @@ class WebAuthnClient(abc.ABC):
     def make_credential(
         self,
         options: PublicKeyCredentialCreationOptions,
-        event: Optional[Event] = None,
+        event: Event | None = None,
     ) -> AuthenticatorAttestationResponse:
         """Creates a credential.
 
@@ -253,7 +251,7 @@ class WebAuthnClient(abc.ABC):
     def get_assertion(
         self,
         options: PublicKeyCredentialRequestOptions,
-        event: Optional[Event] = None,
+        event: Event | None = None,
     ) -> AssertionSelection:
         """Get an assertion.
 
@@ -280,17 +278,15 @@ class UserInteraction:
         logger.info("User Presence check required.")
 
     def request_pin(
-        self, permissions: ClientPin.PERMISSION, rp_id: Optional[str]
-    ) -> Optional[str]:
+        self, permissions: ClientPin.PERMISSION, rp_id: str | None
+    ) -> str | None:
         """Called when the client requires a PIN from the user.
 
         Should return a PIN, or None/Empty to cancel."""
         logger.info("PIN requested, but UserInteraction does not support it.")
         return None
 
-    def request_uv(
-        self, permissions: ClientPin.PERMISSION, rp_id: Optional[str]
-    ) -> bool:
+    def request_uv(self, permissions: ClientPin.PERMISSION, rp_id: str | None) -> bool:
         """Called when the client is about to request UV from the user.
 
         Should return True if allowed, or False to cancel."""
@@ -310,7 +306,7 @@ class _ClientBackend(abc.ABC):
     info: Info
 
     @abc.abstractmethod
-    def selection(self, event: Optional[Event]) -> None:
+    def selection(self, event: Event | None) -> None:
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -320,7 +316,7 @@ class _ClientBackend(abc.ABC):
         client_data: CollectedClientData,
         rp: PublicKeyCredentialRpEntity,
         rp_id: str,
-        enterprise_rpid_list: Optional[Sequence[str]],
+        enterprise_rpid_list: Sequence[str] | None,
         event: Event,
     ) -> AuthenticatorAttestationResponse:
         raise NotImplementedError()
@@ -453,7 +449,7 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         client_data: CollectedClientData,
         assertions: Sequence[AssertionResponse],
         extensions: Sequence[AuthenticationExtensionProcessor],
-        pin_token: Optional[bytes],
+        pin_token: bytes | None,
     ):
         super().__init__(client_data, assertions)
         self._extensions = extensions
@@ -689,7 +685,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         # Negotiate PIN/UV protocol version
         for proto in ClientPin.PROTOCOLS:
             if proto.VERSION in self.info.pin_uv_protocols:
-                pin_protocol: Optional[PinProtocol] = proto()
+                pin_protocol: PinProtocol | None = proto()
                 break
         else:
             pin_protocol = None
@@ -755,7 +751,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             # Calculate pin_auth
             client_data_hash = client_data.hash
             if pin_protocol and pin_token:
-                pin_auth: Tuple[Optional[bytes], Optional[int]] = (
+                pin_auth: tuple[bytes | None, int | None] = (
                     pin_protocol.authenticate(pin_token, client_data_hash),
                     pin_protocol.VERSION,
                 )
@@ -839,7 +835,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         # Negotiate PIN/UV protocol version
         for proto in ClientPin.PROTOCOLS:
             if proto.VERSION in self.info.pin_uv_protocols:
-                pin_protocol: Optional[PinProtocol] = proto()
+                pin_protocol: PinProtocol | None = proto()
                 break
         else:
             pin_protocol = None
@@ -886,7 +882,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             # Calculate pin_auth
             client_data_hash = client_data.hash
             if pin_protocol and pin_token:
-                pin_auth: Tuple[Optional[bytes], Optional[int]] = (
+                pin_auth: tuple[bytes | None, int | None] = (
                     pin_protocol.authenticate(pin_token, client_data_hash),
                     pin_protocol.VERSION,
                 )
@@ -965,7 +961,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         super().__init__(origin, verify)
 
         # TODO: Decide how to configure this list.
-        self._enterprise_rpid_list: Optional[Sequence[str]] = None
+        self._enterprise_rpid_list: Sequence[str] | None = None
 
         try:
             self._backend: _ClientBackend = _Ctap2ClientBackend(
@@ -978,13 +974,13 @@ class Fido2Client(WebAuthnClient, _BaseClient):
     def info(self) -> Info:
         return self._backend.info
 
-    def selection(self, event: Optional[Event] = None) -> None:
+    def selection(self, event: Event | None = None) -> None:
         try:
             self._backend.selection(event)
         except CtapError as e:
             raise _ctap2client_err(e)
 
-    def _get_rp_id(self, rp_id: Optional[str]) -> str:
+    def _get_rp_id(self, rp_id: str | None) -> str:
         if rp_id is None:
             url = urlparse(self.origin)
             if url.scheme != "https" or not url.netloc:
@@ -998,7 +994,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
     def make_credential(
         self,
         options: PublicKeyCredentialCreationOptions,
-        event: Optional[Event] = None,
+        event: Event | None = None,
     ) -> AuthenticatorAttestationResponse:
         """Creates a credential.
 
@@ -1041,7 +1037,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
     def get_assertion(
         self,
         options: PublicKeyCredentialRequestOptions,
-        event: Optional[Event] = None,
+        event: Event | None = None,
     ) -> AssertionSelection:
         """Get an assertion.
 
@@ -1122,7 +1118,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         )
 
         # TODO: Decide how to configure this list.
-        self._enterprise_rpid_list: Optional[Sequence[str]] = None
+        self._enterprise_rpid_list: Sequence[str] | None = None
 
     @staticmethod
     def is_available() -> bool:

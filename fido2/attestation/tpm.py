@@ -48,7 +48,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import dataclass
-from typing import Tuple, Union, cast
+from typing import cast, TypeAlias
 
 import struct
 
@@ -131,7 +131,7 @@ class TpmAttestationFormat:
 
     name: bytes
     data: bytes
-    clock_info: Tuple[int, int, int, bool]
+    clock_info: tuple[int, int, int, bool]
     firmware_version: int
     attested: TpmsCertifyInfo
 
@@ -389,9 +389,9 @@ class ATTRIBUTES(IntEnum):
     )
 
 
-_PublicKey = Union[rsa.RSAPublicKey, ec.EllipticCurvePublicKey]
-_Parameters = Union[TpmsRsaParms, TpmsEccParms]
-_Unique = Union[Tpm2bPublicKeyRsa, TpmsEccPoint]
+_PublicKey: TypeAlias = rsa.RSAPublicKey | ec.EllipticCurvePublicKey
+_Parameters = TpmsRsaParms | TpmsEccParms
+_Unique = Tpm2bPublicKeyRsa | TpmsEccPoint
 
 
 @dataclass

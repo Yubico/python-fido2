@@ -31,7 +31,7 @@ from .. import cbor
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
 
-from typing import Optional, List, Dict, Any
+from typing import Any
 from enum import IntEnum, unique
 import struct
 
@@ -64,8 +64,8 @@ class Config:
     def __init__(
         self,
         ctap: Ctap2,
-        pin_uv_protocol: Optional[PinProtocol] = None,
-        pin_uv_token: Optional[bytes] = None,
+        pin_uv_protocol: PinProtocol | None = None,
+        pin_uv_token: bytes | None = None,
     ):
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support Config")
@@ -105,8 +105,8 @@ class Config:
 
     def set_min_pin_length(
         self,
-        min_pin_length: Optional[int] = None,
-        rp_ids: Optional[List[str]] = None,
+        min_pin_length: int | None = None,
+        rp_ids: list[str] | None = None,
         force_change_pin: bool = False,
     ) -> None:
         """Set the minimum PIN length allowed when setting/changing the PIN.
@@ -117,7 +117,7 @@ class Config:
         :param force_change_pin: True if the Authenticator should enforce changing the
             PIN before the next use.
         """
-        params: Dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
+        params: dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
         if min_pin_length is not None:
             params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
         if rp_ids is not None:

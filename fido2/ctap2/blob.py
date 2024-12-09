@@ -35,7 +35,7 @@ from .pin import PinProtocol, _PinUv
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
-from typing import Optional, Any, Sequence, Mapping, cast
+from typing import Any, Sequence, Mapping, cast
 import struct
 import zlib
 import os
@@ -100,8 +100,8 @@ class LargeBlobs:
     def __init__(
         self,
         ctap: Ctap2,
-        pin_uv_protocol: Optional[PinProtocol] = None,
-        pin_uv_token: Optional[bytes] = None,
+        pin_uv_protocol: PinProtocol | None = None,
+        pin_uv_token: bytes | None = None,
     ):
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support LargeBlobs")
@@ -173,7 +173,7 @@ class LargeBlobs:
 
             offset += ln
 
-    def get_blob(self, large_blob_key: bytes) -> Optional[bytes]:
+    def get_blob(self, large_blob_key: bytes) -> bytes | None:
         """Gets the Large Blob stored for a single credential.
 
         :param large_blob_key: The largeBlobKey for the credential, or None.
@@ -189,7 +189,7 @@ class LargeBlobs:
                 continue
         return None
 
-    def put_blob(self, large_blob_key: bytes, data: Optional[bytes]) -> None:
+    def put_blob(self, large_blob_key: bytes, data: bytes | None) -> None:
         """Stores a Large Blob for a single credential.
 
         Any existing entries for the same credential will be replaced.

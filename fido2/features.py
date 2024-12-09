@@ -26,8 +26,6 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 
-from typing import Optional
-
 import warnings
 
 
@@ -37,7 +35,7 @@ class FeatureNotEnabledError(Exception):
 
 class _Feature:
     def __init__(self, name: str, desc: str):
-        self._enabled: Optional[bool] = None
+        self._enabled: bool | None = None
         self._name = name
         self._desc = desc
 
