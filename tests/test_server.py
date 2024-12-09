@@ -1,6 +1,6 @@
 import unittest
 
-from fido2.server import Fido2Server, U2FFido2Server, verify_app_id
+from fido2.server import Fido2Server
 from fido2.webauthn import (
     CollectedClientData,
     PublicKeyCredentialRpEntity,
@@ -11,58 +11,6 @@ from fido2.webauthn import (
 from fido2.utils import websafe_encode
 
 from .test_ctap2 import _ATT_CRED_DATA, _CRED_ID
-from .utils import U2FDevice
-
-
-class TestAppId(unittest.TestCase):
-    def test_valid_ids(self):
-        self.assertTrue(
-            verify_app_id("https://example.com", "https://register.example.com")
-        )
-        self.assertTrue(
-            verify_app_id("https://example.com", "https://fido.example.com")
-        )
-        self.assertTrue(
-            verify_app_id("https://example.com", "https://www.example.com:444")
-        )
-
-        self.assertTrue(
-            verify_app_id(
-                "https://companyA.hosting.example.com",
-                "https://fido.companyA.hosting.example.com",
-            )
-        )
-        self.assertTrue(
-            verify_app_id(
-                "https://companyA.hosting.example.com",
-                "https://xyz.companyA.hosting.example.com",
-            )
-        )
-
-    def test_invalid_ids(self):
-        self.assertFalse(verify_app_id("https://example.com", "http://example.com"))
-        self.assertFalse(verify_app_id("https://example.com", "http://www.example.com"))
-        self.assertFalse(
-            verify_app_id("https://example.com", "https://example-test.com")
-        )
-
-        self.assertFalse(
-            verify_app_id(
-                "https://companyA.hosting.example.com", "https://register.example.com"
-            )
-        )
-        self.assertFalse(
-            verify_app_id(
-                "https://companyA.hosting.example.com",
-                "https://companyB.hosting.example.com",
-            )
-        )
-
-    def test_effective_tld_names(self):
-        self.assertFalse(
-            verify_app_id("https://appspot.com", "https://foo.appspot.com")
-        )
-        self.assertFalse(verify_app_id("https://co.uk", "https://example.co.uk"))
 
 
 class TestPublicKeyCredentialRpEntity(unittest.TestCase):
@@ -130,94 +78,4 @@ class TestFido2Server(unittest.TestCase):
                 client_data,
                 AuthenticatorData(_AUTH_DATA),
                 b"INVALID",
-            )
-
-
-class TestU2FFido2Server(unittest.TestCase):
-    def test_u2f(self):
-        rp = PublicKeyCredentialRpEntity("Example", "example.com")
-        app_id = b"https://example.com"
-        server = U2FFido2Server(app_id=app_id.decode("ascii"), rp=rp)
-
-        state = {
-            "challenge": "GAZPACHO!",
-            "user_verification": UserVerificationRequirement.PREFERRED,
-        }
-        client_data = CollectedClientData.create(
-            CollectedClientData.TYPE.GET,
-            "GAZPACHO!",
-            "https://example.com",
-        )
-
-        param = b"TOMATO GIVES "
-
-        device = U2FDevice(param, app_id)
-        auth_data = AttestedCredentialData.from_ctap1(param, device.public_key_bytes)
-        authenticator_data, signature = device.sign(client_data)
-
-        server.authenticate_complete(
-            state,
-            [auth_data],
-            device.credential_id,
-            client_data,
-            authenticator_data,
-            signature,
-        )
-
-    def test_u2f_facets(self):
-        rp = PublicKeyCredentialRpEntity("Example", "example.com")
-        app_id = b"https://www.example.com/facets.json"
-
-        def verify_u2f_origin(origin):
-            return origin in ("https://oauth.example.com", "https://admin.example.com")
-
-        server = U2FFido2Server(
-            app_id=app_id.decode("ascii"), rp=rp, verify_u2f_origin=verify_u2f_origin
-        )
-
-        state = {
-            "challenge": "GAZPACHO!",
-            "user_verification": UserVerificationRequirement.PREFERRED,
-        }
-
-        client_data = CollectedClientData.create(
-            CollectedClientData.TYPE.GET,
-            "GAZPACHO!",
-            "https://oauth.example.com",
-        )
-
-        param = b"TOMATO GIVES "
-
-        device = U2FDevice(param, app_id)
-        auth_data = AttestedCredentialData.from_ctap1(param, device.public_key_bytes)
-        authenticator_data, signature = device.sign(client_data)
-
-        server.authenticate_complete(
-            state,
-            [auth_data],
-            device.credential_id,
-            client_data,
-            authenticator_data,
-            signature,
-        )
-
-        # Now with something not whitelisted
-        client_data = CollectedClientData.create(
-            CollectedClientData.TYPE.GET,
-            "GAZPACHO!",
-            "https://publicthingy.example.com",
-        )
-
-        authenticator_data, signature = device.sign(client_data)
-
-        with self.assertRaisesRegex(
-            ValueError, "Invalid origin in CollectedClientData."
-        ):
-            server.authenticate_complete(
-                state,
-                [auth_data],
-                device.credential_id,
-                client_data,
-                authenticator_data,
-                signature,
             )

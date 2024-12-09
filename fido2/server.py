@@ -55,8 +55,6 @@ from .webauthn import (
 
 from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from dataclasses import replace
-from urllib.parse import urlparse
 from typing import Sequence, Mapping, Callable, Any, overload
 
 import os
@@ -439,81 +437,3 @@ class Fido2Server:
             "challenge": websafe_encode(challenge),
             "user_verification": user_verification,
         }
-
-
-# TODO 2.0: Delete, or move to an example
-def verify_app_id(app_id: str, origin: str) -> bool:
-    """Checks if a FIDO U2F App ID is usable for a given origin.
-
-    :param app_id: The App ID to validate.
-    :param origin: The origin of the request.
-    :return: True if the App ID is usable by the origin, False if not.
-
-    .. deprecated:: 1.2.0
-       This will be removed in python-fido2 2.0.
-    """
-    url = urlparse(app_id)
-    hostname = url.hostname
-    # Note that FIDO U2F requires a secure context, i.e. an origin with https scheme.
-    # However, most browsers also treat http://localhost as a secure context. See
-    # https://groups.google.com/a/chromium.org/g/blink-dev/c/RC9dSw-O3fE/m/E3_0XaT0BAAJ
-    if url.scheme != "https" and (url.scheme, hostname) != ("http", "localhost"):
-        return False
-    if not hostname:
-        return False
-    return verify_rp_id(hostname, origin)
-
-
-# TODO 2.0: Delete, or move to an example
-class U2FFido2Server(Fido2Server):
-    """Fido2Server which can be used with existing U2F credentials.
-
-    This Fido2Server can be used with existing U2F credentials by using the
-    WebAuthn appid extension, as well as with new WebAuthn credentials.
-    See https://www.w3.org/TR/webauthn/#sctn-appid-extension for details.
-
-    :param app_id: The appId which was used for U2F registration.
-    :param verify_u2f_origin: (optional) Alternative function to validate an
-        origin for U2F credentials.
-
-    For other parameters, see Fido2Server.
-
-    .. deprecated:: 1.2.0
-       This will be removed in python-fido2 2.0.
-    """
-
-    def __init__(
-        self,
-        app_id: str,
-        rp: PublicKeyCredentialRpEntity,
-        verify_u2f_origin: VerifyOrigin | None = None,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(rp, *args, **kwargs)
-        if verify_u2f_origin:
-            kwargs["verify_origin"] = verify_u2f_origin
-        else:
-            kwargs["verify_origin"] = lambda o: verify_app_id(app_id, o)
-        self._app_id = app_id
-        self._app_id_server = Fido2Server(
-            replace(PublicKeyCredentialRpEntity.from_dict(rp), id=app_id),
-            *args,
-            **kwargs,
-        )
-
-    def register_begin(self, *args, **kwargs):
-        kwargs.setdefault("extensions", {})["appidExclude"] = self._app_id
-        req, state = super().register_begin(*args, **kwargs)
-        return req, state
-
-    def authenticate_begin(self, *args, **kwargs):
-        kwargs.setdefault("extensions", {})["appid"] = self._app_id
-        req, state = super().authenticate_begin(*args, **kwargs)
-        return req, state
-
-    def authenticate_complete(self, *args, **kwargs):
-        try:
-            return super().authenticate_complete(*args, **kwargs)
-        except ValueError:
-            return self._app_id_server.authenticate_complete(*args, **kwargs)
