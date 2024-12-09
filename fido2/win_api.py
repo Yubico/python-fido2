@@ -50,8 +50,6 @@ import ctypes
 from ctypes import WinDLL  # type: ignore
 from ctypes import LibraryLoader
 
-import warnings
-
 
 windll = LibraryLoader(WinDLL)
 
@@ -941,16 +939,8 @@ class WinAPI:
 
     version = WEBAUTHN_API_VERSION
 
-    def __init__(self, handle=None, return_extensions=False, allow_hmac_secret=False):
+    def __init__(self, handle=None, allow_hmac_secret=False):
         self.handle = handle or windll.user32.GetForegroundWindow()
-        # TODO 2.0: Remove return_extensions and always return them
-        if not return_extensions:
-            warnings.warn(
-                "WinAPI will start returning extension outputs in the next major "
-                "version, to opt in to this behaivor now, set return_extensions=True.",
-                DeprecationWarning,
-            )
-        self._return_extensions = return_extensions
         self._allow_hmac_secret = allow_hmac_secret
 
     def get_error_name(self, winerror):
@@ -975,7 +965,7 @@ class WinAPI:
         pub_key_cred_params,
         client_data,
         timeout=0,
-        resident_key=False,
+        resident_key=ResidentKeyRequirement.DISCOURAGED,
         platform_attachment=WebAuthNAuthenticatorAttachment.ANY,
         user_verification=WebAuthNUserVerificationRequirement.ANY,
         attestation=WebAuthNAttestationConveyancePreference.DIRECT,
@@ -992,7 +982,8 @@ class WinAPI:
             PubKeyCredentialParams data.
         :param bytes client_data: ClientData JSON.
         :param int timeout: (optional) Timeout value, in ms.
-        :param bool resident_key: (optional) Require resident key, default: False.
+        :param ResidentKeyRequirement resident_key: (optional)
+            Require resident key, default: discouraged.
         :param WebAuthNAuthenticatorAttachment platform_attachment: (optional)
             Authenticator Attachment, default: any.
         :param WebAuthNUserVerificationRequirement user_verification: (optional)
@@ -1004,14 +995,6 @@ class WinAPI:
         :param Any extensions: Currently not supported.
         :param threading.Event event: (optional) Signal to abort the operation.
         """
-
-        # TODO 2.0: Require resident_key be ResidentKeyRequirement
-        if isinstance(resident_key, bool):
-            warnings.warn(
-                "Passing resident_key as a bool is deprecated. "
-                "Use ResidentKeyRequirement instead.",
-                DeprecationWarning,
-            )
 
         win_extensions = []
         large_blob_support = WebAuthNLargeBlobSupport.NONE
@@ -1043,11 +1026,13 @@ class WinAPI:
             if extensions.get("minPinLength", True):
                 win_extensions.append(WebAuthNExtension("minPinLength", BOOL(True)))
             if "prf" in extensions:
-                resident_key = True  # Windows requires resident key for hmac-secret
+                # Windows requires resident key for hmac-secret
+                resident_key = ResidentKeyRequirement.REQUIRED
                 enable_prf = True
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
             elif "hmacCreateSecret" in extensions and self._allow_hmac_secret:
-                resident_key = True  # Windows requires resident key for hmac-secret
+                # Windows requires resident key for hmac-secret
+                resident_key = ResidentKeyRequirement.REQUIRED
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
         else:
             extensions = {}
@@ -1066,7 +1051,7 @@ class WinAPI:
             ctypes.byref(
                 WebAuthNMakeCredentialOptions(
                     timeout,
-                    resident_key in (True, ResidentKeyRequirement.REQUIRED),
+                    resident_key == ResidentKeyRequirement.REQUIRED,
                     platform_attachment,
                     user_verification,
                     attestation,
@@ -1101,10 +1086,7 @@ class WinAPI:
                 "supported": bool(obj.bLargeBlobSupported)
             }
 
-        if self._return_extensions:
-            return att_obj, extension_outputs
-        else:
-            return att_obj  # type: ignore
+        return att_obj, extension_outputs
 
     def get_assertion(
         self,
@@ -1230,18 +1212,10 @@ class WinAPI:
                         "written": obj.dwCredLargeBlobStatus == 1
                     }
 
-        if self._return_extensions:
-            return (
-                obj.Credential.descriptor,
-                auth_data,
-                obj.signature,
-                obj.user_id,
-                extension_outputs,
-            )
-        else:
-            return (
-                obj.Credential.descriptor,
-                auth_data,
-                obj.signature,
-                obj.user_id,
-            )  # type: ignore
+        return (
+            obj.Credential.descriptor,
+            auth_data,
+            obj.signature,
+            obj.user_id,
+            extension_outputs,
+        )

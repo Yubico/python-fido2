@@ -38,9 +38,6 @@ from fido2.server import Fido2Server
 from flask import Flask, session, request, redirect, abort, jsonify
 
 import os
-import fido2.features
-
-fido2.features.webauthn_json_mapping.enabled = True
 
 
 app = Flask(__name__, static_url_path="")

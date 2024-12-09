@@ -35,6 +35,7 @@ from .ctap2.pin import ClientPin, PinProtocol
 from .ctap2.extensions import (
     Ctap2Extension,
     AuthenticationExtensionProcessor,
+    _DEFAULT_EXTENSIONS,
 )
 from .webauthn import (
     Aaguid,
@@ -61,7 +62,6 @@ from dataclasses import replace
 from urllib.parse import urlparse
 from threading import Timer, Event
 from typing import (
-    Type,
     Any,
     Callable,
     Mapping,
@@ -71,7 +71,6 @@ from typing import (
 
 import abc
 import platform
-import inspect
 import logging
 
 logger = logging.getLogger(__name__)
@@ -259,12 +258,6 @@ class WebAuthnClient(abc.ABC):
         :param threading.Event event: (optional) Signal to abort the operation.
         """
         raise NotImplementedError()
-
-
-def _default_extensions() -> Sequence[Type[Ctap2Extension]]:
-    return [
-        cls for cls in Ctap2Extension.__subclasses__() if not inspect.isabstract(cls)
-    ]
 
 
 class UserInteraction:
@@ -487,19 +480,12 @@ class _Ctap2ClientBackend(_ClientBackend):
         self,
         device: CtapDevice,
         user_interaction: UserInteraction,
-        extension_types: Sequence[Type[Ctap2Extension]],
         extensions: Sequence[Ctap2Extension],
     ):
         self.ctap2 = Ctap2(device)
         self.info = self.ctap2.info
-        self._extension_types = extension_types
         self._extensions = extensions
         self.user_interaction = user_interaction
-
-    def _get_extensions(self) -> Sequence[Ctap2Extension]:
-        if self._extensions:
-            return self._extensions
-        return [ext(self.ctap2) for ext in self._extension_types]
 
     def _filter_creds(
         self, rp_id, cred_list, pin_protocol, pin_token, event, on_keepalive
@@ -698,7 +684,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Initialize extensions and add extension permissions
         used_extensions = []
-        for e in self._get_extensions():
+        for e in self._extensions:
             ext = e.make_credential(self.ctap2, options, pin_protocol)
             if ext:
                 used_extensions.append(ext)
@@ -845,7 +831,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Initialize extensions and add extension permissions
         used_extensions = []
-        for e in self._get_extensions():
+        for e in self._extensions:
             ext = e.get_assertion(self.ctap2, options, pin_protocol)
             if ext:
                 used_extensions.append(ext)
@@ -953,10 +939,8 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         device: CtapDevice,
         origin: str,
         verify: Callable[[str, str], bool] = verify_rp_id,
-        # TODO 2.0: Replace extension_types with extensions
-        extension_types: Sequence[Type[Ctap2Extension]] = _default_extensions(),
         user_interaction: UserInteraction = UserInteraction(),
-        extensions: Sequence[Ctap2Extension] = [],
+        extensions: Sequence[Ctap2Extension] = _DEFAULT_EXTENSIONS,
     ):
         super().__init__(origin, verify)
 
@@ -965,7 +949,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
 
         try:
             self._backend: _ClientBackend = _Ctap2ClientBackend(
-                device, user_interaction, extension_types, extensions
+                device, user_interaction, extensions
             )
         except (ValueError, CtapError):
             self._backend = _Ctap1ClientBackend(device, user_interaction)
@@ -1110,9 +1094,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
         allow_hmac_secret=False,
     ):
         super().__init__(origin, verify)
-        self.api = WinAPI(
-            handle, return_extensions=True, allow_hmac_secret=allow_hmac_secret
-        )
+        self.api = WinAPI(handle, allow_hmac_secret=allow_hmac_secret)
         self.info = Info(
             versions=["U2F_V2", "FIDO_2_0"], extensions=[], aaguid=Aaguid.NONE
         )
@@ -1169,7 +1151,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                 options.pub_key_cred_params,
                 client_data,
                 options.timeout or 0,
-                selection.resident_key,
+                selection.resident_key or ResidentKeyRequirement.DISCOURAGED,
                 WebAuthNAuthenticatorAttachment.from_string(
                     selection.authenticator_attachment or "any"
                 ),
