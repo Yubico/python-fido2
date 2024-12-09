@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fido2"
-version = "1.2.1-dev.0"
+version = "2.0.0-dev.0"
 description = "FIDO2/WebAuthn library for implementing clients and servers."
 authors = ["Dain Nilsson <dain@yubico.com>"]
 homepage = "https://github.com/Yubico/python-fido2"
@@ -31,8 +31,8 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.8"
-cryptography = ">=2.6, !=35, <45"
+python = "^3.10"
+cryptography = ">=2.6, !=35, <47"
 pyscard = {version = "^1.9 || ^2", optional = true}
 
 [tool.poetry.extras]
@@ -40,9 +40,9 @@ pcsc = ["pyscard"]
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.0"
-Sphinx = {version = "^8.1", python = ">=3.10"}
-sphinx-rtd-theme = {version = "^3.0.1", python = ">=3.10"}
-sphinx-autoapi = {version = "^3.3.3", python = ">=3.10"}
+Sphinx = "^8.1"
+sphinx-rtd-theme = "^3.0.1"
+sphinx-autoapi = "^3.3.3"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
