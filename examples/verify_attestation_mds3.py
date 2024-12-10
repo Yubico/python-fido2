@@ -85,7 +85,7 @@ with open(sys.argv[1], "rb") as f:
 mds = MdsAttestationVerifier(metadata)
 
 # Locate a suitable FIDO authenticator
-client = get_client()
+client, _ = get_client()
 
 # The MDS verifier is passed to the server to verify that new credentials registered
 # exist in the MDS blob, else the registration will fail.
