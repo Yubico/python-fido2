@@ -38,12 +38,11 @@ import sys
 
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: "largeBlobKey" in client.info.extensions)
-
+client, info = get_client(lambda info: "largeBlobKey" in info.extensions)
 
 # LargeBlob requires UV if it is configured
 uv = "discouraged"
-if client.info.options.get("clientPin"):
+if info.options.get("clientPin"):
     uv = "required"
 
 

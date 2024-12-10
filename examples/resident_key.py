@@ -36,11 +36,11 @@ from exampleutils import get_client
 
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: client.info.options.get("rk"))
+client, info = get_client(lambda info: info.options.get("rk"))
 
 # Prefer UV if supported and configured
 uv = "discouraged"
-if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+if info and info.options.get("uv") or info.options.get("bioEnroll"):
     uv = "preferred"
     print("Authenticator is configured for User Verification")
 

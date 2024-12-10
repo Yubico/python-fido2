@@ -38,7 +38,7 @@ import os
 
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: "hmac-secret" in client.info.extensions)
+client, _ = get_client(lambda info: "hmac-secret" in info.extensions)
 
 uv = "discouraged"
 

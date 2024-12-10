@@ -77,7 +77,7 @@ class YubicoAttestationVerifier(AttestationVerifier):
 
 
 # Locate a suitable FIDO authenticator
-client = get_client()
+client, _ = get_client()
 
 server = Fido2Server(
     {"id": "example.com", "name": "Example RP"},

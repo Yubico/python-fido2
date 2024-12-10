@@ -35,11 +35,11 @@ from fido2.server import Fido2Server
 from exampleutils import get_client
 
 # Locate a suitable FIDO authenticator
-client = get_client()
+client, info = get_client()
 
 
 # Prefer UV if supported and configured
-if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+if info and info.options.get("uv") or info.options.get("bioEnroll"):
     uv = "preferred"
     print("Authenticator supports User Verification")
 else:

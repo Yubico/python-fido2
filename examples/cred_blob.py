@@ -36,12 +36,12 @@ import os
 
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: "credBlob" in client.info.extensions)
+client, info = get_client(lambda info: "credBlob" in info.extensions)
 
 
 # Prefer UV token if supported
 uv = "discouraged"
-if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+if info.options.get("uv") or info.options.get("bioEnroll"):
     uv = "preferred"
     print("Authenticator is configured for User Verification")
 

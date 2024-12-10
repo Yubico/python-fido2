@@ -1,30 +1,30 @@
 # Copyright (c) 2019 Onica Group LLC.
 # Modified work Copyright 2019 Yubico.
 # All rights reserved.
-
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are
-# met:
-
-#   * Redistributions of source code must retain the above copyright
-#     notice, this list of conditions and the following disclaimer.
-
-#   * Redistributions in binary form must reproduce the above
-#     copyright notice, this list of conditions and the following
-#     disclaimer in the documentation and/or other materials provided
-#     with the distribution.
-
+#
+#   Redistribution and use in source and binary forms, with or
+#   without modification, are permitted provided that the following
+#   conditions are met:
+#
+#    1. Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#    2. Redistributions in binary form must reproduce the above
+#       copyright notice, this list of conditions and the following
+#       disclaimer in the documentation and/or other materials provided
+#       with the distribution.
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 # "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
 
 """
 Structs based on Microsoft's WebAuthN API.
@@ -39,8 +39,9 @@ https://github.com/microsoft/webauthn
 
 from __future__ import annotations
 
-from .utils import websafe_decode
-from .webauthn import AttestationObject, AuthenticatorData, ResidentKeyRequirement
+from ..utils import websafe_decode
+from ..webauthn import AttestationObject, AuthenticatorData, ResidentKeyRequirement
+
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND, WORD
 from threading import Thread
@@ -1038,8 +1039,10 @@ class WinAPI:
             extensions = {}
 
         if event:
-            t = CancelThread(event)
-            t.start()
+            timer = CancelThread(event)
+            timer.start()
+        else:
+            timer = None
 
         attestation_pointer = ctypes.POINTER(WebAuthNCredentialAttestation)()
         WEBAUTHN.WebAuthNAuthenticatorMakeCredential(
@@ -1056,7 +1059,7 @@ class WinAPI:
                     user_verification,
                     attestation,
                     exclude_credentials or [],
-                    ctypes.pointer(t.guid) if event else None,
+                    ctypes.pointer(timer.guid) if timer else None,
                     enterprise_attestation,
                     large_blob_support,
                     resident_key == ResidentKeyRequirement.PREFERRED,
@@ -1066,8 +1069,8 @@ class WinAPI:
             ),
             ctypes.byref(attestation_pointer),
         )
-        if event:
-            t.complete()
+        if timer:
+            timer.complete()
 
         obj = attestation_pointer.contents
         att_obj = AttestationObject(obj.attestation_object)
@@ -1153,8 +1156,10 @@ class WinAPI:
                 )
 
         if event:
-            t = CancelThread(event)
-            t.start()
+            timer = CancelThread(event)
+            timer.start()
+        else:
+            timer = None
 
         assertion_pointer = ctypes.POINTER(WebAuthNAssertion)()
         WEBAUTHN.WebAuthNAuthenticatorGetAssertion(
@@ -1167,7 +1172,7 @@ class WinAPI:
                     platform_attachment,
                     user_verification,
                     allow_credentials or [],
-                    ctypes.pointer(t.guid) if event else None,
+                    ctypes.pointer(timer.guid) if timer else None,
                     large_blob_operation,
                     large_blob,
                     hmac_secret_salts,
@@ -1180,8 +1185,8 @@ class WinAPI:
             ctypes.byref(assertion_pointer),
         )
 
-        if event:
-            t.complete()
+        if timer:
+            timer.complete()
 
         obj = assertion_pointer.contents
         auth_data = AuthenticatorData(obj.auth_data)
