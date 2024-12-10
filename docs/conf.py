@@ -14,15 +14,16 @@
 #
 import os
 import sys
-import re
+import tomllib
 
 sys.path.insert(0, os.path.abspath("../"))
 
 
 def get_version():
-    with open("../fido2/__init__.py", "r") as f:
-        match = re.search(r"(?m)^__version__\s*=\s*['\"](.+)['\"]$", f.read())
-        return match.group(1)
+    with open("../pyproject.toml", "rb") as f:
+        pyproject = tomllib.load(f)
+
+    return pyproject["tool"]["poetry"]["version"]
 
 
 # -- Project information -----------------------------------------------------
@@ -198,7 +199,6 @@ autoapi_options = [
     "undoc-members",
     "show-inheritance",
     "show-module-summary",
-    "special-members",
     "imported-members",
 ]
 autoapi_ignore = ["*/fido2/hid/*", "*/fido2/win_api.py"]
