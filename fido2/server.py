@@ -245,7 +245,7 @@ class Fido2Server:
         ):
             raise ValueError("Wrong challenge in response.")
         if not constant_time.bytes_eq(
-            self.rp.id_hash, attestation_object.auth_data.rp_id_hash
+            self.rp.id_hash or b"", attestation_object.auth_data.rp_id_hash
         ):
             raise ValueError("Wrong RP ID hash in response.")
         if not attestation_object.auth_data.is_user_present():
@@ -346,7 +346,7 @@ class Fido2Server:
             raise ValueError("Invalid origin in CollectedClientData.")
         if websafe_decode(state["challenge"]) != client_data.challenge:
             raise ValueError("Wrong challenge in response.")
-        if not constant_time.bytes_eq(self.rp.id_hash, auth_data.rp_id_hash):
+        if not constant_time.bytes_eq(self.rp.id_hash or b"", auth_data.rp_id_hash):
             raise ValueError("Wrong RP ID hash in response.")
         if not auth_data.is_user_present():
             raise ValueError("User Present flag not set.")
