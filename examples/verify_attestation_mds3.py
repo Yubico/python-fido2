@@ -107,14 +107,13 @@ result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 try:
-    auth_data = server.register_complete(
-        state, result.client_data, result.attestation_object
-    )
+    auth_data = server.register_complete(state, result)
     print("Registration completed")
 
     # mds can also be used to get the metadata for the Authenticator,
     # regardless of if it was used to verify the attestation or not:
-    entry = mds.find_entry(result.attestation_object, result.client_data.hash)
+    response = result.response
+    entry = mds.find_entry(response.attestation_object, response.client_data.hash)
     print("Authenticator description:", entry.metadata_statement.description)
 except UntrustedAttestation:
     print("Authenticator metadata not found")

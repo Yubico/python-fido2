@@ -69,9 +69,7 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 
@@ -94,7 +92,7 @@ result = client.get_assertion(
     }
 ).get_response(0)
 
-blob_res = result.authenticator_data.extensions.get("credBlob")
+blob_res = result.response.authenticator_data.extensions.get("credBlob")
 
 if blob == blob_res:
     print("Authenticated, got correct blob:", blob.hex())

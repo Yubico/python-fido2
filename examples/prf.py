@@ -62,20 +62,18 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credential = auth_data.credential_data
 
 # PRF result:
-if not result.extension_results.get("prf", {}).get("enabled"):
-    print("Failed to create credential with PRF", result.extension_results)
+if not result.client_extension_results.get("prf", {}).get("enabled"):
+    print("Failed to create credential with PRF", result.client_extension_results)
     sys.exit(1)
 
 print("New credential created, with the PRF extension.")
 
 # If created with UV, keep using UV
-if result.attestation_object.auth_data.is_user_verified():
+if auth_data.is_user_verified():
     uv = "required"
 
 # Generate a salt for PRF:
@@ -97,7 +95,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 response = result.get_response(0)
 
-output1 = response.extension_results["prf"]["results"]["first"]
+output1 = response.client_extension_results["prf"]["results"]["first"]
 print("Authenticated, secret:", output1)
 
 # Authenticate again, using two salts to generate two secrets.
@@ -130,6 +128,6 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 response = result.get_response(0)
 
-output = response.extension_results["prf"]["results"]
+output = response.client_extension_results["prf"]["results"]
 print("Old secret:", output["first"])
 print("New secret:", output["second"])

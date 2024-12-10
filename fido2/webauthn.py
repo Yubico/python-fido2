@@ -535,67 +535,18 @@ class PublicKeyCredentialRequestOptions(_JsonDataObject):
     extensions: Mapping[str, Any] | None = None
 
 
-# TODO 2.0: Move extension results to RegistrationResponse, remove methods
 @dataclass(eq=False, frozen=True)
 class AuthenticatorAttestationResponse(_JsonDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     attestation_object: AttestationObject
-    extension_results: Mapping[str, Any] | None = None
-
-    @classmethod
-    def _parse_value(cls, t, value):
-        if t == Mapping[str, Any] | None:
-            # Don't convert extension_results
-            return value
-        return super()._parse_value(t, value)
 
 
-# TODO 2.0: Move extension results to AuthenticationResponse, remove methods
 @dataclass(eq=False, frozen=True)
 class AuthenticatorAssertionResponse(_JsonDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     authenticator_data: AuthenticatorData
     signature: bytes
     user_handle: bytes | None = None
-    credential_id: bytes | None = None
-    extension_results: Mapping[str, Any] | None = None
-
-    @classmethod
-    def _parse_value(cls, t, value):
-        if t == Mapping[str, Any] | None:
-            # Don't convert extension_results
-            return value
-        return super()._parse_value(t, value)
-
-
-# TODO 2.0: Re-align against WebAuthn spec and use in client
-@dataclass(eq=False, frozen=True)
-class RegistrationResponse(_JsonDataObject):
-    id: bytes
-    response: AuthenticatorAttestationResponse
-    authenticator_attachment: AuthenticatorAttachment | None = None
-    client_extension_results: AuthenticationExtensionsClientOutputs | None = None
-    type: PublicKeyCredentialType | None = None
-
-
-# TODO 2.0: Re-align against WebAuthn spec and use in client
-@dataclass(eq=False, frozen=True)
-class AuthenticationResponse(_JsonDataObject):
-    id: bytes
-    response: AuthenticatorAssertionResponse
-    authenticator_attachment: AuthenticatorAttachment | None = None
-    client_extension_results: AuthenticationExtensionsClientOutputs | None = None
-    type: PublicKeyCredentialType | None = None
-
-
-@dataclass(eq=False, frozen=True)
-class CredentialCreationOptions(_JsonDataObject):
-    public_key: PublicKeyCredentialCreationOptions
-
-
-@dataclass(eq=False, frozen=True)
-class CredentialRequestOptions(_JsonDataObject):
-    public_key: PublicKeyCredentialRequestOptions
 
 
 class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
@@ -607,7 +558,7 @@ class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
     When accessed using attributes, richer types will instead be returned.
     """
 
-    def __init__(self, outputs: Mapping[str, Any]):
+    def __init__(self, outputs: Mapping[str, Any] = {}):
         self._members = {k: v for k, v in outputs.items() if v is not None}
 
     def __iter__(self):
@@ -631,3 +582,77 @@ class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
 
     def __repr__(self):
         return repr(dict(self))
+
+
+@dataclass(eq=False, frozen=True)
+class RegistrationResponse(_JsonDataObject):
+    id: str = field(init=False)
+    raw_id: bytes
+    response: AuthenticatorAttestationResponse
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    client_extension_results: AuthenticationExtensionsClientOutputs = field(
+        default_factory=AuthenticationExtensionsClientOutputs
+    )
+    type: PublicKeyCredentialType = PublicKeyCredentialType.PUBLIC_KEY
+
+    def __post_init__(self):
+        object.__setattr__(self, "id", websafe_encode(self.raw_id))
+        super().__post_init__()
+
+    @classmethod
+    def _parse_value(cls, t, value):
+        if t == Mapping[str, Any] | None:
+            # Don't convert extension_results
+            return value
+        return super()._parse_value(t, value)
+
+    @classmethod
+    def from_dict(cls, data):
+        if data and "id" in data:
+            data = dict(data)
+            credential_id = data.pop("id")
+            if credential_id != data["rawId"]:
+                raise ValueError("id does not match rawId")
+        return super().from_dict(data)
+
+
+@dataclass(eq=False, frozen=True)
+class AuthenticationResponse(_JsonDataObject):
+    id: str = field(init=False)
+    raw_id: bytes
+    response: AuthenticatorAssertionResponse
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    client_extension_results: AuthenticationExtensionsClientOutputs = field(
+        default_factory=AuthenticationExtensionsClientOutputs
+    )
+    type: PublicKeyCredentialType = PublicKeyCredentialType.PUBLIC_KEY
+
+    def __post_init__(self):
+        object.__setattr__(self, "id", websafe_encode(self.raw_id))
+        super().__post_init__()
+
+    @classmethod
+    def _parse_value(cls, t, value):
+        if t == Mapping[str, Any] | None:
+            # Don't convert extension_results
+            return value
+        return super()._parse_value(t, value)
+
+    @classmethod
+    def from_dict(cls, data):
+        if data and "id" in data:
+            data = dict(data)
+            credential_id = data.pop("id")
+            if credential_id != data["rawId"]:
+                raise ValueError("id does not match rawId")
+        return super().from_dict(data)
+
+
+@dataclass(eq=False, frozen=True)
+class CredentialCreationOptions(_JsonDataObject):
+    public_key: PublicKeyCredentialCreationOptions
+
+
+@dataclass(eq=False, frozen=True)
+class CredentialRequestOptions(_JsonDataObject):
+    public_key: PublicKeyCredentialRequestOptions

@@ -107,8 +107,9 @@ if cancel.is_set():
     )
 
     print("New credential created!")
-    print("ATTESTATION OBJECT:", result.attestation_object)
+    response = result.response
+    print("ATTESTATION OBJECT:", response.attestation_object)
     print()
-    print("CREDENTIAL DATA:", result.attestation_object.auth_data.credential_data)
+    print("CREDENTIAL DATA:", response.attestation_object.auth_data.credential_data)
 else:
     print("Operation timed out!")

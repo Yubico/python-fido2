@@ -96,9 +96,7 @@ create_options, state = server.register_begin(
 result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 print("New credential created, attestation verified!")

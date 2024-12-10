@@ -139,7 +139,7 @@ class TestFido2Client(unittest.TestCase):
                 timeout=1000,
                 authenticator_selection={"userVerification": "discouraged"},
             )
-        )
+        ).response
 
         self.assertIsInstance(response.attestation_object, AttestationObject)
         self.assertIsInstance(response.client_data, CollectedClientData)
@@ -177,7 +177,7 @@ class TestFido2Client(unittest.TestCase):
             PublicKeyCredentialCreationOptions(
                 rp, user, challenge, [{"type": "public-key", "alg": -7}]
             )
-        )
+        ).response
 
         self.assertIsInstance(response.attestation_object, AttestationObject)
         self.assertIsInstance(response.client_data, CollectedClientData)

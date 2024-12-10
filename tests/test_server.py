@@ -7,6 +7,8 @@ from fido2.webauthn import (
     UserVerificationRequirement,
     AttestedCredentialData,
     AuthenticatorData,
+    AuthenticatorAssertionResponse,
+    AuthenticationResponse,
 )
 from fido2.utils import websafe_encode
 
@@ -70,12 +72,18 @@ class TestFido2Server(unittest.TestCase):
         _AUTH_DATA = bytes.fromhex(
             "A379A6F6EEAFB9A55E378C118034E2751E682FAB9F2D30AB13D2125586CE1947010000001D"
         )
+        response = AuthenticationResponse(
+            raw_id=_CRED_ID,
+            response=AuthenticatorAssertionResponse(
+                client_data,
+                AuthenticatorData(_AUTH_DATA),
+                b"INVALID",
+            ),
+        )
+
         with self.assertRaisesRegex(ValueError, "Invalid signature."):
             server.authenticate_complete(
                 state,
                 [AttestedCredentialData(_ATT_CRED_DATA)],
-                _CRED_ID,
-                client_data,
-                AuthenticatorData(_AUTH_DATA),
-                b"INVALID",
+                response,
             )

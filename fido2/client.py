@@ -50,8 +50,12 @@ from .webauthn import (
     UserVerificationRequirement,
     AuthenticatorAttestationResponse,
     AuthenticatorAssertionResponse,
+    RegistrationResponse,
+    AuthenticationResponse,
     AttestationConveyancePreference,
     ResidentKeyRequirement,
+    AuthenticatorAttachment,
+    PublicKeyCredentialType,
     _as_cbor,
 )
 from .cose import ES256
@@ -61,13 +65,7 @@ from enum import IntEnum, unique
 from dataclasses import replace
 from urllib.parse import urlparse
 from threading import Timer, Event
-from typing import (
-    Any,
-    Callable,
-    Mapping,
-    Sequence,
-    overload,
-)
+from typing import Callable, Sequence, Mapping, Any, overload
 
 import abc
 import platform
@@ -201,7 +199,7 @@ class AssertionSelection:
         self,
         client_data: CollectedClientData,
         assertions: Sequence[AssertionResponse],
-        extension_results=None,
+        extension_results: Mapping[str, Any] = {},
     ):
         self._client_data = client_data
         self._assertions = assertions
@@ -211,22 +209,26 @@ class AssertionSelection:
         """Get the raw AssertionResponses available to inspect before selecting one."""
         return self._assertions
 
-    def _get_extension_results(
-        self, assertion: AssertionResponse
-    ) -> Mapping[str, Any] | None:
+    def _get_extension_results(self, assertion: AssertionResponse) -> Mapping[str, Any]:
         return self._extension_results
 
-    def get_response(self, index: int) -> AuthenticatorAssertionResponse:
+    def get_response(self, index: int) -> AuthenticationResponse:
         """Get a single response."""
         assertion = self._assertions[index]
 
-        return AuthenticatorAssertionResponse(
-            self._client_data,
-            assertion.auth_data,
-            assertion.signature,
-            assertion.user["id"] if assertion.user else None,
-            assertion.credential["id"] if assertion.credential else None,
-            self._get_extension_results(assertion),
+        return AuthenticationResponse(
+            raw_id=assertion.credential["id"],
+            response=AuthenticatorAssertionResponse(
+                self._client_data,
+                assertion.auth_data,
+                assertion.signature,
+                assertion.user["id"] if assertion.user else None,
+            ),
+            authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+            client_extension_results=AuthenticationExtensionsClientOutputs(
+                self._get_extension_results(assertion)
+            ),
+            type=PublicKeyCredentialType.PUBLIC_KEY,
         )
 
 
@@ -238,7 +240,7 @@ class WebAuthnClient(abc.ABC):
         self,
         options: PublicKeyCredentialCreationOptions,
         event: Event | None = None,
-    ) -> AuthenticatorAttestationResponse:
+    ) -> RegistrationResponse:
         """Creates a credential.
 
         :param options: PublicKeyCredentialCreationOptions data.
@@ -311,7 +313,7 @@ class _ClientBackend(abc.ABC):
         rp_id: str,
         enterprise_rpid_list: Sequence[str] | None,
         event: Event,
-    ) -> AuthenticatorAttestationResponse:
+    ) -> RegistrationResponse:
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -396,10 +398,15 @@ class _Ctap1ClientBackend(_ClientBackend):
                 app_param,
             ),
         )
-        return AuthenticatorAttestationResponse(
-            client_data,
-            AttestationObject.create(att_obj.fmt, att_obj.auth_data, att_obj.att_stmt),
-            AuthenticationExtensionsClientOutputs({}),
+        credential = att_obj.auth_data.credential_data
+        assert credential is not None  # nosec
+
+        return RegistrationResponse(
+            raw_id=credential.credential_id,
+            response=AuthenticatorAttestationResponse(client_data, att_obj),
+            authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+            client_extension_results=AuthenticationExtensionsClientOutputs({}),
+            type=PublicKeyCredentialType.PUBLIC_KEY,
         )
 
     def do_get_assertion(
@@ -458,7 +465,7 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
                     extension_outputs.update(output)
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
-        return AuthenticationExtensionsClientOutputs(extension_outputs)
+        return extension_outputs
 
 
 @overload
@@ -766,7 +773,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         reconnected = False
         while True:
             try:
-                att_obj, pin_token = _do_make()
+                att_resp, pin_token = _do_make()
                 break
             except CtapError as e:
                 # The Authenticator may still require UV, try again
@@ -793,16 +800,27 @@ class _Ctap2ClientBackend(_ClientBackend):
         extension_outputs = {}
         try:
             for ext in used_extensions:
-                output = ext.prepare_outputs(att_obj, pin_token)
+                output = ext.prepare_outputs(att_resp, pin_token)
                 if output is not None:
                     extension_outputs.update(output)
         except ValueError as e:
             raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
-        return AuthenticatorAttestationResponse(
-            client_data,
-            AttestationObject.create(att_obj.fmt, att_obj.auth_data, att_obj.att_stmt),
-            AuthenticationExtensionsClientOutputs(extension_outputs),
+        att_obj = AttestationObject.create(
+            att_resp.fmt, att_resp.auth_data, att_resp.att_stmt
+        )
+
+        credential = att_obj.auth_data.credential_data
+        assert credential is not None  # nosec
+
+        return RegistrationResponse(
+            raw_id=credential.credential_id,
+            response=AuthenticatorAttestationResponse(client_data, att_obj),
+            authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+            client_extension_results=AuthenticationExtensionsClientOutputs(
+                extension_outputs
+            ),
+            type=PublicKeyCredentialType.PUBLIC_KEY,
         )
 
     def do_get_assertion(
@@ -979,7 +997,7 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         self,
         options: PublicKeyCredentialCreationOptions,
         event: Event | None = None,
-    ) -> AuthenticatorAttestationResponse:
+    ) -> RegistrationResponse:
         """Creates a credential.
 
         :param options: PublicKeyCredentialCreationOptions data.
@@ -1168,8 +1186,16 @@ class WindowsClient(WebAuthnClient, _BaseClient):
             raise ClientError.ERR.OTHER_ERROR(e)
 
         logger.info("New credential registered")
-        return AuthenticatorAttestationResponse(
-            client_data, att_obj, AuthenticationExtensionsClientOutputs(extensions)
+
+        credential = att_obj.auth_data.credential_data
+        assert credential is not None  # nosec
+
+        return RegistrationResponse(
+            raw_id=credential.credential_id,
+            response=AuthenticatorAttestationResponse(client_data, att_obj),
+            authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+            client_extension_results=AuthenticationExtensionsClientOutputs(extensions),
+            type=PublicKeyCredentialType.PUBLIC_KEY,
         )
 
     def get_assertion(self, options, event=None):
@@ -1217,5 +1243,5 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     user=user,
                 )
             ],
-            AuthenticationExtensionsClientOutputs(extensions),
+            extensions,
         )
