@@ -101,17 +101,15 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 # HmacSecret result:
-if not result.extension_results.get("hmacCreateSecret"):
+if not result.client_extension_results.get("hmacCreateSecret"):
     print("Failed to create credential with HmacSecret")
     sys.exit(1)
 
-credential = result.attestation_object.auth_data.credential_data
+credential = auth_data.credential_data
 print("New credential created, with the HmacSecret extension.")
 
 # Prepare parameters for getAssertion
@@ -136,7 +134,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-output1 = result.extension_results.hmac_get_secret.output1
+output1 = result.client_extension_results.hmac_get_secret.output1
 print("Authenticated, secret:", output1.hex())
 
 # Authenticate again, using two salts to generate two secrets:
@@ -157,6 +155,6 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-output = result.extension_results.hmac_get_secret
+output = result.client_extension_results.hmac_get_secret
 print("Old secret:", output.output1.hex())
 print("New secret:", output.output2.hex())

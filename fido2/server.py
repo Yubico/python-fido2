@@ -55,7 +55,7 @@ from .webauthn import (
 
 from cryptography.hazmat.primitives import constant_time
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from typing import Sequence, Mapping, Callable, Any, overload
+from typing import Sequence, Mapping, Callable, Any
 
 import os
 import logging
@@ -219,50 +219,22 @@ class Fido2Server:
             state,
         )
 
-    @overload
     def register_complete(
         self,
         state,
         response: RegistrationResponse | Mapping[str, Any],
     ) -> AuthenticatorData:
-        pass
-
-    @overload
-    def register_complete(
-        self,
-        state,
-        client_data: CollectedClientData,
-        attestation_object: AttestationObject,
-    ) -> AuthenticatorData:
-        pass
-
-    def register_complete(self, state, *args, **kwargs):
         """Verify the correctness of the registration data received from
         the client.
 
         :param state: The state data returned by the corresponding
             `register_begin`.
-        :param client_data: The client data.
-        :param attestation_object: The attestation object.
+        :param response: The registration response from the client.
         :return: The authenticator data
         """
-        response = None
-        if len(args) == 1 and not kwargs:
-            response = args[0]
-        elif set(kwargs) == {"response"} and not args:
-            response = kwargs["response"]
-        if response:
-            registration = RegistrationResponse.from_dict(response)
-            client_data = registration.response.client_data
-            attestation_object = registration.response.attestation_object
-        else:
-            names = ["client_data", "attestation_object"]
-            pos = dict(zip(names, args))
-            data = {**kwargs, **pos}
-            if set(kwargs) & set(pos) or set(data) != set(names):
-                raise TypeError("incorrect arguments passed to register_complete()")
-            client_data = data[names[0]]
-            attestation_object = data[names[1]]
+        registration = RegistrationResponse.from_dict(response)
+        client_data = registration.response.client_data
+        attestation_object = registration.response.attestation_object
 
         if client_data.type != CollectedClientData.TYPE.CREATE:
             raise ValueError("Incorrect type in CollectedClientData.")
@@ -345,28 +317,12 @@ class Fido2Server:
             state,
         )
 
-    @overload
     def authenticate_complete(
         self,
         state,
         credentials: Sequence[AttestedCredentialData],
         response: AuthenticationResponse | Mapping[str, Any],
     ) -> AttestedCredentialData:
-        pass
-
-    @overload
-    def authenticate_complete(
-        self,
-        state,
-        credentials: Sequence[AttestedCredentialData],
-        credential_id: bytes,
-        client_data: CollectedClientData,
-        auth_data: AuthenticatorData,
-        signature: bytes,
-    ) -> AttestedCredentialData:
-        pass
-
-    def authenticate_complete(self, state, credentials, *args, **kwargs):
         """Verify the correctness of the assertion data received from
         the client.
 
@@ -378,27 +334,11 @@ class Fido2Server:
         :param auth_data: The authenticator data.
         :param signature: The signature provided by the client."""
 
-        response = None
-        if len(args) == 1 and not kwargs:
-            response = args[0]
-        elif set(kwargs) == {"response"} and not args:
-            response = kwargs["response"]
-        if response:
-            authentication = AuthenticationResponse.from_dict(response)
-            credential_id = authentication.id
-            client_data = authentication.response.client_data
-            auth_data = authentication.response.authenticator_data
-            signature = authentication.response.signature
-        else:
-            names = ["credential_id", "client_data", "auth_data", "signature"]
-            pos = dict(zip(names, args))
-            data = {**kwargs, **pos}
-            if set(kwargs) & set(pos) or set(data) != set(names):
-                raise TypeError("incorrect arguments passed to authenticate_complete()")
-            credential_id = data[names[0]]
-            client_data = data[names[1]]
-            auth_data = data[names[2]]
-            signature = data[names[3]]
+        authentication = AuthenticationResponse.from_dict(response)
+        credential_id = authentication.raw_id
+        client_data = authentication.response.client_data
+        auth_data = authentication.response.authenticator_data
+        signature = authentication.response.signature
 
         if client_data.type != CollectedClientData.TYPE.GET:
             raise ValueError("Incorrect type in CollectedClientData.")

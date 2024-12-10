@@ -70,16 +70,14 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 if auth_data.is_user_verified():
     # The WindowsClient doesn't know about authenticator config until now
     uv = "required"
 
-if not result.extension_results.get("largeBlob", {}).get("supported"):
+if not result.client_extension_results.get("largeBlob", {}).get("supported"):
     print("Credential does not support largeBlob, failure!")
     sys.exit(1)
 
@@ -101,7 +99,7 @@ selection = client.get_assertion(
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-if not result.extension_results.get("largeBlob", {}).get("written"):
+if not result.client_extension_results.get("largeBlob", {}).get("written"):
     print("Failed to write blob!")
     sys.exit(1)
 
@@ -118,4 +116,6 @@ selection = client.get_assertion(
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-print("Read blob:", websafe_decode(result.extension_results["largeBlob"]["blob"]))
+print(
+    "Read blob:", websafe_decode(result.client_extension_results["largeBlob"]["blob"])
+)

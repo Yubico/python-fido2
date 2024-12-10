@@ -72,7 +72,7 @@ def register_begin():
 
     session["state"] = state
     print("\n\n\n\n")
-    print(options)
+    print(dict(options))
     print("\n\n\n\n")
 
     return jsonify(dict(options))
