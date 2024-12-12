@@ -33,7 +33,6 @@ derive two separate secrets.
 from fido2.server import Fido2Server
 from fido2.utils import websafe_encode
 from exampleutils import get_client
-import sys
 import os
 
 
@@ -66,9 +65,12 @@ auth_data = server.register_complete(state, result)
 credential = auth_data.credential_data
 
 # PRF result:
-if not result.client_extension_results.get("prf", {}).get("enabled"):
-    print("Failed to create credential with PRF", result.client_extension_results)
-    sys.exit(1)
+if result.client_extension_results.get("prf", {}).get("enabled"):
+    print("New credential created, with PRF")
+else:
+    # This fails on Windows, but we might still be able to use prf even if
+    # the credential wasn't made with it, so keep going
+    print("Failed to create credential with PRF, it might not work")
 
 print("New credential created, with the PRF extension.")
 

@@ -39,7 +39,7 @@ client, info = get_client()
 
 
 # Prefer UV if supported and configured
-if info and info.options.get("uv") or info.options.get("bioEnroll"):
+if info and (info.options.get("uv") or info.options.get("bioEnroll")):
     uv = "preferred"
     print("Authenticator supports User Verification")
 else:

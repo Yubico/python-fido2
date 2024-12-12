@@ -41,7 +41,7 @@ client, info = get_client(lambda info: "credBlob" in info.extensions)
 
 # Prefer UV token if supported
 uv = "discouraged"
-if info.options.get("uv") or info.options.get("bioEnroll"):
+if info and (info.options.get("uv") or info.options.get("bioEnroll")):
     uv = "preferred"
     print("Authenticator is configured for User Verification")
 

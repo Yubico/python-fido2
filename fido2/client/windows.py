@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from . import WebAuthnClient, _BaseClient, AssertionSelection, ClientError
+from . import WebAuthnClient, _BaseClient, AssertionSelection, ClientError, _cbor_list
 from .win_api import (
     WinAPI,
     WebAuthNAuthenticatorAttachment,
@@ -35,7 +35,6 @@ from .win_api import (
     WebAuthNAttestationConveyancePreference,
     WebAuthNEnterpriseAttestation,
 )
-from ..ctap2 import AssertionResponse
 from ..rpid import verify_rp_id
 from ..webauthn import (
     CollectedClientData,
@@ -49,13 +48,35 @@ from ..webauthn import (
     ResidentKeyRequirement,
     AuthenticatorAttachment,
     PublicKeyCredentialType,
+    _as_cbor,
 )
+from ..ctap2 import AssertionResponse
+from ..ctap2.extensions import (
+    HMACGetSecretOutput,
+    AuthenticatorExtensionsPRFOutputs,
+    AuthenticatorExtensionsLargeBlobOutputs,
+    CredentialPropertiesOutput,
+)
+from ..utils import _JsonDataObject
 
 from typing import Callable, Sequence
 import sys
 import logging
 
 logger = logging.getLogger(__name__)
+
+_extension_output_types: dict[str, type[_JsonDataObject]] = {
+    "hmacGetSecret": HMACGetSecretOutput,
+    "prf": AuthenticatorExtensionsPRFOutputs,
+    "largeBlob": AuthenticatorExtensionsLargeBlobOutputs,
+    "credProps": CredentialPropertiesOutput,
+}
+
+
+def _wrap_ext(key, value):
+    if key in _extension_output_types:
+        return _extension_output_types[key].from_dict(value)
+    return value
 
 
 class WindowsClient(WebAuthnClient, _BaseClient):
@@ -130,9 +151,9 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         try:
             att_obj, extensions = self.api.make_credential(
-                options.rp,
-                options.user,
-                options.pub_key_cred_params,
+                _as_cbor(options.rp),
+                _as_cbor(options.user),
+                _cbor_list(options.pub_key_cred_params),
                 client_data,
                 options.timeout or 0,
                 selection.resident_key or ResidentKeyRequirement.DISCOURAGED,
@@ -143,7 +164,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     selection.user_verification or "discouraged"
                 ),
                 attestation,
-                options.exclude_credentials,
+                _cbor_list(options.exclude_credentials),
                 options.extensions,
                 event,
                 enterprise_attestation,
@@ -160,7 +181,9 @@ class WindowsClient(WebAuthnClient, _BaseClient):
             raw_id=credential.credential_id,
             response=AuthenticatorAttestationResponse(client_data, att_obj),
             authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
-            client_extension_results=AuthenticationExtensionsClientOutputs(extensions),
+            client_extension_results=AuthenticationExtensionsClientOutputs(
+                {k: _wrap_ext(k, v) for k, v in extensions.items()}
+            ),
             type=PublicKeyCredentialType.PUBLIC_KEY,
         )
 
@@ -191,7 +214,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     WebAuthNUserVerificationRequirement.from_string(
                         options.user_verification or "discouraged"
                     ),
-                    options.allow_credentials,
+                    _cbor_list(options.allow_credentials),
                     options.extensions,
                     event,
                 )
@@ -210,5 +233,5 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                     user=user,
                 )
             ],
-            extensions,
+            {k: _wrap_ext(k, v) for k, v in extensions.items()},
         )

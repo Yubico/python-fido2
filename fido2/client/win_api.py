@@ -41,6 +41,11 @@ from __future__ import annotations
 
 from ..utils import websafe_decode
 from ..webauthn import AttestationObject, AuthenticatorData, ResidentKeyRequirement
+from ..ctap2.extensions import (
+    AuthenticatorExtensionsPRFInputs,
+    HMACGetSecretInput,
+    AuthenticatorExtensionsLargeBlobInputs,
+)
 
 from enum import IntEnum, unique
 from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND, WORD
@@ -291,7 +296,7 @@ class WebAuthNCredWithHmacSecretSalt(ctypes.Structure):
 
     def __init__(self, cred_id, salt):
         self.cred_id = cred_id
-        self.salt = ctypes.pointer(salt)
+        self.pHmacSecretSalt = ctypes.pointer(salt)
 
 
 class WebAuthNHmacSecretSaltValues(ctypes.Structure):
@@ -1129,30 +1134,37 @@ class WinAPI:
                 u2f_appid = extensions["appid"]
             if extensions.get("getCredBlob"):
                 win_extensions.append(WebAuthNExtension("credBlob", BOOL(True)))
-            if "largeBlob" in extensions:
-                if extensions["largeBlob"].get("read", False):
+            large_blob = AuthenticatorExtensionsLargeBlobInputs.from_dict(
+                extensions.get("largeBlob")
+            )
+            if large_blob:
+                if large_blob.read:
                     large_blob_operation = WebAuthNLargeBlobOperation.GET
                 else:
-                    large_blob = extensions["largeBlob"]["write"]
+                    large_blob = large_blob.write
                     large_blob_operation = WebAuthNLargeBlobOperation.SET
-            if "prf" in extensions:
-                global_salts = extensions["prf"].get("eval")
-                cred_salts = extensions["prf"].get("evalByCredential", {})
+            prf = AuthenticatorExtensionsPRFInputs.from_dict(extensions.get("prf"))
+            if prf:
+                cred_salts = prf.eval_by_credential or {}
                 hmac_secret_salts = WebAuthNHmacSecretSaltValues(
-                    WebAuthNHmacSecretSalt(**global_salts) if global_salts else None,
+                    (
+                        WebAuthNHmacSecretSalt(prf.eval.first, prf.eval.second)
+                        if prf.eval
+                        else None
+                    ),
                     [
                         WebAuthNCredWithHmacSecretSalt(
                             websafe_decode(cred_id),
-                            WebAuthNHmacSecretSalt(**salts),
+                            WebAuthNHmacSecretSalt(salts.first, salts.second),
                         )
                         for cred_id, salts in cred_salts.items()
                     ],
                 )
             elif "hmacGetSecret" in extensions and self._allow_hmac_secret:
                 flags |= 0x00100000
-                salts = extensions["hmacGetSecret"]
+                salts = HMACGetSecretInput.from_dict(extensions["hmacGetSecret"])
                 hmac_secret_salts = WebAuthNHmacSecretSaltValues(
-                    WebAuthNHmacSecretSalt(salts["salt1"], salts.get("salt2"))
+                    WebAuthNHmacSecretSalt(salts.salt1, salts.salt2)
                 )
 
         if event:
