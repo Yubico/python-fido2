@@ -34,32 +34,28 @@ NOTE: This extension is not enabled by default as direct access to the extension
 is now allowed in a browser setting. See also prf.py for an example which uses
 the PRF extension which is enabled by default.
 """
-from fido2.hid import CtapHidDevice
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client, WindowsClient
+from fido2.client import Fido2Client
 from fido2.ctap2.extensions import HmacSecretExtension
-from exampleutils import CliInteraction
+from exampleutils import CliInteraction, enumerate_devices
 import ctypes
 import sys
 import os
 
+# Use the Windows WebAuthn API if available, and we're not running as admin
 try:
-    from fido2.pcsc import CtapPcscDevice
+    from fido2.client.windows import WindowsClient
+
+    use_winclient = (
+        WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin()
+    )
 except ImportError:
-    CtapPcscDevice = None
-
-
-def enumerate_devices():
-    for dev in CtapHidDevice.list_devices():
-        yield dev
-    if CtapPcscDevice:
-        for dev in CtapPcscDevice.list_devices():
-            yield dev
+    use_winclient = False
 
 
 uv = "discouraged"
 
-if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
+if use_winclient:
     # Use the Windows WebAuthn API if available, and we're not running as admin
     # By default only the PRF extension is allowed, we need to explicitly
     # configure the client to allow hmac-secret
@@ -105,12 +101,15 @@ auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 # HmacSecret result:
-if not result.client_extension_results.get("hmacCreateSecret"):
-    print("Failed to create credential with HmacSecret")
-    sys.exit(1)
+if result.client_extension_results.get("hmacCreateSecret"):
+    print("New credential created, with HmacSecret")
+else:
+    # This fails on Windows, but we might still be able to use hmac-secret even if
+    # the credential wasn't made with it, so keep going
+    print("Failed to create credential with HmacSecret, it might not work")
+
 
 credential = auth_data.credential_data
-print("New credential created, with the HmacSecret extension.")
 
 # Prepare parameters for getAssertion
 allow_list = [{"type": "public-key", "id": credential.credential_id}]
