@@ -22,10 +22,6 @@ jobs:
           - os: macos-latest
             python: pypy3
           - os: macos-latest
-            python: 3.8
-          - os: macos-latest
-            python: 3.9
-          - os: macos-latest
             python: 3.10
 
     name: ${{ matrix.os }} Py ${{ matrix.python }} ${{ matrix.architecture }}
