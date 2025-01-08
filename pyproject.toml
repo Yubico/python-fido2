@@ -1,51 +1,53 @@
-[tool.poetry]
+[project]
 name = "fido2"
 version = "2.0.0-dev.0"
 description = "FIDO2/WebAuthn library for implementing clients and servers."
-authors = ["Dain Nilsson <dain@yubico.com>"]
-homepage = "https://github.com/Yubico/python-fido2"
-repository = "https://github.com/Yubico/python-fido2"
+authors = [{ name = "Dain Nilsson", email = "<dain@yubico.com>" }]
+readme = "README.adoc"
+requires-python = ">=3.10, <4"
+license = { file = "COPYING" }
 keywords = ["fido2", "webauthn", "ctap", "u2f"]
 classifiers = [
-    "License :: OSI Approved :: BSD License",
-    "License :: OSI Approved :: Apache Software License",
-    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
-    "Operating System :: MacOS",
-    "Operating System :: Microsoft :: Windows",
-    "Operating System :: POSIX :: Linux",
-    "Development Status :: 5 - Production/Stable",
-    "Intended Audience :: Developers",
-    "Intended Audience :: System Administrators",
-    "Topic :: Internet",
-    "Topic :: Security :: Cryptography",
-    "Topic :: Software Development :: Libraries :: Python Modules"
+  "License :: OSI Approved :: BSD License",
+  "License :: OSI Approved :: Apache Software License",
+  "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Topic :: Internet",
+  "Topic :: Security :: Cryptography",
+  "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+dependencies = ["cryptography (>=2.6, !=35, <47)"]
+
+[project.optional-dependencies]
+pcsc = ["pyscard (>=1.9, <3)"]
+
+[project.urls]
+Homepage = "https://github.com/Yubico/python-fido2"
+
+[tool.poetry]
 include = [
-  { path = "COPYING", format = "sdist"},
-  { path = "COPYING.MPLv2", format = "sdist"},
-  { path = "COPYING.APLv2", format = "sdist"},
-  { path = "NEWS", format = "sdist"},
-  { path = "README.adoc", format = "sdist"},
-  { path= "tests/", format = "sdist"},
-  { path= "examples/", format = "sdist"},
+  { path = "COPYING", format = "sdist" },
+  { path = "COPYING.MPLv2", format = "sdist" },
+  { path = "COPYING.APLv2", format = "sdist" },
+  { path = "NEWS", format = "sdist" },
+  { path = "README.adoc", format = "sdist" },
+  { path = "tests/", format = "sdist" },
+  { path = "examples/", format = "sdist" },
 ]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-cryptography = ">=2.6, !=35, <47"
-pyscard = {version = "^1.9 || ^2", optional = true}
-
-[tool.poetry.extras]
-pcsc = ["pyscard"]
-
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
 Sphinx = "^8.1"
 sphinx-rtd-theme = "^3.0.1"
 sphinx-autoapi = "^3.3.3"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=2.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
