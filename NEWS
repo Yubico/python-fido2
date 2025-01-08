@@ -1,3 +1,6 @@
+* Version 2.0.0 (unreleased)
+ ** Backwards breaking changes
+
 * Version 1.2.0 (released 2024-11-27)
  ** Improved extension handling:
     Several new extensions are now supported, both for Fido2Client and WindowsClient.
