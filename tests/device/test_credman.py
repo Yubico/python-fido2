@@ -1,3 +1,4 @@
+from fido2.cose import CoseKey
 from fido2.ctap import CtapError
 from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
 from fido2.ctap2.credman import CredentialManagement
@@ -22,12 +23,21 @@ def pin_protocol(request, info):
     return proto()
 
 
+@pytest.fixture(params=[CoseKey.for_alg(alg) for alg in CoseKey.supported_algorithms()])
+def algorithm(request, info):
+    alg_cls = request.param
+    alg = {"alg": alg_cls.ALGORITHM, "type": "public-key"}
+    if alg not in info.algorithms:
+        pytest.skip(f"Algorithm {alg_cls.__name__} not supported")
+    return alg
+
+
 def get_credman(ctap2, pin_protocol, permissions=ClientPin.PERMISSION.CREDENTIAL_MGMT):
     token = ClientPin(ctap2, pin_protocol).get_pin_token(TEST_PIN, permissions)
     return CredentialManagement(ctap2, pin_protocol, token)
 
 
-def test_list_and_delete(client, ctap2, pin_protocol):
+def test_list_and_delete(client, ctap2, pin_protocol, algorithm):
     # Ensure no credentials exist initially
     credman = get_credman(ctap2, pin_protocol)
     metadata = credman.get_metadata()
@@ -48,6 +58,7 @@ def test_list_and_delete(client, ctap2, pin_protocol):
     result = client.make_credential(
         {
             **create_options["publicKey"],
+            "pubKeyCredParams": [algorithm],
             "extensions": {"credProps": True},
         }
     )
@@ -62,6 +73,7 @@ def test_list_and_delete(client, ctap2, pin_protocol):
     # Complete registration
     auth_data = server.register_complete(state, result)
     cred = auth_data.credential_data
+    assert cred.public_key[3] == algorithm["alg"]
 
     rps = credman.enumerate_rps()
     assert len(rps) == 1
