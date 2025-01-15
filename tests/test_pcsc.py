@@ -26,34 +26,17 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from fido2.hid import CTAPHID
-from fido2.pcsc import CtapPcscDevice
 from unittest import mock
-import sys
 import pytest
 
 
 @pytest.fixture(autouse=True, scope="module")
 def preconditions():
-    modules = [
-        "smartcard",
-        "smartcard.Exceptions",
-        "smartcard.System",
-        "smartcard.CardConnection",
-        "smartcard.pcsc",
-        "smartcard.pcsc.PCSCExceptions",
-        "smartcard.pcsc.PCSCContext",
-    ]
-
-    # setup
-    orig_modules = {}
-    for m in modules:
-        orig_modules[m] = sys.modules[m]
-        sys.modules[m] = mock.Mock()
-    yield None
-
-    # teardown
-    for m in modules:
-        sys.modules[m] = orig_modules[m]
+    global CtapPcscDevice
+    try:
+        from fido2.pcsc import CtapPcscDevice
+    except ImportError:
+        pytest.skip("pyscard is not installed")
 
 
 def test_pcsc_call_cbor():

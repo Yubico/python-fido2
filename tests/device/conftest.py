@@ -46,7 +46,10 @@ class DeviceManager:
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
         if reader_name:
-            from fido2.pcsc import _list_readers
+            try:
+                from fido2.pcsc import _list_readers
+            except ImportError:
+                pytest.exit("pyscard not installed, install package with 'pcsc' extra")
 
             readers = [
                 r for r in _list_readers() if reader_name.lower() in r.name.lower()
