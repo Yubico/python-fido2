@@ -237,6 +237,9 @@ class DeviceManager:
 
 @pytest.fixture(scope="session", autouse=True)
 def dev_manager(pytestconfig, request):
+    if pytestconfig.getoption("no_device"):
+        pytest.skip("Skip device tests")
+
     reader = pytestconfig.getoption("reader")
     capmanager = request.config.pluginmanager.getplugin("capturemanager")
     manager = DeviceManager(capmanager, reader)
