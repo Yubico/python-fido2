@@ -10,7 +10,7 @@ def preconditions(dev_manager):
         pytest.skip("CredBlob not supported by authenticator")
 
 
-def test_read_write(client):
+def test_read_write(client, ctap2, clear_creds):
     rp = {"id": "example.com", "name": "Example RP"}
     server = Fido2Server(rp)
     user = {"id": b"user_id", "name": "A. User"}

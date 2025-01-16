@@ -76,7 +76,7 @@ def test_missing_permissions(ctap2, pin_protocol):
         lb.put_blob(key, data)
 
 
-def test_large_blob_key(client, ctap2, pin_protocol):
+def test_large_blob_key(client, ctap2, pin_protocol, clear_creds):
     rp = {"id": "example.com", "name": "Example RP"}
     server = Fido2Server(rp)
     user = {"id": b"user_id", "name": "A. User"}

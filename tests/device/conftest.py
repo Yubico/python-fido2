@@ -1,6 +1,7 @@
 from fido2.hid import CtapHidDevice, list_descriptors, open_connection, open_device
 from fido2.ctap2 import Ctap2
 from fido2.ctap2.pin import ClientPin
+from fido2.ctap2.credman import CredentialManagement
 from fido2.client import Fido2Client, ClientError, UserInteraction
 
 from . import TEST_PIN
@@ -13,37 +14,46 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class Printer:
+    def __init__(self, capmanager):
+        self.capmanager = capmanager
+
+    def print(self, *messages):
+        with self.capmanager.global_and_fixture_disabled():
+            for m in messages:
+                print(m)
+
+
 # Handle user interaction
 class CliInteraction(UserInteraction):
-    def __init__(self, capmanager, pin):
-        self.capmanager = capmanager
+    def __init__(self, printer, pin):
+        self.printer = printer
         self.pin = pin
 
     def prompt_up(self):
-        with self.capmanager.global_and_fixture_disabled():
-            print("\nTouch your authenticator device now...\n")
+        self.printer.print("\nTouch your authenticator device now...\n")
 
     def request_pin(self, permissions, rd_id):
         return self.pin
 
     def request_uv(self, permissions, rd_id):
-        with self.capmanager.global_and_fixture_disabled():
-            print("\nUser Verification required.")
+        self.printer.print("\nUser Verification required.")
         return True
 
 
 class DeviceManager:
-    def __init__(self, capmanager, reader_name):
-        self.capmanager = capmanager
+    def __init__(self, printer, reader_name):
+        self.printer = printer
 
-        with self.capmanager.global_and_fixture_disabled():
-            print("")
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            print("Tests will now run against a connected FIDO authenticator.")
-            print("")
-            print("THESE TESTS ARE DESTRUCTIVE!")
-            print("ANY CREDENTIALS ON THIS AUTHENTICATOR WILL BE PERMANENTLY DELETED!")
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        self.printer.print(
+            "",
+            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+            "Tests will now run against a connected FIDO authenticator.",
+            "",
+            "THESE TESTS ARE DESTRUCTIVE!",
+            "ANY CREDENTIALS ON THIS AUTHENTICATOR WILL BE PERMANENTLY DELETED!",
+            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+        )
 
         if reader_name:
             try:
@@ -56,8 +66,7 @@ class DeviceManager:
             ]
             if len(readers) == 1:
                 self._reader = readers[0]
-                with self.capmanager.global_and_fixture_disabled():
-                    self._dev = self._connect_nfc(self._reader, False)
+                self._dev = self._connect_nfc(self._reader, False)
             else:
                 pytest.exit(f"No/Multiple NFC readers found matching '{reader_name}'")
         else:
@@ -94,8 +103,7 @@ class DeviceManager:
                     exc_info=True,
                 )
 
-        with self.capmanager.global_and_fixture_disabled():
-            print("Insert and touch the authenticator to test...")
+        self.printer.print("Insert and touch the authenticator to test...")
 
         descriptors: set[str | bytes] = set()
         threads: list[Thread] = []
@@ -140,7 +148,7 @@ class DeviceManager:
             connection = ExclusiveConnectCardConnection(reader.createConnection())
             return CtapPcscDevice(connection, reader.name)
 
-        print("Remove Authenticator from the NFC reader now...")
+        self.printer.print("Remove Authenticator from the NFC reader now...")
         removed = False
         while not event.wait(0.5):
             try:
@@ -154,7 +162,7 @@ class DeviceManager:
                 pass  # Expected, ignore
             except (NoCardException, KeyError):
                 if not removed:
-                    print("Place Authenticator on the NFC reader now...")
+                    self.printer.print("Place Authenticator on the NFC reader now...")
                     removed = True
 
         raise Exception("Failed to (re-)connect to Authenticator")
@@ -176,7 +184,7 @@ class DeviceManager:
         return Fido2Client(
             self.device,
             "https://example.com",
-            user_interaction=CliInteraction(self.capmanager, TEST_PIN),
+            user_interaction=CliInteraction(self.printer, TEST_PIN),
         )
 
     def _reconnect_usb(self):
@@ -185,13 +193,12 @@ class DeviceManager:
         info = Ctap2(self._dev).info
         logger.debug(f"Reconnect over USB: {dev_path}")
 
-        print("")
-        print("Disconnect the Authenticator now...")
+        self.printer.print("", "Disconnect the Authenticator now...")
         ds = {d.path for d in list_descriptors()}
         while dev_path in ds:
             event.wait(0.5)
             ds = {d.path for d in list_descriptors()}
-        print("Re-insert the Authenticator now...")
+        self.printer.print("Re-insert the Authenticator now...")
         ds2 = ds
         while True:
             event.wait(0.5)
@@ -210,13 +217,11 @@ class DeviceManager:
             self._dev.close()
             self._dev.connect()
         else:
-            with self.capmanager.global_and_fixture_disabled():
-                self._dev = self._reconnect_usb()
+            self._dev = self._reconnect_usb()
         return self._dev
 
     def factory_reset(self, setup=False):
-        with self.capmanager.global_and_fixture_disabled():
-            print("\nPERFORMING FACTORY RESET!")
+        self.printer.print("", "PERFORMING FACTORY RESET!")
 
         self.reconnect()
 
@@ -225,8 +230,7 @@ class DeviceManager:
         def on_keepalive(status):
             if not prompted and status == 2:
                 prompted.append(True)
-                with self.capmanager.global_and_fixture_disabled():
-                    print("Touch the Authenticator now...")
+                self.printer.print("Touch the Authenticator now...")
 
         self.ctap2.reset(on_keepalive=on_keepalive)
 
@@ -245,7 +249,8 @@ def dev_manager(pytestconfig, request):
 
     reader = pytestconfig.getoption("reader")
     capmanager = request.config.pluginmanager.getplugin("capturemanager")
-    manager = DeviceManager(capmanager, reader)
+    printer = Printer(capmanager)
+    manager = DeviceManager(printer, reader)
 
     yield manager
 
@@ -271,3 +276,16 @@ def client(dev_manager):
 @pytest.fixture
 def info(ctap2):
     return ctap2.get_info()
+
+
+@pytest.fixture
+def clear_creds(dev_manager):
+    # Clears any discoverable credentials after a test
+    yield None
+    clientpin = ClientPin(dev_manager.ctap2)
+    token = clientpin.get_pin_token(TEST_PIN, ClientPin.PERMISSION.CREDENTIAL_MGMT)
+    credman = CredentialManagement(dev_manager.ctap2, clientpin.protocol, token)
+    for rp in credman.enumerate_rps():
+        for cred in credman.enumerate_creds(rp[4]):
+            credman.delete_cred(cred[7])
+    assert len(credman.enumerate_rps()) == 0
