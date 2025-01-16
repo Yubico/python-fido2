@@ -1,4 +1,5 @@
 from fido2.hid import CtapHidDevice, list_descriptors, open_connection, open_device
+from fido2.cose import CoseKey
 from fido2.ctap2 import Ctap2
 from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
 from fido2.ctap2.credman import CredentialManagement
@@ -263,6 +264,15 @@ def client(dev_manager):
 @pytest.fixture
 def info(ctap2):
     return ctap2.get_info()
+
+
+@pytest.fixture(params=[CoseKey.for_alg(alg) for alg in CoseKey.supported_algorithms()])
+def algorithm(request, info):
+    alg_cls = request.param
+    alg = {"alg": alg_cls.ALGORITHM, "type": "public-key"}
+    if alg not in info.algorithms:
+        pytest.skip(f"Algorithm {alg_cls.__name__} not supported")
+    return alg
 
 
 @pytest.fixture(params=[PinProtocolV1, PinProtocolV2])

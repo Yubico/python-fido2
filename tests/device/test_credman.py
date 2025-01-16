@@ -1,4 +1,3 @@
-from fido2.cose import CoseKey
 from fido2.ctap import CtapError
 from fido2.ctap2.pin import ClientPin
 from fido2.ctap2.credman import CredentialManagement
@@ -12,15 +11,6 @@ import pytest
 def preconditions(dev_manager):
     if not CredentialManagement.is_supported(dev_manager.info):
         pytest.skip("CredentialManagement not supported by authenticator")
-
-
-@pytest.fixture(params=[CoseKey.for_alg(alg) for alg in CoseKey.supported_algorithms()])
-def algorithm(request, info):
-    alg_cls = request.param
-    alg = {"alg": alg_cls.ALGORITHM, "type": "public-key"}
-    if alg not in info.algorithms:
-        pytest.skip(f"Algorithm {alg_cls.__name__} not supported")
-    return alg
 
 
 def get_credman(ctap2, pin_protocol, permissions=ClientPin.PERMISSION.CREDENTIAL_MGMT):
