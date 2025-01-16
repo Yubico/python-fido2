@@ -51,6 +51,7 @@ class BioEnrollment:
         LAST_SAMPLE_STATUS = 0x05
         REMAINING_SAMPLES = 0x06
         TEMPLATE_INFOS = 0x07
+        MAX_TEMPLATE_FRIENDLY_NAME = 0x08
 
     @unique
     class TEMPLATE_INFO(IntEnum):
@@ -149,8 +150,7 @@ class FPEnrollmentContext:
 
 
 class FPBioEnrollment(BioEnrollment):
-    """Implementation of a draft specification of the bio enrollment API.
-    WARNING: This specification is not final and this class is likely to change.
+    """Implementation of the bio enrollment API.
 
     NOTE: The get_fingerprint_sensor_info method does not require authentication, and
     can be used by setting pin_uv_protocol and pin_uv_token to None.
