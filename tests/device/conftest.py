@@ -271,7 +271,12 @@ def pin_protocol(request, info):
     if proto.VERSION not in info.pin_uv_protocols:
         pytest.skip(f"PIN/UV protocol {proto.VERSION} not supported")
 
-    return proto()
+    all_protocols = ClientPin.PROTOCOLS
+    # Ensure we always negotiate only the selected protocol
+    ClientPin.PROTOCOLS = [proto]
+    yield proto()
+
+    ClientPin.PROTOCOLS = all_protocols
 
 
 @pytest.fixture

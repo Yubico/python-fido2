@@ -108,12 +108,6 @@ else:
     # the credential wasn't made with it, so keep going
     print("Failed to create credential with HmacSecret, it might not work")
 
-
-credential = auth_data.credential_data
-
-# Prepare parameters for getAssertion
-allow_list = [{"type": "public-key", "id": credential.credential_id}]
-
 # Generate a salt for HmacSecret:
 salt = os.urandom(32)
 print("Authenticate with salt:", salt.hex())
