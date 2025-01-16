@@ -500,19 +500,25 @@ class _Ctap2ClientBackend(_ClientBackend):
         extensions: Sequence[Ctap2Extension],
     ):
         self.ctap2 = Ctap2(device)
-        self.info = self.ctap2.info
         self._extensions = extensions
         self.user_interaction = user_interaction
+
+    @property
+    def info(self):
+        return self.ctap2.info
 
     def _filter_creds(
         self, rp_id, cred_list, pin_protocol, pin_token, event, on_keepalive
     ):
+        # Use fresh info
+        info = self.ctap2.get_info()
+
         # Filter out credential IDs which are too long
-        max_len = self.info.max_cred_id_length
+        max_len = info.max_cred_id_length
         if max_len:
             cred_list = [c for c in cred_list if len(c.id) <= max_len]
 
-        max_creds = self.info.max_creds_in_list or 1
+        max_creds = info.max_creds_in_list or 1
         chunks = [
             cred_list[i : i + max_creds] for i in range(0, len(cred_list), max_creds)
         ]
@@ -553,7 +559,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         return None
 
     def selection(self, event):
-        if "FIDO_2_1" in self.info.versions:
+        if "FIDO_2_1" in self.ctap2.info.versions:
             self.ctap2.selection(event=event)
         else:
             # Selection not supported, make dummy credential instead
@@ -575,12 +581,10 @@ class _Ctap2ClientBackend(_ClientBackend):
                     return
                 raise
 
-    def _should_use_uv(self, user_verification, permissions):
-        uv_supported = any(
-            k in self.info.options for k in ("uv", "clientPin", "bioEnroll")
-        )
+    def _should_use_uv(self, info, user_verification, permissions):
+        uv_supported = any(k in info.options for k in ("uv", "clientPin", "bioEnroll"))
         uv_configured = any(
-            self.info.options.get(k) for k in ("uv", "clientPin", "bioEnroll")
+            info.options.get(k) for k in ("uv", "clientPin", "bioEnroll")
         )
         mc = ClientPin.PERMISSION.MAKE_CREDENTIAL & permissions != 0
         additional_perms = permissions & ~(
@@ -593,25 +597,32 @@ class _Ctap2ClientBackend(_ClientBackend):
                 user_verification in (UserVerificationRequirement.PREFERRED, None)
                 and uv_supported
             )
-            or self.info.options.get("alwaysUv")
+            or info.options.get("alwaysUv")
         ):
             if not uv_configured:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
                     "User verification not configured/supported"
                 )
             return True
-        elif mc and uv_configured and not self.info.options.get("makeCredUvNotRqd"):
+        elif mc and uv_configured and not info.options.get("makeCredUvNotRqd"):
             return True
         elif uv_configured and additional_perms:
             return True
         return False
 
     def _get_token(
-        self, client_pin, permissions, rp_id, event, on_keepalive, allow_internal_uv
+        self,
+        info,
+        client_pin,
+        permissions,
+        rp_id,
+        event,
+        on_keepalive,
+        allow_internal_uv,
     ):
         # Prefer UV
-        if self.info.options.get("uv"):
-            if ClientPin.is_token_supported(self.info):
+        if info.options.get("uv"):
+            if ClientPin.is_token_supported(info):
                 if self.user_interaction.request_uv(permissions, rp_id):
                     return client_pin.get_uv_token(
                         permissions, rp_id, event, on_keepalive
@@ -621,7 +632,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                     return None  # No token, use uv=True
 
         # PIN if UV not supported/allowed.
-        if self.info.options.get("clientPin"):
+        if info.options.get("clientPin"):
             pin = self.user_interaction.request_pin(permissions, rp_id)
             if pin:
                 return client_pin.get_pin_token(pin, permissions, rp_id)
@@ -635,11 +646,11 @@ class _Ctap2ClientBackend(_ClientBackend):
     def _get_auth_params(
         self, pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
     ):
-        self.info = self.ctap2.get_info()  # Make sure we have "fresh" info
+        info = self.ctap2.get_info()
 
         pin_token = None
         internal_uv = False
-        if self._should_use_uv(user_verification, permissions):
+        if self._should_use_uv(info, user_verification, permissions):
             client_pin = ClientPin(self.ctap2, pin_protocol)
             allow_internal_uv = (
                 permissions
@@ -650,7 +661,13 @@ class _Ctap2ClientBackend(_ClientBackend):
                 == 0
             )
             pin_token = self._get_token(
-                client_pin, permissions, rp_id, event, on_keepalive, allow_internal_uv
+                info,
+                client_pin,
+                permissions,
+                rp_id,
+                event,
+                on_keepalive,
+                allow_internal_uv,
             )
             if not pin_token:
                 internal_uv = True
@@ -672,11 +689,12 @@ class _Ctap2ClientBackend(_ClientBackend):
         user_verification = selection.user_verification
 
         on_keepalive = _user_keepalive(self.user_interaction)
+        info = self.ctap2.get_info()
 
         # Handle enterprise attestation
         enterprise_attestation = None
         if options.attestation == AttestationConveyancePreference.ENTERPRISE:
-            if self.info.options.get("ep"):
+            if info.options.get("ep"):
                 if enterprise_rpid_list is not None:
                     # Platform facilitated
                     if rp_id in enterprise_rpid_list:
@@ -687,7 +705,7 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         # Negotiate PIN/UV protocol version
         for proto in ClientPin.PROTOCOLS:
-            if proto.VERSION in self.info.pin_uv_protocols:
+            if proto.VERSION in info.pin_uv_protocols:
                 pin_protocol: PinProtocol | None = proto()
                 break
         else:
@@ -733,7 +751,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
-            can_rk = self.info.options.get("rk")
+            can_rk = info.options.get("rk")
             rk = selection.resident_key == ResidentKeyRequirement.REQUIRED or (
                 selection.resident_key == ResidentKeyRequirement.PREFERRED and can_rk
             )
