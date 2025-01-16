@@ -1,5 +1,5 @@
 from fido2.ctap import CtapError
-from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
+from fido2.ctap2.pin import ClientPin
 from fido2.ctap2.blob import LargeBlobs
 from fido2.server import Fido2Server
 from fido2.utils import websafe_encode, websafe_decode
@@ -13,15 +13,6 @@ import pytest
 def preconditions(dev_manager):
     if not LargeBlobs.is_supported(dev_manager.info):
         pytest.skip("LargeBlobs not supported by authenticator")
-
-
-@pytest.fixture(params=[PinProtocolV1, PinProtocolV2])
-def pin_protocol(request, info):
-    proto = request.param
-    if proto.VERSION not in info.pin_uv_protocols:
-        pytest.skip(f"PIN/UV protocol {proto.VERSION} not supported")
-
-    return proto()
 
 
 def get_lb(ctap2, pin_protocol, permissions=ClientPin.PERMISSION.LARGE_BLOB_WRITE):

@@ -1,10 +1,10 @@
 from fido2.hid import CtapHidDevice, list_descriptors, open_connection, open_device
 from fido2.ctap2 import Ctap2
-from fido2.ctap2.pin import ClientPin
+from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
 from fido2.ctap2.credman import CredentialManagement
-from fido2.client import Fido2Client, ClientError, UserInteraction
+from fido2.client import Fido2Client, ClientError
 
-from . import TEST_PIN
+from . import Printer, TEST_PIN, CliInteraction
 
 from threading import Thread, Event
 
@@ -12,33 +12,6 @@ import pytest
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-class Printer:
-    def __init__(self, capmanager):
-        self.capmanager = capmanager
-
-    def print(self, *messages):
-        with self.capmanager.global_and_fixture_disabled():
-            for m in messages:
-                print(m)
-
-
-# Handle user interaction
-class CliInteraction(UserInteraction):
-    def __init__(self, printer, pin):
-        self.printer = printer
-        self.pin = pin
-
-    def prompt_up(self):
-        self.printer.print("\nTouch your authenticator device now...\n")
-
-    def request_pin(self, permissions, rd_id):
-        return self.pin
-
-    def request_uv(self, permissions, rd_id):
-        self.printer.print("\nUser Verification required.")
-        return True
 
 
 class DeviceManager:
@@ -180,11 +153,23 @@ class DeviceManager:
         return self.ctap2.get_info()
 
     @property
+    def on_keepalive(self):
+        prompted = [0]
+
+        def on_keepalive(status):
+            if status != prompted[0]:
+                prompted[0] = status
+                if status == 2:
+                    self.printer.print("Touch the Authenticator now...")
+
+        return on_keepalive
+
+    @property
     def client(self):
         return Fido2Client(
             self.device,
             "https://example.com",
-            user_interaction=CliInteraction(self.printer, TEST_PIN),
+            user_interaction=CliInteraction(self.printer),
         )
 
     def _reconnect_usb(self):
@@ -225,14 +210,7 @@ class DeviceManager:
 
         self.reconnect()
 
-        prompted = []
-
-        def on_keepalive(status):
-            if not prompted and status == 2:
-                prompted.append(True)
-                self.printer.print("Touch the Authenticator now...")
-
-        self.ctap2.reset(on_keepalive=on_keepalive)
+        self.ctap2.reset(on_keepalive=self.on_keepalive)
 
         if setup:
             self.setup()
@@ -242,14 +220,18 @@ class DeviceManager:
             ClientPin(self.ctap2).set_pin(TEST_PIN)
 
 
+@pytest.fixture(scope="session")
+def printer(request):
+    capmanager = request.config.pluginmanager.getplugin("capturemanager")
+    return Printer(capmanager)
+
+
 @pytest.fixture(scope="session", autouse=True)
-def dev_manager(pytestconfig, request):
+def dev_manager(pytestconfig, printer):
     if pytestconfig.getoption("no_device"):
         pytest.skip("Skip device tests")
 
     reader = pytestconfig.getoption("reader")
-    capmanager = request.config.pluginmanager.getplugin("capturemanager")
-    printer = Printer(capmanager)
     manager = DeviceManager(printer, reader)
 
     yield manager
@@ -269,6 +251,11 @@ def ctap2(dev_manager):
 
 
 @pytest.fixture
+def on_keepalive(dev_manager):
+    return dev_manager.on_keepalive
+
+
+@pytest.fixture
 def client(dev_manager):
     return dev_manager.client
 
@@ -276,6 +263,15 @@ def client(dev_manager):
 @pytest.fixture
 def info(ctap2):
     return ctap2.get_info()
+
+
+@pytest.fixture(params=[PinProtocolV1, PinProtocolV2])
+def pin_protocol(request, info):
+    proto = request.param
+    if proto.VERSION not in info.pin_uv_protocols:
+        pytest.skip(f"PIN/UV protocol {proto.VERSION} not supported")
+
+    return proto()
 
 
 @pytest.fixture

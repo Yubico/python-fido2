@@ -1,4 +1,4 @@
-from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
+from fido2.ctap2.pin import ClientPin
 from fido2.ctap import CtapError
 
 from . import TEST_PIN
@@ -10,15 +10,6 @@ import pytest
 def preconditions(dev_manager):
     if not ClientPin.is_supported(dev_manager.info):
         pytest.skip("ClientPin not supported by authenticator")
-
-
-@pytest.fixture(params=[PinProtocolV1, PinProtocolV2])
-def pin_protocol(request, info):
-    proto = request.param
-    if proto.VERSION not in info.pin_uv_protocols:
-        pytest.skip(f"PIN/UV protocol {proto.VERSION} not supported")
-
-    return proto()
 
 
 @pytest.fixture
