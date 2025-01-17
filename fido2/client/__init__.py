@@ -872,18 +872,18 @@ class _Ctap2ClientBackend(_ClientBackend):
         else:
             pin_protocol = None
 
-        # Gather UV permissions
-        permissions = ClientPin.PERMISSION.GET_ASSERTION
-
-        # Initialize extensions and add extension permissions
-        used_extensions = []
-        for e in self._extensions:
-            ext = e.get_assertion(self.ctap2, options, pin_protocol)
-            if ext:
-                used_extensions.append(ext)
-                permissions |= ext.permissions
-
         def _do_auth():
+            # Gather UV permissions
+            permissions = ClientPin.PERMISSION.GET_ASSERTION
+
+            # Initialize extensions and add extension permissions
+            used_extensions = []
+            for e in self._extensions:
+                ext = e.get_assertion(self.ctap2, options, pin_protocol)
+                if ext:
+                    used_extensions.append(ext)
+                    permissions |= ext.permissions
+
             # Handle auth
             pin_token, internal_uv = self._get_auth_params(
                 pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
@@ -909,7 +909,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             except ValueError as e:
                 raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(e)
 
-            options = {"uv": True} if internal_uv else None
+            opts = {"uv": True} if internal_uv else None
 
             # Calculate pin_auth
             client_data_hash = client_data.hash
@@ -932,7 +932,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                 client_data_hash,
                 [_as_cbor(selected_cred)] if selected_cred else None,
                 extension_inputs or None,
-                options,
+                opts,
                 *pin_auth,
                 event=event,
                 on_keepalive=on_keepalive,
