@@ -1,5 +1,6 @@
 from fido2.hid import CtapHidDevice, list_descriptors, open_connection, open_device
 from fido2.cose import CoseKey
+from fido2.hid import CAPABILITY
 from fido2.ctap2 import Ctap2
 from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
 from fido2.ctap2.credman import CredentialManagement
@@ -47,9 +48,10 @@ class DeviceManager:
             self._reader = None
             self._dev = self._select()
 
-        options = self.ctap2.info.options
-        if options.get("clientPin") or options.get("uv"):
-            pytest.exit("Authenticator must be in a newly-reset state!")
+        if self.has_ctap2():
+            options = Ctap2(self.device).info.options
+            if options.get("clientPin") or options.get("uv"):
+                pytest.exit("Authenticator must be in a newly-reset state!")
 
         self.setup()
 
@@ -145,9 +147,14 @@ class DeviceManager:
     def device(self):
         return self._dev
 
+    def has_ctap2(self):
+        return self.device.capabilities & CAPABILITY.CBOR
+
     @property
     def ctap2(self):
-        return Ctap2(self.device)
+        if self.has_ctap2():
+            return Ctap2(self.device)
+        pytest.skip("Authenticator does not support CTAP 2")
 
     @property
     def info(self):
@@ -217,7 +224,7 @@ class DeviceManager:
             self.setup()
 
     def setup(self):
-        if ClientPin.is_supported(self.info):
+        if self.has_ctap2() and ClientPin.is_supported(self.info):
             ClientPin(self.ctap2).set_pin(TEST_PIN)
 
 
@@ -238,7 +245,8 @@ def dev_manager(pytestconfig, printer):
     yield manager
 
     # after the test, reset the device
-    manager.factory_reset()
+    if manager.has_ctap2():
+        manager.factory_reset()
 
 
 @pytest.fixture

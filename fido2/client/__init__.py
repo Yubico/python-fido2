@@ -445,7 +445,9 @@ class _Ctap1ClientBackend(_ClientBackend):
                     app_param,
                     cred.id,
                 )
-                assertions = [AssertionResponse.from_ctap1(app_param, cred, auth_resp)]
+                assertions = [
+                    AssertionResponse.from_ctap1(app_param, _as_cbor(cred), auth_resp)
+                ]
                 return AssertionSelection(client_data, assertions)
             except ClientError as e:
                 if e.code == ClientError.ERR.TIMEOUT:
