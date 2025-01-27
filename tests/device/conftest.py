@@ -21,13 +21,13 @@ class DeviceManager:
         self.printer = printer
 
         self.printer.print(
+            "⚠️  Tests will now run against a connected FIDO authenticator. ⚠️ ",
             "",
-            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
-            "Tests will now run against a connected FIDO authenticator.",
+            "You may be prompted to interact with the authenticator throughout these "
+            "tests.",
             "",
-            "THESE TESTS ARE DESTRUCTIVE!",
+            "          ☠️  WARNING! THESE TESTS ARE DESTRUCTIVE! ☠️ ",
             "ANY CREDENTIALS ON THIS AUTHENTICATOR WILL BE PERMANENTLY DELETED!",
-            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
         )
 
         if reader_name:
@@ -51,6 +51,11 @@ class DeviceManager:
         if self.has_ctap2():
             options = Ctap2(self.device).info.options
             if options.get("clientPin") or options.get("uv"):
+                self.printer.print(
+                    "As a precaution, these tests will not run on an authenticator "
+                    "which is configured with any form of UV. Factory reset the "
+                    "authenticator prior to running tests against it."
+                )
                 pytest.exit("Authenticator must be in a newly-reset state!")
 
         self.setup()
@@ -79,7 +84,7 @@ class DeviceManager:
                     exc_info=True,
                 )
 
-        self.printer.print("Insert and touch the authenticator to test...")
+        self.printer.touch()
 
         descriptors: set[str | bytes] = set()
         threads: list[Thread] = []
@@ -124,7 +129,7 @@ class DeviceManager:
             connection = ExclusiveConnectCardConnection(reader.createConnection())
             return CtapPcscDevice(connection, reader.name)
 
-        self.printer.print("Remove Authenticator from the NFC reader now...")
+        self.printer.remove(nfc=True)
         removed = False
         while not event.wait(0.5):
             try:
@@ -138,7 +143,7 @@ class DeviceManager:
                 pass  # Expected, ignore
             except (NoCardException, KeyError):
                 if not removed:
-                    self.printer.print("Place Authenticator on the NFC reader now...")
+                    self.printer.insert(nfc=True)
                     removed = True
 
         raise Exception("Failed to (re-)connect to Authenticator")
@@ -168,7 +173,7 @@ class DeviceManager:
             if status != prompted[0]:
                 prompted[0] = status
                 if status == 2:
-                    self.printer.print("Touch the Authenticator now...")
+                    self.printer.touch()
 
         return on_keepalive
 
@@ -186,12 +191,12 @@ class DeviceManager:
         info = Ctap2(self._dev).info
         logger.debug(f"Reconnect over USB: {dev_path}")
 
-        self.printer.print("", "Disconnect the Authenticator now...")
+        self.printer.remove()
         ds = {d.path for d in list_descriptors()}
         while dev_path in ds:
             event.wait(0.5)
             ds = {d.path for d in list_descriptors()}
-        self.printer.print("Re-insert the Authenticator now...")
+        self.printer.insert()
         ds2 = ds
         while True:
             event.wait(0.5)
@@ -214,7 +219,7 @@ class DeviceManager:
         return self._dev
 
     def factory_reset(self, setup=False):
-        self.printer.print("", "PERFORMING FACTORY RESET!")
+        self.printer.print("⚠️  PERFORMING FACTORY RESET! ⚠️ ")
 
         self.reconnect()
 
