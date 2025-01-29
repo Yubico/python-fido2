@@ -450,6 +450,13 @@ class PublicKeyCredentialType(_StringEnum):
     PUBLIC_KEY = "public-key"
 
 
+@unique
+class PublicKeyCredentialHint(_StringEnum):
+    SECURITY_KEY = "security-key"
+    CLIENT_DEVICE = "client-device"
+    HYBRID = "hybrid"
+
+
 def _as_cbor(data: _JsonDataObject) -> Mapping[str, Any]:
     return {k: super(_JsonDataObject, data).__getitem__(k) for k in data}
 
@@ -521,7 +528,9 @@ class PublicKeyCredentialCreationOptions(_JsonDataObject):
     timeout: int | None = None
     exclude_credentials: Sequence[PublicKeyCredentialDescriptor] | None = None
     authenticator_selection: AuthenticatorSelectionCriteria | None = None
+    hints: Sequence[PublicKeyCredentialHint] | None = None
     attestation: AttestationConveyancePreference | None = None
+    attestation_formats: Sequence[str] | None = None
     extensions: Mapping[str, Any] | None = None
 
 
@@ -532,6 +541,7 @@ class PublicKeyCredentialRequestOptions(_JsonDataObject):
     rp_id: str | None = None
     allow_credentials: Sequence[PublicKeyCredentialDescriptor] | None = None
     user_verification: UserVerificationRequirement | None = None
+    hints: Sequence[PublicKeyCredentialHint] | None = None
     extensions: Mapping[str, Any] | None = None
 
 
