@@ -229,10 +229,10 @@ class AssertionSelection:
         return AuthenticationResponse(
             raw_id=assertion.credential["id"],
             response=AuthenticatorAssertionResponse(
-                self._client_data,
-                assertion.auth_data,
-                assertion.signature,
-                assertion.user["id"] if assertion.user else None,
+                client_data=self._client_data,
+                authenticator_data=assertion.auth_data,
+                signature=assertion.signature,
+                user_handle=assertion.user["id"] if assertion.user else None,
             ),
             authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
             client_extension_results=AuthenticationExtensionsClientOutputs(
@@ -413,7 +413,9 @@ class _Ctap1ClientBackend(_ClientBackend):
 
         return RegistrationResponse(
             raw_id=credential.credential_id,
-            response=AuthenticatorAttestationResponse(client_data, att_obj),
+            response=AuthenticatorAttestationResponse(
+                client_data=client_data, attestation_object=att_obj
+            ),
             authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
             client_extension_results=AuthenticationExtensionsClientOutputs({}),
             type=PublicKeyCredentialType.PUBLIC_KEY,
@@ -502,12 +504,9 @@ class _Ctap2ClientBackend(_ClientBackend):
         extensions: Sequence[Ctap2Extension],
     ):
         self.ctap2 = Ctap2(device)
+        self.info = self.ctap2.info
         self._extensions = extensions
         self.user_interaction = user_interaction
-
-    @property
-    def info(self):
-        return self.ctap2.info
 
     def _filter_creds(
         self, rp_id, cred_list, pin_protocol, pin_token, event, on_keepalive
@@ -845,7 +844,9 @@ class _Ctap2ClientBackend(_ClientBackend):
 
         return RegistrationResponse(
             raw_id=credential.credential_id,
-            response=AuthenticatorAttestationResponse(client_data, att_obj),
+            response=AuthenticatorAttestationResponse(
+                client_data=client_data, attestation_object=att_obj
+            ),
             authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
             client_extension_results=AuthenticationExtensionsClientOutputs(
                 extension_outputs
@@ -926,7 +927,9 @@ class _Ctap2ClientBackend(_ClientBackend):
             if allow_list and not selected_cred:
                 # We still need to send a dummy value if there was an allow_list
                 # but no matches were found:
-                selected_cred = PublicKeyCredentialDescriptor(allow_list[0].type, b"\0")
+                selected_cred = PublicKeyCredentialDescriptor(
+                    type=allow_list[0].type, id=b"\0"
+                )
 
             # Perform get assertion
             assertions = self.ctap2.get_assertions(

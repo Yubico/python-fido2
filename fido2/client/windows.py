@@ -309,7 +309,9 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         return RegistrationResponse(
             raw_id=credential.credential_id,
-            response=AuthenticatorAttestationResponse(client_data, att_obj),
+            response=AuthenticatorAttestationResponse(
+                client_data=client_data, attestation_object=att_obj
+            ),
             authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
             client_extension_results=AuthenticationExtensionsClientOutputs(
                 {k: _wrap_ext(k, v) for k, v in extension_outputs.items()}
@@ -334,7 +336,16 @@ class WindowsClient(WebAuthnClient, _BaseClient):
             CollectedClientData.TYPE.GET, options.challenge
         )
 
-        selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
+        attachment = WebAuthNAuthenticatorAttachment.ANY
+        for hint in options.hints or []:
+            match hint:
+                case "security-key":
+                    attachment = WebAuthNAuthenticatorAttachment.CROSS_PLATFORM
+                case "client-device":
+                    attachment = WebAuthNAuthenticatorAttachment.PLATFORM
+                case _:
+                    continue
+            break
 
         flags = 0
         large_blob = None
@@ -400,9 +411,7 @@ class WindowsClient(WebAuthnClient, _BaseClient):
                 ctypes.byref(
                     WebAuthNGetAssertionOptions(
                         options.timeout or 0,
-                        WebAuthNAuthenticatorAttachment.from_string(
-                            selection.authenticator_attachment or "any"
-                        ),
+                        attachment,
                         WebAuthNUserVerificationRequirement.from_string(
                             options.user_verification or "discouraged"
                         ),

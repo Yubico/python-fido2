@@ -461,7 +461,7 @@ def _as_cbor(data: _JsonDataObject) -> Mapping[str, Any]:
     return {k: super(_JsonDataObject, data).__getitem__(k) for k in data}
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class PublicKeyCredentialRpEntity(_JsonDataObject):
     name: str
     id: str | None = None
@@ -472,27 +472,27 @@ class PublicKeyCredentialRpEntity(_JsonDataObject):
         return sha256(self.id.encode("utf8")) if self.id else None
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class PublicKeyCredentialUserEntity(_JsonDataObject):
     name: str
     id: bytes
     display_name: str | None = None
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class PublicKeyCredentialParameters(_JsonDataObject):
     type: PublicKeyCredentialType
     alg: int
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class PublicKeyCredentialDescriptor(_JsonDataObject):
     type: PublicKeyCredentialType
     id: bytes
     transports: Sequence[AuthenticatorTransport] | None = None
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class AuthenticatorSelectionCriteria(_JsonDataObject):
     authenticator_attachment: AuthenticatorAttachment | None = None
     resident_key: ResidentKeyRequirement | None = None
@@ -519,7 +519,7 @@ class AuthenticatorSelectionCriteria(_JsonDataObject):
         )
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class PublicKeyCredentialCreationOptions(_JsonDataObject):
     rp: PublicKeyCredentialRpEntity
     user: PublicKeyCredentialUserEntity
@@ -534,7 +534,7 @@ class PublicKeyCredentialCreationOptions(_JsonDataObject):
     extensions: Mapping[str, Any] | None = None
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class PublicKeyCredentialRequestOptions(_JsonDataObject):
     challenge: bytes
     timeout: int | None = None
@@ -545,13 +545,13 @@ class PublicKeyCredentialRequestOptions(_JsonDataObject):
     extensions: Mapping[str, Any] | None = None
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class AuthenticatorAttestationResponse(_JsonDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     attestation_object: AttestationObject
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class AuthenticatorAssertionResponse(_JsonDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     authenticator_data: AuthenticatorData
@@ -594,7 +594,7 @@ class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
         return repr(dict(self))
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class RegistrationResponse(_JsonDataObject):
     id: str = field(init=False)
     raw_id: bytes
@@ -626,7 +626,7 @@ class RegistrationResponse(_JsonDataObject):
         return super().from_dict(data)
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class AuthenticationResponse(_JsonDataObject):
     id: str = field(init=False)
     raw_id: bytes
@@ -658,11 +658,11 @@ class AuthenticationResponse(_JsonDataObject):
         return super().from_dict(data)
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class CredentialCreationOptions(_JsonDataObject):
     public_key: PublicKeyCredentialCreationOptions
 
 
-@dataclass(eq=False, frozen=True)
+@dataclass(eq=False, frozen=True, kw_only=True)
 class CredentialRequestOptions(_JsonDataObject):
     public_key: PublicKeyCredentialRequestOptions

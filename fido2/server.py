@@ -95,7 +95,9 @@ def to_descriptor(
     :rtype: PublicKeyCredentialDescriptor
     """
     return PublicKeyCredentialDescriptor(
-        PublicKeyCredentialType.PUBLIC_KEY, credential.credential_id, transports
+        type=PublicKeyCredentialType.PUBLIC_KEY,
+        id=credential.credential_id,
+        transports=transports,
     )
 
 
@@ -145,7 +147,9 @@ class Fido2Server:
         self.timeout = None
         self.attestation = AttestationConveyancePreference(attestation)
         self.allowed_algorithms = [
-            PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, alg)
+            PublicKeyCredentialParameters(
+                type=PublicKeyCredentialType.PUBLIC_KEY, alg=alg
+            )
             for alg in CoseKey.supported_algorithms()
         ]
         self._verify_attestation = verify_attestation or _ignore_attestation
@@ -190,18 +194,18 @@ class Fido2Server:
 
         return (
             CredentialCreationOptions(
-                PublicKeyCredentialCreationOptions(
-                    self.rp,
-                    PublicKeyCredentialUserEntity.from_dict(user),
-                    challenge,
-                    self.allowed_algorithms,
-                    self.timeout,
-                    descriptors,
-                    (
+                public_key=PublicKeyCredentialCreationOptions(
+                    rp=self.rp,
+                    user=PublicKeyCredentialUserEntity.from_dict(user),
+                    challenge=challenge,
+                    pub_key_cred_params=self.allowed_algorithms,
+                    timeout=self.timeout,
+                    exclude_credentials=descriptors,
+                    authenticator_selection=(
                         AuthenticatorSelectionCriteria(
-                            authenticator_attachment,
-                            resident_key_requirement,
-                            user_verification,
+                            authenticator_attachment=authenticator_attachment,
+                            resident_key=resident_key_requirement,
+                            user_verification=user_verification,
                         )
                         if any(
                             (
@@ -212,8 +216,8 @@ class Fido2Server:
                         )
                         else None
                     ),
-                    self.attestation,
-                    extensions,
+                    attestation=self.attestation,
+                    extensions=extensions,
                 )
             ),
             state,
@@ -305,13 +309,13 @@ class Fido2Server:
 
         return (
             CredentialRequestOptions(
-                PublicKeyCredentialRequestOptions(
-                    challenge,
-                    self.timeout,
-                    self.rp.id,
-                    descriptors,
-                    user_verification,
-                    extensions,
+                public_key=PublicKeyCredentialRequestOptions(
+                    challenge=challenge,
+                    timeout=self.timeout,
+                    rp_id=self.rp.id,
+                    allow_credentials=descriptors,
+                    user_verification=user_verification,
+                    extensions=extensions,
                 )
             ),
             state,
