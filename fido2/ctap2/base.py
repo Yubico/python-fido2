@@ -64,18 +64,19 @@ class _CborDataObject(_DataClassMapping[int]):
 class Info(_CborDataObject):
     """Binary CBOR encoded response data returned by the CTAP2 GET_INFO command.
 
+    See:
+    https://fidoalliance.org/specs/fido-v2.2-rd-20230321/fido-client-to-authenticator-protocol-v2.2-rd-20230321.html#authenticatorGetInfo
+    for descriptions of these fields.
+
+    Note that while many fields are optional when returned by the authenticator,
+    this dataclass uses defaults to represent a missing value such as empty lists
+    or dicts, or the integer value 0. These are used rather than None for omitted
+    values as long as this can be done without introducing any practical ambiguity.
+    This also means that several of these fields may have a 0 value even if the
+    specification states that they should be non-zero when returned from the
+    authenticator.
+
     :param _: The binary content of the Info data.
-    :ivar versions: The versions supported by the authenticator.
-    :ivar extensions: The extensions supported by the authenticator.
-    :ivar aaguid: The AAGUID of the authenticator.
-    :ivar options: The options supported by the authenticator.
-    :ivar max_msg_size: The max message size supported by the authenticator.
-    :ivar pin_uv_protocols: The PIN/UV protocol versions supported by the authenticator.
-    :ivar max_creds_in_list: Max number of credentials supported in list at a time.
-    :ivar max_cred_id_length: Max length of Credential ID supported.
-    :ivar transports: List of supported transports.
-    :ivar algorithms: List of supported algorithms for credential creation.
-    :ivar data: The Info members, in the form of a dict.
     """
 
     versions: list[str]
@@ -84,21 +85,24 @@ class Info(_CborDataObject):
     options: dict[str, bool] = field(default_factory=dict)
     max_msg_size: int = 1024
     pin_uv_protocols: list[int] = field(default_factory=list)
-    max_creds_in_list: int | None = None
-    max_cred_id_length: int | None = None
+    max_creds_in_list: int = 0
+    max_cred_id_length: int = 0
     transports: list[str] = field(default_factory=list)
-    algorithms: list[dict[str, Any]] | None = None
-    max_large_blob: int | None = None
+    algorithms: list[dict[str, Any]] = field(default_factory=list)
+    max_large_blob: int = 0
     force_pin_change: bool = False
     min_pin_length: int = 4
-    firmware_version: int | None = None
-    max_cred_blob_length: int | None = None
+    firmware_version: int = 0
+    max_cred_blob_length: int = 0
     max_rpids_for_min_pin: int = 0
-    preferred_platform_uv_attempts: int | None = None
-    uv_modality: int | None = None
-    certifications: dict | None = None
+    preferred_platform_uv_attempts: int = 0
+    uv_modality: int = 0
+    certifications: dict = field(default_factory=dict)
     remaining_disc_creds: int | None = None
-    vendor_prototype_config_commands: list[int] | None = None
+    vendor_prototype_config_commands: list[int] = field(default_factory=list)
+    attestation_formats: list[str] = field(default_factory=lambda: ["packed"])
+    uv_count_since_pin: int | None = None
+    long_touch_for_reset: bool = False
 
 
 @dataclass(eq=False, frozen=True)
