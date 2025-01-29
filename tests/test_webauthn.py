@@ -113,7 +113,9 @@ class TestWebAuthnDataTypes(unittest.TestCase):
 
     def test_authenticator_selection_criteria(self):
         o = AuthenticatorSelectionCriteria(
-            "platform", require_resident_key=True, user_verification="required"
+            authenticator_attachment="platform",
+            require_resident_key=True,
+            user_verification="required",
         )
         self.assertEqual(
             dict(o),
@@ -171,7 +173,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.require_resident_key, False)
 
     def test_rp_entity(self):
-        o = PublicKeyCredentialRpEntity("Example", "example.com")
+        o = PublicKeyCredentialRpEntity(name="Example", id="example.com")
         self.assertEqual(o, {"id": "example.com", "name": "Example"})
         self.assertEqual(o.id, "example.com")
         self.assertEqual(o.name, "Example")
@@ -183,7 +185,9 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             PublicKeyCredentialRpEntity()
 
     def test_user_entity(self):
-        o = PublicKeyCredentialUserEntity("Example", b"user", display_name="Display")
+        o = PublicKeyCredentialUserEntity(
+            name="Example", id=b"user", display_name="Display"
+        )
         self.assertEqual(
             o,
             {
@@ -203,12 +207,12 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             PublicKeyCredentialUserEntity()
 
     def test_parameters(self):
-        o = PublicKeyCredentialParameters("public-key", -7)
+        o = PublicKeyCredentialParameters(type="public-key", alg=-7)
         self.assertEqual(o, {"type": "public-key", "alg": -7})
         self.assertEqual(o.type, "public-key")
         self.assertEqual(o.alg, -7)
 
-        p = PublicKeyCredentialParameters("invalid-type", -7)
+        p = PublicKeyCredentialParameters(type="invalid-type", alg=-7)
         assert p.type is None
 
         with self.assertRaises(TypeError):
@@ -218,7 +222,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             PublicKeyCredentialParameters()
 
     def test_descriptor(self):
-        o = PublicKeyCredentialDescriptor("public-key", b"credential_id")
+        o = PublicKeyCredentialDescriptor(type="public-key", id=b"credential_id")
         self.assertEqual(
             o, {"type": "public-key", "id": websafe_encode(b"credential_id")}
         )
@@ -227,7 +231,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertIsNone(o.transports)
 
         o = PublicKeyCredentialDescriptor(
-            "public-key", b"credential_id", ["usb", "nfc"]
+            type="public-key", id=b"credential_id", transports=["usb", "nfc"]
         )
         self.assertEqual(
             o,
@@ -239,31 +243,33 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         )
         self.assertEqual(o.transports, ["usb", "nfc"])
 
-        PublicKeyCredentialDescriptor("public-key", b"credential_id", ["valid_value"])
+        PublicKeyCredentialDescriptor(
+            type="public-key", id=b"credential_id", transports=["valid_value"]
+        )
 
-        d = PublicKeyCredentialDescriptor("wrong-type", b"credential_id")
+        d = PublicKeyCredentialDescriptor(type="wrong-type", id=b"credential_id")
         assert d.type is None
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialDescriptor("public-key")
+            PublicKeyCredentialDescriptor(type="public-key")
 
         with self.assertRaises(TypeError):
             PublicKeyCredentialDescriptor()
 
     def test_creation_options(self):
         o = PublicKeyCredentialCreationOptions(
-            PublicKeyCredentialRpEntity(id="example.com", name="Example"),
-            PublicKeyCredentialUserEntity(id=b"user_id", name="A. User"),
-            b"request_challenge",
-            [{"type": "public-key", "alg": -7}],
-            10000,
-            [{"type": "public-key", "id": b"credential_id"}],
-            {
+            rp=PublicKeyCredentialRpEntity(id="example.com", name="Example"),
+            user=PublicKeyCredentialUserEntity(id=b"user_id", name="A. User"),
+            challenge=b"request_challenge",
+            pub_key_cred_params=[{"type": "public-key", "alg": -7}],
+            timeout=10000,
+            exclude_credentials=[{"type": "public-key", "id": b"credential_id"}],
+            authenticator_selection={
                 "authenticatorAttachment": "platform",
                 "residentKey": "required",
                 "userVerification": "required",
             },
-            "direct",
+            attestation="direct",
         )
         self.assertEqual(o.rp, {"id": "example.com", "name": "Example"})
         self.assertEqual(o.user, {"id": websafe_encode(b"user_id"), "name": "A. User"})
@@ -289,10 +295,10 @@ class TestWebAuthnDataTypes(unittest.TestCase):
 
         self.assertIsNone(
             PublicKeyCredentialCreationOptions(
-                {"id": "example.com", "name": "Example"},
-                {"id": b"user_id", "name": "A. User"},
-                b"request_challenge",
-                [{"type": "public-key", "alg": -7}],
+                rp={"id": "example.com", "name": "Example"},
+                user={"id": b"user_id", "name": "A. User"},
+                challenge=b"request_challenge",
+                pub_key_cred_params=[{"type": "public-key", "alg": -7}],
                 attestation="invalid",
             ).attestation
         )
@@ -304,11 +310,13 @@ class TestWebAuthnDataTypes(unittest.TestCase):
 
     def test_request_options(self):
         o = PublicKeyCredentialRequestOptions(
-            b"request_challenge",
-            10000,
-            "example.com",
-            [PublicKeyCredentialDescriptor(type="public-key", id=b"credential_id")],
-            "discouraged",
+            challenge=b"request_challenge",
+            timeout=10000,
+            rp_id="example.com",
+            allow_credentials=[
+                PublicKeyCredentialDescriptor(type="public-key", id=b"credential_id")
+            ],
+            user_verification="discouraged",
         )
         self.assertEqual(o.challenge, b"request_challenge")
         self.assertEqual(o.rp_id, "example.com")
@@ -319,7 +327,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         o2 = PublicKeyCredentialRequestOptions.from_dict(json.loads(js))
         self.assertEqual(o, o2)
 
-        o = PublicKeyCredentialRequestOptions(b"request_challenge")
+        o = PublicKeyCredentialRequestOptions(challenge=b"request_challenge")
         self.assertIsNone(o.timeout)
         self.assertIsNone(o.rp_id)
         self.assertIsNone(o.allow_credentials)
@@ -327,6 +335,6 @@ class TestWebAuthnDataTypes(unittest.TestCase):
 
         self.assertIsNone(
             PublicKeyCredentialRequestOptions(
-                b"request_challenge", user_verification="invalid"
+                challenge=b"request_challenge", user_verification="invalid"
             ).user_verification
         )

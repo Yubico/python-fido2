@@ -80,10 +80,10 @@ class TestFido2Client(unittest.TestCase):
         try:
             client.make_credential(
                 PublicKeyCredentialCreationOptions(
-                    {"id": "bar.example.com", "name": "Invalid RP"},
-                    user,
-                    challenge,
-                    [{"type": "public-key", "alg": -7}],
+                    rp={"id": "bar.example.com", "name": "Invalid RP"},
+                    user=user,
+                    challenge=challenge,
+                    pub_key_cred_params=[{"type": "public-key", "alg": -7}],
                 )
             )
             self.fail("make_credential did not raise error")
@@ -104,10 +104,10 @@ class TestFido2Client(unittest.TestCase):
         try:
             client.make_credential(
                 PublicKeyCredentialCreationOptions(
-                    rp,
-                    user,
-                    challenge,
-                    [{"type": "public-key", "alg": -7}],
+                    rp=rp,
+                    user=user,
+                    challenge=challenge,
+                    pub_key_cred_params=[{"type": "public-key", "alg": -7}],
                     authenticator_selection={"userVerification": "discouraged"},
                 )
             )
@@ -132,10 +132,10 @@ class TestFido2Client(unittest.TestCase):
 
         response = client.make_credential(
             PublicKeyCredentialCreationOptions(
-                rp,
-                user,
-                challenge,
-                [{"type": "public-key", "alg": -7}],
+                rp=rp,
+                user=user,
+                challenge=challenge,
+                pub_key_cred_params=[{"type": "public-key", "alg": -7}],
                 timeout=1000,
                 authenticator_selection={"userVerification": "discouraged"},
             )
@@ -175,7 +175,10 @@ class TestFido2Client(unittest.TestCase):
 
         response = client.make_credential(
             PublicKeyCredentialCreationOptions(
-                rp, user, challenge, [{"type": "public-key", "alg": -7}]
+                rp=rp,
+                user=user,
+                challenge=challenge,
+                pub_key_cred_params=[{"type": "public-key", "alg": -7}],
             )
         ).response
 
