@@ -1,5 +1,24 @@
-* Version 2.0.0 (unreleased)
- ** Backwards breaking changes
+* Version 2.0.0-beta.1 (released 2025-02-26) Preview release
+** Preview release: The API may undergo changes prior to the final 2.0.0 release!
+** Require Python >= 3.10
+** Building requires Poetry >= 2.0
+** WebAuthn dataclasses have been updated to reflect the current state of the spec
+   (level 3 working draft), constructors require arguments to be passed by name
+   (kwargs_only), and serialization to/from dict is compatible with the standardized
+   JSON formats.
+** features.webauthn_json_mapping has been removed, as this behavior is now the
+   standard.
+** WindowsClient has been moved to fido2.client.windows. This class can no longer be
+   imported on non-windows platforms (throws ImportError).
+** Use RegistrationResponse and AuthenticationResponse classes as return values in
+   Fido2Client.
+** CTAP2/WebAuthn extension handling has been rewritten, Fido2Client now takes a list
+   of Ctap2Extension instances. The default behavior is to include extensions which are
+   generally supported by browsers.
+** fido2.cbor load_x/dump_x functions have been made private, these should not be
+   directly used.
+** Removal of previously deprecated functions.
+** Removal of __version__ in fido2/__init__.py (use importlib.metadata if needed).
 
 * Version 1.2.0 (released 2024-11-27)
  ** Improved extension handling:

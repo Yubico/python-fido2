@@ -29,7 +29,7 @@ def get_version():
 # -- Project information -----------------------------------------------------
 
 project = "python-fido2"
-copyright = "2024, Yubico"
+copyright = "2025, Yubico"
 author = "Yubico"
 
 # The full version, including alpha/beta/rc tags
