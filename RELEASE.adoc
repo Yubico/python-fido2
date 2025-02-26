@@ -3,8 +3,8 @@
 
   $ git checkout -b release/x.y.z
 
-* Update the version in pyproject.toml and fido/__init__.py and make sure the
-  NEWS file has an entry for it, and the correct release date.
+* Update the version in pyproject.toml and make sure the NEWS file has an entry for it,
+  and the correct release date.
 * Commit the changes, and push the new branch.
 
   $ git push -u origin release/x.y.z
@@ -40,14 +40,10 @@
   $ git push origin :release/x.y.z
 
 * Bump the version number by incrementing the PATCH version and appending -dev.0
-  in pyproject.toml and fido2/__init__.py and add a new entry (unreleased) to the
-  NEWS file.
+  in pyproject.toml and add a new entry (unreleased) to the NEWS file.
 
   # pyproject.toml:
   version = "x.y.q-dev.0"
-
-  # fido2/__init__.py:
-  __version__ = 'x.y.q-dev.0'
 
 * Commit and push the change:
 
