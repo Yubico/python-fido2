@@ -3,6 +3,7 @@ from fido2.ctap2.pin import ClientPin
 from fido2.ctap2.blob import LargeBlobs
 from fido2.server import Fido2Server
 from fido2.utils import websafe_encode, websafe_decode
+from fido2 import cbor
 from . import TEST_PIN
 
 import os
@@ -47,6 +48,27 @@ def test_read_write(ctap2, pin_protocol):
     lb.delete_blob(key2)
     assert lb.get_blob(key2) is None
     assert len(lb.read_blob_array()) == 0
+
+
+def test_size_bounds(ctap2, pin_protocol):
+    lb = get_lb(ctap2, pin_protocol)
+    assert len(lb.read_blob_array()) == 0
+
+    size = ctap2.info.max_large_blob
+
+    # Create data which when cbor-encoded is exactly size bytes
+    array = [{1: os.urandom(size - 8)}]
+    array.extend([0] * (size - len(cbor.encode(array))))
+
+    lb.write_blob_array(array)
+
+    # Ensure writing larger data fails:
+    array.append(1)
+    with pytest.raises(CtapError, match="LARGE_BLOB_STORAGE_FULL"):
+        lb.write_blob_array(array)
+
+    # Clear the data
+    lb.write_blob_array([])
 
 
 def test_missing_permissions(ctap2, pin_protocol):
