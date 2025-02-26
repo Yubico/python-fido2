@@ -98,7 +98,7 @@ def get_client(predicate=None, **kwargs):
         # Set up a FIDO 2 client using the origin https://example.com
         client = Fido2Client(
             dev,
-            "https://example.com",
+            origin=kwargs.pop('origin', None) or "https://example.com",
             user_interaction=user_interaction,
             **kwargs,
         )
