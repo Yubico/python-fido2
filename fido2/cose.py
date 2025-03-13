@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from . import bls12_381
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -317,6 +318,18 @@ class EdDSA(CoseKey):
 class Ed25519(EdDSA):
     # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-edwards-curve-digital-signa  # noqa:E501
     ALGORITHM = -50
+
+
+class EcsdsaBls12_381_Sha256(CoseKey):
+    ALGORITHM = -65600  # Placeholder value
+    CURVE_BLS12_381 = -65601  # Placeholder value
+
+    def verify(self, message, signature):
+        if self[-1] != self.CURVE_BLS12_381:
+            raise ValueError("Unsupported elliptic curve")
+
+        pk = bls12_381.CRV_BLS.point_from_cose(self)
+        pk.verify_ecsdsa_sha256(signature, message)
 
 
 class RS1(CoseKey):

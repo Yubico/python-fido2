@@ -32,10 +32,16 @@ derive two separate secrets.
 """
 from fido2 import cbor
 from fido2.server import Fido2Server
-from fido2.utils import websafe_encode
-from fido2.cose import CoseKey, ESP256
+from fido2.utils import sha256, websafe_encode
+from fido2.cose import CoseKey, ES256, ESP256, EdDSA
 from exampleutils import get_client
 import sys
+
+from fido2.cose import CoseKey, EdDSA, ES256, EcsdsaBls12_381_Sha256
+from exampleutils import get_client
+import sys
+
+ESP256_2P = -70009  # Placeholder value
 
 uv = "discouraged"
 
@@ -54,14 +60,40 @@ create_options, state = server.register_begin(
 )
 
 message = b"I am a message"
-algorithms = [ESP256.ALGORITHM]
+algorithms = [
+    # ESP256_2P,
+    EcsdsaBls12_381_Sha256.ALGORITHM,
+]
+
+has_prehash_alg = any(
+    alg
+    in [
+        ESP256_2P,
+    ]
+    for alg in algorithms
+)
+has_raw_alg = any(
+    alg
+    in [
+        EdDSA.ALGORITHM,
+        ES256.ALGORITHM,
+        ESP256.ALGORITHM,
+        EcsdsaBls12_381_Sha256.ALGORITHM,
+    ]
+    for alg in algorithms
+)
+
+if has_prehash_alg and has_raw_alg:
+    raise ValueError("Cannot mix algorithms with pre-hashed and raw message")
+
+data = message if has_raw_alg else sha256(message)
 
 # Create a credential
 result = client.make_credential(
     {
         **create_options["publicKey"],
         "extensions": {
-            "sign": {"generateKey": {"algorithms": algorithms, "tbs": message}}
+            "sign": {"generateKey": {"algorithms": algorithms, "tbs": data}}
         },
     }
 )
@@ -100,6 +132,7 @@ if "signature" in sign_result:
     print("Signature verified!")
 
 message = b"New message"
+data = message if has_raw_alg else sha256(message)
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
@@ -111,7 +144,7 @@ result = client.get_assertion(
         "extensions": {
             "sign": {
                 "sign": {
-                    "tbs": message,
+                    "tbs": data,
                     "keyHandleByCredential": {
                         websafe_encode(credentials[0].credential_id): kh_bin,
                     },
