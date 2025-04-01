@@ -248,6 +248,7 @@ class ClientPin:
         BIO_ENROLL = 0x08
         LARGE_BLOB_WRITE = 0x10
         AUTHENTICATOR_CFG = 0x20
+        PERSISTENT_CREDENTIAL_MGMT = 0x40
 
     @staticmethod
     def is_supported(info):

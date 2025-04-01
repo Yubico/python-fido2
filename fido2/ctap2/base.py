@@ -34,6 +34,11 @@ from ..cose import CoseKey
 from ..hid import CTAPHID, CAPABILITY
 from ..webauthn import AuthenticatorData, Aaguid
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
 from enum import IntEnum, unique
 from dataclasses import dataclass, field, fields, Field
 from threading import Event
@@ -108,6 +113,24 @@ class Info(_CborDataObject):
     pin_complexity_policy: bool | None = None
     pin_complexity_policy_url: bytes | None = None
     max_pin_length: int = 63
+
+    def get_identifier(self, pin_token: bytes) -> bytes | None:
+        """Decrypt the device identifier using a persistent PUAT."""
+        if not self.enc_identifier:
+            return None
+
+        iv, ct = self.enc_identifier[:16], self.enc_identifier[16:]
+        be = default_backend()
+        secret = HKDF(
+            algorithm=hashes.SHA256(),
+            length=16,
+            salt=b"\0" * 32,
+            info=b"encIdentifier",
+            backend=be,
+        ).derive(pin_token)
+
+        dec = Cipher(algorithms.AES(secret), modes.CBC(iv), be).decryptor()
+        return dec.update(ct) + dec.finalize()
 
 
 @dataclass(eq=False, frozen=True)

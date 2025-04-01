@@ -123,3 +123,63 @@ def test_missing_permissions(ctap2, pin_protocol):
 
     with pytest.raises(CtapError, match="PIN_AUTH_INVALID"):
         credman.get_metadata()
+
+
+def test_read_only_management(dev_manager, pin_protocol):
+    if not CredentialManagement.is_readonly_supported(dev_manager.info):
+        pytest.skip("Persistent PUAT not supported")
+
+    rp = {"id": "example.com", "name": "Example RP"}
+    server = Fido2Server(rp)
+    user = {"id": b"user_id", "name": "A. User"}
+
+    create_options, state = server.register_begin(
+        user,
+        resident_key_requirement="required",
+    )
+
+    # Create a credential
+    result = dev_manager.client.make_credential(create_options["publicKey"])
+    auth_data = server.register_complete(state, result)
+    cred_id = {"id": auth_data.credential_data.credential_id, "type": "public-key"}
+    rp_id_hash = server.rp.id_hash
+
+    token = ClientPin(dev_manager.ctap2, pin_protocol).get_pin_token(
+        TEST_PIN, ClientPin.PERMISSION.PERSISTENT_CREDENTIAL_MGMT
+    )
+
+    # Get enc_identifier before reconnect
+    ident = dev_manager.ctap2.get_info().get_identifier(token)
+
+    # Test token before and after reconnect
+    for reconnect in (False, True):
+        if reconnect:
+            dev_manager.reconnect()
+
+        # Use persistent token
+        credman = CredentialManagement(dev_manager.ctap2, pin_protocol, token)
+
+        # Test metadata
+        assert credman.get_metadata()[1] == 1
+
+        # Test enumerate RPs and creds
+        rps = credman.enumerate_rps()
+        assert len(rps) == 1
+        creds = credman.enumerate_creds(rp_id_hash)
+        assert len(creds) == 1
+
+        # Ensure update isn't allowed
+        user2 = {"id": b"user_id", "name": "A. User 2"}
+        with pytest.raises(CtapError, match="PIN_AUTH_INVALID"):
+            credman.update_user_info(cred_id, user2)
+
+        # Ensure delete isn't allowed
+        with pytest.raises(CtapError, match="PIN_AUTH_INVALID"):
+            credman.delete_cred(cred_id)
+
+    # Compare enc_identifier after reconnect
+    assert dev_manager.ctap2.get_info().get_identifier(token) == ident
+
+    # Use new (non-persistent) PIN token
+    credman = get_credman(dev_manager.ctap2, pin_protocol)
+    credman.delete_cred(cred_id)

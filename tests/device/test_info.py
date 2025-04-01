@@ -55,3 +55,8 @@ def test_get_info_fields(ctap2):
 
     assert isinstance(info.uv_count_since_pin, int | None)
     assert isinstance(info.long_touch_for_reset, bool)
+
+
+def test_enc_identifier_changes(ctap2):
+    if ctap2.info.enc_identifier:
+        assert ctap2.get_info().enc_identifier != ctap2.get_info().enc_identifier
