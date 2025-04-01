@@ -8,6 +8,7 @@ from fido2.client import Fido2Client, ClientError
 
 from . import Printer, TEST_PIN, CliInteraction
 
+from dataclasses import replace
 from threading import Thread, Event
 
 import pytest
@@ -205,7 +206,9 @@ class DeviceManager:
             if len(added) == 1:
                 device = open_device(added.pop())
                 info2 = Ctap2(device).info
-                assert info == info2
+                assert replace(info, enc_identifier=None) == replace(
+                    info2, enc_identifier=None
+                )
                 return device
             elif len(added) > 1:
                 raise ValueError("Multiple Authenticators inserted")

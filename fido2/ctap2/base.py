@@ -103,6 +103,11 @@ class Info(_CborDataObject):
     attestation_formats: list[str] = field(default_factory=lambda: ["packed"])
     uv_count_since_pin: int | None = None
     long_touch_for_reset: bool = False
+    enc_identifier: bytes | None = None
+    transports_for_reset: list[str] = field(default_factory=list)
+    pin_complexity_policy: bool | None = None
+    pin_complexity_policy_url: bytes | None = None
+    max_pin_length: int = 63
 
 
 @dataclass(eq=False, frozen=True)
