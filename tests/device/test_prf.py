@@ -12,7 +12,7 @@ import pytest
 @pytest.fixture(autouse=True, scope="module")
 def preconditions(dev_manager):
     if "hmac-secret" not in dev_manager.info.extensions:
-        pytest.skip("HMAC-secret not supported by authenticator")
+        pytest.skip("hmac-secret not supported by authenticator")
 
 
 def test_prf(client, pin_protocol):
@@ -164,3 +164,62 @@ def test_hmac_secret(device, pin_protocol, printer):
     output = result.client_extension_results.hmac_get_secret
     assert output.output1 == output1
     assert output.output2 != output1
+
+
+def test_prf_mc(client, pin_protocol, info):
+    if "hmac-secret-mc" not in info.extensions:
+        pytest.skip("hmac-secret-mc not supported by authenticator")
+
+    rp = {"id": "example.com", "name": "Example RP"}
+    server = Fido2Server(rp)
+    user = {"id": b"user_id", "name": "A. User"}
+    uv = "required"
+
+    create_options, state = server.register_begin(user, user_verification=uv)
+
+    # Generate salts for PRF:
+    salt1 = websafe_encode(os.urandom(32))
+    salt2 = websafe_encode(os.urandom(32))
+
+    # Create a credential, with salts
+    result = client.make_credential(
+        {
+            **create_options["publicKey"],
+            "extensions": {"prf": {"eval": {"first": salt1, "second": salt2}}},
+        }
+    )
+    auth_data = server.register_complete(state, result)
+    credential = auth_data.credential_data
+
+    assert result.client_extension_results.prf.enabled is True
+    assert result.client_extension_results["prf"]["enabled"] is True
+
+    output = result.client_extension_results.prf.results
+    assert output.first
+    assert output.second
+
+    # Prepare parameters for getAssertion
+    credentials = [credential]
+    request_options, state = server.authenticate_begin(
+        credentials, user_verification=uv
+    )
+
+    # Authenticate the credential
+    result = client.get_assertion(
+        {
+            **request_options["publicKey"],
+            "extensions": {
+                "prf": {
+                    "evalByCredential": {
+                        websafe_encode(credential.credential_id): {
+                            "first": salt1,
+                            "second": salt2,
+                        }
+                    }
+                }
+            },
+        }
+    )
+
+    response = result.get_response(0)
+    assert output == response.client_extension_results.prf.results

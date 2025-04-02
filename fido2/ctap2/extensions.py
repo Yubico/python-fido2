@@ -190,6 +190,64 @@ class AuthenticatorExtensionsPRFOutputs(_JsonDataObject):
     results: AuthenticatorExtensionsPRFValues | None = None
 
 
+def _hmac_prepare_salts(allow_list, selected, prf, hmac):
+    if prf:
+        secrets = prf.eval
+        by_creds = prf.eval_by_credential
+        if by_creds:
+            # Make sure all keys are valid IDs from allow_credentials
+            if not allow_list:
+                raise ValueError("evalByCredentials requires allowCredentials")
+            ids = {websafe_encode(c.id) for c in allow_list}
+            if not ids.issuperset(by_creds):
+                raise ValueError("evalByCredentials contains invalid key")
+            if selected:
+                key = websafe_encode(selected.id)
+                if key in by_creds:
+                    secrets = by_creds[key]
+
+        if not secrets:
+            return
+
+        salts = (
+            _prf_salt(secrets.first),
+            (_prf_salt(secrets.second) if secrets.second is not None else b""),
+        )
+    elif hmac:
+        salts = hmac.salt1, hmac.salt2 or b""
+    else:
+        return
+
+    if not (
+        len(salts[0]) == HmacSecretExtension.SALT_LEN
+        and (not salts[1] or len(salts[1]) == HmacSecretExtension.SALT_LEN)
+    ):
+        raise ValueError("Invalid salt length")
+
+    return salts
+
+
+def _hmac_format_outputs(enabled, decrypted, prf):
+    output1 = decrypted[: HmacSecretExtension.SALT_LEN] if decrypted else None
+    output2 = decrypted[HmacSecretExtension.SALT_LEN :] if decrypted else None
+
+    if prf:
+        result = AuthenticatorExtensionsPRFOutputs(
+            enabled=enabled,
+            results=(
+                AuthenticatorExtensionsPRFValues(output1, output2) if output1 else None
+            ),
+        )
+        return {"prf": result} if result else None
+    else:
+        outputs = {}
+        if enabled is not None:
+            outputs["hmacCreateSecret"] = enabled
+        if output1:
+            outputs["hmacGetSecret"] = HMACGetSecretOutput(output1, output2)
+        return outputs or None
+
+
 class HmacSecretExtension(Ctap2Extension):
     """
     Implements the Pseudo-random function (prf) and the hmac-secret CTAP2 extensions.
@@ -205,6 +263,7 @@ class HmacSecretExtension(Ctap2Extension):
     """
 
     NAME = "hmac-secret"
+    MC_NAME = "hmac-secret-mc"
     SALT_LEN = 32
 
     def __init__(self, allow_hmac_secret=False):
@@ -214,24 +273,43 @@ class HmacSecretExtension(Ctap2Extension):
         return self.NAME in ctap.info.extensions
 
     def make_credential(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        prf = inputs.get("prf") is not None
-        hmac = self._allow_hmac_secret and inputs.get("hmacCreateSecret") is True
+        c_inputs = options.extensions or {}
+        prf = c_inputs.get("prf") is not None
+        hmac = self._allow_hmac_secret and c_inputs.get("hmacCreateSecret") is True
         if self.is_supported(ctap) and (prf or hmac):
+            inputs: dict[str, Any] = {HmacSecretExtension.NAME: True}
+            if self.MC_NAME in ctap.info.extensions:
+                prf_salts = AuthenticatorExtensionsPRFInputs.from_dict(
+                    c_inputs.get("prf")
+                )
+                hmac_salts = bool(hmac) and HMACGetSecretInput.from_dict(
+                    c_inputs.get("hmacGetSecret")
+                )
+                salts = _hmac_prepare_salts(None, None, prf_salts, hmac_salts)
+                if salts:
+                    client_pin = ClientPin(ctap, pin_protocol)
+                    key_agreement, shared_secret = client_pin._get_shared_secret()
+                    salt_enc = pin_protocol.encrypt(shared_secret, salts[0] + salts[1])
+                    salt_auth = pin_protocol.authenticate(shared_secret, salt_enc)
+                    inputs[HmacSecretExtension.MC_NAME] = {
+                        1: key_agreement,
+                        2: salt_enc,
+                        3: salt_auth,
+                        4: pin_protocol.VERSION,
+                    }
 
             class Processor(RegistrationExtensionProcessor):
                 def prepare_inputs(self, pin_token):
-                    return {HmacSecretExtension.NAME: True}
+                    return inputs
 
                 def prepare_outputs(self, response, pin_token):
                     extensions = response.auth_data.extensions or {}
                     enabled = extensions.get(HmacSecretExtension.NAME, False)
-                    if prf:
-                        return {
-                            "prf": AuthenticatorExtensionsPRFOutputs(enabled=enabled)
-                        }
-                    else:
-                        return {"hmacCreateSecret": enabled}
+                    value = extensions.get(HmacSecretExtension.MC_NAME)
+                    decrypted = (
+                        pin_protocol.decrypt(shared_secret, value) if value else None
+                    )
+                    return _hmac_format_outputs(enabled, decrypted, prf)
 
             return Processor()
 
@@ -250,49 +328,11 @@ class HmacSecretExtension(Ctap2Extension):
 
             class Processing(AuthenticationExtensionProcessor):
                 def prepare_inputs(self, selected, pin_token):
-                    if prf:
-                        secrets = prf.eval
-                        by_creds = prf.eval_by_credential
-                        if by_creds:
-                            # Make sure all keys are valid IDs from allow_credentials
-                            allow_list = options.allow_credentials
-                            if not allow_list:
-                                raise ValueError(
-                                    "evalByCredentials requires allowCredentials"
-                                )
-                            ids = {websafe_encode(c.id) for c in allow_list}
-                            if not ids.issuperset(by_creds):
-                                raise ValueError(
-                                    "evalByCredentials contains invalid key"
-                                )
-                            if selected:
-                                key = websafe_encode(selected.id)
-                                if key in by_creds:
-                                    secrets = by_creds[key]
-
-                        if not secrets:
-                            return
-
-                        salts = (
-                            _prf_salt(secrets.first),
-                            (
-                                _prf_salt(secrets.second)
-                                if secrets.second is not None
-                                else b""
-                            ),
-                        )
-                    else:
-                        assert hmac is not None  # nosec
-                        salts = hmac.salt1, hmac.salt2 or b""
-
-                    if not (
-                        len(salts[0]) == HmacSecretExtension.SALT_LEN
-                        and (
-                            not salts[1]
-                            or len(salts[1]) == HmacSecretExtension.SALT_LEN
-                        )
-                    ):
-                        raise ValueError("Invalid salt length")
+                    salts = _hmac_prepare_salts(
+                        options.allow_credentials, selected, prf, hmac
+                    )
+                    if not salts:
+                        return
 
                     salt_enc = pin_protocol.encrypt(shared_secret, salts[0] + salts[1])
                     salt_auth = pin_protocol.authenticate(shared_secret, salt_enc)
@@ -309,24 +349,10 @@ class HmacSecretExtension(Ctap2Extension):
                 def prepare_outputs(self, response, pin_token):
                     extensions = response.auth_data.extensions or {}
                     value = extensions.get(HmacSecretExtension.NAME)
-
-                    if value:
-                        decrypted = client_pin.protocol.decrypt(shared_secret, value)
-                        output1 = decrypted[: HmacSecretExtension.SALT_LEN]
-                        output2 = decrypted[HmacSecretExtension.SALT_LEN :] or None
-                    else:
-                        return None
-
-                    if prf:
-                        return {
-                            "prf": AuthenticatorExtensionsPRFOutputs(
-                                results=AuthenticatorExtensionsPRFValues(
-                                    output1, output2
-                                )
-                            )
-                        }
-                    else:
-                        return {"hmacGetSecret": HMACGetSecretOutput(output1, output2)}
+                    decrypted = (
+                        pin_protocol.decrypt(shared_secret, value) if value else None
+                    )
+                    return _hmac_format_outputs(None, decrypted, prf)
 
             return Processing()
 

@@ -34,6 +34,7 @@ from ..ctap2 import Ctap2, AssertionResponse, Info
 from ..ctap2.pin import ClientPin, PinProtocol
 from ..ctap2.extensions import (
     Ctap2Extension,
+    RegistrationExtensionProcessor,
     AuthenticationExtensionProcessor,
     _DEFAULT_EXTENSIONS,
 )
@@ -470,7 +471,7 @@ class _Ctap2ClientAssertionSelection(AssertionSelection):
         self._pin_token = pin_token
 
     def _get_extension_results(self, assertion):
-        # Process extenstion outputs
+        # Process extension outputs
         extension_outputs = {}
         try:
             for ext in self._extensions:
@@ -712,21 +713,23 @@ class _Ctap2ClientBackend(_ClientBackend):
         else:
             pin_protocol = None
 
-        # Gather UV permissions
-        permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
-        if exclude_list:
-            # We need this for filtering the exclude_list
-            permissions |= ClientPin.PERMISSION.GET_ASSERTION
-
-        # Initialize extensions and add extension permissions
-        used_extensions = []
-        for e in self._extensions:
-            ext = e.make_credential(self.ctap2, options, pin_protocol)
-            if ext:
-                used_extensions.append(ext)
-                permissions |= ext.permissions
+        used_extensions: list[RegistrationExtensionProcessor] = []
 
         def _do_make():
+            # Gather UV permissions
+            permissions = ClientPin.PERMISSION.MAKE_CREDENTIAL
+            if exclude_list:
+                # We need this for filtering the exclude_list
+                permissions |= ClientPin.PERMISSION.GET_ASSERTION
+
+            # Initialize extensions and add extension permissions
+            used_extensions.clear()
+            for e in self._extensions:
+                ext = e.make_credential(self.ctap2, options, pin_protocol)
+                if ext:
+                    used_extensions.append(ext)
+                    permissions |= ext.permissions
+
             # Handle auth
             pin_token, internal_uv = self._get_auth_params(
                 pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
@@ -758,17 +761,17 @@ class _Ctap2ClientBackend(_ClientBackend):
             )
 
             if not (rk or internal_uv):
-                options = None
+                opts = None
             else:
-                options = {}
+                opts = {}
                 if rk:
                     if not can_rk:
                         raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
                             "Resident key not supported"
                         )
-                    options["rk"] = True
+                    opts["rk"] = True
                 if internal_uv:
-                    options["uv"] = True
+                    opts["uv"] = True
 
             # Calculate pin_auth
             client_data_hash = client_data.hash
@@ -789,7 +792,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                     _cbor_list(key_params),
                     [_as_cbor(exclude_cred)] if exclude_cred else None,
                     extension_inputs or None,
-                    options,
+                    opts,
                     *pin_auth,
                     enterprise_attestation,
                     event=event,
@@ -825,7 +828,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                     continue
                 raise
 
-        # Process extenstion outputs
+        # Process extension outputs
         extension_outputs = {}
         try:
             for ext in used_extensions:
