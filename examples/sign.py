@@ -115,9 +115,10 @@ kh_bin = cbor.encode(kh)  # key handle in bytes
 print("public key", pk)
 print("keyHandle", kh)
 
-print("Test verify signature", sign_result["signature"])
-pk.verify(message, sign_result.signature)
-print("Signature verified!")
+if "signature" in sign_result:
+    print("Test verify signature", sign_result["signature"])
+    pk.verify(message, sign_result.signature)
+    print("Signature verified!")
 
 message = b"New message"
 data = message if has_raw_alg else sha256(message)
