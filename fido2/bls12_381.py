@@ -1,7 +1,10 @@
 import math
+import os
 
 from cryptography.exceptions import InvalidSignature
+from typing import Optional
 
+from . import cbor
 from .utils import sha256
 
 
@@ -41,7 +44,10 @@ class Curve:
         self.coord_len = coord_len
         self.scalar_len = scalar_len
         (gx, gy) = generator
-        self.generator = PointAffine(gx, gy, self)
+        self.generator = PointAffine(gx, gy, self).to_projective()
+
+    def zero(self):
+        return PointAffine(0, 0, self).zero().to_projective()
 
     def pow(self, b, e):
         return modpow(b, e, self.p)
@@ -57,13 +63,22 @@ class Curve:
             else:
                 return y
 
+    def insecure_random_scalar(self):
+        return int.from_bytes(os.urandom(self.scalar_len * 2), 'big') % self.n
+
+    def insecure_random_point(self):
+        return self.generator * self.insecure_random_scalar()
+
     def find_bls_generator(self):
         for x in range(0, 100):
             y = self.find_y(x)
             if y is not None:
                 g = PointAffine(x, y, self) * self.h
                 if g.is_valid_nonzero():
-                    return g
+                    return g.to_projective()
+
+    def scalar_to_big_endian(self, x):
+        return int.to_bytes(x, self.scalar_len, 'big')
 
     def point_from_cose(self, cose):
         assert cose[1] == 2  # kty: EC2
@@ -89,7 +104,7 @@ class PointAffine:
         self.crv = crv
 
     def __eq__(self, o):
-        assert isinstance(o, PointAffine) or isinstance(o, PointProjective)
+        assert isinstance(o, PointAffine) or isinstance(o, PointProjective), f'self: {self}, o: {o}'
         assert self.crv is o.crv
         if isinstance(o, PointProjective):
             return self.to_projective() == o
@@ -111,10 +126,21 @@ class PointAffine:
         return PointAffine(0, 0, self.crv, is_zero=True)
 
     def to_projective(self):
-        return PointProjective(self.x, self.y, 1, self.crv)
+        q = PointProjective(self.x, self.y, 1, self.crv)
+        if self.is_zero:
+            return q.zero()
+        else:
+            return q
+
+    def coordinate_to_big_endian(self, x):
+        return int.to_bytes(x, self.crv.coord_len, 'big')
+
+    def to_big_endian_coordinates(self):
+        return (self.coordinate_to_big_endian(self.x), self.coordinate_to_big_endian(self.y))
 
     def to_sec1_uncompressed(self):
-        return bytes([0x04]) + int.to_bytes(self.x, self.crv.coord_len, 'big') + int.to_bytes(self.y, self.crv.coord_len, 'big')
+        x, y = self.to_big_endian_coordinates()
+        return bytes([0x04]) + x + y
 
     def is_valid_nonzero(self):
         return not self.is_zero and self.crv.pow(self.y, 2) == (self.crv.pow(self.x, 3) + self.crv.a * self.x + self.crv.b) % self.crv.p
@@ -123,7 +149,7 @@ class PointAffine:
         return PointAffine(self.x, (-self.y) % self.crv.p, self.crv, is_zero=self.is_zero)
 
     def __add__(self, q):
-        assert isinstance(q, PointAffine)
+        assert isinstance(q, PointAffine), f'p: {self}, q: {q}'
         assert self.crv is q.crv
         p = self
 
@@ -151,6 +177,7 @@ class PointAffine:
             return PointAffine(xr, yr, self.crv)
 
     def __mul__(self, k):
+        k = k % self.crv.n
         pPow2 = self
         result = self.zero()
 
@@ -175,16 +202,16 @@ class PointProjective:
         assert self.crv is o.crv
         if isinstance(o, PointAffine):
             return self == o.to_projective()
-        if self.z == 0 and o.z == 0:
+        if self.is_zero() and o.is_zero():
             return True
-        elif (self.z == 0) != (o.z == 0):
+        elif (self.is_zero()) != (o.is_zero()):
             return False
         else:
             return (((self.x * o.z) % self.crv.p == (o.x * self.z) % self.crv.p)
                     and ((self.y * o.z) % self.crv.p == (o.y * self.z) % self.crv.p))
 
     def __repr__(self):
-        if self.z == 0:
+        if self.is_zero():
             return "(ZERO)"
         else:
             l = math.ceil(math.log2(self.crv.p)/8)
@@ -197,8 +224,11 @@ class PointProjective:
         zinv = modinv(self.z, self.crv.p)
         return PointAffine((self.x * zinv) % self.crv.p, (self.y * zinv) % self.crv.p, self.crv)
 
+    def is_zero(self):
+        return self.z == 0
+
     def is_valid_nonzero(self):
-        if self.z == 0:
+        if self.is_zero():
             return False
         else:
             z2 = self.crv.pow(self.z, 2)
@@ -215,10 +245,10 @@ class PointProjective:
         assert self.crv is q.crv
         p = self
 
-        if self.z == 0:
+        if self.is_zero():
             return q
 
-        elif q.z == 0:
+        elif q.is_zero():
             return p
 
         else:
@@ -256,6 +286,7 @@ class PointProjective:
                 return PointProjective(xr, yr, zr, self.crv)
 
     def __mul__(self, k):
+        k = k % self.crv.n
         pPow2 = self
         result = self.zero()
 
@@ -267,17 +298,190 @@ class PointProjective:
 
         return result
 
+    def to_sec1_uncompressed(self):
+        return self.to_affine().to_sec1_uncompressed()
+
     def verify_ecsdsa_sha256(self, signature: bytes, message: bytes):
         assert len(signature) == self.crv.scalar_len * 2
         s = int.from_bytes(signature[:self.crv.scalar_len], 'big')
         e = int.from_bytes(signature[self.crv.scalar_len:], 'big')
-        rv = self.crv.generator.to_projective() * s + self * e
+        rv = self.crv.generator * s + self * e
         rv_bin = rv.to_affine().to_sec1_uncompressed()
         ev_bin = sha256(rv_bin + message)
         ev = int.from_bytes(ev_bin, 'big') % self.crv.n
         if ev == e:
             return
         raise InvalidSignature()
+
+    def verify_ecsdsa_sha256_split_bbs(self, signature: bytes, message: bytes, t2prime: Optional[any]):
+        '''Verification of device binding signature based on "Split BBS" proposal by Cordian Daniluk and Anja Lehmann'''
+        assert len(signature) == self.crv.scalar_len * 3
+        if t2prime is None:
+            t2prime = self.crv.generator * 0
+        s = int.from_bytes(signature[:self.crv.scalar_len], 'big')
+        c = signature[self.crv.scalar_len:self.crv.scalar_len*2]
+        c_int = int.from_bytes(c, 'big')
+        n = signature[self.crv.scalar_len*2:]
+        t_dsk = self.crv.generator * s + self * c_int
+        t2 = t_dsk + t2prime
+        t2_bin = t2.to_sec1_uncompressed()
+        cv = sha256(n + t2_bin + message)
+        if cv == c:
+            return
+        raise InvalidSignature()
+
+
+def split_bbs_sign(
+        crv: Curve,
+        sk: int,
+        dpk: PointProjective,
+        attrs: list[int],
+        attr_generators: list[PointProjective],
+) -> tuple[PointProjective, int]:
+    g1 = crv.generator
+    e = crv.insecure_random_scalar()
+    A = (g1 + dpk + sum((hi * ai for hi, ai in zip(attr_generators, attrs)), crv.zero())) * modinv((e + sk) % crv.n, crv.n)
+    if A.is_zero():
+        raise ValueError("A was zero")
+    return A, e
+
+
+def begin_split_bbs_proof(
+        A: PointProjective,
+        e: int,
+        dpk: PointProjective,
+        attrs: list[int],
+        attr_generators: list[PointProjective],
+        pk: PointProjective,
+        disclose_idx: set[int],
+        ctx: bytes,
+):
+    '''First part of "Split BBS.ZKProve" based on proposal by Cordian Daniluk and Anja Lehmann'''
+    assert len(attrs) == len(attr_generators)
+    assert all(d >= 0 and d < len(attrs) for d in disclose_idx)
+    assert 0 not in disclose_idx
+
+    crv = CRV_BLS
+    g1 = crv.generator
+    idx = list(range(len(attrs)))
+    undisclosed_idx = set(idx) - disclose_idx
+    undisclosed_idx_nonzero = undisclosed_idx - set([0])
+
+    r1 = crv.insecure_random_scalar()
+    r2 = crv.insecure_random_scalar()
+    r2inv = modinv(r2, crv.n)
+    Abar = A * (r1 * r2inv)
+    D = (g1 + dpk + sum((hi * ai for hi, ai in zip(attr_generators[1:], attrs[1:])), crv.zero())) * r2inv
+    Bbar = (D * r1) + (Abar * (-e))
+    rr1 = crv.insecure_random_scalar()
+    rr2 = crv.insecure_random_scalar()
+    re = crv.insecure_random_scalar()
+    rai = [crv.insecure_random_scalar() if i in undisclosed_idx_nonzero else None for i in idx]
+    t1 = (D * rr1) + (Abar * re)
+    t2prime = D * rr2 + sum((attr_generators[i] * rai[i] for i in undisclosed_idx_nonzero), crv.zero())
+    c_host = sha256(cbor.encode([
+        Abar.to_sec1_uncompressed(),
+        Bbar.to_sec1_uncompressed(),
+        D.to_sec1_uncompressed(),
+        g1.to_sec1_uncompressed(),
+        g1.to_sec1_uncompressed(),
+        [gen.to_sec1_uncompressed() for gen in attr_generators],
+        len(attr_generators) + 1,
+        t1.to_sec1_uncompressed(),
+        [crv.scalar_to_big_endian(attrs[i]) for i in sorted(disclose_idx)],
+        sorted(disclose_idx),
+        pk.to_sec1_uncompressed(),
+    ]))
+
+    return c_host, rr1, r1, rr2, r2, re, e, rai, attrs, disclose_idx, Abar, Bbar, D, t2prime, dpk
+
+
+def finish_split_bbs_proof(
+        c_host: bytes,
+        rr1: int, r1: int, rr2: int, r2: int, re: int, e: int, rai: list[int],
+        attrs: list[int],
+        disclose_idx: set[int],
+        Abar: PointProjective,
+        Bbar: PointProjective,
+        D: PointProjective,
+        sa0: int,
+        c: bytes,
+        n: bytes,
+        t2prime: PointProjective,
+        dpk: PointProjective,
+):
+    '''Second part of "Split BBS.ZKProve" based on proposal by Cordian Daniluk and Anja Lehmann'''
+    assert len(attrs) == len(rai)
+    assert 0 not in disclose_idx
+
+    crv = CRV_BLS
+    g1 = crv.generator
+    idx = list(range(len(attrs)))
+    undisclosed_idx = set(range(len(attrs))) - disclose_idx
+    undisclosed_idx_nonzero = undisclosed_idx - set([0])
+    c_bin = c
+
+    c = int.from_bytes(c, 'big')
+    t_dsk = g1 * sa0 + dpk * c
+    t2 = t_dsk + t2prime
+    t2_bin = t2.to_sec1_uncompressed()
+    c2 = sha256(n + t2_bin + c_host)
+    assert c2 == c_bin
+
+    sr1 = (rr1 + c * r1) % crv.n
+    sr2 = (rr2 + c * r2) % crv.n
+    se = (re - c * e) % crv.n
+    sai = [
+        sa0,
+        *[rai[i] - c * attrs[i] if i in undisclosed_idx_nonzero else None for i in idx[1:]]
+    ]
+
+    return Abar, Bbar, D, c, sr1, sr2, se, sai, n
+
+def verify_split_bbs_proof(
+        Abar: PointProjective,
+        Bbar: PointProjective,
+        D: PointProjective,
+        c: int,
+        sr1: int,
+        sr2: int,
+        se: int,
+        sai: list[int],
+        pk: PointProjective,
+        disclosed_idx: set[int],
+        attrs: list[int | None],
+        attr_generators: list[PointProjective],
+        ctx: bytes,
+        n: bytes,
+):
+    assert len(attrs) == len(attr_generators)
+    assert len(sai) == len(attr_generators)
+    assert all(d >= 0 and d < len(attr_generators) for d in disclosed_idx)
+
+    crv = CRV_BLS
+    g1 = crv.generator
+    undisclosed_idx = set(range(len(attr_generators))) - disclosed_idx
+
+    t1 = D * sr1 + Abar * se + Bbar * (-c)
+    t2 = (
+        D * sr2 + sum((attr_generators[i] * sai[i] for i in undisclosed_idx), crv.zero())
+        + (g1 + sum((attr_generators[i] * attrs[i] for i in disclosed_idx), crv.zero())) * (-c))
+
+    c_host = sha256(cbor.encode([
+        Abar.to_sec1_uncompressed(),
+        Bbar.to_sec1_uncompressed(),
+        D.to_sec1_uncompressed(),
+        g1.to_sec1_uncompressed(),
+        g1.to_sec1_uncompressed(),
+        [gen.to_sec1_uncompressed() for gen in attr_generators],
+        len(attr_generators) + 1,
+        t1.to_sec1_uncompressed(),
+        [crv.scalar_to_big_endian(attrs[i]) for i in sorted(disclosed_idx)],
+        sorted(disclosed_idx),
+        pk.to_sec1_uncompressed(),
+    ]))
+    cv = sha256(n + t2.to_sec1_uncompressed() + c_host)
+    return cv == int.to_bytes(c, crv.scalar_len, 'big')
 
 
 CRV_BLS = Curve(
