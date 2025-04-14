@@ -54,11 +54,12 @@ def test_size_bounds(ctap2, pin_protocol):
     lb = get_lb(ctap2, pin_protocol)
     assert len(lb.read_blob_array()) == 0
 
-    size = ctap2.info.max_large_blob
+    # The max storage is the CBOR-encoded array, minus a 16 byte checksum
+    max_size = ctap2.info.max_large_blob - 16
 
-    # Create data which when cbor-encoded is exactly size bytes
-    array = [{1: os.urandom(size - 8)}]
-    array.extend([0] * (size - len(cbor.encode(array))))
+    # Create data which when cbor-encoded is exactly max_size bytes
+    array = [{1: os.urandom(max_size - 8)}]
+    array.extend([0] * (max_size - len(cbor.encode(array))))
 
     lb.write_blob_array(array)
 
