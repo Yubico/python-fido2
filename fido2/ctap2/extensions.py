@@ -649,13 +649,13 @@ class ThirdPartyPaymentExtension(Ctap2Extension):
 @dataclass(eq=False, frozen=True)
 class _SignGenerateKeyInputs(_JsonDataObject):
     algorithms: Sequence[int]
-    ph_data: bytes | None = None
+    tbs: bytes | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class _SignSignInputs(_JsonDataObject):
-    ph_data: bytes
     key_handle_by_credential: Mapping[str, bytes]
+    tbs: bytes
 
 
 @dataclass(eq=False, frozen=True)
@@ -667,7 +667,8 @@ class _SignInputs(_JsonDataObject):
 @dataclass(eq=False, frozen=True)
 class _SignGeneratedKey(_JsonDataObject):
     public_key: bytes
-    key_handle: bytes
+    algorithm: int
+    attestation_object: bytes
 
 
 @dataclass(eq=False, frozen=True)
@@ -710,8 +711,8 @@ class SignExtension(Ctap2Extension):
                 )
                 outputs = {3: gk.algorithms, 4: flags}
 
-                if gk.ph_data:
-                    outputs[0] = gk.ph_data
+                if gk.tbs:
+                    outputs[6] = gk.tbs
 
                 return {SignExtension.NAME: outputs}
 
@@ -720,8 +721,11 @@ class SignExtension(Ctap2Extension):
                 data = extensions.get(SignExtension.NAME)
                 if not data:
                     return None
+                att_obj_bytes = response.unsigned_extension_outputs[SignExtension.NAME][
+                    7
+                ]
                 att_obj = AttestationResponse.from_dict(
-                    cbor.decode(data[7])  # type: ignore
+                    cbor.decode(att_obj_bytes)  # type: ignore
                 )
                 cred_data = att_obj.auth_data.credential_data
                 assert cred_data is not None  # noqa: S101
@@ -731,7 +735,8 @@ class SignExtension(Ctap2Extension):
                     SignExtension.NAME: _SignOutputs(
                         generated_key=_SignGeneratedKey(
                             public_key=cbor.encode(pk),
-                            key_handle=cbor.encode(pk.get_ref()),
+                            algorithm=data.get(3),
+                            attestation_object=att_obj_bytes,
                         ),
                         signature=data.get(6),
                     )
@@ -764,8 +769,8 @@ class SignExtension(Ctap2Extension):
 
                 return {
                     SignExtension.NAME: {
-                        0: sign.ph_data,
-                        5: [kh],
+                        5: kh,
+                        6: sign.tbs,
                     }
                 }
 

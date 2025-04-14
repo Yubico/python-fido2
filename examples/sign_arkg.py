@@ -121,7 +121,7 @@ result = client.get_assertion(
         "extensions": {
             "sign": {
                 "sign": {
-                    "phData": ph_data,
+                    "tbs": ph_data,
                     "keyHandleByCredential": {
                         websafe_encode(credentials[0].credential_id): kh,
                     },
