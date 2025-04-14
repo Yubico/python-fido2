@@ -36,9 +36,11 @@ import sys
 from exampleutils import get_client
 
 from fido2 import cbor
-from fido2.cose import ES256, CoseKey
+from fido2.cose import ES256, ESP256, CoseKey, EdDSA
 from fido2.server import Fido2Server
 from fido2.utils import sha256, websafe_encode
+
+ESP256_2P = -70009  # Placeholder value
 
 uv = "discouraged"
 
@@ -56,17 +58,34 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
+algorithms = [
+    ESP256_2P,
+]
+
 message = b"I am a message"
-ph_data = sha256(message)
+
+has_prehash_alg = any(alg in [ESP256_2P] for alg in algorithms)
+has_raw_alg = any(
+    alg
+    in [
+        EdDSA.ALGORITHM,
+        ES256.ALGORITHM,
+        ESP256.ALGORITHM,
+    ]
+    for alg in algorithms
+)
+
+if has_prehash_alg and has_raw_alg:
+    raise ValueError("Cannot mix algorithms with pre-hashed and raw message")
+
+data = message if has_raw_alg else sha256(message)
 
 # Create a credential
 result = client.make_credential(
     {
         **create_options["publicKey"],
         "extensions": {
-            "sign": {
-                "generateKey": {"algorithms": [ES256.ALGORITHM], "phData": ph_data}
-            }
+            "sign": {"generateKey": {"algorithms": algorithms, "tbs": data}}
         },
     }
 )
@@ -86,18 +105,25 @@ if not sign_key:
     )
     sys.exit(1)
 print("New credential created, with the sign extension.")
+if sign_key.algorithm not in algorithms:
+    print("Got unexpected algorithm in response:", sign_key.algorithm)
+    sys.exit(1)
 
 pk = CoseKey.parse(cbor.decode(sign_key.public_key))  # COSE key in bytes
-kh = sign_key.key_handle  # key handle in bytes
+kh = pk.get_ref()
+kh[3] = sign_key.algorithm
+if pk[1] == 2:  # EC2
+    kh[-1] = pk[-1]  # crv
+kh_bin = cbor.encode(kh)  # key handle in bytes
 print("public key", pk)
-print("keyHandle", sign_key["keyHandle"])
+print("keyHandle", kh)
 
 print("Test verify signature", sign_result["signature"])
 pk.verify(message, sign_result.signature)
 print("Signature verified!")
 
 message = b"New message"
-ph_data = sha256(message)
+data = message if has_raw_alg else sha256(message)
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
@@ -109,9 +135,9 @@ result = client.get_assertion(
         "extensions": {
             "sign": {
                 "sign": {
-                    "phData": ph_data,
+                    "tbs": data,
                     "keyHandleByCredential": {
-                        websafe_encode(credentials[0].credential_id): kh,
+                        websafe_encode(credentials[0].credential_id): kh_bin,
                     },
                 },
             }
