@@ -31,7 +31,7 @@ from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519, types
-from typing import Sequence, Type, Mapping, Any, TypeVar
+from typing import Optional, Sequence, Type, Mapping, Any, TypeVar
 
 
 class CoseKey(dict):
@@ -78,10 +78,21 @@ class CoseKey(dict):
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
-        for cls in CoseKey.__subclasses__():
-            if cls.ALGORITHM == alg:
-                return cls
-        return UnsupportedKey
+
+        def find_subclass(alg: int, base_cls: type[CoseKey]) -> Optional[Type[CoseKey]]:
+            for cls in base_cls.__subclasses__():
+                if cls.ALGORITHM == alg:
+                    return cls
+                subresult = find_subclass(alg, cls)
+                if subresult is not None:
+                    return subresult
+            return None
+
+        result = find_subclass(alg, CoseKey)
+        if result is None:
+            return UnsupportedKey
+        else:
+            return result
 
     @staticmethod
     def for_name(name: str) -> Type[CoseKey]:
@@ -90,10 +101,23 @@ class CoseKey(dict):
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
-        for cls in CoseKey.__subclasses__():
-            if cls.__name__ == name:
-                return cls
-        return UnsupportedKey
+
+        def find_subclass(
+            name: str, base_cls: type[CoseKey]
+        ) -> Optional[Type[CoseKey]]:
+            for cls in base_cls.__subclasses__():
+                if cls.__name__ == name:
+                    return cls
+                subresult = find_subclass(name, cls)
+                if subresult is not None:
+                    return subresult
+            return None
+
+        result = find_subclass(name, CoseKey)
+        if result is None:
+            return UnsupportedKey
+        else:
+            return result
 
     @staticmethod
     def parse(cose: Mapping[int, Any]) -> CoseKey:
@@ -160,6 +184,11 @@ class ES256(CoseKey):
         :return: A ES256 key.
         """
         return cls({1: 2, 3: cls.ALGORITHM, -1: 1, -2: data[1:33], -3: data[33:65]})
+
+
+class ESP256(ES256):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-02.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -9
 
 
 class ES384(CoseKey):
