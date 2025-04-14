@@ -120,6 +120,7 @@ class AttestationResponse(_CborDataObject):
     att_stmt: Dict[str, Any]
     ep_att: Optional[bool] = None
     large_blob_key: Optional[bytes] = None
+    unsigned_extension_outputs: Optional[Dict[str, Any]] = None
 
 
 @dataclass(eq=False, frozen=True)
