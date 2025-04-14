@@ -58,7 +58,12 @@ class CoseKey(dict):
 
     def get_ref(self) -> Mapping[int, Any]:
         """Returns a COSE Key Reference for the key."""
-        return {k: self[k] for k in (1, 2, 3) if k in self}
+        kh = {k: self[k] for k in (1, 2, 3) if k in self}
+        if kh[1] == 2:  # EC2
+            kh[1] = -2  # Ref-EC2
+        else:
+            raise ValueError("Key reference type is unknown for key type: " + kh[1])
+        return kh
 
     @classmethod
     def from_cryptography_key(
@@ -151,11 +156,6 @@ class ES256(CoseKey):
         ).public_key(default_backend()).verify(
             signature, message, ec.ECDSA(self._HASH_ALG)
         )
-
-    def get_ref(self):
-        kh = dict(super().get_ref())
-        kh[1] = -2  # Ref-EC2
-        return kh
 
     @classmethod
     def from_cryptography_key(cls, public_key):
