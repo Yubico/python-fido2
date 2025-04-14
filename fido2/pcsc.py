@@ -34,7 +34,6 @@ from .utils import LOG_LEVEL_TRAFFIC
 from smartcard import System
 from smartcard.CardConnection import CardConnection
 from smartcard.pcsc.PCSCExceptions import ListReadersException
-from smartcard.pcsc.PCSCContext import PCSCContext
 
 from threading import Event
 from typing import Callable, Iterator
@@ -243,9 +242,15 @@ class CtapPcscDevice(CtapDevice):
 def _list_readers():
     try:
         return System.readers()
-    except ListReadersException:
+    except ListReadersException as e:
         # If the PCSC system has restarted the context might be stale, try
         # forcing a new context (This happens on Windows if the last reader is
         # removed):
-        PCSCContext.instance = None
-        return System.readers()
+        try:
+            from smartcard.pcsc.PCSCContext import PCSCContext
+
+            PCSCContext.instance = None
+            return System.readers()
+        except ImportError:
+            # As of pyscard 2.2.2 the PCSCContext singleton has been removed
+            raise e
