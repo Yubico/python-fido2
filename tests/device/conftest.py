@@ -247,7 +247,23 @@ class DeviceManager:
 
         self.reconnect()
 
-        self.ctap2.reset(on_keepalive=self.on_keepalive)
+        if self.info.long_touch_for_reset:
+            prompted = [0]
+
+            def on_keepalive_reset(status):
+                if status != prompted[0]:
+                    prompted[0] = status
+                    if status == 2:
+                        self.printer.print(
+                            "👉👉👉 Press the Authenticator button for 10 seconds..."
+                        )
+                    elif status == 1:
+                        self.printer.print("✅ You can now release the button!")
+
+        else:
+            on_keepalive_reset = self.on_keepalive
+
+        self.ctap2.reset(on_keepalive=on_keepalive_reset)
 
         if setup:
             self.setup()
