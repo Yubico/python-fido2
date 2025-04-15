@@ -63,11 +63,11 @@ def test_change_pin(client_pin):
     client_pin.get_pin_token(TEST_PIN)
 
 
-def test_set_and_reset(dev_manager, client_pin):
+def test_set_and_reset(dev_manager, client_pin, factory_reset):
     assert dev_manager.ctap2.get_info().options["clientPin"] is True
     assert client_pin.get_pin_retries()[0] == 8
 
-    dev_manager.factory_reset()
+    factory_reset()
     client_pin = ClientPin(dev_manager.ctap2, client_pin.protocol)
     # Factory reset clears the PIN
     assert dev_manager.ctap2.get_info().options["clientPin"] is False

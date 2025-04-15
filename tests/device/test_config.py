@@ -86,7 +86,9 @@ def test_force_pin_change(ctap2, pin_protocol, client_pin):
     client_pin.get_pin_token(TEST_PIN)
 
 
-def test_min_pin_length(dev_manager, ctap2, pin_protocol, client_pin, printer):
+def test_min_pin_length(
+    dev_manager, ctap2, pin_protocol, client_pin, printer, factory_reset
+):
     config = get_config(ctap2, pin_protocol)
 
     orig_len = ctap2.info.min_pin_length
@@ -145,12 +147,12 @@ def test_min_pin_length(dev_manager, ctap2, pin_protocol, client_pin, printer):
         assert auth_data.extensions["minPinLength"] == orig_len + 6
 
     # Restore original config
-    dev_manager.factory_reset(setup=True)
+    factory_reset(setup=True)
     assert dev_manager.info.min_pin_length == orig_len
 
 
 @pytest.fixture(scope="module")
-def enable_ep(dev_manager):
+def enable_ep(dev_manager, factory_reset):
     if "ep" not in dev_manager.info.options:
         pytest.skip("Enterprise Attestation not supported")
 
@@ -165,7 +167,7 @@ def enable_ep(dev_manager):
     yield None
 
     # Restore original config
-    dev_manager.factory_reset(setup=True)
+    factory_reset(setup=True)
     assert dev_manager.info.options["ep"] is False
 
 

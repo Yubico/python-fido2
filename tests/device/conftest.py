@@ -50,14 +50,27 @@ class DeviceManager:
             self._dev = self._select()
 
         if self.has_ctap2():
-            options = Ctap2(self.device).info.options
-            if options.get("clientPin") or options.get("uv"):
+            info = Ctap2(self.device).info
+            if info.transports_for_reset:
+                transport = "nfc" if reader_name else "usb"
+                self._can_reset = transport in info.transports_for_reset
+            else:
+                self._can_reset = True
+            if info.options.get("clientPin") or info.options.get("uv"):
                 self.printer.print(
                     "As a precaution, these tests will not run on an authenticator "
                     "which is configured with any form of UV. Factory reset the "
                     "authenticator prior to running tests against it."
                 )
                 pytest.exit("Authenticator must be in a newly-reset state!")
+
+            if not self._can_reset:
+                self.printer.print(
+                    "⚠️  FACTORY RESET NOT ENABLED FOR THIS TRANSPORT! ⚠️ ",
+                    "Some tests will be skipped, and the authenticator will be left "
+                    "in a state where it will need to be factory reset through another"
+                    "transport to be used.",
+                )
 
         self.setup()
 
@@ -221,7 +234,15 @@ class DeviceManager:
             self._dev = self._reconnect_usb()
         return self._dev
 
-    def factory_reset(self, setup=False):
+    def _factory_reset(self, setup=False):
+        if not self._can_reset:
+            self.printer.print(
+                "☠️  FACTORY RESET CALLED! ☠️ ",
+                "",
+                "This test should have been marked as requiring reset!",
+            )
+            pytest.exit("FACTORY RESET CALLED")
+
         self.printer.print("⚠️  PERFORMING FACTORY RESET! ⚠️ ")
 
         self.reconnect()
@@ -252,9 +273,16 @@ def dev_manager(pytestconfig, printer):
 
     yield manager
 
-    # after the test, reset the device
-    if manager.has_ctap2():
-        manager.factory_reset()
+    # after the test, reset the device, if possible
+    if manager._can_reset:
+        manager._factory_reset()
+
+
+@pytest.fixture(scope="session")
+def factory_reset(dev_manager):
+    if dev_manager._can_reset:
+        return dev_manager._factory_reset
+    pytest.skip("Requires factory reset")
 
 
 @pytest.fixture

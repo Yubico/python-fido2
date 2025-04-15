@@ -29,9 +29,14 @@ def credential(dev_manager):
 
 
 @pytest.fixture(scope="module")
-def discoverable_credential(dev_manager):
+def discoverable_credential(request, dev_manager):
     if not dev_manager.has_ctap2():
         pytest.skip("Authenticator does not support CTAP 2")
+
+    has_credman = CredentialManagement.is_supported(dev_manager.info)
+    if not has_credman:
+        # Request dynamically since we don't want to skip the test unless needed
+        factory_reset = request.getfixturevalue("factory_reset")
 
     create_options, state = server.register_begin(
         user,
@@ -42,14 +47,14 @@ def discoverable_credential(dev_manager):
     yield auth_data.credential_data
 
     # Delete credential via credman, or factory reset
-    if CredentialManagement.is_supported(dev_manager.info):
+    if has_credman:
         client_pin = ClientPin(dev_manager.ctap2)
         token = client_pin.get_pin_token(TEST_PIN, ClientPin.PERMISSION.CREDENTIAL_MGMT)
         credman = CredentialManagement(dev_manager.ctap2, client_pin.protocol, token)
         cred_id = {"id": auth_data.credential_data.credential_id, "type": "public-key"}
         credman.delete_cred(cred_id)
     else:
-        dev_manager.factory_reset(setup=True)
+        factory_reset(setup=True)
 
 
 def test_exclude_credentials_single(credential, client, excluded_match):
