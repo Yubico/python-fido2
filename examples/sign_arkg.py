@@ -41,7 +41,7 @@ import sys
 uv = "discouraged"
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: "sign" in client.info.extensions)
+client, info = get_client(lambda info: "sign" in info.extensions)
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
 user = {"id": b"user_id", "name": "A. User"}
@@ -65,18 +65,19 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 print("New credential created, with the sign extension.")
 
 # PRF result:
-sign_result = result.extension_results.get("sign")
+sign_result = result.client_extension_results.get("sign")
 print("CREATE sign result", sign_result)
 sign_key = sign_result.get("generatedKey")
 if not sign_key:
-    print("Failed to create credential with sign extension", result.extension_results)
+    print(
+        "Failed to create credential with sign extension",
+        result.client_extension_results,
+    )
     sys.exit(1)
 
 # Extension output contains master public key and keyHandle
@@ -130,7 +131,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-sign_result = result.extension_results["sign"]
+sign_result = result.client_extension_results["sign"]
 print("GET sign result", sign_result)
 
 # Response contains a signature over message
