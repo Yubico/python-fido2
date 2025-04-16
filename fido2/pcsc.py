@@ -192,27 +192,34 @@ class CtapPcscDevice(CtapDevice):
         on_keepalive: Callable[[STATUS], None] | None = None,
     ) -> bytes:
         event = event or Event()
+
         # NFCCTAP_MSG
         p1 = 0x80 if self.use_nfcctap_getresponse else 0x00
         resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, p1, 0x00, data)
         last_ka = None
 
-        while not event.is_set():
+        # NFCCTAP_GETRESPONSE
+        p1 = 0x00
+        try:
             while (sw1, sw2) == SW_UPDATE:
                 ka_status = STATUS(resp[0])
                 if on_keepalive and last_ka != ka_status:
                     last_ka = ka_status
                     on_keepalive(ka_status)
 
-                # NFCCTAP_GETRESPONSE
-                resp, sw1, sw2 = self._chain_apdus(0x80, 0x11, 0x00, 0x00)
+                if event.wait(0.1):
+                    p1 = 0x11  # cancel
+                resp, sw1, sw2 = self._chain_apdus(0x80, 0x11, p1, 0x00)
+        except KeyboardInterrupt:
+            logger.debug("Keyboard interrupt, cancelling...")
+            self._chain_apdus(0x80, 0x11, 0x11, 0x00)
 
-            if (sw1, sw2) != SW_SUCCESS:
-                raise CtapError(CtapError.ERR.OTHER)  # TODO: Map from SW error
+            raise
 
-            return resp
+        if (sw1, sw2) != SW_SUCCESS:
+            raise CtapError(CtapError.ERR.OTHER)  # TODO: Map from SW error
 
-        raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
+        return resp
 
     def call(
         self,

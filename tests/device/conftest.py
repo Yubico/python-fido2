@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class DeviceManager:
-    def __init__(self, printer, reader_name):
+    def __init__(self, printer, reader_name, ccid):
         self.printer = printer
 
         self.printer.print(
@@ -36,6 +36,7 @@ class DeviceManager:
             "ANY CREDENTIALS ON THIS AUTHENTICATOR WILL BE PERMANENTLY DELETED!",
         )
 
+        self._transport = "usb"
         if reader_name:
             try:
                 from fido2.pcsc import _list_readers
@@ -47,7 +48,9 @@ class DeviceManager:
             ]
             if len(readers) == 1:
                 self._reader = readers[0]
-                self._dev = self._connect_nfc(self._reader, False)
+                self._dev = self._connect_pcsc(self._reader, not ccid)
+                if not ccid:
+                    self._transport = "nfc"
             else:
                 pytest.exit(f"No/Multiple NFC readers found matching '{reader_name}'")
         else:
@@ -57,8 +60,7 @@ class DeviceManager:
         if self.has_ctap2():
             info = Ctap2(self.device).info
             if info.transports_for_reset:
-                transport = "nfc" if reader_name else "usb"
-                self._can_reset = transport in info.transports_for_reset
+                self._can_reset = self._transport in info.transports_for_reset
             else:
                 self._can_reset = True
             if info.options.get("clientPin") or info.options.get("uv"):
@@ -137,13 +139,12 @@ class DeviceManager:
         else:
             pytest.exit("No Authenticator selected")
 
-    def _connect_nfc(self, reader, reconnect=True):
-        from smartcard.Exceptions import CardConnectionException, NoCardException
+    def _connect_pcsc(self, reader, reconnect=True):
+        from fido2.pcsc import CtapPcscDevice
+        from smartcard.Exceptions import NoCardException, CardConnectionException
         from smartcard.ExclusiveConnectCardConnection import (
             ExclusiveConnectCardConnection,
         )
-
-        from fido2.pcsc import CtapPcscDevice
 
         logger.debug(f"(Re-)connect over NFC using reader: {reader.name}")
         event = Event()
@@ -151,6 +152,9 @@ class DeviceManager:
         def _connect():
             connection = ExclusiveConnectCardConnection(reader.createConnection())
             return CtapPcscDevice(connection, reader.name)
+
+        if not reconnect:
+            return _connect()
 
         self.printer.remove(nfc=True)
         removed = False
@@ -235,10 +239,37 @@ class DeviceManager:
             elif len(added) > 1:
                 raise ValueError("Multiple Authenticators inserted")
 
+    def _reconnect_ccid(self):
+        name = self._reader.name
+        info = Ctap2(self._dev).info
+
+        logger.debug(f"Reconnect over CCID: {name}")
+        from fido2.pcsc import _list_readers
+
+        self.printer.remove()
+        event = Event()
+        removed = False
+        while not event.wait(0.5):
+            readers = [r for r in _list_readers() if name == r.name]
+            if removed and len(readers) == 1:
+                self._reader = readers[0]
+                dev = self._connect_pcsc(self._reader, False)
+                info2 = Ctap2(dev).info
+                assert replace(info, enc_identifier=None) == replace(
+                    info2, enc_identifier=None
+                )
+
+                return dev
+            elif not removed and len(readers) == 0:
+                self.printer.insert()
+                removed = True
+
     def reconnect(self):
-        if self._reader:
+        if self._transport == "nfc":
             self._dev.close()
             self._dev.connect()
+        elif self._reader:
+            self._dev = self._reconnect_ccid()
         else:
             self._dev = self._reconnect_usb()
         return self._dev
@@ -294,7 +325,8 @@ def dev_manager(pytestconfig, printer):
         pytest.skip("Skip device tests")
 
     reader = pytestconfig.getoption("reader")
-    manager = DeviceManager(printer, reader)
+    ccid = pytestconfig.getoption("ccid")
+    manager = DeviceManager(printer, reader, ccid)
 
     yield manager
 
