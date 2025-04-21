@@ -34,7 +34,7 @@ from fido2 import cbor
 from fido2.server import Fido2Server
 from fido2.utils import sha256, websafe_encode, websafe_decode
 from fido2.cose import CoseKey
-from fido2.arkg import ARKG_P256ADD_ECDH
+from fido2.arkg import ARKG_P256_ESP256
 from exampleutils import get_client
 import sys
 
@@ -58,9 +58,7 @@ create_options, state = server.register_begin(
 result = client.make_credential(
     {
         **create_options["publicKey"],
-        "extensions": {
-            "sign": {"generateKey": {"algorithms": [ARKG_P256ADD_ECDH.ALGORITHM]}}
-        },
+        "extensions": {"sign": {"generateKey": {"algorithms": [ARKG_P256_ESP256]}}},
     }
 )
 
@@ -80,23 +78,22 @@ if not sign_key:
     )
     sys.exit(1)
 
-# Extension output contains master public key and keyHandle
+# Extension output contains master public key
 pk = CoseKey.parse(
     cbor.decode(websafe_decode(sign_key["publicKey"]))
 )  # COSE key in bytes
-kh = sign_key["keyHandle"]  # key handle in bytes
 print("public key", pk)
-print("keyHandle from Authenticator", cbor.decode(websafe_decode(kh)))
 
 # Master public key contains blinding and KEM keys
 # ARKG derive_public_key uses these
-print("Blinding public key", pk.blinding_key)
-print("KEM public key", pk.kem_key)
+print("Blinding public key", pk.pkbl)
+print("KEM public key", pk.pkkem)
 
-# Arbitrary bytestring used for info
-info = b"my-info-here"
+# Arbitrary bytestring used for ctx, ikm
+ctx = b"my-ctx-here"
+ikm = b"my-ikm-here"
 # Derived public key to verify with, and kh to send to Authenticator
-pk2 = pk.derive_public_key(info)
+pk2 = pk.derive_public_key(ikm, ctx)
 print("Derived public key", pk2)
 ref = pk2.get_ref()
 print("COSE Key ref for derived key", ref)
