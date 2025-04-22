@@ -1,7 +1,16 @@
 # flake8: noqa ignore lines too long
-from fido2.arkg import ARKG_P256
+
 
 import pytest
+
+
+@pytest.fixture(autouse=True, scope="module")
+def preconditions():
+    global ARKG_P256
+    try:
+        from fido2.arkg import ARKG_P256
+    except ImportError:
+        pytest.skip("ecdsa is not installed")
 
 
 TEST_VECTORS = [
