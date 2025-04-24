@@ -32,7 +32,6 @@ from ctypes import (
     c_uint32,
     c_uint8,
 )
-from typing import Set
 
 from . import base
 
@@ -90,7 +89,7 @@ USB_HID_SET_RAW = 0x80046802  # _IOW('h', 2, int)
 
 # Cache for continuously failing devices
 # XXX not thread-safe
-_failed_cache: Set[str] = set()
+_failed_cache: set[str] = set()
 
 
 def list_descriptors():

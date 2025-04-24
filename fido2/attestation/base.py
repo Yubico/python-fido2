@@ -35,7 +35,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from dataclasses import dataclass
 from functools import wraps
-from typing import Type, Mapping, Sequence, Any
+from typing import Mapping, Sequence, Any
 
 import abc
 
@@ -152,7 +152,7 @@ class Attestation(abc.ABC):
         """
 
     @staticmethod
-    def for_type(fmt: str) -> Type[Attestation]:
+    def for_type(fmt: str) -> type[Attestation]:
         """Get an Attestation subclass type for the given format."""
         for cls in Attestation.__subclasses__():
             if getattr(cls, "FORMAT", None) == fmt:

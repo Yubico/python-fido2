@@ -46,7 +46,6 @@ from typing import (
     Hashable,
     get_type_hints,
     overload,
-    Type,
     ClassVar,
 )
 import struct
@@ -254,11 +253,11 @@ class _DataClassMapping(Mapping[_T, Any]):
 
     @overload
     @classmethod
-    def from_dict(cls: Type[_S], data: None) -> None: ...
+    def from_dict(cls: type[_S], data: None) -> None: ...
 
     @overload
     @classmethod
-    def from_dict(cls: Type[_S], data: Mapping[_T, Any]) -> _S: ...
+    def from_dict(cls: type[_S], data: Mapping[_T, Any]) -> _S: ...
 
     @classmethod
     def from_dict(cls, data):

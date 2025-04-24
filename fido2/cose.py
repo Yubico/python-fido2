@@ -30,8 +30,13 @@ from __future__ import annotations
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519, types
-from typing import Sequence, Type, Mapping, Any, TypeVar
+from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519
+from typing import Sequence, Mapping, Any, TypeVar
+
+try:
+    from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
+except ImportError:
+    pass  # This type isn't available on cryptography <40.
 
 
 class CoseKey(dict):
@@ -53,7 +58,7 @@ class CoseKey(dict):
 
     @classmethod
     def from_cryptography_key(
-        cls: Type[T_CoseKey], public_key: types.PublicKeyTypes
+        cls: type[T_CoseKey], public_key: "PublicKeyTypes"
     ) -> T_CoseKey:
         """Converts a PublicKey object from Cryptography into a COSE key.
 
@@ -63,7 +68,7 @@ class CoseKey(dict):
         raise NotImplementedError("Creation from cryptography not supported.")
 
     @staticmethod
-    def for_alg(alg: int) -> Type[CoseKey]:
+    def for_alg(alg: int) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
@@ -75,7 +80,7 @@ class CoseKey(dict):
         return UnsupportedKey
 
     @staticmethod
-    def for_name(name: str) -> Type[CoseKey]:
+    def for_name(name: str) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
@@ -97,7 +102,7 @@ class CoseKey(dict):
     @staticmethod
     def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
-        algs: Sequence[Type[CoseKey]] = [
+        algs: Sequence[type[CoseKey]] = [
             ES256,
             EdDSA,
             ES384,

@@ -28,7 +28,6 @@ from ctypes import Structure, c_char, c_int, c_uint8, c_uint16, c_uint32
 from .base import HidDescriptor, FileCtapHidConnection
 
 import logging
-from typing import Set
 
 # Don't typecheck this file on Windows
 assert sys.platform != "win32"  # nosec
@@ -118,7 +117,7 @@ def get_descriptor(path):
 
 
 # Cache for continuously failing devices
-_failed_cache: Set[str] = set()
+_failed_cache: set[str] = set()
 
 
 def list_descriptors():

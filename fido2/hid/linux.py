@@ -23,7 +23,6 @@ import glob
 import fcntl
 import struct
 from array import array
-from typing import Set
 
 import logging
 import sys
@@ -86,7 +85,7 @@ def get_descriptor(path):
 
 
 # Cache for continuously failing devices
-_failed_cache: Set[str] = set()
+_failed_cache: set[str] = set()
 
 
 def list_descriptors():

@@ -40,7 +40,7 @@ python-fido2 2.0.
 from __future__ import annotations
 
 import struct
-from typing import Any, Sequence, Mapping, Type, Callable
+from typing import Any, Sequence, Mapping, Callable
 
 
 CborType = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
@@ -93,7 +93,7 @@ def _dump_text(data: str) -> bytes:
     return _dump_int(len(data_bytes), mt=3) + data_bytes
 
 
-_SERIALIZERS: Sequence[tuple[Type, Callable[[Any], bytes]]] = [
+_SERIALIZERS: Sequence[tuple[type, Callable[[Any], bytes]]] = [
     (bool, _dump_bool),
     (int, _dump_int),
     (str, _dump_text),
