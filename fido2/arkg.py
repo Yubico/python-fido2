@@ -133,6 +133,7 @@ class HTF:
             b_i = d.finalize()
             uniform_bytes.extend(b_i)
             b_xor = strxor(b_0, b_i)
+
         return uniform_bytes[:len_in_bytes]
 
     def hash_to_field(self, msg: bytes, count: int) -> Sequence[int]:
@@ -165,6 +166,7 @@ class HTF:
             tv = uniform_bytes[offset : offset + self.L]
             e_j = bytes2int(tv) % self.p
             elements.append(e_j)
+
         return elements
 
 
@@ -174,12 +176,13 @@ class BL:
     Hash: HashAlgorithm
     DST_ext: bytes
 
-    def blind_public_key(self, pk: Point, tau: bytes, ctx: bytes) -> Point:
+    def prf(self, ikm_tau: bytes, ctx: bytes) -> int:
         """
-        BL-Blind-Public-Key(pk, tau, ctx) -> pk_tau
+        BL-PRF(ikm_tau, ctx) -> tau
 
-            tau' = hash_to_field(tau, 1) with the parameters:
-                DST: 'ARKG-BL-EC.' || DST_ext || ctx
+            DST_tau = 'ARKG-BL-EC.' || DST_ext || ctx
+            tau = hash_to_field(tau, 1) with the parameters:
+                DST: DST_tau
                 F: GF(N), the scalar field
                    of the prime order subgroup of crv
                 p: N
@@ -187,15 +190,21 @@ class BL:
                 L: The L defined in hash-to-crv-suite
                 expand_message: The expand_message function
                                 defined in hash-to-crv-suite
-
-            pk_tau = pk + tau' * G
         """
-        dst = b"ARKG-BL-EC." + self.DST_ext + ctx
-        htf = HTF(dst, self.crv.order, 48, self.Hash())
+        dst_tau = b"ARKG-BL-EC." + self.DST_ext + ctx
+        htf = HTF(dst_tau, self.crv.order, 48, self.Hash)
+        tau = htf.hash_to_field(ikm_tau, 1)[0]
 
-        tau_prime = htf.hash_to_field(tau, 1)[0]
+        return tau
 
-        pk_tau = pk + (tau_prime * self.crv.generator)
+    def blind_public_key(self, pk: Point, tau: int) -> Point:
+        """
+        BL-Blind-Public-Key(pk, tau) -> pk_tau
+
+            pk_tau = pk + tau * G
+        """
+        pk_tau = pk + (tau * self.crv.generator)
+
         return pk_tau
 
 
@@ -221,9 +230,10 @@ class KEM:
 
             pk = sk * G
         """
-        htf = HTF(b"ARKG-KEM-ECDH-KG." + self.DST_ext, self.crv.order, 48, self.Hash())
+        htf = HTF(b"ARKG-KEM-ECDH-KG." + self.DST_ext, self.crv.order, 48, self.Hash)
         sk = htf.hash_to_field(ikm, 1)[0]
         pk = sk * self.crv.generator
+
         return pk, sk
 
     def sub_kem_encaps(self, pk: Point, ikm: bytes, ctx: bytes) -> Tuple[bytes, bytes]:
@@ -275,24 +285,22 @@ class KEM:
             c = t || c'
         """
 
-        h = self.Hash()
-
         ctx_sub = b"ARKG-KEM-HMAC." + self.DST_ext + ctx
         k_prime, c_prime = self.sub_kem_encaps(pk, ikm, ctx_sub)
 
         mk = HKDF(
-            h,
-            h.digest_size,
+            self.Hash,
+            self.Hash.digest_size,
             None,
             b"ARKG-KEM-HMAC-mac." + self.DST_ext + ctx,
         ).derive(k_prime)
 
-        hmac = HMAC(mk, h)
+        hmac = HMAC(mk, self.Hash)
         hmac.update(c_prime)
         t = hmac.finalize()[:16]  # Truncate to 128-bit
 
         k = HKDF(
-            h,
+            self.Hash,
             len(k_prime),
             None,
             b"ARKG-KEM-HMAC-shared." + self.DST_ext + ctx,
@@ -346,8 +354,9 @@ class ARKG:
             ctx_bl  = 'ARKG-Derive-Key-BL.'  || ctx'
             ctx_kem = 'ARKG-Derive-Key-KEM.' || ctx'
 
-            (tau, c) = KEM-Encaps(pk_kem, ikm, ctx_kem)
-            pk' = BL-Blind-Public-Key(pk_bl, tau, ctx_bl)
+            (ikm_tau, c) = KEM-Encaps(pk_kem, ikm, ctx_kem)
+            tau = BL-PRF(ikm_tau, ctx_bl)
+            pk' = BL-Blind-Public-Key(pk_bl, tau)
 
             kh = c
         """
@@ -357,8 +366,9 @@ class ARKG:
         ctx_bl = b"ARKG-Derive-Key-BL." + ctx_prime
         ctx_kem = b"ARKG-Derive-Key-KEM." + ctx_prime
 
-        tau, c = self.kem.encaps(pk_kem, ikm, ctx_kem)
-        pk_prime = self.bl.blind_public_key(pk_bl, tau, ctx_bl)
+        ikm_tau, c = self.kem.encaps(pk_kem, ikm, ctx_kem)
+        tau = self.bl.prf(ikm_tau, ctx_bl)
+        pk_prime = self.bl.blind_public_key(pk_bl, tau)
 
         kh = c
 
@@ -415,8 +425,8 @@ class ARKG_P256(CoseKey):
 
     ALGORITHM = -65700
     _ARKG = ARKG(
-        bl=BL(crv=NIST256p, Hash=SHA256, DST_ext=b"ARKG-P256"),
-        kem=KEM(crv=NIST256p, Hash=SHA256, DST_ext=b"ARKG-ECDH.ARKG-P256"),
+        bl=BL(crv=NIST256p, Hash=SHA256(), DST_ext=b"ARKG-P256"),
+        kem=KEM(crv=NIST256p, Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
     )
 
     @property
@@ -436,6 +446,7 @@ class ARKG_P256(CoseKey):
         )
         point_enc = point.to_bytes("uncompressed")
         ln = len(point_enc) // 2
+
         return ARKG_P256_DERIVED(
             {
                 1: 2,  # kty: EC
