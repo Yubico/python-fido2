@@ -189,5 +189,6 @@ class TestCoseKey(unittest.TestCase):
         self.assertEqual(CoseKey.for_alg(-48), cose.ESP384)
         self.assertEqual(CoseKey.for_alg(-49), cose.ESP512)
         self.assertEqual(CoseKey.for_alg(-50), cose.Ed25519)
+        self.assertEqual(CoseKey.for_alg(-51), cose.Ed448)
         self.assertEqual(CoseKey.for_alg(-257), cose.RS256)
         self.assertEqual(CoseKey.for_alg(-65535), cose.RS1)
