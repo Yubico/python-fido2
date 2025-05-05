@@ -28,7 +28,7 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido2 import cbor
+from fido2 import cbor, cose
 from fido2.cose import CoseKey, ES256, ESP256, RS256, Ed25519, EdDSA, UnsupportedKey
 from binascii import a2b_hex
 
@@ -177,3 +177,17 @@ class TestCoseKey(unittest.TestCase):
         key = CoseKey.parse({1: 4711, 3: 4712, -1: b"123", -2: b"456"})
         self.assertIsInstance(key, UnsupportedKey)
         self.assertEqual(key, {1: 4711, 3: 4712, -1: b"123", -2: b"456"})
+
+    def test_supported_algs(self):
+        self.assertEqual(CoseKey.for_alg(-7), cose.ES256)
+        self.assertEqual(CoseKey.for_alg(-8), cose.EdDSA)
+        self.assertEqual(CoseKey.for_alg(-9), cose.ESP256)
+        self.assertEqual(CoseKey.for_alg(-35), cose.ES384)
+        self.assertEqual(CoseKey.for_alg(-36), cose.ES512)
+        self.assertEqual(CoseKey.for_alg(-37), cose.PS256)
+        self.assertEqual(CoseKey.for_alg(-47), cose.ES256K)
+        self.assertEqual(CoseKey.for_alg(-48), cose.ESP384)
+        self.assertEqual(CoseKey.for_alg(-49), cose.ESP512)
+        self.assertEqual(CoseKey.for_alg(-50), cose.Ed25519)
+        self.assertEqual(CoseKey.for_alg(-257), cose.RS256)
+        self.assertEqual(CoseKey.for_alg(-65535), cose.RS1)
