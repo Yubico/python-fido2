@@ -110,13 +110,12 @@ class AttestationResponse(_CborDataObject):
     """Binary CBOR encoded attestation object.
 
     :param _: The binary representation of the attestation object.
-    :type _: bytes
     :ivar fmt: The type of attestation used.
-    :type fmt: str
     :ivar auth_data: The attested authenticator data.
-    :type auth_data: AuthenticatorData
     :ivar att_stmt: The attestation statement.
-    :type att_stmt: dict[str, Any]
+    :ivar ep_att: Whether an enterprise attestation was returned for this credential.
+    :ivar large_blob_key: The largeBlobKey for the credential, if requested.
+    :ivar unsigned_extension_outputs: Any unsigned outputs of extensions.
     """
 
     fmt: str
@@ -124,6 +123,7 @@ class AttestationResponse(_CborDataObject):
     att_stmt: dict[str, Any]
     ep_att: bool | None = None
     large_blob_key: bytes | None = None
+    unsigned_extension_outputs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(eq=False, frozen=True)
