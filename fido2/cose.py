@@ -74,10 +74,17 @@ class CoseKey(dict):
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
-        for cls in CoseKey.__subclasses__():
-            if cls.ALGORITHM == alg:
-                return cls
-        return UnsupportedKey
+
+        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
+            for cls in base_cls.__subclasses__():
+                if cls.ALGORITHM == alg:
+                    return cls
+                subresult = find_subclass(cls)
+                if subresult:
+                    return subresult
+            return None
+
+        return find_subclass(CoseKey) or UnsupportedKey
 
     @staticmethod
     def for_name(name: str) -> type[CoseKey]:
@@ -86,10 +93,17 @@ class CoseKey(dict):
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
-        for cls in CoseKey.__subclasses__():
-            if cls.__name__ == name:
-                return cls
-        return UnsupportedKey
+
+        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
+            for cls in base_cls.__subclasses__():
+                if cls.__name__ == name:
+                    return cls
+                subresult = find_subclass(cls)
+                if subresult:
+                    return subresult
+            return None
+
+        return find_subclass(CoseKey) or UnsupportedKey
 
     @staticmethod
     def parse(cose: Mapping[int, Any]) -> CoseKey:
@@ -158,6 +172,11 @@ class ES256(CoseKey):
         return cls({1: 2, 3: cls.ALGORITHM, -1: 1, -2: data[1:33], -3: data[33:65]})
 
 
+class ESP256(ES256):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -9
+
+
 class ES384(CoseKey):
     ALGORITHM = -35
     _HASH_ALG = hashes.SHA384()
@@ -186,6 +205,11 @@ class ES384(CoseKey):
         )
 
 
+class ESP384(ES384):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -48
+
+
 class ES512(CoseKey):
     ALGORITHM = -36
     _HASH_ALG = hashes.SHA512()
@@ -212,6 +236,11 @@ class ES512(CoseKey):
                 -3: int2bytes(pn.y, 66),
             }
         )
+
+
+class ESP512(ES512):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -49
 
 
 class RS256(CoseKey):
@@ -274,6 +303,11 @@ class EdDSA(CoseKey):
                 ),
             }
         )
+
+
+class Ed25519(EdDSA):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-edwards-curve-digital-signa  # noqa:E501
+    ALGORITHM = -50
 
 
 class RS1(CoseKey):
