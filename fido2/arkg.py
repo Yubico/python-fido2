@@ -38,6 +38,14 @@ from ecdsa.ellipticcurve import Point
 from .cose import ESP256, CoseKey
 from .utils import bytes2int
 
+"""
+WARNING: This module and these algorithms are currently in DRAFT.
+They are to be considered experimental, and NOT part of the stable API of this library.
+
+This module implements the Asynchronous Remote Key Generation (ARKG) algorithm,
+as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-08.html
+"""
+
 
 def strxor(a: bytes, b: bytes) -> bytes:
     return bytes(a[i] ^ b[i] for i in range(len(a)))
