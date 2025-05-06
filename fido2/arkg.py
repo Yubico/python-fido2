@@ -40,6 +40,15 @@ from typing import Tuple, Sequence
 import struct
 
 
+"""
+WARNING: This module and these algorithms are currently in DRAFT.
+They are to be considered experimental, and NOT part of the stable API of this library.
+
+This module implements the Asynchronous Remote Key Generation (ARKG) algorithm,
+as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-08.html
+"""
+
+
 def strxor(a: bytes, b: bytes) -> bytes:
     c = bytearray(len(a))
     for i in range(len(a)):

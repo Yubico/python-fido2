@@ -659,7 +659,12 @@ class _SignOutputs(_JsonDataObject):
 
 class SignExtension(Ctap2Extension):
     """
+    WARNING: This extension is currently in DRAFT.
+    It is to be considered experimental, and NOT part of the stable API of this library.
+
     Implements the sign CTAP2 extension.
+
+    https://github.com/yubicolabs/webauthn-sign-extension
     """
 
     NAME = "sign"
