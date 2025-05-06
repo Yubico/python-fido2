@@ -32,12 +32,10 @@ derive two separate secrets.
 """
 from fido2 import cbor
 from fido2.server import Fido2Server
-from fido2.utils import sha256, websafe_encode
-from fido2.cose import CoseKey, ES256, ESP256, EdDSA
+from fido2.utils import websafe_encode
+from fido2.cose import CoseKey, ESP256
 from exampleutils import get_client
 import sys
-
-ESP256_2P = -70009  # Placeholder value
 
 uv = "discouraged"
 
@@ -55,34 +53,15 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
-algorithms = [
-    ESP256_2P,
-]
-
 message = b"I am a message"
-
-has_prehash_alg = any(alg in [ESP256_2P] for alg in algorithms)
-has_raw_alg = any(
-    alg
-    in [
-        EdDSA.ALGORITHM,
-        ES256.ALGORITHM,
-        ESP256.ALGORITHM,
-    ]
-    for alg in algorithms
-)
-
-if has_prehash_alg and has_raw_alg:
-    raise ValueError("Cannot mix algorithms with pre-hashed and raw message")
-
-data = message if has_raw_alg else sha256(message)
+algorithms = [ESP256.ALGORITHM]
 
 # Create a credential
 result = client.make_credential(
     {
         **create_options["publicKey"],
         "extensions": {
-            "sign": {"generateKey": {"algorithms": algorithms, "tbs": data}}
+            "sign": {"generateKey": {"algorithms": algorithms, "tbs": message}}
         },
     }
 )
@@ -121,7 +100,6 @@ if "signature" in sign_result:
     print("Signature verified!")
 
 message = b"New message"
-data = message if has_raw_alg else sha256(message)
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
@@ -133,7 +111,7 @@ result = client.get_assertion(
         "extensions": {
             "sign": {
                 "sign": {
-                    "tbs": data,
+                    "tbs": message,
                     "keyHandleByCredential": {
                         websafe_encode(credentials[0].credential_id): kh_bin,
                     },
