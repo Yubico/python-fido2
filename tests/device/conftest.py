@@ -4,7 +4,7 @@ from fido2.hid import CAPABILITY
 from fido2.ctap2 import Ctap2
 from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
 from fido2.ctap2.credman import CredentialManagement
-from fido2.client import Fido2Client, ClientError
+from fido2.client import Fido2Client, ClientError, DefaultClientDataCollector
 
 from . import Printer, TEST_PIN, CliInteraction
 
@@ -81,7 +81,10 @@ class DeviceManager:
         def select(descriptor):
             dev = CtapHidDevice(descriptor, open_connection(descriptor))
             # This client is only used for selection
-            client = Fido2Client(dev, "https://example.com")
+            client = Fido2Client(
+                dev,
+                client_data_collector=DefaultClientDataCollector("https://example.com"),
+            )
             try:
                 while not event.is_set():
                     try:
@@ -195,7 +198,7 @@ class DeviceManager:
     def client(self):
         return Fido2Client(
             self.device,
-            "https://example.com",
+            client_data_collector=DefaultClientDataCollector("https://example.com"),
             user_interaction=CliInteraction(self.printer),
         )
 

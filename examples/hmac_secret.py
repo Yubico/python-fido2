@@ -35,7 +35,7 @@ is now allowed in a browser setting. See also prf.py for an example which uses
 the PRF extension which is enabled by default.
 """
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client
+from fido2.client import Fido2Client, DefaultClientDataCollector
 from fido2.ctap2.extensions import HmacSecretExtension
 from exampleutils import CliInteraction, enumerate_devices
 import ctypes
@@ -65,7 +65,7 @@ else:
     for dev in enumerate_devices():
         client = Fido2Client(
             dev,
-            "https://example.com",
+            client_data_collector=DefaultClientDataCollector("https://example.com"),
             user_interaction=CliInteraction(),
             # By default only the PRF extension is allowed, we need to explicitly
             # configure the client to allow hmac-secret

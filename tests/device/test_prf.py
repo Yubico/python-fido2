@@ -1,5 +1,5 @@
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client
+from fido2.client import Fido2Client, DefaultClientDataCollector
 from fido2.ctap2.extensions import HmacSecretExtension
 from fido2.utils import websafe_encode
 
@@ -111,7 +111,7 @@ def test_hmac_secret(device, pin_protocol, printer):
 
     client = Fido2Client(
         device,
-        "https://example.com",
+        client_data_collector=DefaultClientDataCollector("https://example.com"),
         user_interaction=CliInteraction(printer, TEST_PIN),
         extensions=[HmacSecretExtension(allow_hmac_secret=True)],
     )

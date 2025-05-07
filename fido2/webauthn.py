@@ -338,6 +338,7 @@ class CollectedClientData(bytes):
         CREATE = "webauthn.create"
         GET = "webauthn.get"
 
+    _data: Mapping[str, Any]
     type: str
     challenge: bytes
     origin: str
@@ -346,11 +347,11 @@ class CollectedClientData(bytes):
     def __init__(self, _: bytes):
         super().__init__()
 
-        data = json.loads(self.decode())
-        object.__setattr__(self, "type", data["type"])
-        object.__setattr__(self, "challenge", websafe_decode(data["challenge"]))
-        object.__setattr__(self, "origin", data["origin"])
-        object.__setattr__(self, "cross_origin", data.get("crossOrigin", False))
+        object.__setattr__(self, "_data", json.loads(self.decode()))
+        object.__setattr__(self, "type", self._data["type"])
+        object.__setattr__(self, "challenge", websafe_decode(self._data["challenge"]))
+        object.__setattr__(self, "origin", self._data["origin"])
+        object.__setattr__(self, "cross_origin", self._data.get("crossOrigin", False))
 
     @classmethod
     def create(

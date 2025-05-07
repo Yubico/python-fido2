@@ -1,7 +1,7 @@
 from fido2.ctap2.pin import ClientPin
 from fido2.ctap2.config import Config
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client, ClientError
+from fido2.client import Fido2Client, ClientError, DefaultClientDataCollector
 from fido2.ctap import CtapError
 
 from . import TEST_PIN, CliInteraction
@@ -51,7 +51,7 @@ def test_always_uv(ctap2, pin_protocol, device, printer):
     # Create a credential
     client = Fido2Client(
         device,
-        "https://example.com",
+        client_data_collector=DefaultClientDataCollector("https://example.com"),
         user_interaction=CliInteraction(printer, "WrongPin"),
     )
 
@@ -133,7 +133,7 @@ def test_min_pin_length(
         config.set_min_pin_length(rp_ids=[rp["id"]])
         client = Fido2Client(
             dev_manager.device,
-            "https://example.com",
+            client_data_collector=DefaultClientDataCollector("https://example.com"),
             user_interaction=CliInteraction(printer, pin[: orig_len + 6]),
         )
 
@@ -208,7 +208,9 @@ def test_ep_vendor(pytestconfig, device, printer, enable_ep, att_cert):
     create_options, state = server.register_begin(user)
 
     client = Fido2Client(
-        device, f"https://{ep_rp_id}", user_interaction=CliInteraction(printer)
+        device,
+        client_data_collector=DefaultClientDataCollector(f"https://{ep_rp_id}"),
+        user_interaction=CliInteraction(printer),
     )
 
     result = client.make_credential(create_options.public_key)

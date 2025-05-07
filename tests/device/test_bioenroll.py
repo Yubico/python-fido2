@@ -2,7 +2,7 @@ from fido2.ctap import CtapError
 from fido2.ctap2.bio import BioEnrollment, FPBioEnrollment, CaptureError
 from fido2.ctap2.pin import ClientPin
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client, ClientError
+from fido2.client import Fido2Client, ClientError, DefaultClientDataCollector
 
 from . import TEST_PIN, CliInteraction
 import pytest
@@ -72,7 +72,7 @@ def test_enroll_use_delete(device, ctap2, pin_protocol, printer):
 
     client = Fido2Client(
         device,
-        "https://example.com",
+        client_data_collector=DefaultClientDataCollector("https://example.com"),
         user_interaction=CliInteraction(printer, "WrongPin"),
     )
 

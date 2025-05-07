@@ -42,7 +42,6 @@ from ..webauthn import (
     Aaguid,
     AttestationObject,
     CollectedClientData,
-    PublicKeyCredentialRpEntity,
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
@@ -167,38 +166,6 @@ def _call_polling(poll_delay, event, on_keepalive, func, *args, **kwargs):
     raise ClientError.ERR.TIMEOUT()
 
 
-class _BaseClient:
-    def __init__(self, origin: str, verify: Callable[[str, str], bool]):
-        self._origin = origin
-        self._verify = verify
-
-    def _get_rp_id(self, rp_id: str | None) -> str:
-        if rp_id is None:
-            url = urlparse(self._origin)
-            if url.scheme != "https" or not url.netloc:
-                raise ClientError.ERR.BAD_REQUEST(
-                    "RP ID required for non-https origin."
-                )
-            return url.netloc
-        else:
-            return rp_id
-
-    def _verify_rp_id(self, rp_id):
-        try:
-            if self._verify(rp_id, self._origin):
-                return
-        except Exception:  # nosec
-            pass  # Fall through to ClientError
-        raise ClientError.ERR.BAD_REQUEST()
-
-    def _build_client_data(self, typ, challenge):
-        return CollectedClientData.create(
-            type=typ,
-            origin=self._origin,
-            challenge=challenge,
-        )
-
-
 class AssertionSelection:
     """GetAssertion result holding one or more assertions.
 
@@ -300,6 +267,94 @@ class UserInteraction:
         return True
 
 
+class ClientDataCollector(abc.ABC):
+    """Provides client data and logic to the Client.
+
+    Users should subclass this to implement custom behavior for determining the origin,
+    validating the RP ID, and providing client data for a request.
+    """
+
+    @abc.abstractmethod
+    def collect_client_data(
+        self,
+        options: PublicKeyCredentialCreationOptions | PublicKeyCredentialRequestOptions,
+    ) -> tuple[CollectedClientData, str]:
+        """Called when the client is preparing a request.
+
+        Should return a CollectedClientData object with the client data for the request,
+        as well as the RP ID of the credential.
+        """
+
+
+class DefaultClientDataCollector(ClientDataCollector):
+    """Default implementation of ClientDataProvider.
+
+    This implementation uses a fixed origin, it can be subclassed to customize specific
+    behavior.
+    """
+
+    def __init__(self, origin: str, verify: Callable[[str, str], bool] = verify_rp_id):
+        self._origin = origin
+        self._verify = verify
+
+    def get_rp_id(
+        self,
+        options: PublicKeyCredentialCreationOptions | PublicKeyCredentialRequestOptions,
+        origin: str,
+    ) -> str:
+        """Get the RP ID for the given options and origin."""
+        if isinstance(options, PublicKeyCredentialCreationOptions):
+            rp_id = options.rp.id
+        elif isinstance(options, PublicKeyCredentialRequestOptions):
+            rp_id = options.rp_id
+        else:
+            raise ValueError("Invalid options type.")
+
+        if rp_id is None:
+            url = urlparse(origin)
+            if url.scheme != "https" or not url.netloc:
+                raise ClientError.ERR.BAD_REQUEST(
+                    "RP ID required for non-https origin."
+                )
+            return url.netloc
+        else:
+            return rp_id
+
+    def verify_rp_id(self, rp_id: str, origin: str) -> None:
+        """Verify the RP ID for the given origin."""
+        try:
+            if self._verify(rp_id, origin):
+                return
+        except Exception:  # nosec
+            pass  # Fall through to ClientError
+        raise ClientError.ERR.BAD_REQUEST()
+
+    def get_request_type(self, options) -> str:
+        """Get the request type for the given options."""
+        if isinstance(options, PublicKeyCredentialCreationOptions):
+            return CollectedClientData.TYPE.CREATE
+        elif isinstance(options, PublicKeyCredentialRequestOptions):
+            return CollectedClientData.TYPE.GET
+        else:
+            raise ValueError("Invalid options type.")
+
+    def collect_client_data(self, options):
+        # Get the effective RP ID from the request options, falling back to the origin
+        rp_id = self.get_rp_id(options, self._origin)
+        # Validate that the RP ID is valid for the given origin
+        self.verify_rp_id(rp_id, self._origin)
+
+        # Construct the client data
+        return (
+            CollectedClientData.create(
+                type=self.get_request_type(options),
+                origin=self._origin,
+                challenge=options.challenge,
+            ),
+            rp_id,
+        )
+
+
 def _user_keepalive(user_interaction):
     def on_keepalive(status):
         if status == STATUS.UPNEEDED:  # Waiting for touch
@@ -320,7 +375,6 @@ class _ClientBackend(abc.ABC):
         self,
         options: PublicKeyCredentialCreationOptions,
         client_data: CollectedClientData,
-        rp: PublicKeyCredentialRpEntity,
         rp_id: str,
         enterprise_rpid_list: Sequence[str] | None,
         event: Event,
@@ -359,7 +413,6 @@ class _Ctap1ClientBackend(_ClientBackend):
         self,
         options,
         client_data,
-        rp,
         rp_id,
         enterprise_rpid_list,
         event,
@@ -679,7 +732,6 @@ class _Ctap2ClientBackend(_ClientBackend):
         self,
         options,
         client_data,
-        rp,
         rp_id,
         enterprise_rpid_list,
         event,
@@ -787,7 +839,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             return (
                 self.ctap2.make_credential(
                     client_data_hash,
-                    _as_cbor(replace(rp, id=rp_id)),
+                    _as_cbor(replace(options.rp, id=rp_id)),
                     _as_cbor(user),
                     _cbor_list(key_params),
                     [_as_cbor(exclude_cred)] if exclude_cred else None,
@@ -977,7 +1029,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                 raise
 
 
-class Fido2Client(WebAuthnClient, _BaseClient):
+class Fido2Client(WebAuthnClient):
     """WebAuthn-like client implementation.
 
     The client allows registration and authentication of WebAuthn credentials against
@@ -991,12 +1043,11 @@ class Fido2Client(WebAuthnClient, _BaseClient):
     def __init__(
         self,
         device: CtapDevice,
-        origin: str,
-        verify: Callable[[str, str], bool] = verify_rp_id,
+        client_data_collector: ClientDataCollector,
         user_interaction: UserInteraction = UserInteraction(),
         extensions: Sequence[Ctap2Extension] = _DEFAULT_EXTENSIONS,
     ):
-        super().__init__(origin, verify)
+        self._client_data_collector = client_data_collector
 
         # TODO: Decide how to configure this list.
         self._enterprise_rpid_list: Sequence[str] | None = None
@@ -1038,21 +1089,14 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         else:
             timer = None
 
-        rp = options.rp
-        rp_id = self._get_rp_id(rp.id)
-
+        # Gather client data, RP ID from client
+        client_data, rp_id = self._client_data_collector.collect_client_data(options)
         logger.debug(f"Register a new credential for RP ID: {rp_id}")
-        self._verify_rp_id(rp_id)
-
-        client_data = self._build_client_data(
-            CollectedClientData.TYPE.CREATE, options.challenge
-        )
 
         try:
             return self._backend.do_make_credential(
                 options,
                 client_data,
-                rp,
                 rp_id,
                 self._enterprise_rpid_list,
                 event,
@@ -1083,13 +1127,9 @@ class Fido2Client(WebAuthnClient, _BaseClient):
         else:
             timer = None
 
-        rp_id = self._get_rp_id(options.rp_id)
+        # Gather client data, RP ID from client
+        client_data, rp_id = self._client_data_collector.collect_client_data(options)
         logger.debug(f"Assert a credential for RP ID: {rp_id}")
-        self._verify_rp_id(rp_id)
-
-        client_data = self._build_client_data(
-            CollectedClientData.TYPE.GET, options.challenge
-        )
 
         try:
             return self._backend.do_get_assertion(
