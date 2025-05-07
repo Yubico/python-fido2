@@ -564,6 +564,64 @@ class CredPropsExtension(Ctap2Extension):
             )
 
 
+@dataclass(eq=False, frozen=True)
+class PaymentCurrencyAmount(_JsonDataObject):
+    currency: str
+    value: str
+
+
+@dataclass(eq=False, frozen=True)
+class PaymentCredentialInstrument(_JsonDataObject):
+    display_name: str
+    icon: str
+    icon_must_be_shown: bool = True
+
+
+@dataclass(eq=False, frozen=True)
+class AuthenticationExtensionsPaymentInputs(_JsonDataObject):
+    """Client inputs for payment."""
+
+    is_payment: bool | None = None
+    rp_id: str | None = None
+    top_origin: str | None = None
+    payee_name: str | None = None
+    payee_origin: str | None = None
+    total: PaymentCurrencyAmount | None = None
+    instrument: PaymentCredentialInstrument | None = None
+
+
+class ThirdPartyPaymentExtension(Ctap2Extension):
+    """
+    Implements the Third Party Payment (thirdPartyPayment) CTAP2.2 extension.
+
+    https://fidoalliance.org/specs/fido-v2.2-ps-20250228/fido-client-to-authenticator-protocol-v2.2-ps-20250228.html#sctn-thirdPartyPayment-extension
+
+    Note that most of the processing for the WebAuthn extension needs to be done by the
+    client, see:
+    https://www.w3.org/TR/secure-payment-confirmation/#sctn-collectedclientpaymentdata-dictionary
+
+    As such, this extension is not included in the default extensions list, and should
+    not be used without a client that supports the WebAuthn payment extension.
+    """
+
+    NAME = "thirdPartyPayment"
+
+    def is_supported(self, ctap):
+        return self.NAME in ctap.info.extensions
+
+    def make_credential(self, ctap, options, pin_protocol):
+        inputs = options.extensions or {}
+        data = AuthenticationExtensionsPaymentInputs.from_dict(inputs.get("payment"))
+        if self.is_supported(ctap) and data and data.is_payment:
+            return RegistrationExtensionProcessor(inputs={self.NAME: True})
+
+    def get_assertion(self, ctap, options, pin_protocol):
+        inputs = options.extensions or {}
+        data = AuthenticationExtensionsPaymentInputs.from_dict(inputs.get("payment"))
+        if self.is_supported(ctap) and data and data.is_payment:
+            return AuthenticationExtensionProcessor(inputs={self.NAME: True})
+
+
 _DEFAULT_EXTENSIONS = [
     HmacSecretExtension(),
     LargeBlobExtension(),
