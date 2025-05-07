@@ -276,7 +276,7 @@ class HmacSecretExtension(Ctap2Extension):
         c_inputs = options.extensions or {}
         prf = c_inputs.get("prf") is not None
         hmac = self._allow_hmac_secret and c_inputs.get("hmacCreateSecret") is True
-        if self.is_supported(ctap) and (prf or hmac):
+        if pin_protocol and self.is_supported(ctap) and (prf or hmac):
             inputs: dict[str, Any] = {HmacSecretExtension.NAME: True}
             if self.MC_NAME in ctap.info.extensions:
                 prf_salts = AuthenticatorExtensionsPRFInputs.from_dict(
