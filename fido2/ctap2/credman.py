@@ -99,6 +99,10 @@ class CredentialManagement:
         # Not supported in credentialMgmtPreview
         return bool(info.options.get("credMgmt"))
 
+    @staticmethod
+    def is_readonly_supported(info: Info) -> bool:
+        return bool(info.options.get("perCredMgmtRO"))
+
     def __init__(
         self,
         ctap: Ctap2,

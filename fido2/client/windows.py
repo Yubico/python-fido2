@@ -55,10 +55,14 @@ from .win_api import (
     WebAuthNGetAssertionOptions,
     WebAuthNAssertion,
 )
-from . import WebAuthnClient, _BaseClient, AssertionSelection, ClientError, _cbor_list
-from ..rpid import verify_rp_id
+from . import (
+    WebAuthnClient,
+    ClientDataCollector,
+    AssertionSelection,
+    ClientError,
+    _cbor_list,
+)
 from ..webauthn import (
-    CollectedClientData,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     AuthenticationExtensionsClientOutputs,
@@ -86,7 +90,7 @@ from ..ctap2.extensions import (
 from ..utils import _JsonDataObject, websafe_decode
 
 from threading import Thread
-from typing import Callable, Sequence, Any
+from typing import Sequence, Any
 import ctypes
 import logging
 
@@ -126,7 +130,7 @@ class CancelThread(Thread):
         self.join()
 
 
-class WindowsClient(WebAuthnClient, _BaseClient):
+class WindowsClient(WebAuthnClient):
     """Fido2Client-like class using the Windows WebAuthn API.
 
     Note: This class only works on Windows 10 19H1 or later. This is also when Windows
@@ -140,13 +144,12 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
     def __init__(
         self,
-        origin: str,
-        verify: Callable[[str, str], bool] = verify_rp_id,
+        client_data_collector: ClientDataCollector,
         handle=None,
         allow_hmac_secret=False,
     ):
-        super().__init__(origin, verify)
         self.handle = handle or windll.user32.GetForegroundWindow()
+        self._client_data_collector = client_data_collector
 
         self._allow_hmac_secret = allow_hmac_secret
 
@@ -166,13 +169,9 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         options = PublicKeyCredentialCreationOptions.from_dict(options)
 
-        rp_id = self._get_rp_id(options.rp.id)
+        # Gather client data, RP ID from client
+        client_data, rp_id = self._client_data_collector.collect_client_data(options)
         logger.debug(f"Register a new credential for RP ID: {rp_id}")
-        self._verify_rp_id(rp_id)
-
-        client_data = self._build_client_data(
-            CollectedClientData.TYPE.CREATE, options.challenge
-        )
 
         selection = options.authenticator_selection or AuthenticatorSelectionCriteria()
         resident_key = selection.resident_key or ResidentKeyRequirement.DISCOURAGED
@@ -328,13 +327,9 @@ class WindowsClient(WebAuthnClient, _BaseClient):
 
         options = PublicKeyCredentialRequestOptions.from_dict(options)
 
-        rp_id = self._get_rp_id(options.rp_id)
+        # Gather client data, RP ID from client
+        client_data, rp_id = self._client_data_collector.collect_client_data(options)
         logger.debug(f"Assert a credential for RP ID: {rp_id}")
-        self._verify_rp_id(rp_id)
-
-        client_data = self._build_client_data(
-            CollectedClientData.TYPE.GET, options.challenge
-        )
 
         attachment = WebAuthNAuthenticatorAttachment.ANY
         for hint in options.hints or []:

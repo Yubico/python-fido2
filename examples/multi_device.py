@@ -31,7 +31,12 @@ triggers one to select it. A new credential is created for that authenticator,
 and the operation is cancelled for the others.
 """
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, ClientError, UserInteraction
+from fido2.client import (
+    Fido2Client,
+    ClientError,
+    UserInteraction,
+    DefaultClientDataCollector,
+)
 from threading import Event, Thread
 from getpass import getpass
 import sys
@@ -58,7 +63,11 @@ class CliInteraction(UserInteraction):
 
 cli_interaction = CliInteraction()
 clients = [
-    Fido2Client(d, "https://example.com", user_interaction=cli_interaction)
+    Fido2Client(
+        d,
+        client_data_collector=DefaultClientDataCollector("https://example.com"),
+        user_interaction=cli_interaction,
+    )
     for d in devs
 ]
 

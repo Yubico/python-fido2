@@ -30,7 +30,7 @@ Utilities for common functionality used by several examples in this directory.
 """
 
 from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, UserInteraction
+from fido2.client import Fido2Client, UserInteraction, DefaultClientDataCollector
 from getpass import getpass
 import ctypes
 
@@ -98,7 +98,7 @@ def get_client(predicate=None, **kwargs):
         # Set up a FIDO 2 client using the origin https://example.com
         client = Fido2Client(
             dev,
-            "https://example.com",
+            client_data_collector=DefaultClientDataCollector("https://example.com"),
             user_interaction=user_interaction,
             **kwargs,
         )

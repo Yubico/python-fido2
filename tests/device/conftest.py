@@ -4,10 +4,11 @@ from fido2.hid import CAPABILITY
 from fido2.ctap2 import Ctap2
 from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
 from fido2.ctap2.credman import CredentialManagement
-from fido2.client import Fido2Client, ClientError
+from fido2.client import Fido2Client, ClientError, DefaultClientDataCollector
 
 from . import Printer, TEST_PIN, CliInteraction
 
+from dataclasses import replace
 from threading import Thread, Event
 
 import pytest
@@ -49,14 +50,27 @@ class DeviceManager:
             self._dev = self._select()
 
         if self.has_ctap2():
-            options = Ctap2(self.device).info.options
-            if options.get("clientPin") or options.get("uv"):
+            info = Ctap2(self.device).info
+            if info.transports_for_reset:
+                transport = "nfc" if reader_name else "usb"
+                self._can_reset = transport in info.transports_for_reset
+            else:
+                self._can_reset = True
+            if info.options.get("clientPin") or info.options.get("uv"):
                 self.printer.print(
                     "As a precaution, these tests will not run on an authenticator "
                     "which is configured with any form of UV. Factory reset the "
                     "authenticator prior to running tests against it."
                 )
                 pytest.exit("Authenticator must be in a newly-reset state!")
+
+            if not self._can_reset:
+                self.printer.print(
+                    "⚠️  FACTORY RESET NOT ENABLED FOR THIS TRANSPORT! ⚠️ ",
+                    "Some tests will be skipped, and the authenticator will be left "
+                    "in a state where it will need to be factory reset through another"
+                    "transport to be used.",
+                )
 
         self.setup()
 
@@ -67,7 +81,10 @@ class DeviceManager:
         def select(descriptor):
             dev = CtapHidDevice(descriptor, open_connection(descriptor))
             # This client is only used for selection
-            client = Fido2Client(dev, "https://example.com")
+            client = Fido2Client(
+                dev,
+                client_data_collector=DefaultClientDataCollector("https://example.com"),
+            )
             try:
                 while not event.is_set():
                     try:
@@ -181,7 +198,7 @@ class DeviceManager:
     def client(self):
         return Fido2Client(
             self.device,
-            "https://example.com",
+            client_data_collector=DefaultClientDataCollector("https://example.com"),
             user_interaction=CliInteraction(self.printer),
         )
 
@@ -205,7 +222,9 @@ class DeviceManager:
             if len(added) == 1:
                 device = open_device(added.pop())
                 info2 = Ctap2(device).info
-                assert info == info2
+                assert replace(info, enc_identifier=None) == replace(
+                    info2, enc_identifier=None
+                )
                 return device
             elif len(added) > 1:
                 raise ValueError("Multiple Authenticators inserted")
@@ -218,12 +237,36 @@ class DeviceManager:
             self._dev = self._reconnect_usb()
         return self._dev
 
-    def factory_reset(self, setup=False):
+    def _factory_reset(self, setup=False):
+        if not self._can_reset:
+            self.printer.print(
+                "☠️  FACTORY RESET CALLED! ☠️ ",
+                "",
+                "This test should have been marked as requiring reset!",
+            )
+            pytest.exit("FACTORY RESET CALLED")
+
         self.printer.print("⚠️  PERFORMING FACTORY RESET! ⚠️ ")
 
         self.reconnect()
 
-        self.ctap2.reset(on_keepalive=self.on_keepalive)
+        if self.info.long_touch_for_reset:
+            prompted = [0]
+
+            def on_keepalive_reset(status):
+                if status != prompted[0]:
+                    prompted[0] = status
+                    if status == 2:
+                        self.printer.print(
+                            "👉👉👉 Press the Authenticator button for 10 seconds..."
+                        )
+                    elif status == 1:
+                        self.printer.print("✅ You can now release the button!")
+
+        else:
+            on_keepalive_reset = self.on_keepalive
+
+        self.ctap2.reset(on_keepalive=on_keepalive_reset)
 
         if setup:
             self.setup()
@@ -249,9 +292,16 @@ def dev_manager(pytestconfig, printer):
 
     yield manager
 
-    # after the test, reset the device
-    if manager.has_ctap2():
-        manager.factory_reset()
+    # after the test, reset the device, if possible
+    if manager._can_reset:
+        manager._factory_reset()
+
+
+@pytest.fixture(scope="session")
+def factory_reset(dev_manager):
+    if dev_manager._can_reset:
+        return dev_manager._factory_reset
+    pytest.skip("Requires factory reset")
 
 
 @pytest.fixture
