@@ -30,7 +30,7 @@ from __future__ import annotations
 from .utils import bytes2int, int2bytes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519
+from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519, ed448
 from typing import Sequence, Mapping, Any, TypeVar
 
 try:
@@ -206,8 +206,8 @@ class ES384(CoseKey):
 
 
 class ESP384(ES384):
-    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
-    ALGORITHM = -48
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -51
 
 
 class ES512(CoseKey):
@@ -239,8 +239,8 @@ class ES512(CoseKey):
 
 
 class ESP512(ES512):
-    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
-    ALGORITHM = -49
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -52
 
 
 class RS256(CoseKey):
@@ -306,8 +306,32 @@ class EdDSA(CoseKey):
 
 
 class Ed25519(EdDSA):
-    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-edwards-curve-digital-signa  # noqa:E501
-    ALGORITHM = -50
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
+    ALGORITHM = -19
+
+
+class Ed448(CoseKey):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
+    ALGORITHM = -53
+
+    def verify(self, message, signature):
+        if self[-1] != 7:
+            raise ValueError("Unsupported elliptic curve")
+        ed448.Ed448PublicKey.from_public_bytes(self[-2]).verify(signature, message)
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, ed448.Ed448PublicKey)  # nosec
+        return cls(
+            {
+                1: 1,
+                3: cls.ALGORITHM,
+                -1: 7,
+                -2: public_key.public_bytes(
+                    serialization.Encoding.Raw, serialization.PublicFormat.Raw
+                ),
+            }
+        )
 
 
 class RS1(CoseKey):
