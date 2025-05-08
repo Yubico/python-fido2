@@ -45,7 +45,7 @@ _RS256_KEY = a2b_hex(
 _EdDSA_KEY = a2b_hex(
     b"a4010103272006215820ee9b21803405d3cf45601e58b6f4c06ea93862de87d3af903c5870a5016e86f5"  # noqa E501
 )
-_Ed25519_KEY = _EdDSA_KEY[0:4] + a2b_hex("3831") + _EdDSA_KEY[5:]
+_Ed25519_KEY = _EdDSA_KEY[0:4] + a2b_hex("32") + _EdDSA_KEY[5:]
 
 
 class TestCoseKey(unittest.TestCase):
@@ -157,7 +157,7 @@ class TestCoseKey(unittest.TestCase):
             key,
             {
                 1: 1,
-                3: -50,
+                3: -19,
                 -1: 6,
                 -2: a2b_hex(
                     "EE9B21803405D3CF45601E58B6F4C06EA93862DE87D3AF903C5870A5016E86F5"
@@ -182,13 +182,13 @@ class TestCoseKey(unittest.TestCase):
         self.assertEqual(CoseKey.for_alg(-7), cose.ES256)
         self.assertEqual(CoseKey.for_alg(-8), cose.EdDSA)
         self.assertEqual(CoseKey.for_alg(-9), cose.ESP256)
+        self.assertEqual(CoseKey.for_alg(-19), cose.Ed25519)
         self.assertEqual(CoseKey.for_alg(-35), cose.ES384)
         self.assertEqual(CoseKey.for_alg(-36), cose.ES512)
         self.assertEqual(CoseKey.for_alg(-37), cose.PS256)
         self.assertEqual(CoseKey.for_alg(-47), cose.ES256K)
-        self.assertEqual(CoseKey.for_alg(-48), cose.ESP384)
-        self.assertEqual(CoseKey.for_alg(-49), cose.ESP512)
-        self.assertEqual(CoseKey.for_alg(-50), cose.Ed25519)
+        self.assertEqual(CoseKey.for_alg(-51), cose.ESP384)
+        self.assertEqual(CoseKey.for_alg(-52), cose.ESP512)
         self.assertEqual(CoseKey.for_alg(-53), cose.Ed448)
         self.assertEqual(CoseKey.for_alg(-257), cose.RS256)
         self.assertEqual(CoseKey.for_alg(-65535), cose.RS1)

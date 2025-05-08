@@ -206,8 +206,8 @@ class ES384(CoseKey):
 
 
 class ESP384(ES384):
-    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
-    ALGORITHM = -48
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -51
 
 
 class ES512(CoseKey):
@@ -239,8 +239,8 @@ class ES512(CoseKey):
 
 
 class ESP512(ES512):
-    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
-    ALGORITHM = -49
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -52
 
 
 class RS256(CoseKey):
@@ -306,8 +306,8 @@ class EdDSA(CoseKey):
 
 
 class Ed25519(EdDSA):
-    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-edwards-curve-digital-signa  # noqa:E501
-    ALGORITHM = -50
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
+    ALGORITHM = -19
 
 
 class Ed448(CoseKey):
