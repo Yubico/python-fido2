@@ -311,7 +311,8 @@ class Ed25519(EdDSA):
 
 
 class Ed448(CoseKey):
-    ALGORITHM = -51
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
+    ALGORITHM = -53
 
     def verify(self, message, signature):
         if self[-1] != 7:
