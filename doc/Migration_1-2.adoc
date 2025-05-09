@@ -37,6 +37,18 @@ Note: The `verify` parameter remains optional and can still be omitted in the ne
 
 === Updated Return Values for `make_credential` and `get_assertion`
 
+These methods now return `RegistrationResponse` and `AuthenticationResponse` objects from the `fido2.webauthn` module, which correspond to the types described link:https://www.w3.org/TR/webauthn-3/#iface-pkcredential[here].
+These objects can easily be serialized to or from JSON. This allows transmission to a server for validation. Note that for JSON serialization you will need to explicitly convert the object to a `dict`. See the following example:
+```python
+import json
+from fido2.webauthn import RegistrationResponse
+
+result = client.make_credential(...)
+result_json = json.dumps(dict(result))  # Convert into a JSON (RegistrationResponseJSON)
+
+result = RegistrationResponse.from_dict(json.loads(result_json))  # The JSON can be deserialized
+```
+
 ==== `client.make_credential`
 
 The `make_credential` method now returns a `RegistrationResponse` object instead of an `AuthenticatorAttestationResponse`.
