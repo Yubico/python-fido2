@@ -32,9 +32,6 @@ required for FIDO 2 CTAP.
 
 Use the :func:`encode`, :func:`decode` and :func:`decode_from` functions to encode
 and decode objects to/from CBOR.
-
-DO NOT use the _dump_x/_load_x functions directly, these will be made private in
-python-fido2 2.0.
 """
 
 from __future__ import annotations

@@ -1,0 +1,143 @@
+= Migration Guide: python-fido2 1.x to 2.0
+
+This guide helps you migrate your code from python-fido2 version 1.x to 2.0. While many changes are backward-incompatible, most are minor. A few, however, require manual updates. Follow the sections below to adapt your code.
+
+== Table of Contents
+* <<fido-client-classes, FIDO Client Classes>>
+* <<server-parameter-changes, Server Parameter Changes>>
+* <<windows-client, Changes to the Windows Client>>
+* <<dataclasses-changes, Changes to Dataclasses in `fido2.webauthn`>>
+* <<migration-checklist, Migration Checklist>>
+
+== FIDO Client Classes (`Fido2Client`, `WindowsClient`)
+
+The client classes have undergone changes to their constructor arguments and the return types of the `make_credential` and `get_assertion` methods.
+
+=== `ClientDataCollector` Replaces `origin` and `verify`
+
+In version 1.x, you passed a static `origin` and an optional function `verify` to validate an RP ID. These parameters have been replaced by a new `ClientDataCollector` class. 
+
+`ClientDataCollector` is an abstract class, but the `DefaultClientDataCollector` implementation provides a one-to-one replacement for the old behavior.
+
+**Old Approach:**
+```python
+from fido2.client import Fido2Client
+
+client = Fido2Client(
+    device,
+    origin=origin,
+    verify=verify_rp_id,
+)
+```
+
+**New Approach:**
+```python
+from fido2.client import Fido2Client, DefaultClientDataCollector
+
+client = Fido2Client(
+    device,
+    client_data_collector=DefaultClientDataCollector(origin=origin, verify=verify_rp_id),
+)
+```
+
+Note: The `verify` parameter remains optional and can still be omitted in the new API, just as in the old API.
+
+=== Updated Return Values for `make_credential` and `get_assertion`
+
+==== `client.make_credential`
+
+The `make_credential` method now returns a `RegistrationResponse` object instead of an `AuthenticatorAttestationResponse`.
+
+**Old Approach:**
+```python
+result = client.make_credential(...)  # Returns an AuthenticatorAttestationResponse
+
+print(result.client_data, result.attestation_object)
+```
+
+**New Approach:**
+```python
+result = client.make_credential(...)  # Returns a RegistrationResponse
+
+response = result.response  # Extract the AuthenticatorAttestationResponse
+
+print(response.client_data, response.attestation_object)
+```
+
+==== `client.get_assertion`
+
+The `get_assertion` method now returns an `AuthenticationResponse` object instead of an `AuthenticatorAssertionResponse`.
+
+**Old Approach:**
+```python
+selection = client.get_assertion(...)
+result = selection.get_response(0)  # Returns an AuthenticatorAssertionResponse
+
+print(result.client_data, result.authenticator_data, result.signature)
+```
+
+**New Approach:**
+```python
+selection = client.get_assertion(...)
+result = selection.get_response(0)  # Returns an AuthenticationResponse
+
+response = result.response  # Extract the AuthenticatorAssertionResponse
+
+print(response.client_data, response.authenticator_data, response.signature)
+```
+
+== Server Parameter Changes
+
+For the `Fido2Server` methods `register_complete` and `authenticate_complete`, the parameters now require `RegistrationResponse` and `AuthenticationResponse` objects. These parameter types have been supported since version 1.1.0, so you may already be using them. However, the older method signatures are no longer supported in version 2.0.
+
+This change aligns the server parameter types with the updated client return values, simplifying data exchange between client and server.
+
+== Changes to the Windows Client
+
+The `WindowsClient` class has been moved to a new module, `fido2.client.windows`. Additionally, this class is no longer importable on non-Windows platforms. If you are writing cross-platform code, you will need to handle imports conditionally or catch exceptions.
+
+**Old Approach:**
+```python
+from fido2.client import WindowsClient  # Always importable
+
+if WindowsClient.is_available():  # Check if the OS supports the webauthn.h API
+    client = WindowsClient(...)
+else:
+    # Fallback for unsupported platforms
+    ...
+```
+
+**New Approach:**
+```python
+try:
+    from fido2.client.windows import WindowsClient
+    if WindowsClient.is_available():  # Check if Windows supports the webauthn.h API
+        client = WindowsClient(...)
+    else:
+        # Fallback for unsupported platforms
+        ...
+except ImportError:
+    # Handle non-Windows platforms (e.g., MacOS, Linux)
+    ...
+```
+
+== Changes to Dataclasses in `fido2.webauthn`
+
+Many dataclasses in the `fido2.webauthn` module have been updated with new fields to align with the latest version of the WebAuthn specification. These updates include some backwards-incompatible changes that require adjustments to your code.
+
+=== Backwards-Incompatible Changes
+
+* **Keyword-only arguments**: All dataclass constructors now require arguments to be passed as keyword arguments. Positional arguments are no longer supported.
+  
+* **Removal of `extension_results`**:
+  - `AuthenticatorAttestationResponse.extension_results` has been removed. Instead, use `RegistrationResponse.client_extension_results` to access extension results.
+  - `AuthenticatorAssertionResponse.extension_results` has been removed. Instead, use `AuthenticationResponse.client_extension_results` to access extension results.
+
+== Migration Checklist
+
+- Update `Fido2Client` and `WindowsClient` constructors to use `ClientDataCollector`.
+- Update return value handling for `make_credential` and `get_assertion` methods.
+- Update `Fido2Server` methods to use `RegistrationResponse` and `AuthenticationResponse` objects.
+- Update dataclass constructors to use keyword arguments.
+- Replace references to `extension_results` with `client_extension_results`.
+- Refactor imports for `WindowsClient` for cross-platform compatibility.
