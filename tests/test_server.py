@@ -1,16 +1,16 @@
 import unittest
 
 from fido2.server import Fido2Server
+from fido2.utils import websafe_encode
 from fido2.webauthn import (
+    AttestedCredentialData,
+    AuthenticationResponse,
+    AuthenticatorAssertionResponse,
+    AuthenticatorData,
     CollectedClientData,
     PublicKeyCredentialRpEntity,
     UserVerificationRequirement,
-    AttestedCredentialData,
-    AuthenticatorData,
-    AuthenticatorAssertionResponse,
-    AuthenticationResponse,
 )
-from fido2.utils import websafe_encode
 
 from .test_ctap2 import _ATT_CRED_DATA, _CRED_ID
 

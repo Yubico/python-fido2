@@ -39,13 +39,11 @@ https://github.com/microsoft/webauthn
 
 from __future__ import annotations
 
-from enum import IntEnum, unique
-from ctypes.wintypes import BOOL, DWORD, LONG, LPCWSTR, HWND, WORD
-from typing import Mapping, Sequence, Any
-
 import ctypes
-from ctypes import WinDLL  # type: ignore
-from ctypes import LibraryLoader
+from ctypes import LibraryLoader, WinDLL  # type: ignore
+from ctypes.wintypes import BOOL, DWORD, HWND, LONG, LPCWSTR, WORD
+from enum import IntEnum, unique
+from typing import Any, Mapping, Sequence
 
 # Not implemented: Platform credentials support
 

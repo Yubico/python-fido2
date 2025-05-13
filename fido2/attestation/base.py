@@ -27,17 +27,18 @@
 
 from __future__ import annotations
 
-from ..webauthn import AuthenticatorData, AttestationObject
-from enum import IntEnum, unique
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from dataclasses import dataclass
-from functools import wraps
-from typing import Mapping, Sequence, Any
-
 import abc
+from dataclasses import dataclass
+from enum import IntEnum, unique
+from functools import wraps
+from typing import Any, Mapping, Sequence
+
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+
+from ..webauthn import AttestationObject, AuthenticatorData
 
 
 class InvalidAttestation(Exception):

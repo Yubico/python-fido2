@@ -1,18 +1,18 @@
+import pytest
+
 from fido2.client import Fido2Client
-from fido2.server import Fido2Server
 from fido2.ctap2.extensions import (
-    ThirdPartyPaymentExtension,
     PaymentCredentialInstrument,
     PaymentCurrencyAmount,
+    ThirdPartyPaymentExtension,
 )
 from fido2.payment import (
-    PaymentClientDataCollector,
     CollectedClientAdditionalPaymentData,
+    PaymentClientDataCollector,
 )
+from fido2.server import Fido2Server
 
 from . import TEST_PIN, CliInteraction
-
-import pytest
 
 
 @pytest.fixture(autouse=True, scope="module")

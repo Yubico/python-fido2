@@ -22,15 +22,14 @@ import os
 import select
 import struct
 import sys
-
 from ctypes import (
     Structure,
     c_char,
     c_int,
     c_ubyte,
+    c_uint8,
     c_uint16,
     c_uint32,
-    c_uint8,
 )
 
 from . import base

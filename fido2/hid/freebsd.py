@@ -30,19 +30,18 @@
 
 from __future__ import annotations
 
-from ctypes.util import find_library
 import ctypes
 import fcntl
 import glob
+import logging
+import os
 import re
 import struct
-import os
-from array import array
-
-from .base import HidDescriptor, parse_report_descriptor, FileCtapHidConnection
-
-import logging
 import sys
+from array import array
+from ctypes.util import find_library
+
+from .base import FileCtapHidConnection, HidDescriptor, parse_report_descriptor
 
 # Don't typecheck this file on Windows
 assert sys.platform != "win32"  # nosec

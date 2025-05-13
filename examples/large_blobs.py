@@ -32,11 +32,12 @@ This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
 
-from fido2.server import Fido2Server
-from exampleutils import get_client
-from fido2.utils import websafe_encode, websafe_decode
 import sys
 
+from exampleutils import get_client
+
+from fido2.server import Fido2Server
+from fido2.utils import websafe_decode, websafe_encode
 
 # Locate a suitable FIDO authenticator
 client, info = get_client(lambda info: "largeBlobKey" in info.extensions)

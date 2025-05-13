@@ -27,9 +27,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2 import cbor
 import unittest
 
+from fido2 import cbor
 
 _TEST_VECTORS = [
     ("00", 0),

@@ -18,16 +18,14 @@
 from __future__ import annotations
 
 import fcntl
-import select
+import logging
 import os
 import os.path
+import select
 import sys
-
 from ctypes import Structure, c_char, c_int, c_uint8, c_uint16, c_uint32
 
-from .base import HidDescriptor, FileCtapHidConnection
-
-import logging
+from .base import FileCtapHidConnection, HidDescriptor
 
 # Don't typecheck this file on Windows
 assert sys.platform != "win32"  # nosec

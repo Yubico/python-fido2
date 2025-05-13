@@ -1,9 +1,9 @@
-from fido2.ctap2.pin import ClientPin
+import pytest
+
 from fido2.ctap import CtapError
+from fido2.ctap2.pin import ClientPin
 
 from . import TEST_PIN
-
-import pytest
 
 
 @pytest.fixture(autouse=True, scope="module")

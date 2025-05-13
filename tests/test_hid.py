@@ -25,9 +25,10 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import unittest
+
 from fido2.hid import CtapHidDevice
 from fido2.hid.base import parse_report_descriptor
-import unittest
 
 
 class HidTest(unittest.TestCase):

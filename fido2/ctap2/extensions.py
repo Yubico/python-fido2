@@ -27,21 +27,22 @@
 
 from __future__ import annotations
 
-from .base import AttestationResponse, AssertionResponse, Ctap2
-from .pin import ClientPin, PinProtocol
-from .blob import LargeBlobs
-from ..utils import sha256, websafe_encode, _JsonDataObject
+import abc
+from dataclasses import dataclass
+from enum import Enum, unique
+from typing import Any, Mapping
+
+from ..utils import _JsonDataObject, sha256, websafe_encode
 from ..webauthn import (
-    PublicKeyCredentialDescriptor,
-    PublicKeyCredentialCreationOptions,
-    PublicKeyCredentialRequestOptions,
     AuthenticatorSelectionCriteria,
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialDescriptor,
+    PublicKeyCredentialRequestOptions,
     ResidentKeyRequirement,
 )
-from enum import Enum, unique
-from dataclasses import dataclass
-from typing import Any, Mapping
-import abc
+from .base import AssertionResponse, AttestationResponse, Ctap2
+from .blob import LargeBlobs
+from .pin import ClientPin, PinProtocol
 
 
 class ExtensionProcessor(abc.ABC):

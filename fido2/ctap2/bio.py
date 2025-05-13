@@ -27,16 +27,16 @@
 
 from __future__ import annotations
 
+import logging
+import struct
+from enum import IntEnum, unique
+from threading import Event
+from typing import Any, Callable, Mapping
+
 from .. import cbor
 from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol
-
-from enum import IntEnum, unique
-from threading import Event
-from typing import Callable, Mapping, Any
-import struct
-import logging
 
 logger = logging.getLogger(__name__)
 

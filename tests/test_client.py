@@ -29,19 +29,19 @@
 
 import unittest
 from unittest import mock
+
 from fido2 import cbor
-from fido2.utils import sha256
-from fido2.hid import CAPABILITY
+from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client
 from fido2.ctap import CtapError
 from fido2.ctap1 import RegistrationData
-from fido2.ctap2 import Info, AttestationResponse
-from fido2.client import ClientError, Fido2Client, DefaultClientDataCollector
+from fido2.ctap2 import AttestationResponse, Info
+from fido2.hid import CAPABILITY
+from fido2.utils import sha256
 from fido2.webauthn import (
-    PublicKeyCredentialCreationOptions,
     AttestationObject,
     CollectedClientData,
+    PublicKeyCredentialCreationOptions,
 )
-
 
 APP_ID = "https://foo.example.com"
 CLIENT_DATA_COLLECTOR = DefaultClientDataCollector(APP_ID)

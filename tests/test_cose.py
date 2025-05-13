@@ -28,12 +28,11 @@
 
 from __future__ import absolute_import, unicode_literals
 
-from fido2 import cbor, cose
-from fido2.cose import CoseKey, ES256, ESP256, RS256, Ed25519, EdDSA, UnsupportedKey
+import unittest
 from binascii import a2b_hex
 
-import unittest
-
+from fido2 import cbor, cose
+from fido2.cose import ES256, ESP256, RS256, CoseKey, Ed25519, EdDSA, UnsupportedKey
 
 _ES256_KEY = a2b_hex(
     b"A5010203262001215820A5FD5CE1B1C458C530A54FA61B31BF6B04BE8B97AFDE54DD8CBB69275A8A1BE1225820FA3A3231DD9DEED9D1897BE5A6228C59501E4BCD12975D3DFF730F01278EA61C"  # noqa E501

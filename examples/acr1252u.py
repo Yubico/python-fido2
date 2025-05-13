@@ -1,6 +1,6 @@
-from fido2.pcsc import CtapPcscDevice
 import time
 
+from fido2.pcsc import CtapPcscDevice
 
 # control codes:
 # 3225264 - magic number!!!

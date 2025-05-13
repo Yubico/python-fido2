@@ -35,13 +35,15 @@ is now allowed in a browser setting. See also prf.py for an example which uses
 the PRF extension which is enabled by default.
 """
 
-from fido2.server import Fido2Server
-from fido2.client import Fido2Client, DefaultClientDataCollector
-from fido2.ctap2.extensions import HmacSecretExtension
-from exampleutils import CliInteraction, enumerate_devices
 import ctypes
-import sys
 import os
+import sys
+
+from exampleutils import CliInteraction, enumerate_devices
+
+from fido2.client import DefaultClientDataCollector, Fido2Client
+from fido2.ctap2.extensions import HmacSecretExtension
+from fido2.server import Fido2Server
 
 # Use the Windows WebAuthn API if available, and we're not running as admin
 try:

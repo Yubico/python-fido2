@@ -37,8 +37,7 @@ and decode objects to/from CBOR.
 from __future__ import annotations
 
 import struct
-from typing import Any, Sequence, Mapping, Callable
-
+from typing import Any, Callable, Mapping, Sequence
 
 CborType = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
 

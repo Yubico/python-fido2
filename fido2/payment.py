@@ -25,23 +25,23 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from dataclasses import dataclass
+
+from .client import DefaultClientDataCollector
+from .ctap2.extensions import (
+    AuthenticationExtensionsPaymentInputs,
+    PaymentCredentialInstrument,
+    PaymentCurrencyAmount,
+)
+from .utils import _JsonDataObject
 from .webauthn import (
+    AuthenticatorAttachment,
     CollectedClientData,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions,
     ResidentKeyRequirement,
-    AuthenticatorAttachment,
     UserVerificationRequirement,
 )
-from .utils import _JsonDataObject
-from .ctap2.extensions import (
-    PaymentCurrencyAmount,
-    PaymentCredentialInstrument,
-    AuthenticationExtensionsPaymentInputs,
-)
-from .client import DefaultClientDataCollector
-
-from dataclasses import dataclass
 
 """
 Implements client and server functionality for the WebAuthn "payment" extension.

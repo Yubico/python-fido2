@@ -1,18 +1,23 @@
-from fido2.hid import CtapHidDevice, list_descriptors, open_connection, open_device
-from fido2.cose import CoseKey
-from fido2.hid import CAPABILITY
-from fido2.ctap2 import Ctap2
-from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
-from fido2.ctap2.credman import CredentialManagement
-from fido2.client import Fido2Client, ClientError, DefaultClientDataCollector
-
-from . import Printer, TEST_PIN, CliInteraction
-
+import logging
 from dataclasses import replace
-from threading import Thread, Event
+from threading import Event, Thread
 
 import pytest
-import logging
+
+from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client
+from fido2.cose import CoseKey
+from fido2.ctap2 import Ctap2
+from fido2.ctap2.credman import CredentialManagement
+from fido2.ctap2.pin import ClientPin, PinProtocolV1, PinProtocolV2
+from fido2.hid import (
+    CAPABILITY,
+    CtapHidDevice,
+    list_descriptors,
+    open_connection,
+    open_device,
+)
+
+from . import TEST_PIN, CliInteraction, Printer
 
 logger = logging.getLogger(__name__)
 
@@ -133,11 +138,12 @@ class DeviceManager:
             pytest.exit("No Authenticator selected")
 
     def _connect_nfc(self, reader, reconnect=True):
-        from fido2.pcsc import CtapPcscDevice
-        from smartcard.Exceptions import NoCardException, CardConnectionException
+        from smartcard.Exceptions import CardConnectionException, NoCardException
         from smartcard.ExclusiveConnectCardConnection import (
             ExclusiveConnectCardConnection,
         )
+
+        from fido2.pcsc import CtapPcscDevice
 
         logger.debug(f"(Re-)connect over NFC using reader: {reader.name}")
         event = Event()

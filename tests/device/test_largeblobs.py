@@ -1,13 +1,15 @@
-from fido2.ctap import CtapError
-from fido2.ctap2.pin import ClientPin
-from fido2.ctap2.blob import LargeBlobs
-from fido2.server import Fido2Server
-from fido2.utils import websafe_encode, websafe_decode
-from fido2 import cbor
-from . import TEST_PIN
-
 import os
+
 import pytest
+
+from fido2 import cbor
+from fido2.ctap import CtapError
+from fido2.ctap2.blob import LargeBlobs
+from fido2.ctap2.pin import ClientPin
+from fido2.server import Fido2Server
+from fido2.utils import websafe_decode, websafe_encode
+
+from . import TEST_PIN
 
 
 @pytest.fixture(autouse=True, scope="module")

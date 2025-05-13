@@ -1,5 +1,6 @@
-from fido2.mds3 import parse_blob, MdsAttestationVerifier
 from base64 import b64decode
+
+from fido2.mds3 import MdsAttestationVerifier, parse_blob
 
 # Example data from:
 # https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#examples

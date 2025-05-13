@@ -30,7 +30,7 @@
 
 import unittest
 
-from fido2.utils import hmac_sha256, sha256, websafe_encode, websafe_decode
+from fido2.utils import hmac_sha256, sha256, websafe_decode, websafe_encode
 
 
 class TestSha256(unittest.TestCase):

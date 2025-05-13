@@ -17,15 +17,14 @@
 
 from __future__ import annotations
 
-from .base import HidDescriptor, FileCtapHidConnection, parse_report_descriptor
-
-import glob
 import fcntl
+import glob
+import logging
 import struct
+import sys
 from array import array
 
-import logging
-import sys
+from .base import FileCtapHidConnection, HidDescriptor, parse_report_descriptor
 
 # Don't typecheck this file on Windows
 assert sys.platform != "win32"  # nosec

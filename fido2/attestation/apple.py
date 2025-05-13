@@ -27,19 +27,18 @@
 
 from __future__ import annotations
 
-from .base import (
-    Attestation,
-    AttestationType,
-    AttestationResult,
-    InvalidData,
-    catch_builtins,
-)
-from ..utils import sha256
-
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.constant_time import bytes_eq
 
+from ..utils import sha256
+from .base import (
+    Attestation,
+    AttestationResult,
+    AttestationType,
+    InvalidData,
+    catch_builtins,
+)
 
 OID_APPLE = x509.ObjectIdentifier("1.2.840.113635.100.8.2")
 

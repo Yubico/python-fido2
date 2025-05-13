@@ -27,7 +27,8 @@
 
 import unittest
 from unittest import mock
-from fido2.ctap1 import Ctap1, ApduError
+
+from fido2.ctap1 import ApduError, Ctap1
 
 
 class TestCtap1(unittest.TestCase):

@@ -17,15 +17,14 @@
 
 from __future__ import annotations
 
-from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
-
-from ctypes import wintypes, LibraryLoader
+import ctypes
+import logging
+import platform
+import sys
+from ctypes import LibraryLoader, wintypes
 from typing import cast
 
-import ctypes
-import platform
-import logging
-import sys
+from .base import FIDO_USAGE, FIDO_USAGE_PAGE, CtapHidConnection, HidDescriptor
 
 # Only typecheck this file on Windows
 assert sys.platform == "win32"  # nosec

@@ -27,11 +27,13 @@
 
 from __future__ import annotations
 
-from .utils import bytes2int, int2bytes
+from typing import Any, Mapping, Sequence, TypeVar
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519
-from typing import Sequence, Mapping, Any, TypeVar
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
+
+from .utils import bytes2int, int2bytes
 
 try:
     from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes

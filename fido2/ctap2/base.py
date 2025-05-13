@@ -27,24 +27,24 @@
 
 from __future__ import annotations
 
-from .. import cbor
-from ..utils import _DataClassMapping
-from ..ctap import CtapDevice, CtapError
-from ..cose import CoseKey
-from ..hid import CTAPHID, CAPABILITY
-from ..webauthn import AuthenticatorData, Aaguid
+import logging
+import struct
+from dataclasses import Field, dataclass, field, fields
+from enum import IntEnum, unique
+from threading import Event
+from typing import Any, Callable, Mapping
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from enum import IntEnum, unique
-from dataclasses import dataclass, field, fields, Field
-from threading import Event
-from typing import Mapping, Any, Callable
-import struct
-import logging
+from .. import cbor
+from ..cose import CoseKey
+from ..ctap import CtapDevice, CtapError
+from ..hid import CAPABILITY, CTAPHID
+from ..utils import _DataClassMapping
+from ..webauthn import Aaguid, AuthenticatorData
 
 logger = logging.getLogger(__name__)
 

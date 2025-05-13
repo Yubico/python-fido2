@@ -39,12 +39,14 @@ NOTE: You need to retrieve a MDS3 blob to run this example.
 See https://fidoalliance.org/metadata/ for more info.
 """
 
-from fido2.server import Fido2Server
-from fido2.attestation import UntrustedAttestation
-from fido2.mds3 import parse_blob, MdsAttestationVerifier
-from exampleutils import get_client
-from base64 import b64decode
 import sys
+from base64 import b64decode
+
+from exampleutils import get_client
+
+from fido2.attestation import UntrustedAttestation
+from fido2.mds3 import MdsAttestationVerifier, parse_blob
+from fido2.server import Fido2Server
 
 # Load the root CA used to sign the Metadata Statement blob
 ca = b64decode(

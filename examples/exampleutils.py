@@ -29,11 +29,11 @@
 Utilities for common functionality used by several examples in this directory.
 """
 
-from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, UserInteraction, DefaultClientDataCollector
-from getpass import getpass
 import ctypes
+from getpass import getpass
 
+from fido2.client import DefaultClientDataCollector, Fido2Client, UserInteraction
+from fido2.hid import CtapHidDevice
 
 # Support NFC devices if we can
 try:

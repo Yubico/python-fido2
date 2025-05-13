@@ -34,12 +34,12 @@ See the file README.adoc in this directory for details.
 Navigate to http://localhost:5000 in a supported web browser.
 """
 
-from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
-from fido2.server import Fido2Server
-from flask import Flask, session, request, redirect, abort, jsonify
-
 import os
 
+from flask import Flask, abort, jsonify, redirect, request, session
+
+from fido2.server import Fido2Server
+from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
 
 app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.

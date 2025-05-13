@@ -31,16 +31,17 @@ triggers one to select it. A new credential is created for that authenticator,
 and the operation is cancelled for the others.
 """
 
-from fido2.hid import CtapHidDevice
-from fido2.client import (
-    Fido2Client,
-    ClientError,
-    UserInteraction,
-    DefaultClientDataCollector,
-)
-from threading import Event, Thread
-from getpass import getpass
 import sys
+from getpass import getpass
+from threading import Event, Thread
+
+from fido2.client import (
+    ClientError,
+    DefaultClientDataCollector,
+    Fido2Client,
+    UserInteraction,
+)
+from fido2.hid import CtapHidDevice
 
 # Locate a device
 devs = list(CtapHidDevice.list_devices())

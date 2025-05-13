@@ -1,12 +1,13 @@
-from fido2.ctap2.pin import ClientPin
-from fido2.ctap2.credman import CredentialManagement
-from fido2.server import Fido2Server, to_descriptor
-from fido2.client import ClientError
-from . import TEST_PIN
-
-import pytest
 import os
 
+import pytest
+
+from fido2.client import ClientError
+from fido2.ctap2.credman import CredentialManagement
+from fido2.ctap2.pin import ClientPin
+from fido2.server import Fido2Server, to_descriptor
+
+from . import TEST_PIN
 
 rp = {"id": "example.com", "name": "Example RP"}
 user = {"id": b"user_id", "name": "A. User"}

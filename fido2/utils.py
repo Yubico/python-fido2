@@ -32,23 +32,24 @@ This module contains various functions used throughout the rest of the project.
 
 from __future__ import annotations
 
-from base64 import urlsafe_b64decode, urlsafe_b64encode
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hmac, hashes
-from io import BytesIO
-from dataclasses import fields, Field
+import struct
 from abc import abstractmethod
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from dataclasses import Field, fields
+from io import BytesIO
 from typing import (
-    Sequence,
-    Mapping,
     Any,
-    TypeVar,
+    ClassVar,
     Hashable,
+    Mapping,
+    Sequence,
+    TypeVar,
     get_type_hints,
     overload,
-    ClassVar,
 )
-import struct
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, hmac
 
 __all__ = [
     "websafe_encode",

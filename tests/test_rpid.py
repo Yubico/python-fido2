@@ -27,8 +27,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.rpid import verify_rp_id
 import unittest
+
+from fido2.rpid import verify_rp_id
 
 
 class TestRpId(unittest.TestCase):

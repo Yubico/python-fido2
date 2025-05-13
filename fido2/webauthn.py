@@ -27,20 +27,21 @@
 
 from __future__ import annotations
 
+import json
+import struct
+from dataclasses import dataclass, field
+from enum import Enum, EnumMeta, IntFlag, unique
+from typing import Any, Mapping, Sequence, cast
+
 from . import cbor
-from .cose import CoseKey, ES256
+from .cose import ES256, CoseKey
 from .utils import (
+    ByteBuffer,
+    _JsonDataObject,
     sha256,
     websafe_decode,
     websafe_encode,
-    ByteBuffer,
-    _JsonDataObject,
 )
-from enum import Enum, EnumMeta, unique, IntFlag
-from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence, cast
-import struct
-import json
 
 """
 Data classes based on the W3C WebAuthn specification (https://www.w3.org/TR/webauthn/).

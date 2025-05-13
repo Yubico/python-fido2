@@ -1,6 +1,5 @@
 from fido2.client import UserInteraction
 
-
 TEST_PIN = "a1b2c3d4"
 
 

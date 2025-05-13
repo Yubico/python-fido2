@@ -35,11 +35,12 @@ Yubico FIDO root CA (this will only work for Yubico devices).
 On Windows, the native WebAuthn API will be used.
 """
 
-from fido2.server import Fido2Server
-from fido2.attestation import AttestationVerifier
-from exampleutils import get_client
 from base64 import b64decode
 
+from exampleutils import get_client
+
+from fido2.attestation import AttestationVerifier
+from fido2.server import Fido2Server
 
 # Official Yubico root CA for FIDO Authenticators
 YUBICO_CA = b64decode(

@@ -27,13 +27,13 @@
 
 from __future__ import annotations
 
+import struct
+from enum import IntEnum, unique
+from typing import Any
+
 from .. import cbor
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
-
-from typing import Any
-from enum import IntEnum, unique
-import struct
 
 
 class Config:

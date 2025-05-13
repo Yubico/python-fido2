@@ -1,11 +1,12 @@
+import pytest
+
+from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client
 from fido2.ctap import CtapError
-from fido2.ctap2.bio import BioEnrollment, FPBioEnrollment, CaptureError
+from fido2.ctap2.bio import BioEnrollment, CaptureError, FPBioEnrollment
 from fido2.ctap2.pin import ClientPin
 from fido2.server import Fido2Server
-from fido2.client import Fido2Client, ClientError, DefaultClientDataCollector
 
 from . import TEST_PIN, CliInteraction
-import pytest
 
 
 @pytest.fixture(autouse=True, scope="module")

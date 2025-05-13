@@ -27,72 +27,72 @@
 
 from __future__ import annotations
 
-from .win_api import (
-    windll,
-    BOOL,
-    GUID,
-    WEBAUTHN_API_VERSION,
-    WEBAUTHN,
-    WebAuthNAuthenticatorAttachment,
-    WebAuthNUserVerificationRequirement,
-    WebAuthNAttestationConveyancePreference,
-    WebAuthNCredentialAttestation,
-    WebAuthNEnterpriseAttestation,
-    WebAuthNUserVerification,
-    WebAuthNRpEntityInformation,
-    WebAuthNUserEntityInformation,
-    WebAuthNCoseCredentialParameters,
-    WebAuthNClientData,
-    WebAuthNLargeBlobSupport,
-    WebAuthNLargeBlobOperation,
-    WebAuthNExtension,
-    WebAuthNCredProtectExtensionIn,
-    WebAuthNCredBlobExtension,
-    WebAuthNHmacSecretSaltValues,
-    WebAuthNHmacSecretSalt,
-    WebAuthNCredWithHmacSecretSalt,
-    WebAuthNMakeCredentialOptions,
-    WebAuthNGetAssertionOptions,
-    WebAuthNAssertion,
-)
-from . import (
-    WebAuthnClient,
-    ClientDataCollector,
-    AssertionSelection,
-    ClientError,
-    _cbor_list,
-)
-from ..webauthn import (
-    PublicKeyCredentialCreationOptions,
-    PublicKeyCredentialRequestOptions,
-    AuthenticationExtensionsClientOutputs,
-    AuthenticatorSelectionCriteria,
-    AuthenticatorAttestationResponse,
-    RegistrationResponse,
-    AttestationConveyancePreference,
-    ResidentKeyRequirement,
-    AuthenticatorAttachment,
-    PublicKeyCredentialType,
-    AttestationObject,
-    AuthenticatorData,
-    _as_cbor,
-)
-from ..ctap2 import AssertionResponse
-from ..ctap2.extensions import (
-    HMACGetSecretOutput,
-    AuthenticatorExtensionsPRFOutputs,
-    AuthenticatorExtensionsLargeBlobOutputs,
-    CredentialPropertiesOutput,
-    AuthenticatorExtensionsPRFInputs,
-    HMACGetSecretInput,
-    AuthenticatorExtensionsLargeBlobInputs,
-)
-from ..utils import _JsonDataObject, websafe_decode
-
-from threading import Thread
-from typing import Sequence, Any
 import ctypes
 import logging
+from threading import Thread
+from typing import Any, Sequence
+
+from ..ctap2 import AssertionResponse
+from ..ctap2.extensions import (
+    AuthenticatorExtensionsLargeBlobInputs,
+    AuthenticatorExtensionsLargeBlobOutputs,
+    AuthenticatorExtensionsPRFInputs,
+    AuthenticatorExtensionsPRFOutputs,
+    CredentialPropertiesOutput,
+    HMACGetSecretInput,
+    HMACGetSecretOutput,
+)
+from ..utils import _JsonDataObject, websafe_decode
+from ..webauthn import (
+    AttestationConveyancePreference,
+    AttestationObject,
+    AuthenticationExtensionsClientOutputs,
+    AuthenticatorAttachment,
+    AuthenticatorAttestationResponse,
+    AuthenticatorData,
+    AuthenticatorSelectionCriteria,
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialRequestOptions,
+    PublicKeyCredentialType,
+    RegistrationResponse,
+    ResidentKeyRequirement,
+    _as_cbor,
+)
+from . import (
+    AssertionSelection,
+    ClientDataCollector,
+    ClientError,
+    WebAuthnClient,
+    _cbor_list,
+)
+from .win_api import (
+    BOOL,
+    GUID,
+    WEBAUTHN,
+    WEBAUTHN_API_VERSION,
+    WebAuthNAssertion,
+    WebAuthNAttestationConveyancePreference,
+    WebAuthNAuthenticatorAttachment,
+    WebAuthNClientData,
+    WebAuthNCoseCredentialParameters,
+    WebAuthNCredBlobExtension,
+    WebAuthNCredentialAttestation,
+    WebAuthNCredProtectExtensionIn,
+    WebAuthNCredWithHmacSecretSalt,
+    WebAuthNEnterpriseAttestation,
+    WebAuthNExtension,
+    WebAuthNGetAssertionOptions,
+    WebAuthNHmacSecretSalt,
+    WebAuthNHmacSecretSaltValues,
+    WebAuthNLargeBlobOperation,
+    WebAuthNLargeBlobSupport,
+    WebAuthNMakeCredentialOptions,
+    WebAuthNRpEntityInformation,
+    WebAuthNUserEntityInformation,
+    WebAuthNUserVerification,
+    WebAuthNUserVerificationRequirement,
+    windll,
+)
 
 logger = logging.getLogger(__name__)
 

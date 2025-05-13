@@ -25,26 +25,26 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.webauthn import AuthenticatorData
+import unittest
+
+from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
+
 from fido2.attestation import (
-    Attestation,
-    AttestationType,
-    UnsupportedAttestation,
-    FidoU2FAttestation,
-    PackedAttestation,
-    TpmAttestation,
-    NoneAttestation,
     AndroidSafetynetAttestation,
     AppleAttestation,
+    Attestation,
+    AttestationType,
+    FidoU2FAttestation,
     InvalidData,
     InvalidSignature,
+    NoneAttestation,
+    PackedAttestation,
+    TpmAttestation,
+    UnsupportedAttestation,
     UnsupportedType,
     verify_x509_chain,
 )
-from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
-
-import unittest
-
+from fido2.webauthn import AuthenticatorData
 
 # GS Root R2 (https://pki.goog/)
 _GSR2_DER = bytes.fromhex(

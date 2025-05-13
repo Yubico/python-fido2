@@ -27,18 +27,18 @@
 
 from __future__ import annotations
 
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from cryptography.hazmat.backends import default_backend
+
+from ..cose import ES256
 from .base import (
     Attestation,
-    AttestationType,
     AttestationResult,
+    AttestationType,
     InvalidSignature,
     catch_builtins,
 )
-from ..cose import ES256
-
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
 
 
 class FidoU2FAttestation(Attestation):

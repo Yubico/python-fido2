@@ -1,7 +1,8 @@
-from fido2.server import Fido2Server
-
 import os
+
 import pytest
+
+from fido2.server import Fido2Server
 
 
 @pytest.fixture(autouse=True, scope="module")

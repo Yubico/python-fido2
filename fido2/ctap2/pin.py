@@ -27,9 +27,13 @@
 
 from __future__ import annotations
 
-from ..utils import sha256, hmac_sha256, bytes2int, int2bytes
-from ..cose import CoseKey
-from .base import Ctap2
+import abc
+import logging
+import os
+from dataclasses import dataclass
+from enum import IntEnum, IntFlag, unique
+from threading import Event
+from typing import Any, Callable, ClassVar, Mapping
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -37,14 +41,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from enum import IntEnum, IntFlag, unique
-from dataclasses import dataclass
-from threading import Event
-from typing import Any, Mapping, ClassVar, Callable
-
-import abc
-import os
-import logging
+from ..cose import CoseKey
+from ..utils import bytes2int, hmac_sha256, int2bytes, sha256
+from .base import Ctap2
 
 logger = logging.getLogger(__name__)
 

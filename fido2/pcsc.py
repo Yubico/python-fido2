@@ -28,18 +28,18 @@
 
 from __future__ import annotations
 
-from .ctap import CtapDevice, CtapError, STATUS
-from .hid import CAPABILITY, CTAPHID
-from .utils import LOG_LEVEL_TRAFFIC
+import logging
+import struct
+from threading import Event
+from typing import Callable, Iterator
+
 from smartcard import System
 from smartcard.CardConnection import CardConnection
 from smartcard.pcsc.PCSCExceptions import ListReadersException
 
-from threading import Event
-from typing import Callable, Iterator
-import struct
-import logging
-
+from .ctap import STATUS, CtapDevice, CtapError
+from .hid import CAPABILITY, CTAPHID
+from .utils import LOG_LEVEL_TRAFFIC
 
 AID_FIDO = b"\xa0\x00\x00\x06\x47\x2f\x00\x01"
 SW_SUCCESS = (0x90, 0x00)

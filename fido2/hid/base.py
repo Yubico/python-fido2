@@ -27,10 +27,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import struct
 import abc
 import os
+import struct
+from dataclasses import dataclass
 
 FIDO_USAGE_PAGE = 0xF1D0
 FIDO_USAGE = 0x1

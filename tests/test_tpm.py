@@ -25,9 +25,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.attestation.tpm import TpmAttestationFormat, TpmPublicFormat
-
 import unittest
+
+from fido2.attestation.tpm import TpmAttestationFormat, TpmPublicFormat
 
 
 class TestTpmObject(unittest.TestCase):

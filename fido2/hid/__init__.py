@@ -27,16 +27,17 @@
 
 from __future__ import annotations
 
-from .base import HidDescriptor
-from ..ctap import CtapDevice, CtapError, STATUS
-from ..utils import LOG_LEVEL_TRAFFIC
-from threading import Event
-from enum import IntEnum, IntFlag, unique
-from typing import Callable, Iterator
+import logging
+import os
 import struct
 import sys
-import os
-import logging
+from enum import IntEnum, IntFlag, unique
+from threading import Event
+from typing import Callable, Iterator
+
+from ..ctap import STATUS, CtapDevice, CtapError
+from ..utils import LOG_LEVEL_TRAFFIC
+from .base import HidDescriptor
 
 logger = logging.getLogger(__name__)
 

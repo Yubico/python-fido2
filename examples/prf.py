@@ -31,11 +31,12 @@ creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
 
-from fido2.server import Fido2Server
-from fido2.utils import websafe_encode
-from exampleutils import get_client
 import os
 
+from exampleutils import get_client
+
+from fido2.server import Fido2Server
+from fido2.utils import websafe_encode
 
 # Locate a suitable FIDO authenticator
 client, _ = get_client(lambda info: "hmac-secret" in info.extensions)

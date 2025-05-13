@@ -27,38 +27,38 @@
 
 from __future__ import annotations
 
-from .rpid import verify_rp_id
+import logging
+import os
+from typing import Any, Callable, Mapping, Sequence
+
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from cryptography.hazmat.primitives import constant_time
+
 from .cose import CoseKey
-from .utils import websafe_encode, websafe_decode
+from .rpid import verify_rp_id
+from .utils import websafe_decode, websafe_encode
 from .webauthn import (
-    CollectedClientData,
-    AuthenticatorData,
+    AttestationConveyancePreference,
     AttestationObject,
     AttestedCredentialData,
-    AttestationConveyancePreference,
-    PublicKeyCredentialRpEntity,
-    PublicKeyCredentialUserEntity,
-    AuthenticatorSelectionCriteria,
-    PublicKeyCredentialDescriptor,
-    PublicKeyCredentialType,
-    PublicKeyCredentialParameters,
-    PublicKeyCredentialCreationOptions,
-    PublicKeyCredentialRequestOptions,
-    UserVerificationRequirement,
-    ResidentKeyRequirement,
-    AuthenticatorAttachment,
-    RegistrationResponse,
     AuthenticationResponse,
+    AuthenticatorAttachment,
+    AuthenticatorData,
+    AuthenticatorSelectionCriteria,
+    CollectedClientData,
     CredentialCreationOptions,
     CredentialRequestOptions,
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialDescriptor,
+    PublicKeyCredentialParameters,
+    PublicKeyCredentialRequestOptions,
+    PublicKeyCredentialRpEntity,
+    PublicKeyCredentialType,
+    PublicKeyCredentialUserEntity,
+    RegistrationResponse,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
 )
-
-from cryptography.hazmat.primitives import constant_time
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from typing import Sequence, Mapping, Callable, Any
-
-import os
-import logging
 
 logger = logging.getLogger(__name__)
 

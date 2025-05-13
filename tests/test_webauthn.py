@@ -25,22 +25,22 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import json
+import unittest
+
+from fido2.utils import websafe_encode
 from fido2.webauthn import (
     Aaguid,
     AuthenticatorSelectionCriteria,
     CollectedClientData,
-    ResidentKeyRequirement,
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialDescriptor,
+    PublicKeyCredentialParameters,
+    PublicKeyCredentialRequestOptions,
     PublicKeyCredentialRpEntity,
     PublicKeyCredentialUserEntity,
-    PublicKeyCredentialParameters,
-    PublicKeyCredentialDescriptor,
-    PublicKeyCredentialCreationOptions,
-    PublicKeyCredentialRequestOptions,
+    ResidentKeyRequirement,
 )
-from fido2.utils import websafe_encode
-
-import unittest
-import json
 
 
 class TestAaguid(unittest.TestCase):

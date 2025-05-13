@@ -1,12 +1,13 @@
-from fido2.server import Fido2Server
-from fido2.client import Fido2Client, DefaultClientDataCollector
+import os
+
+import pytest
+
+from fido2.client import DefaultClientDataCollector, Fido2Client
 from fido2.ctap2.extensions import HmacSecretExtension
+from fido2.server import Fido2Server
 from fido2.utils import websafe_encode
 
 from . import TEST_PIN, CliInteraction
-
-import os
-import pytest
 
 
 @pytest.fixture(autouse=True, scope="module")

@@ -17,14 +17,13 @@
 
 from __future__ import annotations
 
-from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
-
 import ctypes
 import ctypes.util
-import threading
-from queue import Queue, Empty
-
 import logging
+import threading
+from queue import Empty, Queue
+
+from .base import FIDO_USAGE, FIDO_USAGE_PAGE, CtapHidConnection, HidDescriptor
 
 logger = logging.getLogger(__name__)
 

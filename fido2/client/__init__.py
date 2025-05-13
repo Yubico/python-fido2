@@ -27,48 +27,48 @@
 
 from __future__ import annotations
 
-from ..hid import STATUS
-from ..ctap import CtapDevice, CtapError
-from ..ctap1 import Ctap1, APDU, ApduError
-from ..ctap2 import Ctap2, AssertionResponse, Info
-from ..ctap2.pin import ClientPin, PinProtocol
-from ..ctap2.extensions import (
-    Ctap2Extension,
-    RegistrationExtensionProcessor,
-    AuthenticationExtensionProcessor,
-    _DEFAULT_EXTENSIONS,
-)
-from ..webauthn import (
-    Aaguid,
-    AttestationObject,
-    CollectedClientData,
-    PublicKeyCredentialDescriptor,
-    PublicKeyCredentialCreationOptions,
-    PublicKeyCredentialRequestOptions,
-    AuthenticationExtensionsClientOutputs,
-    AuthenticatorSelectionCriteria,
-    UserVerificationRequirement,
-    AuthenticatorAttestationResponse,
-    AuthenticatorAssertionResponse,
-    RegistrationResponse,
-    AuthenticationResponse,
-    AttestationConveyancePreference,
-    ResidentKeyRequirement,
-    AuthenticatorAttachment,
-    PublicKeyCredentialType,
-    _as_cbor,
-)
-from ..cose import ES256
-from ..rpid import verify_rp_id
-from ..utils import sha256
-from enum import IntEnum, unique
-from dataclasses import replace
-from urllib.parse import urlparse
-from threading import Timer, Event
-from typing import Callable, Sequence, Mapping, Any, overload
-
 import abc
 import logging
+from dataclasses import replace
+from enum import IntEnum, unique
+from threading import Event, Timer
+from typing import Any, Callable, Mapping, Sequence, overload
+from urllib.parse import urlparse
+
+from ..cose import ES256
+from ..ctap import CtapDevice, CtapError
+from ..ctap1 import APDU, ApduError, Ctap1
+from ..ctap2 import AssertionResponse, Ctap2, Info
+from ..ctap2.extensions import (
+    _DEFAULT_EXTENSIONS,
+    AuthenticationExtensionProcessor,
+    Ctap2Extension,
+    RegistrationExtensionProcessor,
+)
+from ..ctap2.pin import ClientPin, PinProtocol
+from ..hid import STATUS
+from ..rpid import verify_rp_id
+from ..utils import sha256
+from ..webauthn import (
+    Aaguid,
+    AttestationConveyancePreference,
+    AttestationObject,
+    AuthenticationExtensionsClientOutputs,
+    AuthenticationResponse,
+    AuthenticatorAssertionResponse,
+    AuthenticatorAttachment,
+    AuthenticatorAttestationResponse,
+    AuthenticatorSelectionCriteria,
+    CollectedClientData,
+    PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialDescriptor,
+    PublicKeyCredentialRequestOptions,
+    PublicKeyCredentialType,
+    RegistrationResponse,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+    _as_cbor,
+)
 
 logger = logging.getLogger(__name__)
 

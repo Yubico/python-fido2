@@ -31,8 +31,8 @@ Connects to each attached FIDO device, and:
     2. If the device supports WINK, perform the wink command.
 """
 
-from fido2.hid import CtapHidDevice, CAPABILITY
 from fido2.ctap2 import Ctap2
+from fido2.hid import CAPABILITY, CtapHidDevice
 
 try:
     from fido2.pcsc import CtapPcscDevice

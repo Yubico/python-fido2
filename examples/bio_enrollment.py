@@ -33,12 +33,13 @@ NOTE: This uses a draft bio enrollment specification which is not yet final.
 Consider this highly experimental.
 """
 
-from fido2.hid import CtapHidDevice
-from fido2.ctap2 import Ctap2, FPBioEnrollment, CaptureError
-from fido2.ctap2.pin import ClientPin
-from fido2.ctap2.bio import BioEnrollment
-from getpass import getpass
 import sys
+from getpass import getpass
+
+from fido2.ctap2 import CaptureError, Ctap2, FPBioEnrollment
+from fido2.ctap2.bio import BioEnrollment
+from fido2.ctap2.pin import ClientPin
+from fido2.hid import CtapHidDevice
 
 pin = None
 uv = "discouraged"

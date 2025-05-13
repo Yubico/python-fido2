@@ -27,18 +27,18 @@
 
 from __future__ import annotations
 
+import os
+import struct
+import zlib
+from typing import Any, Mapping, Sequence, cast
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from .. import cbor
 from ..utils import sha256
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
-
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.exceptions import InvalidTag
-
-from typing import Any, Sequence, Mapping, cast
-import struct
-import zlib
-import os
 
 
 def _compress(data):

@@ -25,9 +25,11 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.hid import CTAPHID
 from unittest import mock
+
 import pytest
+
+from fido2.hid import CTAPHID
 
 
 @pytest.fixture(autouse=True, scope="module")
