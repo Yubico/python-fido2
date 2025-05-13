@@ -326,7 +326,8 @@ class PointProjective:
         t2 = t_dsk + t2prime
         t2_bin = t2.to_sec1_uncompressed()
         cv = sha256(n + t2_bin + message)
-        if cv == c:
+        cv_int = int.from_bytes(cv, 'big') % self.crv.n
+        if cv_int == c_int:
             return
         raise InvalidSignature()
 
