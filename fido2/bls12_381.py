@@ -320,7 +320,7 @@ class PointProjective:
             t2prime = self.crv.generator * 0
         s = int.from_bytes(signature[:self.crv.scalar_len], 'big')
         c = signature[self.crv.scalar_len:self.crv.scalar_len*2]
-        c_int = int.from_bytes(c, 'big')
+        c_int = int.from_bytes(c, 'big') % self.crv.n
         n = signature[self.crv.scalar_len*2:]
         t_dsk = self.crv.generator * s + self * c_int
         t2 = t_dsk + t2prime
@@ -420,14 +420,14 @@ def finish_split_bbs_proof(
     idx = list(range(len(attrs)))
     undisclosed_idx = set(range(len(attrs))) - disclose_idx
     undisclosed_idx_nonzero = undisclosed_idx - set([0])
-    c_bin = c
 
-    c = int.from_bytes(c, 'big')
+    c = int.from_bytes(c, 'big') % crv.n
     t_dsk = g1 * sa0 + dpk * c
     t2 = t_dsk + t2prime
     t2_bin = t2.to_sec1_uncompressed()
     c2 = sha256(n + t2_bin + c_host)
-    assert c2 == c_bin
+    c2_int = int.from_bytes(c2, 'big') % crv.n
+    assert c2_int == c
 
     sr1 = (rr1 + c * r1) % crv.n
     sr2 = (rr2 + c * r2) % crv.n
@@ -482,7 +482,8 @@ def verify_split_bbs_proof(
         pk.to_sec1_uncompressed(),
     ]))
     cv = sha256(n + t2.to_sec1_uncompressed() + c_host)
-    return cv == int.to_bytes(c, crv.scalar_len, 'big')
+    cv_int = int.from_bytes(cv, 'big') % crv.n
+    return cv_int == c
 
 
 CRV_BLS = Curve(
