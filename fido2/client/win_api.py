@@ -374,7 +374,6 @@ class WebAuthNCredentialList(ctypes.Structure):
 
 
 class WebAuthNHmacSecretSalt(ctypes.Structure):
-
     _fields_ = [
         ("cbFirst", DWORD),
         ("pbFirst", PBYTE),
@@ -391,7 +390,6 @@ class WebAuthNHmacSecretSalt(ctypes.Structure):
 
 
 class WebAuthNCredWithHmacSecretSalt(ctypes.Structure):
-
     _fields_ = [
         ("cbCredID", DWORD),
         ("pbCredID", PBYTE),
@@ -406,7 +404,6 @@ class WebAuthNCredWithHmacSecretSalt(ctypes.Structure):
 
 
 class WebAuthNHmacSecretSaltValues(ctypes.Structure):
-
     _fields_ = [
         ("pGlobalHmacSalt", ctypes.POINTER(WebAuthNHmacSecretSalt)),
         ("cCredWithHmacSecretSaltList", DWORD),

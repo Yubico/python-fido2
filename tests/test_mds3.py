@@ -252,9 +252,7 @@ iOiJGSURPMjEwMDAyMDE1MTIyMTAwMSIsImNlcnRpZmljYXRpb25Qb2xpY3lWZXJzaW9uIjoiMS4wLjE
 iLCJjZXJ0aWZpY2F0aW9uUmVxdWlyZW1lbnRzVmVyc2lvbiI6IjEuMC4xIn1dLCJ0aW1lT2ZMYXN0U3R
 hdHVzQ2hhbmdlIjoiMjAxOS0wMS0wNCJ9XX0.MEYCIQD6RzXCuiskDXpvEtdfN4OQUQ4KxsoDLZYMTOg
 Jj4B6PwIhAM3RtYg4CaGkcbFJrcJeCbAXCAC7LbfQSr8EdM79GyGw
-""".replace(
-    "\n", ""
-).encode()
+""".replace("\n", "").encode()
 
 
 AAGUID = bytes.fromhex("0132d110bf4e4208a403ab4f5f12efe5")

@@ -105,9 +105,7 @@ fdc24624a4cb69caaab18df965058fbac39df9714b9c80b9a12d715cfc4dd15ed3a6e191a6d26e
 6d65d3ca284944cb10254d85db0d8948294fb8174a41206c6b5e36406bae447343f8c9f97420e3
 9f361815dfb268b33ccde5f29e4348a70f95abc30754c839fa7126e5bd882377d6abe3c0c95ba5
 c21190a5e4fff5380b2c23cc1655e593244019e172ba8284618471d95b92c231c1ffe98ff23
-""".replace(
-                    "\n", ""
-                )
+""".replace("\n", "")
             ),
             "x5c": [
                 bytes.fromhex(
@@ -142,9 +140,7 @@ a4501b18d56a6a73e35f00e043d8febb7a4c719c837bc5cb801efe23570d6c8b40699ba411fe66
 f6fe5558f7d1c56a7646ba483cd601690a9323caba9257ae561781b13c658083ad1281047d94d4
 c1ab9759d90a16fbe167cec388e7b67027a20dbc1b88986dbb636107ef91ffec22c413ac5fbfec
 3de9ee4aa1c6e4c173e43246193890c8b024587fcc8028eb379f515de3c678b11dfb81aef3547c
-3c6e790577d52f775f9148""".replace(
-                        "\n", ""
-                    )
+3c6e790577d52f775f9148""".replace("\n", "")
                 ),
                 bytes.fromhex(
                     """308205e8308203d0a003020102021333000000a5304bb34bf0
@@ -186,9 +182,7 @@ a455ff5be5ce8f7bde0420b5d7d24ec254affdc2e7e946c961ec159b6dfc703e3934f9445b0072
 d42d17888534fee9daf844260de901c3b18b49ccb2a5f81f0f4639f2e2cfa1ce1d7c791cef6f48
 5d10df989aac02b1e9afd1094603f5307133f5f59ce105a5910700f98fea5a5fcf8f5cf4c797bd
 79d440cc4f9161f5cc61e0e8f06592050cd1f0f0fd066bd1d6335710fdf8159b75281ee1082bff
-1da2fc0b631bd346ac""".replace(
-                        "\n", ""
-                    )
+1da2fc0b631bd346ac""".replace("\n", "")
                 ),
             ],
             "certInfo": bytes.fromhex(
@@ -196,9 +190,7 @@ d42d17888534fee9daf844260de901c3b18b49ccb2a5f81f0f4639f2e2cfa1ce1d7c791cef6f48
 9fde4379f649aa170c7072d1adf230de439efc80810014f7c8b0cdeb31328648130a19733d6fff
 16e76e1300000003ef605603446ed8c56aa7608d01a6ea5651ee67a8a20022000bdf681917e185
 29c61e1b85a1e7952f3201eb59c609ed5d8e217e5de76b228bbd0022000b0a10d216b0c3ab82bf
-dc1f0a016ab9493384c7aee1937ee8800f76b30c9b71a7""".replace(
-                    "\n", ""
-                )
+dc1f0a016ab9493384c7aee1937ee8800f76b30c9b71a7""".replace("\n", "")
             ),
             "pubArea": bytes.fromhex(
                 """0001000b0006047200209dffcbf36c383ae699fb986
@@ -209,9 +201,7 @@ dffede0ee0c5ebc8b7a08b36555c8091669e9ef2cb4fd858134a01e9522d3ef924069aeeec2271
 a6f6181ed64f1cfb40db5e01687454cfacafa8318bdc6a677550baa6e24f8af864fa5324e9d930
 a97cdeb1995b476f21a017b33ab7fe4139f2524c784fcb04cf5241c89f0c145eb23da914ad1722
 d47a843692a0b2a567d94dd808c13678a51c5a0583dc042dcbba1b9ceff12b159d0539248b0994
-ee18128ed50dd7a855e54d2459db005""".replace(
-                    "\n", ""
-                )
+ee18128ed50dd7a855e54d2459db005""".replace("\n", "")
             ),
         }
         auth_data = AuthenticatorData(

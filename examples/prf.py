@@ -30,6 +30,7 @@ Connects to the first FIDO device found which supports the PRF extension,
 creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
+
 from fido2.server import Fido2Server
 from fido2.utils import websafe_encode
 from exampleutils import get_client

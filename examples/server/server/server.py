@@ -33,6 +33,7 @@ See the file README.adoc in this directory for details.
 
 Navigate to http://localhost:5000 in a supported web browser.
 """
+
 from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
 from fido2.server import Fido2Server
 from flask import Flask, session, request, redirect, abort, jsonify

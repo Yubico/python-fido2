@@ -32,6 +32,7 @@ fingerprint. This requires that a PIN is already set.
 NOTE: This uses a draft bio enrollment specification which is not yet final.
 Consider this highly experimental.
 """
+
 from fido2.hid import CtapHidDevice
 from fido2.ctap2 import Ctap2, FPBioEnrollment, CaptureError
 from fido2.ctap2.pin import ClientPin

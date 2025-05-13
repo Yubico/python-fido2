@@ -259,7 +259,9 @@ def _dev_read_thread(hid_device):
     while retries < max_retries:
         # Run the run loop
         run_loop_run_result = cf.CFRunLoopRunInMode(
-            K_CF_RUNLOOP_DEFAULT_MODE, 4, True  # Timeout in seconds
+            K_CF_RUNLOOP_DEFAULT_MODE,
+            4,
+            True,  # Timeout in seconds
         )  # Return after source handled
 
         received_data = not hid_device.read_queue.empty()

@@ -288,7 +288,7 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             }
         )
         self.assertEqual(o.user.id, b"user_id")
-        self.assertEqual(o.challenge, b"request_challenge"),
+        self.assertEqual(o.challenge, b"request_challenge")
         self.assertIsNone(o.timeout)
         self.assertIsNone(o.authenticator_selection)
         self.assertIsNone(o.attestation)

@@ -38,6 +38,7 @@ On Windows, the native WebAuthn API will be used.
 NOTE: You need to retrieve a MDS3 blob to run this example.
 See https://fidoalliance.org/metadata/ for more info.
 """
+
 from fido2.server import Fido2Server
 from fido2.attestation import UntrustedAttestation
 from fido2.mds3 import parse_blob, MdsAttestationVerifier

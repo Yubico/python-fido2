@@ -30,6 +30,7 @@ Connects to each FIDO device found, and causes them all to blink until the user
 triggers one to select it. A new credential is created for that authenticator,
 and the operation is cancelled for the others.
 """
+
 from fido2.hid import CtapHidDevice
 from fido2.client import (
     Fido2Client,

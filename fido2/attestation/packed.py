@@ -74,8 +74,7 @@ def _validate_packed_cert(cert, aaguid):
         ext_aaguid = ext.value.value[2:]
         if ext_aaguid != aaguid:
             raise InvalidData(
-                "AAGUID in Authenticator data does not "
-                "match attestation certificate!"
+                "AAGUID in Authenticator data does not match attestation certificate!"
             )
     except x509.ExtensionNotFound:
         pass  # If missing, ignore

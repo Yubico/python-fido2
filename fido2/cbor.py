@@ -124,8 +124,8 @@ def _load_bool(ai: int, data: bytes) -> tuple[bool, bytes]:
 
 
 def _load_bytes(ai: int, data: bytes) -> tuple[bytes, bytes]:
-    l, data = _load_int(ai, data)
-    return data[:l], data[l:]
+    ln, data = _load_int(ai, data)
+    return data[:ln], data[ln:]
 
 
 def _load_text(ai: int, data: bytes) -> tuple[str, bytes]:
@@ -134,18 +134,18 @@ def _load_text(ai: int, data: bytes) -> tuple[str, bytes]:
 
 
 def _load_array(ai: int, data: bytes) -> tuple[Sequence[CborType], bytes]:
-    l, data = _load_int(ai, data)
+    ln, data = _load_int(ai, data)
     values = []
-    for i in range(l):
+    for i in range(ln):
         val, data = decode_from(data)
         values.append(val)
     return values, data
 
 
 def _load_map(ai: int, data: bytes) -> tuple[Mapping[CborType, CborType], bytes]:
-    l, data = _load_int(ai, data)
+    ln, data = _load_int(ai, data)
     values = {}
-    for i in range(l):
+    for i in range(ln):
         k, data = decode_from(data)
         v, data = decode_from(data)
         values[k] = v

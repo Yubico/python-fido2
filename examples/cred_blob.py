@@ -29,6 +29,7 @@
 Connects to the first FIDO device found which supports the CredBlob extension,
 creates a new credential for it with the extension enabled, and stores some data.
 """
+
 from fido2.server import Fido2Server
 from exampleutils import get_client
 import sys

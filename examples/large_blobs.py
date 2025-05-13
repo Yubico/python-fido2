@@ -31,6 +31,7 @@ creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
+
 from fido2.server import Fido2Server
 from exampleutils import get_client
 from fido2.utils import websafe_encode, websafe_decode
