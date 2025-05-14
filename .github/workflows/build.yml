@@ -64,6 +64,8 @@ jobs:
       - name: Build source package
         run: |
           python -m pip install --upgrade pip setuptools poetry
+          # poetry will by default set all timestamps to 0, which Debian doesn't allow
+          export SOURCE_DATE_EPOCH=$(git show --no-patch --format=%ct)
           poetry build
 
       - name: Upload source package
