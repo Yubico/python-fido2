@@ -47,6 +47,15 @@ from .utils import (
 Data classes based on the W3C WebAuthn specification (https://www.w3.org/TR/webauthn/).
 
 See the specification for a description and details on their usage.
+
+Most of these classes can be serialized to JSON-compatible dictionaries by passing them
+to dict(), and then deserialized by calling DataClass.from_dict(data). For example:
+
+    user = PublicKeyCredentialUserEntity(id=b"1234", name="Alice")
+    data = dict(user)
+    # data is now a JSON-compatible dictionary, json.dumps(data) will work
+    user2 = PublicKeyCredentialUserEntity.from_dict(data)
+    assert user == user2
 """
 
 # Binary types
@@ -598,6 +607,15 @@ class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
 
 @dataclass(eq=False, frozen=True, kw_only=True)
 class RegistrationResponse(_JsonDataObject):
+    """
+    Represents the RegistrationResponse structure from the WebAuthn specification,
+    with fields modeled after the JSON serialization.
+
+    Serializing this object to JSON can be done by using json.dumps(dict(response)).
+
+    See: https://www.w3.org/TR/webauthn-3/#dictdef-registrationresponsejson
+    """
+
     id: str = field(init=False)
     raw_id: bytes
     response: AuthenticatorAttestationResponse
@@ -630,6 +648,15 @@ class RegistrationResponse(_JsonDataObject):
 
 @dataclass(eq=False, frozen=True, kw_only=True)
 class AuthenticationResponse(_JsonDataObject):
+    """
+    Represents the AuthenticationResponse structure from the WebAuthn specification,
+    with fields modeled after the JSON serialization.
+
+    Serializing this object to JSON can be done by using json.dumps(dict(response)).
+
+    See: https://www.w3.org/TR/webauthn-3/#dictdef-authenticationresponsejson
+    """
+
     id: str = field(init=False)
     raw_id: bytes
     response: AuthenticatorAssertionResponse
