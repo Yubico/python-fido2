@@ -38,6 +38,7 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import Field, fields
 from io import BytesIO
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
     Hashable,
@@ -47,6 +48,15 @@ from typing import (
     get_type_hints,
     overload,
 )
+
+if TYPE_CHECKING:
+    import sys
+
+    if sys.version_info >= (3, 11):
+        from typing import Self
+    else:
+        # Fallback for Python 3.10 and earlier
+        Self = TypeVar("Self", bound="_DataClassMapping")
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
@@ -121,10 +131,12 @@ def websafe_decode(data: str | bytes) -> bytes:
     :return: The decoded bytes.
     """
     if isinstance(data, str):
-        data = data.encode("ascii")
+        data_b = data.encode("ascii")
+    else:
+        data_b = bytes(data)
 
-    data += b"=" * (-len(data) % 4)
-    return urlsafe_b64decode(data)
+    data_b += b"=" * (-len(data_b) % 4)
+    return urlsafe_b64decode(data_b)
 
 
 def websafe_encode(data: bytes) -> str:
@@ -161,7 +173,6 @@ class ByteBuffer(BytesIO):
 
 
 _T = TypeVar("_T", bound=Hashable)
-_S = TypeVar("_S", bound="_DataClassMapping")
 
 
 class _DataClassMapping(Mapping[_T, Any]):
@@ -254,11 +265,15 @@ class _DataClassMapping(Mapping[_T, Any]):
 
     @overload
     @classmethod
-    def from_dict(cls: type[_S], data: None) -> None: ...
+    def from_dict(cls: type[Self], data: None) -> None: ...
 
     @overload
     @classmethod
-    def from_dict(cls: type[_S], data: Mapping[_T, Any]) -> _S: ...
+    def from_dict(cls: type[Self], data: Self) -> Self: ...
+
+    @overload
+    @classmethod
+    def from_dict(cls: type[Self], data: Mapping[_T, Any]) -> Self: ...
 
     @classmethod
     def from_dict(cls, data):

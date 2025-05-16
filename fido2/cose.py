@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Mapping, Sequence, TypeVar
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -35,10 +35,9 @@ from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, paddin
 
 from .utils import bytes2int, int2bytes
 
-try:
+if TYPE_CHECKING:
+    # This type isn't available on cryptography <40.
     from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
-except ImportError:
-    pass  # This type isn't available on cryptography <40.
 
 
 class CoseKey(dict):
@@ -60,7 +59,7 @@ class CoseKey(dict):
 
     @classmethod
     def from_cryptography_key(
-        cls: type[T_CoseKey], public_key: "PublicKeyTypes"
+        cls: type[T_CoseKey], public_key: PublicKeyTypes
     ) -> T_CoseKey:
         """Converts a PublicKey object from Cryptography into a COSE key.
 
