@@ -239,6 +239,7 @@ def _hmac_format_outputs(enabled, decrypted, prf):
                 AuthenticatorExtensionsPRFValues(output1, output2) if output1 else None
             ),
         )
+        # If result has no content, don't add an entry for it
         return {"prf": result} if result else None
     else:
         outputs = {}
