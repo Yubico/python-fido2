@@ -21,6 +21,10 @@
  ** Previously deprecated functions and APIs have been removed.
  ** The `__version__` attribute in `fido2/__init__.py` has been removed. Use
     `importlib.metadata.version('fido2')` to get the package version.
+ ** Add new GetInfo fields based on CTAP 2.2.
+ ** Add support for Persistent PinUvAuthToken and encIdentifier.
+ ** Add support for hmac-secret-mc and thirdPartyPayments exensions.
+ ** Update COSE algorithm types.
  ** Building the library now requires Poetry version 2.0 or later.
 
 * Version 1.2.0 (released 2024-11-27)
