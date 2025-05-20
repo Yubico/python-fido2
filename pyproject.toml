@@ -1,6 +1,6 @@
 [project]
 name = "fido2"
-version = "2.0.0-dev.0"
+version = "2.0.1-dev.0"
 description = "FIDO2/WebAuthn library for implementing clients and servers."
 authors = [{ name = "Dain Nilsson", email = "<dain@yubico.com>" }]
 readme = "README.adoc"
@@ -21,7 +21,7 @@ classifiers = [
   "Topic :: Security :: Cryptography",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = ["cryptography (>=2.6, !=35, <47)"]
+dependencies = ["cryptography (>=2.6, !=35, <48)"]
 
 [project.optional-dependencies]
 pcsc = ["pyscard (>=1.9, <3)"]

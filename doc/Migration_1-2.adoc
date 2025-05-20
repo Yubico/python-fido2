@@ -13,7 +13,8 @@ In version 1.x, you passed a static `origin` and an optional function `verify` t
 `ClientDataCollector` is an abstract class, but the `DefaultClientDataCollector` implementation provides a one-to-one replacement for the old behavior.
 
 *Old Approach:*
-```python
+[source,python]
+----
 from fido2.client import Fido2Client
 
 client = Fido2Client(
@@ -21,17 +22,18 @@ client = Fido2Client(
     origin=origin,
     verify=verify_rp_id,
 )
-```
+----
 
 *New Approach:*
-```python
+[source,python]
+----
 from fido2.client import Fido2Client, DefaultClientDataCollector
 
 client = Fido2Client(
     device,
     client_data_collector=DefaultClientDataCollector(origin=origin, verify=verify_rp_id),
 )
-```
+----
 
 Note: The `verify` parameter remains optional and can still be omitted in the new API, just as in the old API.
 
@@ -39,7 +41,8 @@ Note: The `verify` parameter remains optional and can still be omitted in the ne
 
 These methods now return `RegistrationResponse` and `AuthenticationResponse` objects from the `fido2.webauthn` module, which correspond to the types described link:https://www.w3.org/TR/webauthn-3/#iface-pkcredential[here].
 These objects can easily be serialized to or from JSON. This allows transmission to a server for validation. Note that for JSON serialization you will need to explicitly convert the object to a `dict`. See the following example:
-```python
+[source,python]
+----
 import json
 from fido2.webauthn import RegistrationResponse
 
@@ -47,49 +50,53 @@ result = client.make_credential(...)
 result_json = json.dumps(dict(result))  # Convert into a JSON (RegistrationResponseJSON)
 
 result = RegistrationResponse.from_dict(json.loads(result_json))  # The JSON can be deserialized
-```
+----
 
 ==== `client.make_credential`
 
 The `make_credential` method now returns a `RegistrationResponse` object instead of an `AuthenticatorAttestationResponse`.
 
 *Old Approach:*
-```python
+[source,python]
+----
 result = client.make_credential(...)  # Returns an AuthenticatorAttestationResponse
 
 print(result.client_data, result.attestation_object)
-```
+----
 
 *New Approach:*
-```python
+[source,python]
+----
 result = client.make_credential(...)  # Returns a RegistrationResponse
 
 response = result.response  # Extract the AuthenticatorAttestationResponse
 
 print(response.client_data, response.attestation_object)
-```
+----
 
 ==== `client.get_assertion`
 
 The `get_assertion` method now returns an `AuthenticationResponse` object instead of an `AuthenticatorAssertionResponse`.
 
 *Old Approach:*
-```python
+[source,python]
+----
 selection = client.get_assertion(...)
 result = selection.get_response(0)  # Returns an AuthenticatorAssertionResponse
 
 print(result.client_data, result.authenticator_data, result.signature)
-```
+----
 
 *New Approach:*
-```python
+[source,python]
+----
 selection = client.get_assertion(...)
 result = selection.get_response(0)  # Returns an AuthenticationResponse
 
 response = result.response  # Extract the AuthenticatorAssertionResponse
 
 print(response.client_data, response.authenticator_data, response.signature)
-```
+----
 
 == Server Parameter Changes
 
@@ -102,7 +109,8 @@ This change aligns the server parameter types with the updated client return val
 The `WindowsClient` class has been moved to a new module, `fido2.client.windows`. Additionally, this class is no longer importable on non-Windows platforms. If you are writing cross-platform code, you will need to handle imports conditionally or catch exceptions.
 
 *Old Approach:*
-```python
+[source,python]
+----
 from fido2.client import WindowsClient  # Always importable
 
 if WindowsClient.is_available():  # Check if the OS supports the webauthn.h API
@@ -110,10 +118,11 @@ if WindowsClient.is_available():  # Check if the OS supports the webauthn.h API
 else:
     # Handle platforms that do not support WindowsClient
     ...
-```
+----
 
 *New Approach:*
-```python
+[source,python]
+----
 try:
     from fido2.client.windows import WindowsClient
     if WindowsClient.is_available():  # Check if Windows supports the webauthn.h API
@@ -124,7 +133,7 @@ try:
 except ImportError:
     # Handle non-Windows platforms (e.g., MacOS, Linux)
     ...
-```
+----
 
 == Changes to Dataclasses in `fido2.webauthn`
 
@@ -132,24 +141,26 @@ Many dataclasses in the `fido2.webauthn` module have been updated with new field
 
 === Backwards-Incompatible Changes
 
-* **Keyword-only arguments**:  
+* **Keyword-only arguments**:
    All dataclass constructors now require arguments to be passed as keyword arguments. Positional arguments are no longer supported.
 
 *Old Approach:*
-```python
+[source,python]
+----
 from fido2.webauthn import PublicKeyCredentialRpEntity
 
 rp_entity = PublicKeyCredentialRpEntity("example.com", "Example")
-```
+----
 
 *New Approach:*
-```python
+[source,python]
+----
 from fido2.webauthn import PublicKeyCredentialRpEntity
 
 rp_entity = PublicKeyCredentialRpEntity(id="example.com", name="Example")
-```
+----
 
-* **Removal of `extension_results`**:  
+* **Removal of `extension_results`**:
    - `AuthenticatorAttestationResponse.extension_results` has been removed. Instead, use `RegistrationResponse.client_extension_results` to access extension results.
    - `AuthenticatorAssertionResponse.extension_results` has been removed. Instead, use `AuthenticationResponse.client_extension_results` to access extension results.
 
@@ -160,10 +171,11 @@ rp_entity = PublicKeyCredentialRpEntity(id="example.com", name="Example")
 The `features.webauthn_json_mapping` feature has been removed as its behavior is now the standard.
 
 *Old Approach:*
-```python
+[source,python]
+----
 from fido2 import features
 features.webauthn_json_mapping = True
-```
+----
 
 *New Approach:*
 This is no longer needed as JSON serialization is the default behavior.
@@ -173,17 +185,19 @@ This is no longer needed as JSON serialization is the default behavior.
 The `__version__` attribute has been removed from `fido2/__init__.py`. Use `importlib.metadata` instead.
 
 *Old Approach:*
-```python
+[source,python]
+----
 from fido2 import __version__
 print(__version__)
-```
+----
 
 *New Approach:*
-```python
+[source,python]
+----
 from importlib.metadata import version
 
 print(version("fido2"))
-```
+----
 
 == Migration Checklist
 
