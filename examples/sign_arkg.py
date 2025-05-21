@@ -30,13 +30,16 @@ Connects to the first FIDO device found which supports the PRF extension,
 creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
-from fido2 import cbor
-from fido2.server import Fido2Server
-from fido2.utils import sha256, websafe_encode, websafe_decode
-from fido2.cose import CoseKey
-from fido2.arkg import ARKG_P256_ESP256
-from exampleutils import get_client
+
 import sys
+
+from exampleutils import get_client
+
+from fido2 import cbor
+from fido2.arkg import ARKG_P256_ESP256
+from fido2.cose import CoseKey
+from fido2.server import Fido2Server
+from fido2.utils import sha256, websafe_decode, websafe_encode
 
 uv = "discouraged"
 

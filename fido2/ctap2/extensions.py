@@ -713,7 +713,7 @@ class SignExtension(Ctap2Extension):
                     cbor.decode(att_obj_bytes)  # type: ignore
                 )
                 cred_data = att_obj.auth_data.credential_data
-                assert cred_data is not None  # nosec
+                assert cred_data is not None  # noqa: S101
                 pk = cred_data.public_key
 
                 return {

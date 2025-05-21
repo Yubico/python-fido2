@@ -25,20 +25,18 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from .cose import CoseKey, ESP256
-from .utils import bytes2int
+import struct
+from dataclasses import dataclass
+from typing import Sequence, Tuple
 
 from cryptography.hazmat.primitives.hashes import SHA256, Hash, HashAlgorithm
 from cryptography.hazmat.primitives.hmac import HMAC
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
 from ecdsa.curves import Curve, NIST256p
 from ecdsa.ellipticcurve import Point
 
-from dataclasses import dataclass
-from typing import Tuple, Sequence
-import struct
-
+from .cose import ESP256, CoseKey
+from .utils import bytes2int
 
 """
 WARNING: This module and these algorithms are currently in DRAFT.
@@ -369,7 +367,7 @@ class ARKG:
 
             kh = c
         """
-        assert len(ctx) <= 64  # nosec
+        assert len(ctx) <= 64  # noqa: S101
 
         ctx_prime = struct.pack(">B", len(ctx)) + ctx
         ctx_bl = b"ARKG-Derive-Key-BL." + ctx_prime
