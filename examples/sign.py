@@ -173,8 +173,6 @@ t2px, t2py = (
 
 kh = pk.get_ref()
 kh[3] = sign_key.algorithm
-if pk[1] == 2:  # EC2
-    kh[-1] = pk[-1]  # crv
 if t2prime is not None:
     kh[-10] = {
         1: 2,
