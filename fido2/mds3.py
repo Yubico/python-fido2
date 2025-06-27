@@ -408,7 +408,7 @@ class MdsAttestationVerifier(AttestationVerifier):
         return None
 
     def ca_lookup(self, attestation_result, auth_data):
-        assert auth_data.credential_data is not None  # nosec
+        assert auth_data.credential_data is not None  # noqa: S101
         aaguid = auth_data.credential_data.aaguid
         if aaguid:
             logging.debug(f"Using AAGUID: {aaguid} to look up metadata")

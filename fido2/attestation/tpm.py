@@ -79,7 +79,7 @@ class TpmAlgHash(IntEnum):
 
     def _hash_alg(self) -> hashes.HashAlgorithm:
         if self == TpmAlgHash.SHA1:
-            return hashes.SHA1()  # nosec
+            return hashes.SHA1()  # noqa: S303
         elif self == TpmAlgHash.SHA256:
             return hashes.SHA256()
         elif self == TpmAlgHash.SHA384:

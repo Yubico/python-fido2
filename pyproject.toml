@@ -54,4 +54,5 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 
 [tool.ruff.lint]
-select = ["I"]  # Organize imports
+select = ["E", "I", "S"]
+exclude = ["tests/*"]

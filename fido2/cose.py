@@ -151,7 +151,7 @@ class ES256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {
@@ -193,7 +193,7 @@ class ES384(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {
@@ -226,7 +226,7 @@ class ES512(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {
@@ -255,7 +255,7 @@ class RS256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
+        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -278,7 +278,7 @@ class PS256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
+        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -293,7 +293,7 @@ class EdDSA(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ed25519.Ed25519PublicKey)  # nosec
+        assert isinstance(public_key, ed25519.Ed25519PublicKey)  # noqa: S101
         return cls(
             {
                 1: 1,
@@ -322,7 +322,7 @@ class Ed448(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ed448.Ed448PublicKey)  # nosec
+        assert isinstance(public_key, ed448.Ed448PublicKey)  # noqa: S101
         return cls(
             {
                 1: 1,
@@ -337,7 +337,7 @@ class Ed448(CoseKey):
 
 class RS1(CoseKey):
     ALGORITHM = -65535
-    _HASH_ALG = hashes.SHA1()  # nosec
+    _HASH_ALG = hashes.SHA1()  # noqa: S303
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
@@ -346,7 +346,7 @@ class RS1(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
+        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -366,7 +366,7 @@ class ES256K(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {

@@ -27,7 +27,7 @@ from array import array
 from .base import FileCtapHidConnection, HidDescriptor, parse_report_descriptor
 
 # Don't typecheck this file on Windows
-assert sys.platform != "win32"  # nosec
+assert sys.platform != "win32"  # noqa: S101
 
 logger = logging.getLogger(__name__)
 

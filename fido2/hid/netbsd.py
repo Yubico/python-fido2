@@ -35,7 +35,7 @@ from ctypes import (
 from . import base
 
 # Don't typecheck this file on Windows
-assert sys.platform != "win32"  # nosec
+assert sys.platform != "win32"  # noqa: S101
 
 from fcntl import ioctl  # noqa: E402
 

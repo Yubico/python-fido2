@@ -49,7 +49,7 @@ for dev in CtapHidDevice.list_devices():
         ctap = Ctap2(dev)
         if BioEnrollment.is_supported(ctap.info):
             break
-    except Exception:  # nosec
+    except Exception:  # noqa: S112
         continue
 else:
     print("No Authenticator supporting bioEnroll found")

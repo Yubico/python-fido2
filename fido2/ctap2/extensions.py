@@ -469,7 +469,7 @@ class CredBlobExtension(Ctap2Extension):
         inputs = options.extensions or {}
         if self.is_supported(ctap):
             blob = inputs.get("credBlob")
-            assert ctap.info.max_cred_blob_length is not None  # nosec
+            assert ctap.info.max_cred_blob_length is not None  # noqa: S101
             if blob and len(blob) <= ctap.info.max_cred_blob_length:
                 return RegistrationExtensionProcessor(inputs={self.NAME: blob})
 

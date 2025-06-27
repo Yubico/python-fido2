@@ -117,7 +117,7 @@ def verify_x509_chain(chain: list[bytes]) -> None:
         pub = cert.public_key()
         try:
             if isinstance(pub, rsa.RSAPublicKey):
-                assert child.signature_hash_algorithm is not None  # nosec
+                assert child.signature_hash_algorithm is not None  # noqa: S101
                 pub.verify(
                     child.signature,
                     child.tbs_certificate_bytes,
@@ -125,7 +125,7 @@ def verify_x509_chain(chain: list[bytes]) -> None:
                     child.signature_hash_algorithm,
                 )
             elif isinstance(pub, ec.EllipticCurvePublicKey):
-                assert child.signature_hash_algorithm is not None  # nosec
+                assert child.signature_hash_algorithm is not None  # noqa: S101
                 pub.verify(
                     child.signature,
                     child.tbs_certificate_bytes,

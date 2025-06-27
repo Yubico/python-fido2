@@ -304,7 +304,7 @@ class WindowsClient(WebAuthnClient):
         logger.info("New credential registered")
 
         credential = att_obj.auth_data.credential_data
-        assert credential is not None  # nosec
+        assert credential is not None  # noqa: S101
 
         return RegistrationResponse(
             raw_id=credential.credential_id,

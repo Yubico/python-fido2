@@ -27,7 +27,7 @@ from typing import cast
 from .base import FIDO_USAGE, FIDO_USAGE_PAGE, CtapHidConnection, HidDescriptor
 
 # Only typecheck this file on Windows
-assert sys.platform == "win32"  # nosec
+assert sys.platform == "win32"  # noqa: S101
 from ctypes import WinDLL, WinError  # noqa: E402
 
 logger = logging.getLogger(__name__)

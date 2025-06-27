@@ -142,7 +142,7 @@ class Fido2Server:
         verify_attestation: VerifyAttestation | None = None,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
-        assert self.rp.id is not None  # nosec
+        assert self.rp.id is not None  # noqa: S101
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
         self.timeout = None
         self.attestation = AttestationConveyancePreference(attestation)
@@ -270,7 +270,7 @@ class Fido2Server:
         # clients strip the attestation.
 
         auth_data = attestation_object.auth_data
-        assert auth_data.credential_data is not None  # nosec
+        assert auth_data.credential_data is not None  # noqa: S101
         logger.info(
             "New credential registered: "
             + auth_data.credential_data.credential_id.hex()

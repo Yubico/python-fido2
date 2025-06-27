@@ -325,7 +325,7 @@ class DefaultClientDataCollector(ClientDataCollector):
         try:
             if self._verify(rp_id, origin):
                 return
-        except Exception:  # nosec
+        except Exception:  # noqa: S110
             pass  # Fall through to ClientError
         raise ClientError.ERR.BAD_REQUEST()
 
@@ -463,7 +463,7 @@ class _Ctap1ClientBackend(_ClientBackend):
             ),
         )
         credential = att_obj.auth_data.credential_data
-        assert credential is not None  # nosec
+        assert credential is not None  # noqa: S101
 
         return RegistrationResponse(
             raw_id=credential.credential_id,
@@ -895,7 +895,7 @@ class _Ctap2ClientBackend(_ClientBackend):
         )
 
         credential = att_obj.auth_data.credential_data
-        assert credential is not None  # nosec
+        assert credential is not None  # noqa: S101
 
         return RegistrationResponse(
             raw_id=credential.credential_id,

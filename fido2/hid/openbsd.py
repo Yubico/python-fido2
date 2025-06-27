@@ -28,7 +28,7 @@ from ctypes import Structure, c_char, c_int, c_uint8, c_uint16, c_uint32
 from .base import FileCtapHidConnection, HidDescriptor
 
 # Don't typecheck this file on Windows
-assert sys.platform != "win32"  # nosec
+assert sys.platform != "win32"  # noqa: S101
 
 logger = logging.getLogger(__name__)
 
