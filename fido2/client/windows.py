@@ -30,7 +30,7 @@ from __future__ import annotations
 import ctypes
 import logging
 from threading import Thread
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from ..ctap2 import AssertionResponse
 from ..ctap2.extensions import (
@@ -355,7 +355,7 @@ class WindowsClient(WebAuthnClient):
             if options.extensions.get("getCredBlob"):
                 win_extensions.append(WebAuthNExtension("credBlob", BOOL(True)))
             lg_blob = AuthenticatorExtensionsLargeBlobInputs.from_dict(
-                options.extensions.get("largeBlob")
+                cast(Mapping | None, options.extensions.get("largeBlob"))
             )
             if lg_blob:
                 if lg_blob.read:
@@ -363,8 +363,9 @@ class WindowsClient(WebAuthnClient):
                 else:
                     large_blob = lg_blob.write
                     large_blob_operation = WebAuthNLargeBlobOperation.SET
+
             prf = AuthenticatorExtensionsPRFInputs.from_dict(
-                options.extensions.get("prf")
+                cast(Mapping | None, options.extensions.get("prf"))
             )
             if prf:
                 cred_salts = prf.eval_by_credential or {}
@@ -385,7 +386,7 @@ class WindowsClient(WebAuthnClient):
             elif "hmacGetSecret" in options.extensions and self._allow_hmac_secret:
                 flags |= 0x00100000
                 salts = HMACGetSecretInput.from_dict(
-                    options.extensions["hmacGetSecret"]
+                    cast(Mapping, options.extensions["hmacGetSecret"])
                 )
                 hmac_secret_salts = WebAuthNHmacSecretSaltValues(
                     WebAuthNHmacSecretSalt(salts.salt1, salts.salt2)

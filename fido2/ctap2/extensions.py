@@ -30,7 +30,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from ..utils import _JsonDataObject, sha256, websafe_encode
 from ..webauthn import (
@@ -280,12 +280,17 @@ class HmacSecretExtension(Ctap2Extension):
         hmac = self._allow_hmac_secret and c_inputs.get("hmacCreateSecret") is True
         if pin_protocol and self.is_supported(ctap) and (prf or hmac):
             inputs: dict[str, Any] = {HmacSecretExtension.NAME: True}
+            shared_secret = None
             if self.MC_NAME in ctap.info.extensions:
                 prf_salts = AuthenticatorExtensionsPRFInputs.from_dict(
-                    c_inputs.get("prf")
+                    cast(Mapping | None, c_inputs.get("prf"))
                 )
-                hmac_salts = bool(hmac) and HMACGetSecretInput.from_dict(
-                    c_inputs.get("hmacGetSecret")
+                hmac_salts = (
+                    HMACGetSecretInput.from_dict(
+                        cast(Mapping | None, c_inputs.get("hmacGetSecret"))
+                    )
+                    if hmac
+                    else None
                 )
                 salts = _hmac_prepare_salts(None, None, prf_salts, hmac_salts)
                 if salts:
@@ -309,7 +314,9 @@ class HmacSecretExtension(Ctap2Extension):
                     enabled = extensions.get(HmacSecretExtension.NAME, False)
                     value = extensions.get(HmacSecretExtension.MC_NAME)
                     decrypted = (
-                        pin_protocol.decrypt(shared_secret, value) if value else None
+                        pin_protocol.decrypt(shared_secret, value)
+                        if value and shared_secret
+                        else None
                     )
                     return _hmac_format_outputs(enabled, decrypted, prf)
 
@@ -317,9 +324,13 @@ class HmacSecretExtension(Ctap2Extension):
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        prf = AuthenticatorExtensionsPRFInputs.from_dict(inputs.get("prf"))
+        prf = AuthenticatorExtensionsPRFInputs.from_dict(
+            cast(Mapping | None, inputs.get("prf"))
+        )
         hmac = (
-            HMACGetSecretInput.from_dict(inputs.get("hmacGetSecret"))
+            HMACGetSecretInput.from_dict(
+                cast(Mapping | None, inputs.get("hmacGetSecret"))
+            )
             if self._allow_hmac_secret
             else None
         )
@@ -393,7 +404,9 @@ class LargeBlobExtension(Ctap2Extension):
 
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(
+            cast(Mapping | None, inputs.get("largeBlob"))
+        )
         if data:
             if data.read or data.write:
                 raise ValueError("Invalid set of parameters")
@@ -415,7 +428,9 @@ class LargeBlobExtension(Ctap2Extension):
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(inputs.get("largeBlob"))
+        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(
+            cast(Mapping | None, inputs.get("largeBlob"))
+        )
         if data:
             if data.support or (data.read and data.write):
                 raise ValueError("Invalid set of parameters")
@@ -424,6 +439,7 @@ class LargeBlobExtension(Ctap2Extension):
 
             class Processor(AuthenticationExtensionProcessor):
                 def prepare_outputs(self, response, pin_token):
+                    assert data is not None  # noqa: S101 needed for mypy
                     blob_key = response.large_blob_key
                     if blob_key:
                         if data.read:
@@ -613,13 +629,17 @@ class ThirdPartyPaymentExtension(Ctap2Extension):
 
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = AuthenticationExtensionsPaymentInputs.from_dict(inputs.get("payment"))
+        data = AuthenticationExtensionsPaymentInputs.from_dict(
+            cast(Mapping | None, inputs.get("payment"))
+        )
         if self.is_supported(ctap) and data and data.is_payment:
             return RegistrationExtensionProcessor(inputs={self.NAME: True})
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = AuthenticationExtensionsPaymentInputs.from_dict(inputs.get("payment"))
+        data = AuthenticationExtensionsPaymentInputs.from_dict(
+            cast(Mapping | None, inputs.get("payment"))
+        )
         if self.is_supported(ctap) and data and data.is_payment:
             return AuthenticationExtensionProcessor(inputs={self.NAME: True})
 

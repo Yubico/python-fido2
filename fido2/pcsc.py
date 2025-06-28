@@ -101,7 +101,7 @@ class CtapPcscDevice(CtapDevice):
 
     def get_atr(self) -> bytes:
         """Get the ATR/ATS of the connected card."""
-        return bytes(self._conn.getATR())
+        return bytes(self._conn.getATR() or b"")
 
     def apdu_exchange(
         self, apdu: bytes, protocol: int | None = None
@@ -249,7 +249,7 @@ def _list_readers():
         # forcing a new context (This happens on Windows if the last reader is
         # removed):
         try:
-            from smartcard.pcsc.PCSCContext import PCSCContext
+            from smartcard.pcsc.PCSCContext import PCSCContext  # type: ignore
 
             PCSCContext.instance = None
             return System.readers()

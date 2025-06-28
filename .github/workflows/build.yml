@@ -39,13 +39,20 @@ jobs:
           python-version: ${{ matrix.python }}
           architecture: ${{ matrix.architecture }}
 
+      - name: Install dependencies
+        if: "startsWith(matrix.os, 'ubuntu')"
+        run: |
+          sudo apt-get install -qq swig libpcsclite-dev
+
       - name: Install the project
-        run: uv sync
+        run: uv sync --all-extras
 
       - name: Run pre-commit
         if: "!startsWith(matrix.python, 'pypy')"
+        shell: bash
         run: |
           uv tool install pre-commit
+          echo $(python --version) | grep -q "Python 3.10" && export SKIP=pyright
           pre-commit run --all-files
 
       - name: Run unit tests

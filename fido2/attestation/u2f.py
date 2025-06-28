@@ -47,6 +47,7 @@ class FidoU2FAttestation(Attestation):
     @catch_builtins
     def verify(self, statement, auth_data, client_data_hash):
         cd = auth_data.credential_data
+        assert cd is not None  # noqa: S101
         pk = b"\x04" + cd.public_key[-2] + cd.public_key[-3]
         x5c = statement["x5c"]
         FidoU2FAttestation.verify_signature(

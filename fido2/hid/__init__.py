@@ -37,22 +37,22 @@ from typing import Callable, Iterator
 
 from ..ctap import STATUS, CtapDevice, CtapError
 from ..utils import LOG_LEVEL_TRAFFIC
-from .base import HidDescriptor
+from .base import CtapHidConnection, HidDescriptor
 
 logger = logging.getLogger(__name__)
 
 
-if sys.platform.startswith("linux"):
+if sys.platform == "linux":
     from . import linux as backend
-elif sys.platform.startswith("win32"):
+elif sys.platform == "win32":
     from . import windows as backend
-elif sys.platform.startswith("darwin"):
+elif sys.platform == "darwin":
     from . import macos as backend
-elif sys.platform.startswith("freebsd"):
+elif sys.platform == "freebsd":
     from . import freebsd as backend
-elif sys.platform.startswith("netbsd"):
+elif sys.platform == "netbsd":
     from . import netbsd as backend
-elif sys.platform.startswith("openbsd"):
+elif sys.platform == "openbsd":
     from . import openbsd as backend
 else:
     raise Exception("Unsupported platform")
@@ -104,7 +104,7 @@ class CtapHidDevice(CtapDevice):
     :cvar descriptor: Device descriptor.
     """
 
-    def __init__(self, descriptor: HidDescriptor, connection):
+    def __init__(self, descriptor: HidDescriptor, connection: CtapHidConnection):
         self.descriptor = descriptor
         self._packet_size = descriptor.report_size_out
         self._connection = connection
@@ -197,6 +197,7 @@ class CtapHidDevice(CtapDevice):
         try:
             # Read response
             seq = 0
+            r_len = 0
             response = b""
             last_ka = None
             while True:
@@ -267,9 +268,7 @@ class CtapHidDevice(CtapDevice):
         self.call(CTAPHID.LOCK, struct.pack(">B", lock_time))
 
     def close(self) -> None:
-        if self._connection:
-            self._connection.close()
-            self._connection = None
+        self._connection.close()
 
     @classmethod
     def list_devices(cls) -> Iterator[CtapHidDevice]:

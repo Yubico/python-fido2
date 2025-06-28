@@ -40,6 +40,7 @@ import struct
 import sys
 from array import array
 from ctypes.util import find_library
+from dataclasses import dataclass
 
 from .base import FileCtapHidConnection, HidDescriptor, parse_report_descriptor
 
@@ -89,9 +90,9 @@ class usb_gen_descriptor(ctypes.Structure):
 
 
 class HidrawCtapHidConnection(FileCtapHidConnection):
-    def write_packet(self, packet):
+    def write_packet(self, data):
         # Prepend the report ID
-        super(HidrawCtapHidConnection, self).write_packet(b"\0" + packet)
+        super(HidrawCtapHidConnection, self).write_packet(b"\0" + data)
 
 
 def open_connection(descriptor):
@@ -122,6 +123,16 @@ def _read_descriptor(vid, pid, name, serial, path):
     return HidDescriptor(path, vid, pid, max_in_size, max_out_size, name, serial)
 
 
+@dataclass
+class _UhidDevice:
+    name: str
+    path: str
+    vendor_id: int | None = None
+    product_id: int | None = None
+    serial_number: str | None = None
+    product_desc: str | None = None
+
+
 def _enumerate():
     for uhid in glob.glob(devdir + "uhid?*"):
         index = uhid[len(devdir) + len("uhid") :]
@@ -138,26 +149,34 @@ def _enumerate():
         if retval != 0:
             continue
 
-        dev: dict[str, str | int | None] = {}
-        dev["name"] = uhid[len(devdir) :]
-        dev["path"] = uhid
+        dev_name = uhid[len(devdir) :]
+        dev_path = uhid
 
         value = ovalue.value[: olen.value].decode()
         m = vendor_re.search(value)
-        dev["vendor_id"] = int(m.group(1), 16) if m else None
+        dev_vendor_id = int(m.group(1), 16) if m else None
 
         m = product_re.search(value)
-        dev["product_id"] = int(m.group(1), 16) if m else None
+        dev_product_id = int(m.group(1), 16) if m else None
 
         m = sernum_re.search(value)
-        dev["serial_number"] = m.group(1) if m else None
+        dev_serial_number = m.group(1) if m else None
 
         key = ctypes.c_char_p(desc)
         retval = libc.sysctlbyname(key, ovalue, ctypes.byref(olen), None, None)
         if retval == 0:
-            dev["product_desc"] = ovalue.value[: olen.value].decode() or None
+            dev_product_desc = ovalue.value[: olen.value].decode() or None
+        else:
+            dev_product_desc = None
 
-        yield dev
+        yield _UhidDevice(
+            dev_name,
+            dev_path,
+            dev_vendor_id,
+            dev_product_id,
+            dev_serial_number,
+            dev_product_desc,
+        )
 
 
 def get_hidraw_descriptor(path):
@@ -194,7 +213,7 @@ def get_hidraw_descriptor(path):
         buf += array("B", [0] * size)
         fcntl.ioctl(f, HIDIOCGRDESC, buf, True)
 
-    data = bytearray(buf[4:])
+    data = bytes(buf[4:])
     max_in_size, max_out_size = parse_report_descriptor(data)
     return HidDescriptor(path, vid, pid, max_in_size, max_out_size, name, serial)
 
@@ -204,12 +223,10 @@ def get_descriptor(path):
         return get_hidraw_descriptor(path)
 
     for dev in _enumerate():
-        if dev["path"] == path:
-            vid = dev["vendor_id"]
-            pid = dev["product_id"]
-            name = dev["product_desc"] or None
-            serial = (dev["serial_number"] if "serial_number" in dev else None) or None
-            return _read_descriptor(vid, pid, name, serial, path)
+        if dev.path == path:
+            return _read_descriptor(
+                dev.vendor_id, dev.product_id, dev.name, dev.serial_number, dev.path
+            )
     raise ValueError("Device not found")
 
 
@@ -233,28 +250,25 @@ def list_descriptors():
 
     if not descriptors:
         for dev in _enumerate():
-            path = dev["path"]
-            stale.discard(path)
+            stale.discard(dev.path)
             try:
-                name = dev["product_desc"] or None
-                serial = (
-                    dev["serial_number"] if "serial_number" in dev else None
-                ) or None
                 descriptors.append(
                     _read_descriptor(
-                        dev["vendor_id"],
-                        dev["product_id"],
-                        name,
-                        serial,
-                        path,
+                        dev.vendor_id,
+                        dev.product_id,
+                        dev.name,
+                        dev.serial_number,
+                        dev.path,
                     )
                 )
             except ValueError:
                 pass  # Not a CTAP device, ignore
             except Exception:
-                if path not in _failed_cache:
-                    logger.debug("Failed opening HID device %s", path, exc_info=True)
-                    _failed_cache.add(path)
+                if dev.path not in _failed_cache:
+                    logger.debug(
+                        "Failed opening HID device %s", dev.path, exc_info=True
+                    )
+                    _failed_cache.add(dev.path)
 
     # Remove entries from the cache that were not seen
     _failed_cache.difference_update(stale)

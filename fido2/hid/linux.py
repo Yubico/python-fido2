@@ -40,9 +40,9 @@ HIDIOCGRAWUNIQ = 0x90044808
 
 
 class LinuxCtapHidConnection(FileCtapHidConnection):
-    def write_packet(self, packet):
+    def write_packet(self, data):
         # Prepend the report ID
-        super().write_packet(b"\0" + packet)
+        super().write_packet(b"\0" + data)
 
 
 def open_connection(descriptor):
@@ -78,7 +78,7 @@ def get_descriptor(path):
         buf += array("B", [0] * size)
         fcntl.ioctl(f, HIDIOCGRDESC, buf, True)
 
-    data = bytearray(buf[4:])
+    data = bytes(buf[4:])
     max_in_size, max_out_size = parse_report_descriptor(data)
     return HidDescriptor(path, vid, pid, max_in_size, max_out_size, name, serial)
 

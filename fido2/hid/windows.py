@@ -21,14 +21,13 @@ import ctypes
 import logging
 import platform
 import sys
-from ctypes import LibraryLoader, wintypes
 from typing import cast
 
 from .base import FIDO_USAGE, FIDO_USAGE_PAGE, CtapHidConnection, HidDescriptor
 
 # Only typecheck this file on Windows
 assert sys.platform == "win32"  # noqa: S101
-from ctypes import WinDLL, WinError  # noqa: E402
+from ctypes import LibraryLoader, WinDLL, WinError, wintypes  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -205,8 +204,8 @@ class WinCtapHidConnection(CtapHidConnection):
     def close(self):
         kernel32.CloseHandle(self.handle)
 
-    def write_packet(self, packet):
-        out = b"\0" + packet  # Prepend report ID
+    def write_packet(self, data):
+        out = b"\0" + data  # Prepend report ID
         num_written = wintypes.DWORD()
         ret = kernel32.WriteFile(
             self.handle, out, len(out), ctypes.byref(num_written), None

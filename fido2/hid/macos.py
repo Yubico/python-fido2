@@ -318,13 +318,13 @@ class MacCtapHidConnection(CtapHidConnection):
             None,
         )
 
-    def write_packet(self, packet):
+    def write_packet(self, data):
         result = iokit.IOHIDDeviceSetReport(
             self.handle,
             K_IO_HID_REPORT_TYPE_OUTPUT,
             0,
-            packet,
-            len(packet),
+            data,
+            len(data),
         )
 
         # Non-zero status indicates failure
@@ -350,15 +350,14 @@ def get_int_property(dev, key):
     type_ref = iokit.IOHIDDeviceGetProperty(dev, cf_key)
     cf.CFRelease(cf_key)
     if not type_ref:
-        return None
+        raise ValueError(f"Property '{key}' not found")
 
     if cf.CFGetTypeID(type_ref) != cf.CFNumberGetTypeID():
         raise OSError(f"Expected number type, got {cf.CFGetTypeID(type_ref)}")
 
     out = ctypes.c_int32()
-    ret = cf.CFNumberGetValue(type_ref, K_CF_NUMBER_SINT32_TYPE, ctypes.byref(out))
-    if not ret:
-        return None
+    if not cf.CFNumberGetValue(type_ref, K_CF_NUMBER_SINT32_TYPE, ctypes.byref(out)):
+        raise OSError(f"Failed to read property '{key}'")
 
     return out.value
 

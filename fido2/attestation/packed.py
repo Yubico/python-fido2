@@ -88,6 +88,7 @@ class PackedAttestation(Attestation):
             raise NotImplementedError("ECDAA not implemented")
         alg = statement["alg"]
         x5c = statement.get("x5c")
+        assert auth_data.credential_data is not None  # noqa: S101
         if x5c:
             cert = x509.load_der_x509_certificate(x5c[0], default_backend())
             _validate_packed_cert(cert, auth_data.credential_data.aaguid)

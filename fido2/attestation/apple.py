@@ -52,7 +52,8 @@ class AppleAttestation(Attestation):
         expected_nonce = sha256(auth_data + client_data_hash)
         cert = x509.load_der_x509_certificate(x5c[0], default_backend())
         ext = cert.extensions.get_extension_for_oid(OID_APPLE)
-        ext_nonce = ext.value.value[6:]  # Sequence of single element of octet string
+        # Sequence of single element of octet string
+        ext_nonce = ext.value.public_bytes()[6:]
         if not bytes_eq(expected_nonce, ext_nonce):
             raise InvalidData("Nonce does not match!")
         return AttestationResult(AttestationType.ANON_CA, x5c)

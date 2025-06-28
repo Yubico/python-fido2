@@ -56,5 +56,11 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 
 [tool.ruff.lint]
-select = ["E", "I", "S"]
+extend-select = ["E", "I", "S"]
 exclude = ["tests/*"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+exclude = ["tests/", "docs/", "examples/"]
+reportPrivateImportUsage = false
