@@ -26,6 +26,14 @@ dependencies = ["cryptography (>=2.6, !=35, <48)"]
 [project.optional-dependencies]
 pcsc = ["pyscard (>=1.9, <3)"]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0,<9",
+    "sphinx>=7.4,<8",
+    "sphinx-rtd-theme>=3,<4",
+    "sphinx-autoapi>=3.3.3,<4",
+]
+
 [project.urls]
 Homepage = "https://github.com/Yubico/python-fido2"
 
@@ -39,12 +47,6 @@ include = [
   { path = "tests/", format = "sdist" },
   { path = "examples/", format = "sdist" },
 ]
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.0"
-Sphinx = "^8.1"
-sphinx-rtd-theme = "^3.0.1"
-sphinx-autoapi = "^3.3.3"
 
 [build-system]
 requires = ["poetry-core>=2.0"]
