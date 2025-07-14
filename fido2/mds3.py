@@ -493,6 +493,8 @@ def parse_blob(blob: bytes, trust_root: bytes | None) -> MetadataBlobPayload:
         )
         public_key.verify(message, signature)
     else:
-        logger.warning("Parsing MDS blob without trust anchor, CONTENT IS NOT VERIFIED!")
+        logger.warning(
+            "Parsing MDS blob without trust anchor, CONTENT IS NOT VERIFIED!"
+        )
 
     return MetadataBlobPayload.from_dict(payload)
