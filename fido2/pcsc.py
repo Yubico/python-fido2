@@ -61,6 +61,7 @@ class CtapPcscDevice(CtapDevice):
         self._name = name
         self._capabilities = CAPABILITY(0)
         self.use_ext_apdu = False
+        self.use_nfcctap_getresponse = True
         self._conn = connection
         self.connect()
 
@@ -192,7 +193,8 @@ class CtapPcscDevice(CtapDevice):
     ) -> bytes:
         event = event or Event()
         # NFCCTAP_MSG
-        resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, 0x80, 0x00, data)
+        p1 = 0x80 if self.use_nfcctap_getresponse else 0x00
+        resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, p1, 0x00, data)
         last_ka = None
 
         while not event.is_set():
