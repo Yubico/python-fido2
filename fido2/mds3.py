@@ -142,7 +142,7 @@ class EcdaaTrustAnchor(_JsonDataObject):
 
 @unique
 class AuthenticatorStatus(str, Enum):
-    """Status of an Authenitcator."""
+    """Status of an Authenticator."""
 
     NOT_FIDO_CERTIFIED = "NOT_FIDO_CERTIFIED"
     FIDO_CERTIFIED = "FIDO_CERTIFIED"
@@ -493,6 +493,6 @@ def parse_blob(blob: bytes, trust_root: bytes | None) -> MetadataBlobPayload:
         )
         public_key.verify(message, signature)
     else:
-        logger.warn("Parsing MDS blob without trust anchor, CONTENT IS NOT VERIFIED!")
+        logger.warning("Parsing MDS blob without trust anchor, CONTENT IS NOT VERIFIED!")
 
     return MetadataBlobPayload.from_dict(payload)
