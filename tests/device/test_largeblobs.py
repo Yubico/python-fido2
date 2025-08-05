@@ -1,4 +1,5 @@
 import os
+import struct
 
 import pytest
 
@@ -7,7 +8,7 @@ from fido2.ctap import CtapError
 from fido2.ctap2.blob import LargeBlobs
 from fido2.ctap2.pin import ClientPin
 from fido2.server import Fido2Server
-from fido2.utils import websafe_decode, websafe_encode
+from fido2.utils import sha256, websafe_decode, websafe_encode
 
 from . import TEST_PIN
 
@@ -50,6 +51,29 @@ def test_read_write(ctap2, pin_protocol):
     lb.delete_blob(key2)
     assert lb.get_blob(key2) is None
     assert len(lb.read_blob_array()) == 0
+
+
+def test_invalid_checksum(ctap2, pin_protocol):
+    lb = get_lb(ctap2, pin_protocol)
+
+    data = cbor.encode([])
+    # Set the checksum to an invalid value to ensure the authenticator checks it
+    data += sha256(data)[:15] + b"\xff"
+    offset = 0
+    size = len(data)
+
+    msg = b"\xff" * 32 + b"\x0c\x00" + struct.pack("<I", offset) + sha256(data)
+    pin_uv_protocol = pin_protocol.VERSION
+    pin_uv_param = pin_protocol.authenticate(lb.pin_uv.token, msg)
+
+    with pytest.raises(CtapError, match="INTEGRITY_FAILURE"):
+        ctap2.large_blobs(
+            0,
+            set=data,
+            length=size,
+            pin_uv_protocol=pin_uv_protocol,
+            pin_uv_param=pin_uv_param,
+        )
 
 
 def test_size_bounds(ctap2, pin_protocol):
