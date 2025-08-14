@@ -676,9 +676,10 @@ class _Ctap2ClientBackend(_ClientBackend):
         event,
         on_keepalive,
         allow_internal_uv,
+        allow_uv,
     ):
         # Prefer UV
-        if info.options.get("uv"):
+        if allow_uv and info.options.get("uv"):
             if ClientPin.is_token_supported(info):
                 if self.user_interaction.request_uv(permissions, rp_id):
                     return client_pin.get_uv_token(
@@ -701,7 +702,14 @@ class _Ctap2ClientBackend(_ClientBackend):
         )
 
     def _get_auth_params(
-        self, pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
+        self,
+        pin_protocol,
+        rp_id,
+        user_verification,
+        permissions,
+        allow_uv,
+        event,
+        on_keepalive,
     ):
         info = self.ctap2.get_info()
 
@@ -725,6 +733,7 @@ class _Ctap2ClientBackend(_ClientBackend):
                 event,
                 on_keepalive,
                 allow_internal_uv,
+                allow_uv,
             )
             if not pin_token:
                 internal_uv = True
@@ -768,6 +777,7 @@ class _Ctap2ClientBackend(_ClientBackend):
             pin_protocol = None
 
         used_extensions: list[RegistrationExtensionProcessor] = []
+        allow_uv = True
 
         def _do_make():
             # Gather UV permissions
@@ -786,7 +796,13 @@ class _Ctap2ClientBackend(_ClientBackend):
 
             # Handle auth
             pin_token, internal_uv = self._get_auth_params(
-                pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
+                pin_protocol,
+                rp_id,
+                user_verification,
+                permissions,
+                allow_uv,
+                event,
+                on_keepalive,
             )
 
             if exclude_list:
@@ -869,6 +885,10 @@ class _Ctap2ClientBackend(_ClientBackend):
                 ):
                     user_verification = UserVerificationRequirement.REQUIRED
                     continue
+                # UV may be blocked, try again (once) with PIN
+                if e.code == CtapError.ERR.UV_BLOCKED and allow_uv:
+                    allow_uv = False
+                    continue
                 # NFC may require reconnect
                 connect = getattr(dev, "connect", None)
                 if (
@@ -932,6 +952,8 @@ class _Ctap2ClientBackend(_ClientBackend):
         else:
             pin_protocol = None
 
+        allow_uv = True
+
         def _do_auth():
             # Gather UV permissions
             permissions = ClientPin.PERMISSION.GET_ASSERTION
@@ -946,7 +968,13 @@ class _Ctap2ClientBackend(_ClientBackend):
 
             # Handle auth
             pin_token, internal_uv = self._get_auth_params(
-                pin_protocol, rp_id, user_verification, permissions, event, on_keepalive
+                pin_protocol,
+                rp_id,
+                user_verification,
+                permissions,
+                allow_uv,
+                event,
+                on_keepalive,
             )
 
             if allow_list:
@@ -1016,6 +1044,10 @@ class _Ctap2ClientBackend(_ClientBackend):
                     and user_verification == UserVerificationRequirement.DISCOURAGED
                 ):
                     user_verification = UserVerificationRequirement.REQUIRED
+                    continue
+                # UV may be blocked, try again (once) with PIN
+                if e.code == CtapError.ERR.UV_BLOCKED and allow_uv:
+                    allow_uv = False
                     continue
                 # NFC may require reconnect
                 connect = getattr(dev, "connect", None)
