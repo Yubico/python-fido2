@@ -72,6 +72,16 @@ def test_exclude_credentials_multiple(credential, client, excluded_match):
         client.make_credential(create_options.public_key)
 
 
+def test_exclude_credentials_max(info, credential, client, excluded_match):
+    max_len = info.max_cred_id_length
+    max_creds = info.max_creds_in_list or 1
+    exclude = [
+        {"id": os.urandom(max_len), "type": "public-key"} for _ in range(max_creds)
+    ]
+    create_options, state = server.register_begin(user, exclude)
+    client.make_credential(create_options.public_key)
+
+
 def test_exclude_credentials_others(credential, client):
     exclude = [{"id": os.urandom(32), "type": "public-key"} for _ in range(5)]
     create_options, state = server.register_begin(user, exclude)

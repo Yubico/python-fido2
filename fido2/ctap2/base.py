@@ -237,7 +237,9 @@ class Ctap2:
             raise ValueError("Device does not support CTAP2.")
         self.device = device
         self._strict_cbor = strict_cbor
+        self._max_msg_size = 1024  # For initial get_info call
         self._info = self.get_info()
+        self._max_msg_size = self._info.max_msg_size
 
     @property
     def info(self) -> Info:
@@ -267,6 +269,8 @@ class Ctap2:
         request = struct.pack(">B", cmd)
         if data is not None:
             request += cbor.encode(data)
+        if len(request) > self._max_msg_size:
+            raise CtapError(CtapError.ERR.REQUEST_TOO_LARGE)
         response = self.device.call(CTAPHID.CBOR, request, event, on_keepalive)
         status = response[0]
         if status != 0x00:
