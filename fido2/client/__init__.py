@@ -603,11 +603,9 @@ class _Ctap2ClientBackend(_ClientBackend):
                     return PublicKeyCredentialDescriptor(**assertions[0].credential)
             except CtapError as e:
                 match e.code:
-                    case CtapError.ERR.REQUEST_TOO_LARGE:
+                    case CtapError.ERR.REQUEST_TOO_LARGE if max_creds > 1:
                         # Message is too large, try smaller chunks
                         max_creds -= 1
-                        if max_creds == 0:
-                            raise
                     case CtapError.ERR.NO_CREDENTIALS:
                         # All creds in chunk are discarded
                         cred_list = cred_list[max_creds:]
