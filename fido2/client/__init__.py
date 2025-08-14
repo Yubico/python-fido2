@@ -573,11 +573,6 @@ class _Ctap2ClientBackend(_ClientBackend):
         if max_len:
             cred_list = [c for c in cred_list if len(c.id) <= max_len]
 
-        max_creds = info.max_creds_in_list or 1
-        chunks = [
-            cred_list[i : i + max_creds] for i in range(0, len(cred_list), max_creds)
-        ]
-
         client_data_hash = b"\0" * 32
         if pin_token:
             pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
@@ -586,7 +581,9 @@ class _Ctap2ClientBackend(_ClientBackend):
             pin_auth = None
             version = None
 
-        for chunk in chunks:
+        max_creds = info.max_creds_in_list or 1
+        while cred_list:
+            chunk = cred_list[:max_creds]
             try:
                 assertions = self.ctap2.get_assertions(
                     rp_id,
@@ -605,10 +602,15 @@ class _Ctap2ClientBackend(_ClientBackend):
                 else:
                     return PublicKeyCredentialDescriptor(**assertions[0].credential)
             except CtapError as e:
-                if e.code == CtapError.ERR.NO_CREDENTIALS:
-                    # All creds in chunk are discarded
-                    continue
-                raise
+                match e.code:
+                    case CtapError.ERR.REQUEST_TOO_LARGE if max_creds > 1:
+                        # Message is too large, try smaller chunks
+                        max_creds -= 1
+                    case CtapError.ERR.NO_CREDENTIALS:
+                        # All creds in chunk are discarded
+                        cred_list = cred_list[max_creds:]
+                    case _:
+                        raise
 
         # No matches found
         return None
