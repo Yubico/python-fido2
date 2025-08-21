@@ -33,6 +33,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, padding, rsa
 
+from . import bls12_381
 from .utils import bytes2int, int2bytes
 
 if TYPE_CHECKING:
@@ -342,6 +343,30 @@ class Ed448(CoseKey):
                 ),
             }
         )
+
+
+class EcsdsaBls12_381_Sha256(CoseKey):
+    ALGORITHM = -65600  # Placeholder value
+    CURVE_BLS12_381 = -65601  # Placeholder value
+
+    def verify(self, message, signature):
+        if self[-1] != self.CURVE_BLS12_381:
+            raise ValueError("Unsupported elliptic curve")
+
+        pk = bls12_381.CRV_BLS.point_from_cose(self)
+        pk.verify_ecsdsa_sha256(signature, message)
+
+
+class EcsdsaBls12_381_Bbs_Sha256(CoseKey):
+    ALGORITHM = -65602  # Placeholder value
+    CURVE_BLS12_381 = -65601  # Placeholder value
+
+    def verify(self, message, signature, t2prime=None):
+        if self[-1] != self.CURVE_BLS12_381:
+            raise ValueError("Unsupported elliptic curve")
+
+        pk = bls12_381.CRV_BLS.point_from_cose(self)
+        pk.verify_ecsdsa_sha256_split_bbs(signature, message, t2prime)
 
 
 class RS1(CoseKey):
