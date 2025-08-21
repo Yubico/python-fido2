@@ -36,10 +36,15 @@ import sys
 from exampleutils import get_client
 
 from fido2 import cbor
-from fido2.cose import ESP256, CoseKey
+from fido2.cose import (
+    CoseKey,
+    EcsdsaBls12_381_Sha256,
+)
 from fido2.ctap2.extensions import SignExtension
 from fido2.server import Fido2Server
-from fido2.utils import websafe_encode
+from fido2.utils import sha256, websafe_encode
+
+ESP256_2P = -70009  # Placeholder value
 
 uv = "discouraged"
 
@@ -57,18 +62,16 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
-message = b"I am a message"
-algorithms = [ESP256.ALGORITHM]
+algorithms = [
+    ESP256_2P,
+    EcsdsaBls12_381_Sha256.ALGORITHM,
+]
 
 # Create a credential
 result = client.make_credential(
     {
         **create_options["publicKey"],
-        "extensions": {
-            SignExtension.NAME: {
-                "generateKey": {"algorithms": algorithms, "tbs": message}
-            }
-        },
+        "extensions": {SignExtension.NAME: {"generateKey": {"algorithms": algorithms}}},
     }
 )
 
@@ -77,7 +80,7 @@ auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 # PRF result:
-sign_result = result.client_extension_results.sign
+sign_result = result.client_extension_results.previewSign
 print("CREATE sign result", sign_result)
 sign_key = sign_result.generated_key
 if not sign_key:
@@ -91,21 +94,16 @@ if sign_key.algorithm not in algorithms:
     print("Got unexpected algorithm in response:", sign_key.algorithm)
     sys.exit(1)
 
+
 pk = CoseKey.parse(cbor.decode(sign_key.public_key))  # COSE key in bytes
-kh = pk.get_ref()
-kh[3] = sign_key.algorithm
-if pk[1] == 2:  # EC2
-    kh[-1] = pk[-1]  # crv
-kh_bin = cbor.encode(kh)  # key handle in bytes
 print("public key", pk)
+
+kh = sign_key.key_handle
 print("keyHandle", kh)
 
-if "signature" in sign_result:
-    print("Test verify signature", sign_result["signature"])
-    pk.verify(message, sign_result.signature)
-    print("Signature verified!")
-
-message = b"New message"
+message = b"I am a message"
+is_prehash_alg = sign_key.algorithm in [ESP256_2P]
+data = sha256(message) if is_prehash_alg else message
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
@@ -116,10 +114,10 @@ result = client.get_assertion(
         **request_options["publicKey"],
         "extensions": {
             SignExtension.NAME: {
-                "sign": {
-                    "tbs": message,
-                    "keyHandleByCredential": {
-                        websafe_encode(credentials[0].credential_id): kh_bin,
+                "signByCredential": {
+                    websafe_encode(credentials[0].credential_id): {
+                        "keyHandle": kh,
+                        "tbs": data,
                     },
                 },
             }
@@ -130,7 +128,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-sign_result = result.client_extension_results.sign
+sign_result = result.client_extension_results.previewSign
 print("GET sign result", sign_result)
 
 print("Test verify signature", sign_result.get("signature"))

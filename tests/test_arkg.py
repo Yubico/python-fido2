@@ -110,6 +110,6 @@ def test_vectors(test_vector):
         }
     )
 
-    pk_derived = pub_key.derive_public_key(test_vector["ikm"], test_vector["ctx"])
+    pk_derived, args = pub_key.derive_public_key(test_vector["ikm"], test_vector["ctx"])
     point = b"\4" + pk_derived[-2] + pk_derived[-3]
     assert point.hex() == test_vector["pk_prime"].hex()

@@ -74,9 +74,9 @@ credentials = [auth_data.credential_data]
 print("New credential created, with the sign extension.")
 
 # PRF result:
-sign_result = result.client_extension_results.get(SignExtension.NAME)
+sign_result = result.client_extension_results.previewSign
 print("CREATE sign result", sign_result)
-sign_key = sign_result.get("generatedKey")
+sign_key = sign_result.generated_key
 if not sign_key:
     print(
         "Failed to create credential with sign extension",
@@ -99,11 +99,9 @@ print("KEM public key", pk.pkkem)
 ctx = b"my-ctx-here"
 ikm = b"my-ikm-here"
 # Derived public key to verify with, and kh to send to Authenticator
-pk2 = pk.derive_public_key(ikm, ctx)
+pk2, args = pk.derive_public_key(ikm, ctx)
 print("Derived public key", pk2)
-ref = pk2.get_ref()
-print("COSE Key ref for derived key", ref)
-kh = websafe_encode(cbor.encode(ref))
+print("COSE_Sign_Args for derived key", args)
 
 # Prepare a message to sign
 message = b"New message"
@@ -120,10 +118,11 @@ result = client.get_assertion(
         # Add extension outputs. We have only 1 credential in allowCredentials
         "extensions": {
             SignExtension.NAME: {
-                "sign": {
-                    "tbs": ph_data,
-                    "keyHandleByCredential": {
-                        websafe_encode(credentials[0].credential_id): kh,
+                "signByCredential": {
+                    websafe_encode(credentials[0].credential_id): {
+                        "keyHandle": sign_key.key_handle,
+                        "tbs": ph_data,
+                        "additionalArgs": cbor.encode(args),
                     },
                 },
             }

@@ -649,23 +649,24 @@ class ThirdPartyPaymentExtension(Ctap2Extension):
 @dataclass(eq=False, frozen=True)
 class _SignGenerateKeyInputs(_JsonDataObject):
     algorithms: Sequence[int]
-    tbs: bytes | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class _SignSignInputs(_JsonDataObject):
-    key_handle_by_credential: Mapping[str, bytes]
+    key_handle: bytes
     tbs: bytes
+    additional_args: bytes | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class _SignInputs(_JsonDataObject):
     generate_key: _SignGenerateKeyInputs | None = None
-    sign: _SignSignInputs | None = None
+    sign_by_credential: Mapping[str, _SignSignInputs] | None = None
 
 
 @dataclass(eq=False, frozen=True)
 class _SignGeneratedKey(_JsonDataObject):
+    key_handle: bytes
     public_key: bytes
     algorithm: int
     attestation_object: bytes
@@ -682,12 +683,12 @@ class SignExtension(Ctap2Extension):
     WARNING: This extension is currently in DRAFT.
     It is to be considered experimental, and NOT part of the stable API of this library.
 
-    Implements the sign CTAP2 extension.
+    Implements version 4-SNAPSHOT-2025-08-21T15:00 of the sign CTAP2 extension.
 
     https://github.com/yubicolabs/webauthn-sign-extension
     """
 
-    NAME = "sign"
+    NAME = "previewSign"
 
     def is_supported(self, ctap):
         return self.NAME in ctap.info.extensions
@@ -698,7 +699,7 @@ class SignExtension(Ctap2Extension):
         if not data or not self.is_supported(ctap):
             return
 
-        if data.sign or not data.generate_key:
+        if data.sign_by_credential or not data.generate_key:
             raise ValueError("Invalid inputs")
 
         class Processor(RegistrationExtensionProcessor):
@@ -716,9 +717,6 @@ class SignExtension(Ctap2Extension):
                 )
                 outputs = {3: gk.algorithms, 4: flags}
 
-                if gk.tbs:
-                    outputs[6] = gk.tbs
-
                 return {SignExtension.NAME: outputs}
 
             def prepare_outputs(self, response, pin_token):
@@ -734,16 +732,17 @@ class SignExtension(Ctap2Extension):
                 )
                 cred_data = att_obj.auth_data.credential_data
                 assert cred_data is not None  # noqa: S101
+                kh = cred_data.credential_id
                 pk = cred_data.public_key
 
                 return {
                     SignExtension.NAME: _SignOutputs(
                         generated_key=_SignGeneratedKey(
+                            key_handle=kh,
                             public_key=cbor.encode(pk),
                             algorithm=data.get(3),
                             attestation_object=att_obj_bytes,
                         ),
-                        signature=data.get(6),
                     )
                 }
 
@@ -755,13 +754,12 @@ class SignExtension(Ctap2Extension):
         if not data or not self.is_supported(ctap):
             return
 
-        if not data.sign or data.generate_key:
+        if not data.sign_by_credential or data.generate_key:
             raise ValueError("Invalid inputs")
 
         class Processor(AuthenticationExtensionProcessor):
             def prepare_inputs(self, selected, pin_token):
-                sign = data.sign
-                by_creds = sign.key_handle_by_credential
+                by_creds = data.sign_by_credential
 
                 # Make sure all keys are valid IDs from allow_credentials
                 allow_list = options.allow_credentials
@@ -770,14 +768,16 @@ class SignExtension(Ctap2Extension):
                 ids = {websafe_encode(c.id) for c in allow_list}
                 if ids.difference(by_creds):
                     raise ValueError("keyHandleByCredential is not valid")
-                kh = by_creds[websafe_encode(selected.id)]
+                cred_inputs = by_creds[websafe_encode(selected.id)]
 
-                return {
-                    SignExtension.NAME: {
-                        5: kh,
-                        6: sign.tbs,
-                    }
+                authenticator_input = {
+                    2: cred_inputs.key_handle,
+                    6: cred_inputs.tbs,
                 }
+                if cred_inputs.additional_args:
+                    authenticator_input[7] = cred_inputs.additional_args
+
+                return {SignExtension.NAME: authenticator_input}
 
             def prepare_outputs(self, response, pin_token):
                 extensions = response.auth_data.extensions or {}

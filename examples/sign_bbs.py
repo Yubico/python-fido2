@@ -37,12 +37,8 @@ from exampleutils import get_client
 
 from fido2 import bls12_381, cbor
 from fido2.cose import (
-    ES256,
-    ESP256,
     CoseKey,
     EcsdsaBls12_381_Bbs_Sha256,
-    EcsdsaBls12_381_Sha256,
-    EdDSA,
 )
 from fido2.ctap2.extensions import SignExtension
 from fido2.server import Fido2Server
@@ -66,44 +62,15 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
-message = b"I am a message"
 algorithms = [
-    # ESP256_2P,
     EcsdsaBls12_381_Bbs_Sha256.ALGORITHM,
-    EcsdsaBls12_381_Sha256.ALGORITHM,
 ]
-
-has_prehash_alg = any(
-    alg
-    in [
-        ESP256_2P,
-    ]
-    for alg in algorithms
-)
-has_raw_alg = any(
-    alg
-    in [
-        EdDSA.ALGORITHM,
-        ES256.ALGORITHM,
-        ESP256.ALGORITHM,
-        EcsdsaBls12_381_Sha256.ALGORITHM,
-        EcsdsaBls12_381_Bbs_Sha256.ALGORITHM,
-    ]
-    for alg in algorithms
-)
-
-if has_prehash_alg and has_raw_alg:
-    raise ValueError("Cannot mix algorithms with pre-hashed and raw message")
-
-data = message if has_raw_alg else sha256(message)
 
 # Create a credential
 result = client.make_credential(
     {
         **create_options["publicKey"],
-        "extensions": {
-            SignExtension.NAME: {"generateKey": {"algorithms": algorithms, "tbs": data}}
-        },
+        "extensions": {SignExtension.NAME: {"generateKey": {"algorithms": algorithms}}},
     }
 )
 
@@ -112,7 +79,7 @@ auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 # PRF result:
-sign_result = result.client_extension_results.sign
+sign_result = result.client_extension_results.previewSign
 print("CREATE sign result", sign_result)
 sign_key = sign_result.generated_key
 if not sign_key:
@@ -129,10 +96,6 @@ if sign_key.algorithm not in algorithms:
 
 pk = CoseKey.parse(cbor.decode(sign_key.public_key))  # COSE key in bytes
 print("public key", pk)
-if "signature" in sign_result:
-    print("Test verify signature", sign_result["signature"])
-    pk.verify(message, sign_result.signature)
-    print("Signature verified!")
 
 crv = bls12_381.CRV_BLS
 isk = crv.insecure_random_scalar()
@@ -171,23 +134,12 @@ t2px, t2py = (
     else (None, None)
 )
 
-kh = pk.get_ref()
-kh[3] = sign_key.algorithm
-if pk[1] == 2:  # EC2
-    # kh[-1] = pk[-1]  # crv
-    pass
-if t2prime is not None:
-    kh[-10] = {
-        1: 2,
-        -1: pk[-1],
-        -2: t2px,
-        -3: t2py,
-    }
-kh_bin = cbor.encode(kh)  # key handle in bytes
+kh = sign_key.key_handle
 print("keyHandle", kh)
 
 message = c_host
-data = message if has_raw_alg else sha256(message)
+is_prehash_alg = sign_key.algorithm in [ESP256_2P]
+data = sha256(message) if is_prehash_alg else message
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
@@ -198,10 +150,23 @@ result = client.get_assertion(
         **request_options["publicKey"],
         "extensions": {
             SignExtension.NAME: {
-                "sign": {
-                    "tbs": data,
-                    "keyHandleByCredential": {
-                        websafe_encode(credentials[0].credential_id): kh_bin,
+                "signByCredential": {
+                    websafe_encode(credentials[0].credential_id): {
+                        "keyHandle": kh,
+                        "tbs": data,
+                        "additionalArgs": cbor.encode(
+                            {
+                                3: sign_key.algorithm,
+                                -10: {
+                                    1: 2,
+                                    -1: pk[-1],
+                                    -2: t2px,
+                                    -3: t2py,
+                                },
+                            }
+                        )
+                        if t2prime is not None
+                        else None,
                     },
                 },
             }
@@ -212,7 +177,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-sign_result = result.client_extension_results.sign
+sign_result = result.client_extension_results.previewSign
 print("GET sign result", sign_result)
 
 print("Test verify signature", sign_result.get("signature"))
