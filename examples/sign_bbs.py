@@ -44,6 +44,7 @@ from fido2.cose import (
     EcsdsaBls12_381_Sha256,
     EdDSA,
 )
+from fido2.ctap2.extensions import SignExtension
 from fido2.server import Fido2Server
 from fido2.utils import sha256, websafe_encode
 
@@ -52,7 +53,7 @@ ESP256_2P = -70009  # Placeholder value
 uv = "discouraged"
 
 # Locate a suitable FIDO authenticator
-client, info = get_client(lambda info: "sign" in info.extensions)
+client, info = get_client(lambda info: SignExtension.NAME in info.extensions)
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
 user = {"id": b"user_id", "name": "A. User"}
@@ -101,7 +102,7 @@ result = client.make_credential(
     {
         **create_options["publicKey"],
         "extensions": {
-            "sign": {"generateKey": {"algorithms": algorithms, "tbs": data}}
+            SignExtension.NAME: {"generateKey": {"algorithms": algorithms, "tbs": data}}
         },
     }
 )
@@ -196,7 +197,7 @@ result = client.get_assertion(
     {
         **request_options["publicKey"],
         "extensions": {
-            "sign": {
+            SignExtension.NAME: {
                 "sign": {
                     "tbs": data,
                     "keyHandleByCredential": {
