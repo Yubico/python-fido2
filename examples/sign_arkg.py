@@ -38,13 +38,14 @@ from exampleutils import get_client
 from fido2 import cbor
 from fido2.arkg import ARKG_P256_ESP256
 from fido2.cose import CoseKey
+from fido2.ctap2.extensions import SignExtension
 from fido2.server import Fido2Server
 from fido2.utils import sha256, websafe_decode, websafe_encode
 
 uv = "discouraged"
 
 # Locate a suitable FIDO authenticator
-client, info = get_client(lambda info: "sign" in info.extensions)
+client, info = get_client(lambda info: SignExtension.NAME in info.extensions)
 
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
 user = {"id": b"user_id", "name": "A. User"}
@@ -61,7 +62,9 @@ create_options, state = server.register_begin(
 result = client.make_credential(
     {
         **create_options["publicKey"],
-        "extensions": {"sign": {"generateKey": {"algorithms": [ARKG_P256_ESP256]}}},
+        "extensions": {
+            SignExtension.NAME: {"generateKey": {"algorithms": [ARKG_P256_ESP256]}}
+        },
     }
 )
 
@@ -71,7 +74,7 @@ credentials = [auth_data.credential_data]
 print("New credential created, with the sign extension.")
 
 # PRF result:
-sign_result = result.client_extension_results.get("sign")
+sign_result = result.client_extension_results.get(SignExtension.NAME)
 print("CREATE sign result", sign_result)
 sign_key = sign_result.get("generatedKey")
 if not sign_key:
@@ -116,7 +119,7 @@ result = client.get_assertion(
         **request_options["publicKey"],
         # Add extension outputs. We have only 1 credential in allowCredentials
         "extensions": {
-            "sign": {
+            SignExtension.NAME: {
                 "sign": {
                     "tbs": ph_data,
                     "keyHandleByCredential": {
@@ -131,7 +134,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-sign_result = result.client_extension_results["sign"]
+sign_result = result.client_extension_results[SignExtension.NAME]
 print("GET sign result", sign_result)
 
 # Response contains a signature over message

@@ -714,7 +714,7 @@ class SignExtension(Ctap2Extension):
 
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = _SignInputs.from_dict(inputs.get("sign"))
+        data = _SignInputs.from_dict(inputs.get(self.NAME))
         if not data or not self.is_supported(ctap):
             return
 
@@ -771,7 +771,7 @@ class SignExtension(Ctap2Extension):
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = _SignInputs.from_dict(inputs.get("sign"))
+        data = _SignInputs.from_dict(inputs.get(self.NAME))
         if not data or not self.is_supported(ctap):
             return
 
