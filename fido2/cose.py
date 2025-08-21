@@ -58,15 +58,6 @@ class CoseKey(dict):
         """
         raise NotImplementedError("Signature verification not supported.")
 
-    def get_ref(self) -> Mapping[int, Any]:
-        """Returns a COSE Key Reference for the key."""
-        kh = {k: self[k] for k in (1, 2, 3) if k in self}
-        if kh[1] == 2:  # EC2
-            kh[1] = -2  # Ref-EC2
-        else:
-            raise ValueError("Key reference type is unknown for key type: " + kh[1])
-        return kh
-
     @classmethod
     def from_cryptography_key(
         cls: type[T_CoseKey], public_key: PublicKeyTypes

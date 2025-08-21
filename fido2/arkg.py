@@ -387,22 +387,17 @@ def _cose2point(cose):
 ARKG_P256_ESP256 = -65539
 
 
-class ARKG_P256_DERIVED(ESP256):
-    def __init__(self, *args, parent_kid: bytes, kh: bytes, ctx: bytes, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._parent_kid = parent_kid
-        self._kh = kh
-        self._ctx = ctx
-
-    def get_ref(self):
-        return {
-            1: -65538,  # kty: Ref-ARKG-derived
-            2: self._parent_kid,
-            3: ARKG_P256_ESP256,  # alg: ESP256 with key derived by ARKG-P256
-            -1: self._kh,
-            -2: self._ctx,
-            -3: ARKG_P256.ALGORITHM,
-        }
+class ARKG_P256_SignArgs(dict):
+    @classmethod
+    def create(cls, kh: bytes, ctx: bytes):
+        return cls(
+            {
+                3: ARKG_P256_ESP256,  # alg: ESP256 with key derived by ARKG-P256
+                -1: kh,
+                -2: ctx,
+                -3: ARKG_P256.ALGORITHM,
+            }
+        )
 
 
 class ARKG_P256(CoseKey):
@@ -442,7 +437,9 @@ class ARKG_P256(CoseKey):
     def pkkem(self) -> CoseKey:
         return CoseKey.parse(self[-2])
 
-    def derive_public_key(self, ikm: bytes, ctx: bytes) -> CoseKey:
+    def derive_public_key(
+        self, ikm: bytes, ctx: bytes
+    ) -> Tuple[CoseKey, ARKG_P256_SignArgs]:
         point, kh = self._ARKG.derive_public_key(
             _cose2point(self.pkbl),
             _cose2point(self.pkkem),
@@ -452,15 +449,14 @@ class ARKG_P256(CoseKey):
         point_enc = point.to_bytes("uncompressed")
         ln = len(point_enc) // 2
 
-        return ARKG_P256_DERIVED(
+        pk_cose = ESP256(
             {
                 1: 2,  # kty: EC
                 3: self[-3],  # derived key alg (-9)
                 -1: 1,
                 -2: point_enc[1 : ln + 1],  # x-coordinate
                 -3: point_enc[1 + ln :],  # y-coordinate
-            },
-            parent_kid=self[2],
-            kh=kh,
-            ctx=ctx,
+            }
         )
+        args = ARKG_P256_SignArgs.create(kh=kh, ctx=ctx)
+        return pk_cose, args
