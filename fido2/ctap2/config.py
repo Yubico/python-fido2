@@ -56,6 +56,7 @@ class Config:
         NEW_MIN_PIN_LENGTH = 0x01
         MIN_PIN_LENGTH_RPIDS = 0x02
         FORCE_CHANGE_PIN = 0x03
+        PIN_COMPLEXITY_POLICY = 0x04
 
     @staticmethod
     def is_supported(info: Info) -> bool:
@@ -108,6 +109,7 @@ class Config:
         min_pin_length: int | None = None,
         rp_ids: list[str] | None = None,
         force_change_pin: bool = False,
+        pin_complexity_policy: bool = False,
     ) -> None:
         """Set the minimum PIN length allowed when setting/changing the PIN.
 
@@ -116,10 +118,14 @@ class Config:
             minimum PIN length.
         :param force_change_pin: True if the Authenticator should enforce changing the
             PIN before the next use.
+        :param pin_complexity_policy: True if the Authenticator should enforce an additional
+            PIN complexity policy beyond minPINLength.
         """
         params: dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
         if min_pin_length is not None:
             params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
         if rp_ids is not None:
             params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
+        if pin_complexity_policy is not None:
+            params[Config.PARAM.PIN_COMPLEXITY_POLICY] = pin_complexity_policy
         self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)
