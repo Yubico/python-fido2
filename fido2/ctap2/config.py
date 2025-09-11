@@ -118,8 +118,8 @@ class Config:
             minimum PIN length.
         :param force_change_pin: True if the Authenticator should enforce changing the
             PIN before the next use.
-        :param pin_complexity_policy: True if the Authenticator should enforce an additional
-            PIN complexity policy beyond minPINLength.
+        :param pin_complexity_policy: True if the Authenticator should enforce an
+            additional PIN complexity policy beyond minPINLength.
         """
         params: dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
         if min_pin_length is not None:
