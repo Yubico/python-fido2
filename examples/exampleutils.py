@@ -88,8 +88,11 @@ def get_client(predicate=None, **kwargs):
 
     The client will be returned, with the CTAP2 Info, if available.
     """
+
+    client_data_collector = DefaultClientDataCollector("https://example.com")
+
     if use_winclient:
-        return WindowsClient("https://example.com"), None
+        return WindowsClient(client_data_collector), None
 
     user_interaction = kwargs.pop("user_interaction", None) or CliInteraction()
 
@@ -98,7 +101,7 @@ def get_client(predicate=None, **kwargs):
         # Set up a FIDO 2 client using the origin https://example.com
         client = Fido2Client(
             dev,
-            client_data_collector=DefaultClientDataCollector("https://example.com"),
+            client_data_collector=client_data_collector,
             user_interaction=user_interaction,
             **kwargs,
         )
