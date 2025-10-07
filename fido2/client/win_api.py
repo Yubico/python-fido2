@@ -29,6 +29,8 @@
 """
 Structs based on Microsoft's WebAuthN API.
 https://github.com/microsoft/webauthn
+
+Definitions taken from https://github.com/microsoft/webauthn/blob/master/webauthn.h
 """
 
 # With the ctypes.Structure a lot of the property names
@@ -45,7 +47,7 @@ from ctypes.wintypes import BOOL, DWORD, HWND, LONG, LPCWSTR, WORD
 from enum import IntEnum, unique
 from typing import Any, Mapping, Sequence
 
-# Not implemented: Platform credentials support
+# Not implemented: Platform credentials support, listing of built-in authenticators
 
 
 windll = LibraryLoader(WinDLL)
@@ -111,10 +113,7 @@ class _FromString:
 
 @unique
 class WebAuthNUserVerificationRequirement(_FromString, IntEnum):
-    """Maps to WEBAUTHN_USER_VERIFICATION_REQUIREMENT_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L335
-    """
+    """Maps to WEBAUTHN_USER_VERIFICATION_REQUIREMENT_*."""
 
     ANY = 0
     REQUIRED = 1
@@ -124,10 +123,7 @@ class WebAuthNUserVerificationRequirement(_FromString, IntEnum):
 
 @unique
 class WebAuthNAttestationConveyancePreference(_FromString, IntEnum):
-    """Maps to WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L340
-    """
+    """Maps to WEBAUTHN_ATTESTATION_CONVEYANCE_PREFERENCE_*."""
 
     ANY = 0
     NONE = 1
@@ -137,10 +133,7 @@ class WebAuthNAttestationConveyancePreference(_FromString, IntEnum):
 
 @unique
 class WebAuthNAuthenticatorAttachment(_FromString, IntEnum):
-    """Maps to WEBAUTHN_AUTHENTICATOR_ATTACHMENT_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L330
-    """
+    """Maps to WEBAUTHN_AUTHENTICATOR_ATTACHMENT_*."""
 
     ANY = 0
     PLATFORM = 1
@@ -150,10 +143,7 @@ class WebAuthNAuthenticatorAttachment(_FromString, IntEnum):
 
 @unique
 class WebAuthNCTAPTransport(_FromString, IntEnum):
-    """Maps to WEBAUTHN_CTAP_TRANSPORT_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L225
-    """
+    """Maps to WEBAUTHN_CTAP_TRANSPORT_*."""
 
     ANY = 0x00000000
     USB = 0x00000001
@@ -161,15 +151,14 @@ class WebAuthNCTAPTransport(_FromString, IntEnum):
     BLE = 0x00000004
     TEST = 0x00000008
     INTERNAL = 0x00000010
-    FLAGS_MASK = 0x0000001F
+    HYBRID = 0x00000020
+    SMART_CARD = 0x00000040
+    FLAGS_MASK = 0x0000007F
 
 
 @unique
 class WebAuthNEnterpriseAttestation(_FromString, IntEnum):
-    """Maps to WEBAUTHN_ENTERPRISE_ATTESTATION_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L401
-    """
+    """Maps to WEBAUTHN_ENTERPRISE_ATTESTATION_*."""
 
     NONE = 0
     VENDOR_FACILITATED = 1
@@ -178,10 +167,7 @@ class WebAuthNEnterpriseAttestation(_FromString, IntEnum):
 
 @unique
 class WebAuthNLargeBlobSupport(_FromString, IntEnum):
-    """Maps to WEBAUTHN_LARGE_BLOB_SUPPORT_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L405
-    """
+    """Maps to WEBAUTHN_LARGE_BLOB_SUPPORT_*."""
 
     NONE = 0
     REQUIRED = 1
@@ -190,10 +176,7 @@ class WebAuthNLargeBlobSupport(_FromString, IntEnum):
 
 @unique
 class WebAuthNLargeBlobOperation(_FromString, IntEnum):
-    """Maps to WEBAUTHN_LARGE_BLOB_OPERATION_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L478
-    """
+    """Maps to WEBAUTHN_LARGE_BLOB_OPERATION_*."""
 
     NONE = 0
     GET = 1
@@ -203,10 +186,7 @@ class WebAuthNLargeBlobOperation(_FromString, IntEnum):
 
 @unique
 class WebAuthNUserVerification(_FromString, IntEnum):
-    """Maps to WEBAUTHN_USER_VERIFICATION_*.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L482
-    """
+    """Maps to WEBAUTHN_USER_VERIFICATION_*."""
 
     ANY = 0
     OPTIONAL = 1
@@ -216,8 +196,6 @@ class WebAuthNUserVerification(_FromString, IntEnum):
 
 class WebAuthNCoseCredentialParameter(ctypes.Structure):
     """Maps to WEBAUTHN_COSE_CREDENTIAL_PARAMETER Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L185
 
     :param cred_params: Dict of Credential parameters.
     """
@@ -237,8 +215,6 @@ class WebAuthNCoseCredentialParameter(ctypes.Structure):
 class WebAuthNCoseCredentialParameters(ctypes.Structure):
     """Maps to WEBAUTHN_COSE_CREDENTIAL_PARAMETERS Struct.
 
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L191
-
     :param params: List of Credential parameter dicts.
     """
 
@@ -256,8 +232,6 @@ class WebAuthNCoseCredentialParameters(ctypes.Structure):
 
 class WebAuthNClientData(ctypes.Structure):
     """Maps to WEBAUTHN_CLIENT_DATA Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L153
 
     :param client_data_json: ClientData serialized as JSON bytes.
     """
@@ -280,8 +254,6 @@ class WebAuthNClientData(ctypes.Structure):
 class WebAuthNRpEntityInformation(ctypes.Structure):
     """Maps to WEBAUTHN_RP_ENTITY_INFORMATION Struct.
 
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L98
-
     :param rp: Dict of RP information.
     """
 
@@ -301,8 +273,6 @@ class WebAuthNRpEntityInformation(ctypes.Structure):
 
 class WebAuthNUserEntityInformation(ctypes.Structure):
     """Maps to WEBAUTHN_USER_ENTITY_INFORMATION Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L127
 
     :param user: Dict of User information.
     """
@@ -329,8 +299,6 @@ class WebAuthNUserEntityInformation(ctypes.Structure):
 class WebAuthNCredentialEx(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL_EX Struct.
 
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L250
-
     :param cred: Dict of Credential Descriptor data.
     """
 
@@ -353,8 +321,6 @@ class WebAuthNCredentialEx(ctypes.Structure):
 
 class WebAuthNCredentialList(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL_LIST Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L261
 
     :param credentials: List of dict of Credential Descriptor data.
     """
@@ -423,10 +389,7 @@ class WebAuthNHmacSecretSaltValues(ctypes.Structure):
 
 
 class WebAuthNCredProtectExtensionIn(ctypes.Structure):
-    """Maps to WEBAUTHN_CRED_PROTECT_EXTENSION_IN Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L493
-    """
+    """Maps to WEBAUTHN_CRED_PROTECT_EXTENSION_IN Struct."""
 
     _fields_ = [
         ("dwCredProtect", DWORD),
@@ -453,10 +416,7 @@ class WebAuthNCredBlobExtension(ctypes.Structure):
 
 
 class WebAuthNExtension(ctypes.Structure):
-    """Maps to WEBAUTHN_EXTENSION Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L317
-    """
+    """Maps to WEBAUTHN_EXTENSION Struct."""
 
     _fields_ = [
         ("pwszExtensionIdentifier", LPCWSTR),
@@ -471,10 +431,7 @@ class WebAuthNExtension(ctypes.Structure):
 
 
 class WebAuthNExtensions(ctypes.Structure):
-    """Maps to WEBAUTHN_EXTENSIONS Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L324
-    """
+    """Maps to WEBAUTHN_EXTENSIONS Struct."""
 
     _fields_ = [
         ("cExtensions", DWORD),
@@ -488,8 +445,6 @@ class WebAuthNExtensions(ctypes.Structure):
 
 class WebAuthNCredential(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIAL Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L212
 
     :param cred: Dict of Credential Descriptor data.
     """
@@ -511,8 +466,6 @@ class WebAuthNCredential(ctypes.Structure):
 class WebAuthNCredentials(ctypes.Structure):
     """Maps to WEBAUTHN_CREDENTIALS Struct.
 
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L219
-
     :param credentials: List of dict of Credential Descriptor data.
     """
 
@@ -529,10 +482,7 @@ class WebAuthNCredentials(ctypes.Structure):
 
 
 class CtapCborHybridStorageLinkedData(ctypes.Structure):
-    """Maps to CTAPCBOR_HYBRID_STORAGE_LINKED_DATA Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L356
-    """
+    """Maps to CTAPCBOR_HYBRID_STORAGE_LINKED_DATA Struct."""
 
     _fields_ = [
         ("dwVersion", DWORD),
@@ -557,8 +507,6 @@ class CtapCborHybridStorageLinkedData(ctypes.Structure):
 class WebAuthNGetAssertionOptions(ctypes.Structure):
     """Maps to WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS Struct.
 
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L452
-
     :param timeout: Time that the operation is expected to complete within.
         This is used as guidance, and can be overridden by the platform.
     :param attachment: Platform vs Cross-Platform
@@ -575,23 +523,42 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         ("dwAuthenticatorAttachment", DWORD),
         ("dwUserVerificationRequirement", DWORD),
         ("dwFlags", DWORD),
+        # Version 2 additions
         ("pwszU2fAppId", PCWSTR),
         ("pbU2fAppId", ctypes.POINTER(BOOL)),
+        # Version 3 additions
         ("pCancellationId", ctypes.POINTER(GUID)),
+        # Version 4 additions
         ("pAllowCredentialList", ctypes.POINTER(WebAuthNCredentialList)),
+        # Version 5 additions
         ("dwCredLargeBlobOperation", DWORD),
         ("cbCredLargeBlob", DWORD),
         ("pbCredLargeBlob", PBYTE),
+        # Version 6 additions
         ("pHmacSecretSaltValues", ctypes.POINTER(WebAuthNHmacSecretSaltValues)),
         ("bBrowserInPrivateMode", BOOL),
+        # Version 7 additions
         ("pLinkedDevice", ctypes.POINTER(CtapCborHybridStorageLinkedData)),
         ("bAutoFill", BOOL),
         ("cbJsonExt", DWORD),
         ("pbJsonExt", PBYTE),
+        # Version 8 additions
+        ("cCredentialHints", DWORD),
+        ("ppwszCredentialHints", ctypes.POINTER(PCWSTR)),
+        # Version 9 additions
+        ("pwszRemoteWebOrigin", PCWSTR),
+        ("cbPublicKeyCredentialRequestOptionsJSON", DWORD),
+        ("pbPublicKeyCredentialRequestOptionsJSON", PBYTE),
+        ("cbAuthenticatorId", DWORD),
+        ("pbAuthenticatorId", PBYTE),
     ]
 
     cred_large_blob = BytesProperty("CredLargeBlob")
     json_ext = BytesProperty("JsonExt")
+    public_key_credential_request_options_json = BytesProperty(
+        "PublicKeyCredentialRequestOptionsJSON"
+    )
+    authenticator_id = BytesProperty("AuthenticatorId")
 
     def __init__(
         self,
@@ -607,6 +574,10 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         flags: int = 0,
         u2f_appid: str | None = None,
         u2f_appid_used: BOOL | None = None,
+        credential_hints: Sequence[str] = [],
+        remote_web_origin: str | None = None,
+        public_key_credential_request_options_json: bytes | None = None,
+        authenticator_id: bytes | None = None,
     ):
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
@@ -638,12 +609,24 @@ class WebAuthNGetAssertionOptions(ctypes.Structure):
         if self.dwVersion >= 6 and hmac_secret_salts:
             self.pHmacSecretSaltValues = ctypes.pointer(hmac_secret_salts)
 
+        if self.dwVersion >= 8 and credential_hints:
+            self.cCredentialHints = len(credential_hints)
+            # Keep array alive by storing on instance
+            self._credential_hints_array = (PCWSTR * len(credential_hints))(
+                *credential_hints
+            )
+            self.ppwszCredentialHints = self._credential_hints_array
+
+        if self.dwVersion >= 9:
+            self.pwszRemoteWebOrigin = remote_web_origin
+            self.public_key_credential_request_options_json = (
+                public_key_credential_request_options_json
+            )
+            self.authenticator_id = authenticator_id
+
 
 class WebAuthNAssertion(ctypes.Structure):
-    """Maps to WEBAUTHN_ASSERTION Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L616
-    """
+    """Maps to WEBAUTHN_ASSERTION Struct."""
 
     _fields_ = [
         ("dwVersion", DWORD),
@@ -654,14 +637,23 @@ class WebAuthNAssertion(ctypes.Structure):
         ("Credential", WebAuthNCredential),
         ("cbUserId", DWORD),
         ("pbUserId", PBYTE),
+        # Version 2 additions
         ("Extensions", WebAuthNExtensions),
         ("cbCredLargeBlob", DWORD),
         ("pbCredLargeBlob", PBYTE),
         ("dwCredLargeBlobStatus", DWORD),
+        # Version 3 additions
         ("pHmacSecret", ctypes.POINTER(WebAuthNHmacSecretSalt)),
+        # Version 4 additions
         ("dwUsedTransports", DWORD),
+        # Version 5 additions
         ("cbUnsignedExtensionOutputs", DWORD),
         ("pbUnsignedExtensionOutputs", PBYTE),
+        # Version 6 additions
+        ("cbClientDataJSON", DWORD),
+        ("pbClientDataJSON", PBYTE),
+        ("cbAuthenticationResponseJSON", DWORD),
+        ("pbAuthenticationResponseJSON", PBYTE),
     ]
 
     auth_data = BytesProperty("AuthenticatorData")
@@ -669,6 +661,8 @@ class WebAuthNAssertion(ctypes.Structure):
     user_id = BytesProperty("UserId")
     cred_large_blob = BytesProperty("CredLargeBlob")
     unsigned_extension_outputs = BytesProperty("UnsignedExtensionOutputs")
+    client_data_json = BytesProperty("ClientDataJSON")
+    authentication_response_json = BytesProperty("AuthenticationResponseJSON")
 
     def __del__(self):
         WEBAUTHN.WebAuthNFreeAssertion(ctypes.byref(self))
@@ -676,8 +670,6 @@ class WebAuthNAssertion(ctypes.Structure):
 
 class WebAuthNMakeCredentialOptions(ctypes.Structure):
     """maps to WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L394
 
     :param timeout: Time that the operation is expected to complete within.This
         is used as guidance, and can be overridden by the platform.
@@ -701,19 +693,40 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         ("dwUserVerificationRequirement", DWORD),
         ("dwAttestationConveyancePreference", DWORD),
         ("dwFlags", DWORD),
+        # Version 2 additions
         ("pCancellationId", ctypes.POINTER(GUID)),
+        # Version 3 additions
         ("pExcludeCredentialList", ctypes.POINTER(WebAuthNCredentialList)),
+        # Version 4 additions
         ("dwEnterpriseAttestation", DWORD),
         ("dwLargeBlobSupport", DWORD),
         ("bPreferResidentKey", BOOL),
+        # Version 5 additions
         ("bBrowserInPrivateMode", BOOL),
+        # Version 6 additions
         ("bEnablePrf", BOOL),
+        # Version 7 additions
         ("pLinkedDevice", ctypes.POINTER(CtapCborHybridStorageLinkedData)),
         ("cbJsonExt", DWORD),
         ("pbJsonExt", PBYTE),
+        # Version 8 additions
+        ("pPRFGlobalEval", ctypes.POINTER(WebAuthNHmacSecretSalt)),
+        ("cCredentialHints", DWORD),
+        ("ppwszCredentialHints", ctypes.POINTER(PCWSTR)),
+        ("bThirdPartyPayment", BOOL),
+        # Version 9 additions
+        ("pwszRemoteWebOrigin", PCWSTR),
+        ("cbPublicKeyCredentialCreationOptionsJSON", DWORD),
+        ("pbPublicKeyCredentialCreationOptionsJSON", PBYTE),
+        ("cbAuthenticatorId", DWORD),
+        ("pbAuthenticatorId", PBYTE),
     ]
 
     json_ext = BytesProperty("JsonExt")
+    public_key_credential_creation_options_json = BytesProperty(
+        "PublicKeyCredentialCreationOptionsJSON"
+    )
+    authenticator_id = BytesProperty("AuthenticatorId")
 
     def __init__(
         self,
@@ -729,6 +742,12 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         prefer_resident_key: bool = False,
         enable_prf: bool = False,
         extensions: Sequence[WebAuthNExtension] = [],
+        prf_global_eval: WebAuthNHmacSecretSalt | None = None,
+        credential_hints: Sequence[str] = [],
+        third_party_payment: bool = False,
+        remote_web_origin: str | None = None,
+        public_key_credential_creation_options_json: bytes | None = None,
+        authenticator_id: bytes | None = None,
     ):
         self.dwVersion = get_version(self.__class__.__name__)
         self.dwTimeoutMilliseconds = timeout
@@ -758,12 +777,27 @@ class WebAuthNMakeCredentialOptions(ctypes.Structure):
         if self.dwVersion >= 6:
             self.bEnablePrf = enable_prf
 
+        if self.dwVersion >= 8:
+            if prf_global_eval is not None:
+                self.pPRFGlobalEval = ctypes.pointer(prf_global_eval)
+            if credential_hints:
+                self.cCredentialHints = len(credential_hints)
+                self._credential_hints_array = (PCWSTR * len(credential_hints))(
+                    *credential_hints
+                )
+                self.ppwszCredentialHints = self._credential_hints_array
+            self.bThirdPartyPayment = third_party_payment
+
+        if self.dwVersion >= 9:
+            self.pwszRemoteWebOrigin = remote_web_origin
+            self.public_key_credential_creation_options_json = (
+                public_key_credential_creation_options_json
+            )
+            self.authenticator_id = authenticator_id
+
 
 class WebAuthNCredentialAttestation(ctypes.Structure):
-    """Maps to WEBAUTHN_CREDENTIAL_ATTESTATION Struct.
-
-    https://github.com/microsoft/webauthn/blob/master/webauthn.h#L582
-    """
+    """Maps to WEBAUTHN_CREDENTIAL_ATTESTATION Struct."""
 
     _fields_ = [
         ("dwVersion", DWORD),
@@ -778,14 +812,27 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
         ("pbAttestationObject", PBYTE),
         ("cbCredentialId", DWORD),
         ("pbCredentialId", PBYTE),
+        # Version 2 additions
         ("Extensions", WebAuthNExtensions),
+        # Version 3 additions
         ("dwUsedTransport", DWORD),
+        # Version 4 additions
         ("bEpAtt", BOOL),
         ("bLargeBlobSupported", BOOL),
         ("bResidentKey", BOOL),
+        # Version 5 additions
         ("bPrfEnabled", BOOL),
+        # Version 6 additions
         ("cbUnsignedExtensionOutputs", DWORD),
         ("pbUnsignedExtensionOutputs", PBYTE),
+        # Version 7 additions
+        ("bThirdPartyPayment", BOOL),
+        # Version 8 additions
+        ("dwTransports", DWORD),
+        ("cbClientDataJSON", DWORD),
+        ("pbClientDataJSON", PBYTE),
+        ("cbRegistrationResponseJSON", DWORD),
+        ("pbRegistrationResponseJSON", PBYTE),
     ]
 
     auth_data = BytesProperty("AuthenticatorData")
@@ -793,6 +840,8 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
     attestation_object = BytesProperty("AttestationObject")
     credential_id = BytesProperty("CredentialId")
     unsigned_extension_outputs = BytesProperty("UnsignedExtensionOutputs")
+    client_data_json = BytesProperty("ClientDataJSON")
+    registration_response_json = BytesProperty("RegistrationResponseJSON")
 
     def __del__(self):
         WEBAUTHN.WebAuthNFreeCredentialAttestation(ctypes.byref(self))
@@ -801,8 +850,6 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
 HRESULT = ctypes.HRESULT  # type: ignore
 WEBAUTHN = windll.webauthn  # type: ignore
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
-# The following is derived from
-# https://github.com/microsoft/webauthn/blob/master/webauthn.h#L37
 
 WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.argtypes = [
     ctypes.POINTER(ctypes.c_bool)
@@ -884,6 +931,20 @@ WEBAUTHN_STRUCT_VERSIONS: Mapping[int, Mapping[str, int]] = {
         "WebAuthNGetAssertionOptions": 7,
         "WebAuthNCredentialAttestation": 6,
         "WebAuthNAssertion": 5,
+    },
+    8: {
+        "WebAuthNMakeCredentialOptions": 8,
+        "WebAuthNCredentialDetails": 3,
+        "WebAuthNCredentialAttestation": 7,
+        "WebAuthNGetAssertionOptions": 8,
+    },
+    9: {
+        "WebAuthNMakeCredentialOptions": 9,
+        "WebAuthNGetAssertionOptions": 9,
+        "WebAuthNAssertion": 6,
+        "WebAuthNCredentialDetails": 4,
+        "WebAuthNCredentialAttestation": 8,
+        "WebAuthNAuthenticatorDetails": 1,  # Not implemented
     },
 }
 
