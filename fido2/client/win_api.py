@@ -826,6 +826,7 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
         ("cbUnsignedExtensionOutputs", DWORD),
         ("pbUnsignedExtensionOutputs", PBYTE),
         # Version 7 additions
+        ("pHmacSecret", ctypes.POINTER(WebAuthNHmacSecretSalt)),
         ("bThirdPartyPayment", BOOL),
         # Version 8 additions
         ("dwTransports", DWORD),

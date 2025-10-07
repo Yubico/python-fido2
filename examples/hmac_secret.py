@@ -58,17 +58,19 @@ except ImportError:
 
 uv = "discouraged"
 
+client_data_collector = DefaultClientDataCollector("https://example.com")
+
 if use_winclient:
     # Use the Windows WebAuthn API if available, and we're not running as admin
     # By default only the PRF extension is allowed, we need to explicitly
     # configure the client to allow hmac-secret
-    client = WindowsClient("https://example.com", allow_hmac_secret=True)
+    client = WindowsClient(client_data_collector, allow_hmac_secret=True)
 else:
     # Locate a device
     for dev in enumerate_devices():
         client = Fido2Client(
             dev,
-            client_data_collector=DefaultClientDataCollector("https://example.com"),
+            client_data_collector=client_data_collector,
             user_interaction=CliInteraction(),
             # By default only the PRF extension is allowed, we need to explicitly
             # configure the client to allow hmac-secret

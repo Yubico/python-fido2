@@ -198,6 +198,7 @@ class WindowsClient(WebAuthnClient):
         win_extensions = []
         large_blob_support = WebAuthNLargeBlobSupport.NONE
         enable_prf = False
+        hmac_salts = None
         if options.extensions:
             if "credentialProtectionPolicy" in options.extensions:
                 win_extensions.append(
@@ -226,11 +227,23 @@ class WindowsClient(WebAuthnClient):
                 )
             if options.extensions.get("minPinLength", True):
                 win_extensions.append(WebAuthNExtension("minPinLength", BOOL(True)))
-            if "prf" in options.extensions:
+            prf = AuthenticatorExtensionsPRFInputs.from_dict(
+                cast(Mapping | None, options.extensions.get("prf"))
+            )
+            if prf:
                 enable_prf = True
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
+                if prf.eval:
+                    hmac_salts = WebAuthNHmacSecretSalt(prf.eval.first, prf.eval.second)
             elif "hmacCreateSecret" in options.extensions and self._allow_hmac_secret:
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
+                hmac_get_secret = HMACGetSecretInput.from_dict(
+                    cast(Mapping | None, options.extensions.get("hmacGetSecret"))
+                )
+                if hmac_get_secret:
+                    hmac_salts = WebAuthNHmacSecretSalt(
+                        hmac_get_secret.salt1, hmac_get_secret.salt2
+                    )
 
         if event:
             timer = CancelThread(event)
@@ -268,7 +281,7 @@ class WindowsClient(WebAuthnClient):
                         resident_key == ResidentKeyRequirement.PREFERRED,
                         enable_prf,
                         win_extensions,
-                        None,  # TODO: hmac_secret_salts
+                        hmac_salts,
                         options.hints,
                     )
                 ),
@@ -284,20 +297,35 @@ class WindowsClient(WebAuthnClient):
         obj = attestation_pointer.contents
         att_obj = AttestationObject(obj.attestation_object)
 
-        extension_outputs = {}
+        extension_outputs: dict[str, Any] = {}
         if options.extensions:
             extensions_out = att_obj.auth_data.extensions or {}
             if options.extensions.get("credProps"):
                 extension_outputs["credProps"] = {"rk": bool(obj.bResidentKey)}
             if "hmac-secret" in extensions_out:
+                if obj.dwVersion >= 7:
+                    secret = obj.pHmacSecret.contents
+                    secrets = (secret.first, secret.second)
+                else:
+                    secrets = None
                 if enable_prf:
                     extension_outputs["prf"] = {
                         "enabled": extensions_out["hmac-secret"]
                     }
+                    if secrets:
+                        results = {"first": secrets[0]}
+                        if secrets[1]:
+                            results["second"] = secrets[1]
+                        extension_outputs["prf"]["results"] = results
                 else:
                     extension_outputs["hmacCreateSecret"] = extensions_out[
                         "hmac-secret"
                     ]
+                    if secrets:
+                        results = {"output1": secrets[0]}
+                        if secrets[1]:
+                            results["output2"] = secrets[1]
+                        extension_outputs["hmacGetSecret"] = results
             if "largeBlob" in options.extensions:
                 extension_outputs["largeBlob"] = {
                     "supported": bool(obj.bLargeBlobSupported)
