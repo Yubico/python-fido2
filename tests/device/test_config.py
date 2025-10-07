@@ -35,6 +35,9 @@ def test_always_uv(ctap2, pin_protocol, device, printer):
     if always_uv is None:
         pytest.skip("AlwaysUv not supported")
 
+    if ctap2.info.options.get("uv"):
+        pytest.skip("UV already configured")
+
     # Toggle on, if off
     if not always_uv:
         config = get_config(ctap2, pin_protocol)

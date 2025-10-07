@@ -13,7 +13,8 @@ from . import TEST_PIN, CliInteraction
 def preconditions(dev_manager):
     if not BioEnrollment.is_supported(dev_manager.info):
         pytest.skip("BioEnrollment not supported by authenticator")
-    assert dev_manager.info.options["uv"] is False
+    if dev_manager.info.options["uv"]:
+        pytest.skip("UV already configured")
 
 
 def get_bio(ctap2, pin_protocol=None, permissions=ClientPin.PERMISSION.BIO_ENROLL):
