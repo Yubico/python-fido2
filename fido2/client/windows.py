@@ -268,6 +268,8 @@ class WindowsClient(WebAuthnClient):
                         resident_key == ResidentKeyRequirement.PREFERRED,
                         enable_prf,
                         win_extensions,
+                        None,  # TODO: hmac_secret_salts
+                        options.hints,
                     )
                 ),
                 ctypes.byref(attestation_pointer),
@@ -420,6 +422,7 @@ class WindowsClient(WebAuthnClient):
                         flags,
                         u2f_appid,
                         u2f_appid_used,
+                        options.hints,
                     )
                 ),
                 ctypes.byref(assertion_pointer),
