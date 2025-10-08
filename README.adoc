@@ -96,11 +96,8 @@ https://github.com/LudovicRousseau/pyscard/blob/master/INSTALL.md.
 
 
 === Development
-For development of the library we use https://python-poetry.org/[poetry]. To
-set up the dev environment, run this command in the root directory of the
-repository:
-
-  poetry install
+For development of the library we use https://docs.astral.sh/uv/[uv].
+Follow the uv Getting Started guide to install and configure it.
 
 We also use https://pre-commit.com/[pre-commit] to run some scans on the code
 prior to committing.
@@ -113,5 +110,5 @@ WARNING: These tests are destructive, and will factory reset the device under te
 As a safety precaution, the tests will only run on a device that is in a newly reset
 state, as far as the test runner can tell.
 
-  poetry run pytest
+  uv run pytest
 

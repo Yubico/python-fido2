@@ -17,7 +17,7 @@
 
 * Build the release:
 
-  $ poetry build
+  $ uv build
 
 * Sign the release:
 
@@ -26,7 +26,7 @@
 
 * Upload the release to PyPI:
 
-  $ poetry publish
+  $ uv publish
 
 * Add the .tar.gz, the .whl and .sig files to a new Github release, using the
   latest NEWS entry as description.
