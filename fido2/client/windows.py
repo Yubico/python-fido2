@@ -300,7 +300,7 @@ class WindowsClient(WebAuthnClient):
         extension_outputs: dict[str, Any] = {}
         if options.extensions:
             extensions_out = att_obj.auth_data.extensions or {}
-            if options.extensions.get("credProps"):
+            if obj.dwVersion >= 4 and options.extensions.get("credProps"):
                 extension_outputs["credProps"] = {"rk": bool(obj.bResidentKey)}
             if "hmac-secret" in extensions_out:
                 if obj.dwVersion >= 7:
@@ -326,7 +326,7 @@ class WindowsClient(WebAuthnClient):
                         if secrets[1]:
                             results["output2"] = secrets[1]
                         extension_outputs["hmacGetSecret"] = results
-            if "largeBlob" in options.extensions:
+            if obj.dwVersion >= 4 and "largeBlob" in options.extensions:
                 extension_outputs["largeBlob"] = {
                     "supported": bool(obj.bLargeBlobSupported)
                 }
@@ -467,11 +467,11 @@ class WindowsClient(WebAuthnClient):
 
         extension_outputs: dict[str, Any] = {}
 
-        if u2f_appid and obj.dwVersion >= 2:
+        if obj.dwVersion >= 2 and u2f_appid:
             extension_outputs["appid"] = bool(u2f_appid_used.value)
 
         if options.extensions:
-            if hmac_secret_salts and obj.dwVersion >= 3:
+            if obj.dwVersion >= 3 and hmac_secret_salts:
                 secret = obj.pHmacSecret.contents
                 if "prf" in options.extensions:
                     result = {"first": secret.first}
@@ -483,7 +483,7 @@ class WindowsClient(WebAuthnClient):
                     if secret.second:
                         result["output2"] = secret.second
                     extension_outputs["hmacGetSecret"] = result
-            if obj.dwCredLargeBlobStatus != 0:
+            if obj.dwVersion >= 2 and obj.dwCredLargeBlobStatus != 0:
                 if options.extensions["largeBlob"].get("read", False):
                     extension_outputs["largeBlob"] = {"blob": obj.cred_large_blob}
                 else:
