@@ -62,6 +62,10 @@ class Config:
     def is_supported(info: Info) -> bool:
         return info.options.get("authnrCfg") is True
 
+    @staticmethod
+    def is_pin_complexity_supported(info: Info) -> bool:
+        return "pinComplexityPolicy" in info.extensions
+
     def __init__(
         self,
         ctap: Ctap2,
@@ -77,6 +81,7 @@ class Config:
             if pin_uv_protocol and pin_uv_token
             else None
         )
+        self._pin_complexity_supported = self.is_pin_complexity_supported(ctap.info)
 
     def _call(self, sub_cmd, params=None):
         if self.pin_uv:
@@ -126,6 +131,10 @@ class Config:
             params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
         if rp_ids is not None:
             params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
-        if pin_complexity_policy is not None:
-            params[Config.PARAM.PIN_COMPLEXITY_POLICY] = pin_complexity_policy
+        if pin_complexity_policy:
+            if not self._pin_complexity_supported:
+                raise ValueError(
+                    "Authenticator does not support pinComplexityPolicy extension"
+                )
+            params[Config.PARAM.PIN_COMPLEXITY_POLICY] = True
         self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)

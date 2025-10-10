@@ -546,6 +546,24 @@ class MinPinLengthExtension(Ctap2Extension):
             return RegistrationExtensionProcessor(inputs={self.NAME: True})
 
 
+class PinComplexityPolicyExtension(Ctap2Extension):
+    """
+    Implements the PIN Complexity Policy (pinComplexityPolicy) CTAP2 extension.
+
+    https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-minpinlength-extension
+    """
+
+    NAME = "pinComplexityPolicy"
+
+    def is_supported(self, ctap):
+        return self.NAME in ctap.info.extensions
+
+    def make_credential(self, ctap, options, pin_protocol):
+        inputs = options.extensions or {}
+        if self.is_supported(ctap) and inputs.get(self.NAME) is True:
+            return RegistrationExtensionProcessor(inputs={self.NAME: True})
+
+
 @dataclass(eq=False, frozen=True)
 class CredentialPropertiesOutput(_JsonDataObject):
     """Client outputs for credProps."""
