@@ -77,6 +77,8 @@ class Config:
             if pin_uv_protocol and pin_uv_token
             else None
         )
+        # TODO: Implement feature detection for pin_complexity_policy,
+        # which is currently ambiguous in the spec.
 
     def _call(self, sub_cmd, params=None):
         if self.pin_uv:
@@ -126,6 +128,6 @@ class Config:
             params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
         if rp_ids is not None:
             params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
-        if pin_complexity_policy is not None:
-            params[Config.PARAM.PIN_COMPLEXITY_POLICY] = pin_complexity_policy
+        if pin_complexity_policy:
+            params[Config.PARAM.PIN_COMPLEXITY_POLICY] = True
         self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)
