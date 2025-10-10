@@ -83,7 +83,7 @@ def test_update(client, ctap2, pin_protocol):
 
     rp = {"id": "example.com", "name": "Example RP"}
     server = Fido2Server(rp)
-    user = {"id": b"user_id", "name": "A. User"}
+    user = {"id": b"user_id", "name": "A. User", "displayName": "Display Name"}
 
     create_options, state = server.register_begin(
         user,
@@ -100,16 +100,45 @@ def test_update(client, ctap2, pin_protocol):
     auth_data = server.register_complete(state, result)
     cred_id = {"id": auth_data.credential_data.credential_id, "type": "public-key"}
 
-    # Update user data
     credman = get_credman(ctap2, pin_protocol)
-    user2 = {"id": b"user_id", "name": "A. User 2"}
-    credman.update_user_info(cred_id, user2)
-
     rps = credman.enumerate_rps()
     rp_id_hash = rps[0][4]
+
+    # Check user data
+    creds = credman.enumerate_creds(rp_id_hash)
+    assert len(creds) == 1
+
+    # Authenticators may or may not store name/displayName
+    stores_name = "name" in creds[0][6]
+    stores_display_name = "displayName" in creds[0][6]
+
+    if not stores_name:
+        del user["name"]
+    if not stores_display_name:
+        del user["displayName"]
+
+    assert creds[0][6] == user
+
+    # Update user data
+    user2 = {"id": b"user_id"}
+    if stores_name:
+        user2["name"] = "A. User 2"
+    if stores_display_name:
+        user2["displayName"] = "Display Name 2"
+
+    credman.update_user_info(cred_id, user2)
+
     creds = credman.enumerate_creds(rp_id_hash)
     assert len(creds) == 1
     assert creds[0][6] == user2
+    assert creds[0][7] == cred_id
+
+    # Test deleting fields
+    user3 = {"id": b"user_id"}
+    credman.update_user_info(cred_id, user3)
+    creds = credman.enumerate_creds(rp_id_hash)
+    assert len(creds) == 1
+    assert creds[0][6] == user3
     assert creds[0][7] == cred_id
 
     # Clean up

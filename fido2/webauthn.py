@@ -483,9 +483,11 @@ class PublicKeyCredentialRpEntity(_JsonDataObject):
         return sha256(self.id.encode("utf8")) if self.id else None
 
 
+# Note that name and display_name are required in the WebAuthn spec, but CTAP2
+# allows them to be omitted, so we make them optional here.
 @dataclass(eq=False, frozen=True, kw_only=True)
 class PublicKeyCredentialUserEntity(_JsonDataObject):
-    name: str
+    name: str | None = None
     id: bytes
     display_name: str | None = None
 
