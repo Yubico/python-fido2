@@ -113,24 +113,35 @@ class Info(_CborDataObject):
     pin_complexity_policy: bool | None = None
     pin_complexity_policy_url: bytes | None = None
     max_pin_length: int = 63
+    enc_cred_store_state: bytes | None = None
+    authenticator_config_commands: list[int] | None = None
 
-    def get_identifier(self, pin_token: bytes) -> bytes | None:
-        """Decrypt the device identifier using a persistent PUAT."""
-        if not self.enc_identifier:
+    def _decrypt(
+        self, encrypted: bytes | None, info: bytes, pin_token: bytes
+    ) -> bytes | None:
+        if not encrypted:
             return None
 
-        iv, ct = self.enc_identifier[:16], self.enc_identifier[16:]
+        iv, ct = encrypted[:16], encrypted[16:]
         be = default_backend()
         secret = HKDF(
             algorithm=hashes.SHA256(),
             length=16,
             salt=b"\0" * 32,
-            info=b"encIdentifier",
+            info=info,
             backend=be,
         ).derive(pin_token)
 
         dec = Cipher(algorithms.AES(secret), modes.CBC(iv), be).decryptor()
         return dec.update(ct) + dec.finalize()
+
+    def get_identifier(self, pin_token: bytes) -> bytes | None:
+        """Decrypt the device identifier using a persistent PUAT."""
+        return self._decrypt(self.enc_identifier, b"encIdentifier", pin_token)
+
+    def get_cred_store_state(self, pin_token: bytes) -> bytes | None:
+        """Decrypt the credential store state using a persistent PUAT."""
+        return self._decrypt(self.enc_cred_store_state, b"encCredStoreState", pin_token)
 
 
 @dataclass(eq=False, frozen=True)

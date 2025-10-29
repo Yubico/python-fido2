@@ -232,9 +232,9 @@ class DeviceManager:
             if len(added) == 1:
                 device = open_device(added.pop())
                 info2 = Ctap2(device).info
-                assert replace(info, enc_identifier=None) == replace(
-                    info2, enc_identifier=None
-                )
+                assert replace(
+                    info, enc_identifier=None, enc_cred_store_state=None
+                ) == replace(info2, enc_identifier=None, enc_cred_store_state=None)
                 return device
             elif len(added) > 1:
                 raise ValueError("Multiple Authenticators inserted")
@@ -295,7 +295,7 @@ class DeviceManager:
                     prompted[0] = status
                     if status == 2:
                         self.printer.print(
-                            "👉👉👉 Press the Authenticator button for 10 seconds..."
+                            "👉👉👉 Press and hold the Authenticator button..."
                         )
                     elif status == 1:
                         self.printer.print("✅ You can now release the button!")

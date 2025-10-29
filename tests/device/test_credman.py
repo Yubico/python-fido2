@@ -168,18 +168,25 @@ def test_read_only_management(dev_manager, pin_protocol):
         resident_key_requirement="required",
     )
 
+    token = ClientPin(dev_manager.ctap2, pin_protocol).get_pin_token(
+        TEST_PIN, ClientPin.PERMISSION.PERSISTENT_CREDENTIAL_MGMT
+    )
+
+    # Get cred_store_state, enc_identifier before reconnect
+    cred_state = dev_manager.ctap2.get_info().get_cred_store_state(token)
+    ident = dev_manager.ctap2.get_info().get_identifier(token)
+
     # Create a credential
     result = dev_manager.client.make_credential(create_options["publicKey"])
     auth_data = server.register_complete(state, result)
     cred_id = {"id": auth_data.credential_data.credential_id, "type": "public-key"}
     rp_id_hash = server.rp.id_hash
 
-    token = ClientPin(dev_manager.ctap2, pin_protocol).get_pin_token(
-        TEST_PIN, ClientPin.PERMISSION.PERSISTENT_CREDENTIAL_MGMT
-    )
-
-    # Get enc_identifier before reconnect
-    ident = dev_manager.ctap2.get_info().get_identifier(token)
+    # Verify cred_store_state has changed
+    if cred_state:
+        new_cred_state = dev_manager.ctap2.get_info().get_cred_store_state(token)
+        assert new_cred_state != cred_state
+        cred_state = new_cred_state
 
     # Test token before and after reconnect
     for reconnect in (False, True):
@@ -207,9 +214,18 @@ def test_read_only_management(dev_manager, pin_protocol):
         with pytest.raises(CtapError, match="PIN_AUTH_INVALID"):
             credman.delete_cred(cred_id)
 
+        # Ensure cred_store_state is the same
+        assert dev_manager.ctap2.get_info().get_cred_store_state(token) == cred_state
+
     # Compare enc_identifier after reconnect
     assert dev_manager.ctap2.get_info().get_identifier(token) == ident
 
     # Use new (non-persistent) PIN token
     credman = get_credman(dev_manager.ctap2, pin_protocol)
     credman.delete_cred(cred_id)
+
+    # Verify cred_store_state has changed
+    if cred_state:
+        new_cred_state = dev_manager.ctap2.get_info().get_cred_store_state(token)
+        assert new_cred_state != cred_state
+        cred_state = new_cred_state
