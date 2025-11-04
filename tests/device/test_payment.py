@@ -11,6 +11,8 @@ from fido2.payment import (
     PaymentClientDataCollector,
 )
 from fido2.server import Fido2Server
+from fido2.ctap2.credman import CredentialManagement
+from fido2.ctap2.pin import ClientPin
 
 from . import TEST_PIN, CliInteraction
 
@@ -21,7 +23,7 @@ def preconditions(dev_manager):
         pytest.skip("thirdPartyPayment not supported by authenticator")
 
 
-def test_payment_extension(device, printer):
+def test_payment_extension(device, printer, ctap2, pin_protocol):
     rp = {"id": "example.com", "name": "Example RP"}
     server = Fido2Server(rp)
     user = {"id": b"user_id", "name": "A. User"}
@@ -54,6 +56,16 @@ def test_payment_extension(device, printer):
     credentials = [auth_data.credential_data]
 
     print("Payment credential created!")
+
+    # Test flag in Credential Management
+    token = ClientPin(ctap2, pin_protocol).get_pin_token(
+        TEST_PIN, ClientPin.PERMISSION.CREDENTIAL_MGMT
+    )
+    cm = CredentialManagement(ctap2, pin_protocol, token)
+    rps = cm.enumerate_rps()
+    rp_id_hash = rps[0][4]
+    creds = cm.enumerate_creds(rp_id_hash)
+    assert creds[0][CredentialManagement.RESULT.THIRD_PARTY_PAYMENT] == True
 
     # Prepare parameters for getAssertion
     request_options, state = server.authenticate_begin(

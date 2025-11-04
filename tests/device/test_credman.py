@@ -61,15 +61,18 @@ def test_list_and_delete(client, ctap2, pin_protocol, algorithm):
     assert len(rps) == 1
 
     # Not all keys are required in response, but those that are should match
-    for k, v in rps[0][3].items():
+    for k, v in rps[0][CredentialManagement.RESULT.RP].items():
         assert rp[k] == v
 
-    rp_id_hash = rps[0][4]
+    rp_id_hash = rps[0][CredentialManagement.RESULT.RP_ID_HASH]
     creds = credman.enumerate_creds(rp_id_hash)
     assert len(creds) == 1
-    assert creds[0][6] == user
-    assert creds[0][7]["id"] == cred.credential_id
-    assert creds[0][8] == cred.public_key
+    assert creds[0][CredentialManagement.RESULT.USER] == user
+    assert (
+        creds[0][CredentialManagement.RESULT.CREDENTIAL_ID]["id"] == cred.credential_id
+    )
+    assert creds[0][CredentialManagement.RESULT.PUBLIC_KEY] == cred.public_key
+    assert not creds[0].get(CredentialManagement.RESULT.THIRD_PARTY_PAYMENT)
 
     credman.delete_cred(creds[0][7])
     metadata = credman.get_metadata()
@@ -102,22 +105,22 @@ def test_update(client, ctap2, pin_protocol):
 
     credman = get_credman(ctap2, pin_protocol)
     rps = credman.enumerate_rps()
-    rp_id_hash = rps[0][4]
+    rp_id_hash = rps[0][CredentialManagement.RESULT.RP_ID_HASH]
 
     # Check user data
     creds = credman.enumerate_creds(rp_id_hash)
     assert len(creds) == 1
 
     # Authenticators may or may not store name/displayName
-    stores_name = "name" in creds[0][6]
-    stores_display_name = "displayName" in creds[0][6]
+    stores_name = "name" in creds[0][CredentialManagement.RESULT.USER]
+    stores_display_name = "displayName" in creds[0][CredentialManagement.RESULT.USER]
 
     if not stores_name:
         del user["name"]
     if not stores_display_name:
         del user["displayName"]
 
-    assert creds[0][6] == user
+    assert creds[0][CredentialManagement.RESULT.USER] == user
 
     # Update user data
     user2 = {"id": b"user_id"}
@@ -130,16 +133,18 @@ def test_update(client, ctap2, pin_protocol):
 
     creds = credman.enumerate_creds(rp_id_hash)
     assert len(creds) == 1
-    assert creds[0][6] == user2
-    assert creds[0][7] == cred_id
+    assert creds[0][CredentialManagement.RESULT.USER] == user2
+    assert creds[0][CredentialManagement.RESULT.CREDENTIAL_ID] == cred_id
+    assert not creds[0].get(CredentialManagement.RESULT.THIRD_PARTY_PAYMENT)
 
     # Test deleting fields
     user3 = {"id": b"user_id"}
     credman.update_user_info(cred_id, user3)
     creds = credman.enumerate_creds(rp_id_hash)
     assert len(creds) == 1
-    assert creds[0][6] == user3
-    assert creds[0][7] == cred_id
+    assert creds[0][CredentialManagement.RESULT.USER] == user3
+    assert creds[0][CredentialManagement.RESULT.CREDENTIAL_ID] == cred_id
+    assert not creds[0].get(CredentialManagement.RESULT.THIRD_PARTY_PAYMENT)
 
     # Clean up
     credman.delete_cred(cred_id)

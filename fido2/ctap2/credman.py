@@ -83,6 +83,7 @@ class CredentialManagement:
         TOTAL_CREDENTIALS = 0x09
         CRED_PROTECT = 0x0A
         LARGE_BLOB_KEY = 0x0B
+        THIRD_PARTY_PAYMENT = 0x0C
 
     @staticmethod
     def is_supported(info: Info) -> bool:
