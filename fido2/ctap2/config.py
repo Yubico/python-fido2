@@ -77,10 +77,14 @@ class Config:
             if pin_uv_protocol and pin_uv_token
             else None
         )
+        self._subcommands = self.ctap.info.authenticator_config_commands
         # TODO: Implement feature detection for pin_complexity_policy,
         # which is currently ambiguous in the spec.
 
     def _call(self, sub_cmd, params=None):
+        if self._subcommands is not None and sub_cmd not in self._subcommands:
+            raise ValueError(f"Config command {sub_cmd} not supported by Authenticator")
+
         if self.pin_uv:
             msg = b"\xff" * 32 + b"\x0d" + struct.pack("<B", sub_cmd)
             if params is not None:
