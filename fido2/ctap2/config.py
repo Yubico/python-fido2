@@ -78,8 +78,6 @@ class Config:
             else None
         )
         self._subcommands = self.ctap.info.authenticator_config_commands
-        # TODO: Implement feature detection for pin_complexity_policy,
-        # which is currently ambiguous in the spec.
 
     def _call(self, sub_cmd, params=None):
         if self._subcommands is not None and sub_cmd not in self._subcommands:
@@ -133,5 +131,9 @@ class Config:
         if rp_ids is not None:
             params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
         if pin_complexity_policy:
+            if self.ctap.info.pin_complexity_policy is None:
+                raise ValueError(
+                    "Authenticator does not support setting PIN complexity policy"
+                )
             params[Config.PARAM.PIN_COMPLEXITY_POLICY] = True
         self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)
