@@ -21,7 +21,7 @@ classifiers = [
   "Topic :: Security :: Cryptography",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = ["cryptography (>=2.6, !=35, <48)"]
+dependencies = ["cryptography (>=2.6, !=35, <49)"]
 
 [project.optional-dependencies]
 pcsc = ["pyscard (>=1.9, <3)"]
