@@ -37,6 +37,7 @@ and decode objects to/from CBOR.
 from __future__ import annotations
 
 import struct
+from collections.abc import Buffer
 from typing import Any, Callable, Mapping, Sequence
 
 CborType = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
@@ -93,7 +94,7 @@ _SERIALIZERS: Sequence[tuple[type, Callable[[Any], bytes]]] = [
     (bool, _dump_bool),
     (int, _dump_int),
     (str, _dump_text),
-    (bytes, _dump_bytes),
+    (Buffer, _dump_bytes),
     (Mapping, _dump_dict),
     (Sequence, _dump_list),
 ]

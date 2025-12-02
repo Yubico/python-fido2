@@ -27,7 +27,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import unittest
+import pytest
 
 from fido2 import cbor
 
@@ -153,61 +153,72 @@ def cbor2hex(data):
     return cbor.encode(data).hex()
 
 
-class TestCborTestVectors(unittest.TestCase):
+@pytest.mark.parametrize("data,value", _TEST_VECTORS)
+def test_cbor_test_vectors(data, value):
     """
     From https://github.com/cbor/test-vectors
     Unsupported values are commented out.
     """
-
-    def test_vectors(self):
-        for data, value in _TEST_VECTORS:
-            try:
-                self.assertEqual(cbor.decode_from(bytes.fromhex(data)), (value, b""))
-                self.assertEqual(cbor.decode(bytes.fromhex(data)), value)
-                self.assertEqual(cbor2hex(value), data)
-            except Exception:
-                print("\nERROR in test vector, %s" % data)
-                raise
+    assert cbor.decode_from(bytes.fromhex(data)) == (value, b"")
+    assert cbor.decode(bytes.fromhex(data)) == value
+    assert cbor2hex(value) == data
 
 
-class TestFidoCanonical(unittest.TestCase):
-    """
-    As defined in section 6 of:
-    https://fidoalliance.org/specs/fido-v2.0-ps-20170927/fido-client-to-authenticator-protocol-v2.0-ps-20170927.html
-    """
+# FIDO Canonical tests
+# As defined in section 6 of:
+# https://fidoalliance.org/specs/fido-v2.0-ps-20170927/fido-client-to-authenticator-protocol-v2.0-ps-20170927.html
 
-    def test_integers(self):
-        self.assertEqual(cbor2hex(0), "00")
-        self.assertEqual(cbor2hex(0), "00")
-        self.assertEqual(cbor2hex(23), "17")
-        self.assertEqual(cbor2hex(24), "1818")
-        self.assertEqual(cbor2hex(255), "18ff")
-        self.assertEqual(cbor2hex(256), "190100")
-        self.assertEqual(cbor2hex(65535), "19ffff")
-        self.assertEqual(cbor2hex(65536), "1a00010000")
-        self.assertEqual(cbor2hex(4294967295), "1affffffff")
-        self.assertEqual(cbor2hex(4294967296), "1b0000000100000000")
-        self.assertEqual(cbor2hex(-1), "20")
-        self.assertEqual(cbor2hex(-24), "37")
-        self.assertEqual(cbor2hex(-25), "3818")
 
-    def test_key_order(self):
-        self.assertEqual(cbor2hex({"3": 0, b"2": 0, 1: 0}), "a30100413200613300")
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (0, "00"),
+        (23, "17"),
+        (24, "1818"),
+        (255, "18ff"),
+        (256, "190100"),
+        (65535, "19ffff"),
+        (65536, "1a00010000"),
+        (4294967295, "1affffffff"),
+        (4294967296, "1b0000000100000000"),
+        (-1, "20"),
+        (-24, "37"),
+        (-25, "3818"),
+    ],
+)
+def test_fido_canonical_integers(value, expected):
+    assert cbor2hex(value) == expected
 
-        self.assertEqual(cbor2hex({"3": 0, b"": 0, 256: 0}), "a3190100004000613300")
 
-        self.assertEqual(
-            cbor2hex({4294967296: 0, 255: 0, 256: 0, 0: 0}),
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ({"3": 0, b"2": 0, 1: 0}, "a30100413200613300"),
+        ({"3": 0, b"": 0, 256: 0}, "a3190100004000613300"),
+        (
+            {4294967296: 0, 255: 0, 256: 0, 0: 0},
             "a4000018ff00190100001b000000010000000000",
-        )
+        ),
+        ({b"22": 0, b"3": 0, b"111": 0}, "a3413300423232004331313100"),
+        ({b"001": 0, b"003": 0, b"002": 0}, "a3433030310043303032004330303300"),
+        ({True: 0, False: 0}, "a2f400f500"),
+    ],
+)
+def test_fido_canonical_key_order(value, expected):
+    assert cbor2hex(value) == expected
 
-        self.assertEqual(
-            cbor2hex({b"22": 0, b"3": 0, b"111": 0}), "a3413300423232004331313100"
-        )
 
-        self.assertEqual(
-            cbor2hex({b"001": 0, b"003": 0, b"002": 0}),
-            "a3433030310043303032004330303300",
-        )
-
-        self.assertEqual(cbor2hex({True: 0, False: 0}), "a2f400f500")
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (b"", "40"),
+        (b"\x01\x02\x03\x04", "4401020304"),
+        (bytearray(b""), "40"),
+        (bytearray(b"\x01\x02\x03\x04"), "4401020304"),
+        (memoryview(b""), "40"),
+        (memoryview(b"\x01\x02\x03\x04"), "4401020304"),
+    ],
+)
+def test_bytes_like_encoding(value, expected):
+    """Test that bytearray and memoryview are encoded as bytes."""
+    assert cbor2hex(value) == expected
