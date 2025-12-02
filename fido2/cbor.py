@@ -37,10 +37,13 @@ and decode objects to/from CBOR.
 from __future__ import annotations
 
 import struct
-from collections.abc import Buffer
+from types import UnionType
 from typing import Any, Callable, Mapping, Sequence
 
 CborType = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
+
+# TODO: Requires Python 3.12, replace with collections.abc.Buffer
+Buffer = bytes | bytearray | memoryview
 
 
 def _dump_int(data: int, mt: int = 0) -> bytes:
@@ -90,7 +93,7 @@ def _dump_text(data: str) -> bytes:
     return _dump_int(len(data_bytes), mt=3) + data_bytes
 
 
-_SERIALIZERS: Sequence[tuple[type, Callable[[Any], bytes]]] = [
+_SERIALIZERS: Sequence[tuple[type | UnionType, Callable[[Any], bytes]]] = [
     (bool, _dump_bool),
     (int, _dump_int),
     (str, _dump_text),
