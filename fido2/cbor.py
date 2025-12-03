@@ -38,12 +38,12 @@ from __future__ import annotations
 
 import struct
 from types import UnionType
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence, TypeAlias
 
-CborType = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
+CborType: TypeAlias = int | bool | str | bytes | Sequence[Any] | Mapping[Any, Any]
 
 # TODO: Requires Python 3.12, replace with collections.abc.Buffer
-Buffer = bytes | bytearray | memoryview
+Buffer: TypeAlias = bytes | bytearray | memoryview
 
 
 def _dump_int(data: int, mt: int = 0) -> bytes:
