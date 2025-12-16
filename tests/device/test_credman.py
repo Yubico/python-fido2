@@ -74,7 +74,7 @@ def test_list_and_delete(client, ctap2, pin_protocol, algorithm):
     assert creds[0][CredentialManagement.RESULT.PUBLIC_KEY] == cred.public_key
     assert not creds[0].get(CredentialManagement.RESULT.THIRD_PARTY_PAYMENT)
 
-    credman.delete_cred(creds[0][7])
+    credman.delete_cred(creds[0][CredentialManagement.RESULT.CREDENTIAL_ID])
     metadata = credman.get_metadata()
     assert metadata[CredentialManagement.RESULT.EXISTING_CRED_COUNT] == 0
     assert metadata[CredentialManagement.RESULT.MAX_REMAINING_COUNT] == remaining
