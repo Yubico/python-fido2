@@ -91,6 +91,9 @@ class BiometricAccuracyDescriptor(_JsonDataObject):
     self_attested_far: float | None = field(
         default=None, metadata=dict(name="selfAttestedFAR")
     )
+    iapar_threshold: float | None = field(
+        default=None, metadata=dict(name="iAPARThreshold")
+    )
     max_templates: int | None = None
     max_retries: int | None = None
     block_slowdown: int | None = None
@@ -151,6 +154,7 @@ class AuthenticatorStatus(str, Enum):
     USER_KEY_REMOTE_COMPROMISE = "USER_KEY_REMOTE_COMPROMISE"
     USER_KEY_PHYSICAL_COMPROMISE = "USER_KEY_PHYSICAL_COMPROMISE"
     UPDATE_AVAILABLE = "UPDATE_AVAILABLE"
+    RETIRED = "RETIRED"
     REVOKED = "REVOKED"
     SELF_ASSERTION_SUBMITTED = "SELF_ASSERTION_SUBMITTED"
     FIDO_CERTIFIED_L1 = "FIDO_CERTIFIED_L1"
@@ -159,6 +163,10 @@ class AuthenticatorStatus(str, Enum):
     FIDO_CERTIFIED_L2plus = "FIDO_CERTIFIED_L2plus"
     FIDO_CERTIFIED_L3 = "FIDO_CERTIFIED_L3"
     FIDO_CERTIFIED_L3plus = "FIDO_CERTIFIED_L3plus"
+    FIPS140_CERTIFIED_L1 = "FIPS140_CERTIFIED_L1"
+    FIPS140_CERTIFIED_L2 = "FIPS140_CERTIFIED_L2"
+    FIPS140_CERTIFIED_L3 = "FIPS140_CERTIFIED_L3"
+    FIPS140_CERTIFIED_L4 = "FIPS140_CERTIFIED_L4"
 
 
 @dataclass(eq=False, frozen=True)
@@ -172,6 +180,10 @@ class StatusReport(_JsonDataObject):
         default=None,
     )
     authenticator_version: int | None = None
+    batch_certificate: bytes | None = field(
+        metadata=dict(deserialize=b64decode, serialize=lambda x: b64encode(x).decode()),
+        default=None,
+    )
     certificate: bytes | None = field(
         metadata=dict(deserialize=b64decode, serialize=lambda x: b64encode(x).decode()),
         default=None,
@@ -180,7 +192,17 @@ class StatusReport(_JsonDataObject):
     certification_descriptor: str | None = None
     certificate_number: str | None = None
     certification_policy_version: str | None = None
+    certification_profiles: Sequence[str] | None = None
     certification_requirements_version: str | None = None
+    sunset_date: date | None = field(
+        metadata=dict(
+            deserialize=date.fromisoformat,
+            serialize=lambda x: x.isoformat(),
+        ),
+        default=None,
+    )
+    fips_revision: int | None = None
+    fips_physical_security_level: int | None = None
 
 
 @dataclass(eq=False, frozen=True)
@@ -227,6 +249,7 @@ class MetadataStatement(_JsonDataObject):
         ),
         default=None,
     )
+    friendly_names: Mapping[str, str] | None = None
     alternative_descriptions: Mapping[str, str] | None = None
     protocol_family: str | None = None
     authentication_algorithms: Sequence[str] | None = None
@@ -244,8 +267,13 @@ class MetadataStatement(_JsonDataObject):
     )
     ecdaa_trust_anchors: Sequence[EcdaaTrustAnchor] | None = None
     icon: str | None = None
+    icon_dark: str | None = None
+    provider_logo_light: str | None = None
+    provider_logo_dark: str | None = None
     supported_extensions: Sequence[ExtensionDescriptor] | None = None
+    multi_device_credential_support: str | None = None
     authenticator_get_info: Mapping[str, Any] | None = None
+    cx_config_url: str | None = field(metadata=dict(name="cxConfigURL"), default=None)
 
 
 @dataclass(eq=False, frozen=True)
