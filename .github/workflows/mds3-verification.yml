@@ -1,0 +1,156 @@
+name: MDS3 Blob Verification
+
+on:
+  schedule:
+    # Run weekly at 10:00 UTC
+    - cron: '0 10 * * 0'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'fido2/mds3.py'
+      - '.github/workflows/mds3-verification.yml'
+
+jobs:
+  verify-mds3:
+    runs-on: ubuntu-latest
+    name: Download and verify FIDO MDS3 blob
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -qq swig libpcsclite-dev
+          uv sync --all-extras
+
+      - name: Download MDS3 blob
+        run: |
+          curl -fL -o mds3-blob.jwt https://mds3.fidoalliance.org/
+
+      - name: Verify MDS3 blob
+        run: |
+          cat > verify_mds3.py << 'EOF'
+          #!/usr/bin/env python3
+          """
+          Verify the MDS3 blob is properly signed and can be parsed correctly.
+          This ensures all data is preserved during parsing and serialization.
+          """
+          import json
+          import sys
+          from base64 import b64decode
+
+          from fido2.mds3 import parse_blob
+          from fido2.utils import websafe_decode
+
+          # GlobalSign Root CA - R3 (used to sign the MDS3 blob)
+          CA_CERT = b64decode(
+              """
+          MIIDXzCCAkegAwIBAgILBAAAAAABIVhTCKIwDQYJKoZIhvcNAQELBQAwTDEgMB4G
+          A1UECxMXR2xvYmFsU2lnbiBSb290IENBIC0gUjMxEzARBgNVBAoTCkdsb2JhbFNp
+          Z24xEzARBgNVBAMTCkdsb2JhbFNpZ24wHhcNMDkwMzE4MTAwMDAwWhcNMjkwMzE4
+          MTAwMDAwWjBMMSAwHgYDVQQLExdHbG9iYWxTaWduIFJvb3QgQ0EgLSBSMzETMBEG
+          A1UEChMKR2xvYmFsU2lnbjETMBEGA1UEAxMKR2xvYmFsU2lnbjCCASIwDQYJKoZI
+          hvcNAQEBBQADggEPADCCAQoCggEBAMwldpB5BngiFvXAg7aEyiie/QV2EcWtiHL8
+          RgJDx7KKnQRfJMsuS+FggkbhUqsMgUdwbN1k0ev1LKMPgj0MK66X17YUhhB5uzsT
+          gHeMCOFJ0mpiLx9e+pZo34knlTifBtc+ycsmWQ1z3rDI6SYOgxXG71uL0gRgykmm
+          KPZpO/bLyCiR5Z2KYVc3rHQU3HTgOu5yLy6c+9C7v/U9AOEGM+iCK65TpjoWc4zd
+          QQ4gOsC0p6Hpsk+QLjJg6VfLuQSSaGjlOCZgdbKfd/+RFO+uIEn8rUAVSNECMWEZ
+          XriX7613t2Saer9fwRPvm2L7DWzgVGkWqQPabumDk3F2xmmFghcCAwEAAaNCMEAw
+          DgYDVR0PAQH/BAQDAgEGMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFI/wS3+o
+          LkUkrk1Q+mOai97i3Ru8MA0GCSqGSIb3DQEBCwUAA4IBAQBLQNvAUKr+yAzv95ZU
+          RUm7lgAJQayzE4aGKAczymvmdLm6AC2upArT9fHxD4q/c2dKg8dEe3jgr25sbwMp
+          jjM5RcOO5LlXbKr8EpbsU8Yt5CRsuZRj+9xTaGdWPoO4zzUhw8lo/s7awlOqzJCK
+          6fBdRoyV3XpYKBovHd7NADdBj+1EbddTKJd+82cEHhXXipa0095MJ6RMG3NzdvQX
+          mcIfeg7jLQitChws/zyrVQ4PkX4268NXSb7hLi18YIvDQVETI53O9zJrlAGomecs
+          Mx86OyXShkDOOyyGeMlhLxS67ttVb9+E7gUJTb0o2HLO02JQZR7rkpeDMdmztcpH
+          WD9f"""
+          )
+
+          def normalize_json(obj):
+              """
+              Recursively normalize a JSON object for comparison.
+              - Sort all dictionary keys
+              - Convert lists to tuples for hashability (when used in sets)
+              - Handle nested structures
+              """
+              if isinstance(obj, dict):
+                  return {k: normalize_json(v) for k, v in sorted(obj.items())}
+              elif isinstance(obj, list):
+                  return [normalize_json(item) for item in obj]
+              else:
+                  return obj
+
+          def main():
+              # Read the downloaded blob
+              with open("mds3-blob.jwt", "rb") as f:
+                  blob_data = f.read()
+
+              print("1. Parsing MDS3 blob and verifying signature...")
+              try:
+                  # This will verify the signature and parse the blob
+                  metadata = parse_blob(blob_data, CA_CERT)
+                  print("   ✓ Blob signature verified and parsed successfully")
+              except Exception as e:
+                  print(f"   ✗ Failed to parse blob: {e}")
+                  sys.exit(1)
+
+              print(f"\n2. Blob contains {len(metadata.entries)} metadata entries")
+              print(f"   Legal header: {metadata.legal_header[:50]}...")
+              print(f"   Number: {metadata.no}")
+              print(f"   Next update: {metadata.next_update}")
+
+              print("\n3. Re-serializing parsed data and comparing to original...")
+              
+              # Convert parsed metadata back to dict
+              reparsed_dict = dict(metadata)
+              
+              # Extract the original payload from the JWT
+              message, _ = blob_data.rsplit(b".", 1)
+              _, payload_b64 = message.split(b".")
+              original_payload = json.loads(websafe_decode(payload_b64))
+
+              # Normalize both for comparison (ignore key ordering)
+              normalized_original = normalize_json(original_payload)
+              normalized_reparsed = normalize_json(reparsed_dict)
+
+              # Convert to JSON strings for comparison
+              original_json = json.dumps(normalized_original, sort_keys=True, indent=2)
+              reparsed_json = json.dumps(normalized_reparsed, sort_keys=True, indent=2)
+
+              if original_json == reparsed_json:
+                  print("   ✓ Re-serialized data matches original payload")
+                  print("   ✓ All data preserved during parsing")
+              else:
+                  print("   ✗ Re-serialized data does not match original payload")
+                  
+                  # Save both for debugging
+                  with open("original.json", "w") as f:
+                      f.write(original_json)
+                  with open("reparsed.json", "w") as f:
+                      f.write(reparsed_json)
+                  
+                  print("   Saved original.json and reparsed.json for comparison")
+                  sys.exit(1)
+
+              print("\n✓ All verification checks passed!")
+              return 0
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          EOF
+
+          uv run python verify_mds3.py
+
+      - name: Show diff on failure
+        if: failure()
+        run: diff original.json reparsed.json || true
