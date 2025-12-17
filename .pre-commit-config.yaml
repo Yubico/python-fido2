@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.14.2
+  rev: v0.14.9
   hooks:
   # Run the linter
   - id: ruff-check
@@ -8,7 +8,7 @@ repos:
   # Run the formatter
   - id: ruff-format
 - repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.18.2
+  rev: v1.19.1
   hooks:
   - id: mypy
     exclude: ^docs/
@@ -16,4 +16,13 @@ repos:
 - repo: https://github.com/RobertCraigie/pyright-python
   rev: v1.1.407
   hooks:
-    - id: pyright
+  - id: pyright
+- repo: local
+  hooks:
+  - id: ty-check
+    name: ty-check
+    language: python
+    entry: ty check fido2
+    pass_filenames: false
+    args: [--python=.venv/]
+    additional_dependencies: [ty]
