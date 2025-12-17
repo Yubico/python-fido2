@@ -269,7 +269,11 @@ class _DataClassMapping(Mapping[_T, Any]):
 
     @overload
     @classmethod
-    def from_dict(cls: type[Self], data: Self | Mapping[_T, Any]) -> Self: ...
+    def from_dict(cls: type[Self], data: Self) -> Self: ...
+
+    @overload
+    @classmethod
+    def from_dict(cls: type[Self], data: Mapping[_T, Any]) -> Self: ...
 
     @classmethod
     def from_dict(cls, data):

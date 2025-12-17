@@ -203,7 +203,7 @@ class FPBioEnrollment(BioEnrollment):
         self.pin_uv_token = pin_uv_token
 
     def _call(self, sub_cmd, params=None, auth=True, event=None, on_keepalive=None):
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "modality": self.modality,
             "sub_cmd": sub_cmd,
             "sub_cmd_params": params,

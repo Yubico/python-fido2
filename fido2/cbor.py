@@ -52,17 +52,19 @@ def _dump_int(data: int, mt: int = 0) -> bytes:
         data = -1 - data
 
     mt = mt << 5
+    fmt: str
+    args: tuple[int, ...]
     if data <= 23:
-        args: Any = (">B", mt | data)
+        fmt, args = ">B", (mt | data,)
     elif data <= 0xFF:
-        args = (">BB", mt | 24, data)
+        fmt, args = ">BB", (mt | 24, data)
     elif data <= 0xFFFF:
-        args = (">BH", mt | 25, data)
+        fmt, args = ">BH", (mt | 25, data)
     elif data <= 0xFFFFFFFF:
-        args = (">BI", mt | 26, data)
+        fmt, args = ">BI", (mt | 26, data)
     else:
-        args = (">BQ", mt | 27, data)
-    return struct.pack(*args)
+        fmt, args = ">BQ", (mt | 27, data)
+    return struct.pack(fmt, *args)
 
 
 def _dump_bool(data: bool) -> bytes:

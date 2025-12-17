@@ -32,7 +32,7 @@ import struct
 from dataclasses import Field, dataclass, field, fields
 from enum import IntEnum, unique
 from threading import Event
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, cast
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -298,7 +298,7 @@ class Ctap2:
                     f"Got: {enc.hex()}\nExpected: {expected.hex()}"
                 )
         if isinstance(decoded, Mapping):
-            return decoded
+            return cast(Mapping[int, Any], decoded)
         raise TypeError("Decoded value of wrong type")
 
     def get_info(self) -> Info:

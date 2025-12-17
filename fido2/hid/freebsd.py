@@ -92,7 +92,7 @@ class usb_gen_descriptor(ctypes.Structure):
 class HidrawCtapHidConnection(FileCtapHidConnection):
     def write_packet(self, data):
         # Prepend the report ID
-        super(HidrawCtapHidConnection, self).write_packet(b"\0" + data)
+        super().write_packet(b"\0" + data)
 
 
 def open_connection(descriptor):
