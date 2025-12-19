@@ -39,6 +39,7 @@ from ..ctap2.extensions import (
     AuthenticatorExtensionsPRFInputs,
     AuthenticatorExtensionsPRFOutputs,
     CredentialPropertiesOutput,
+    CredProtectExtension,
     HMACGetSecretInput,
     HMACGetSecretOutput,
 )
@@ -205,8 +206,10 @@ class WindowsClient(WebAuthnClient):
                     WebAuthNExtension(
                         "credProtect",
                         WebAuthNCredProtectExtensionIn(
-                            WebAuthNUserVerification.from_string(
-                                options.extensions["credentialProtectionPolicy"]
+                            WebAuthNUserVerification(
+                                CredProtectExtension.POLICY.str2int(
+                                    options.extensions["credentialProtectionPolicy"]
+                                )
                             ),
                             options.extensions.get(
                                 "enforceCredentialProtectionPolicy", False

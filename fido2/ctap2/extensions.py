@@ -508,6 +508,10 @@ class CredProtectExtension(Ctap2Extension):
         OPTIONAL_WITH_LIST = "userVerificationOptionalWithCredentialIDList"
         REQUIRED = "userVerificationRequired"
 
+        @classmethod
+        def str2int(cls, policy: str) -> int:
+            return list(cls).index(cls(policy)) + 1
+
     NAME = "credProtect"
 
     def is_supported(self, ctap):
@@ -517,14 +521,12 @@ class CredProtectExtension(Ctap2Extension):
         inputs = options.extensions or {}
         policy = inputs.get("credentialProtectionPolicy")
         if policy:
-            index = list(CredProtectExtension.POLICY).index(
-                CredProtectExtension.POLICY(policy)
-            )
+            index = CredProtectExtension.POLICY.str2int(policy)
             enforce = inputs.get("enforceCredentialProtectionPolicy", False)
-            if enforce and not self.is_supported(ctap) and index > 0:
+            if enforce and not self.is_supported(ctap) and index > 1:
                 raise ValueError("Authenticator does not support Credential Protection")
 
-            return RegistrationExtensionProcessor(inputs={self.NAME: index + 1})
+            return RegistrationExtensionProcessor(inputs={self.NAME: index})
 
 
 class MinPinLengthExtension(Ctap2Extension):
