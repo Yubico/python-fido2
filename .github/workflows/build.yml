@@ -2,6 +2,8 @@ name: build
 
 on: [push, pull_request]
 
+permissions: read-all
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -83,7 +85,7 @@ jobs:
           uv build
 
       - name: Upload source package
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: fido2-python-sdist
           path: dist
@@ -109,7 +111,7 @@ jobs:
         run: uv run make -C docs/ html
 
       - name: Upload documentation
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: python-fido2-docs
           path: docs/_build/html

@@ -1,5 +1,7 @@
 name: MDS3 Blob Verification
 
+permissions: read-all
+
 on:
   schedule:
     # Run weekly at 10:00 UTC
