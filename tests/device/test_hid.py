@@ -1,4 +1,10 @@
+import pytest
+
+
 def test_ping(device):
+    if not hasattr(device, "ping"):
+        pytest.skip("Device does not support ping method")
+
     msg1 = b"hello world!"
     msg2 = b"            "
     msg3 = b""
