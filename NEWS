@@ -1,3 +1,25 @@
+* Version 2.1.0 (released 2026-01-14)
+ ** CTAP 2.3 support:
+  *** Add new GetInfo fields: enc_cred_store_state.
+  *** Add support for pinComplexityPolicy extension.
+  *** Add thirdPartyPayment bit to credman.
+  *** Check support for config subcommands.
+ ** WebAuthn:
+  *** Allow UserEntity without 'name' field for improved spec compliance.
+  *** Update MDS3 dataclasses with new fields.
+ ** Fido2Client:
+  *** Fallback to PIN after UV_BLOCKED error.
+  *** Improve preflight handling when message exceeds maximum size.
+ ** WindowsClient:
+  *** Fix: Parse 'credentialProtectionPolicy' properly.
+  *** Update win_api.py from latest webauthn.h.
+  *** Add support for hmac-secret-mc extension.
+  *** Add support for hints.
+ ** Development:
+  *** Switch from Poetry to uv for project management.
+  *** Add pyright and ty for improved type checking.
+  *** Replace bandit and flake8 with ruff for linting.
+
 * Version 2.0.0 (released 2025-05-20)
  ** See also the migration guide: doc/Migration_1-2.adoc.
  ** Python 3.10 or later is now required.
