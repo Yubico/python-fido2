@@ -1,4 +1,11 @@
+import pytest
+from fido2.hid import CtapHidDevice
+
+
 def test_ping(device):
+    if not isinstance(device, CtapHidDevice):
+        pytest.skip("Device is not a CtapHidDevice")
+
     msg1 = b"hello world!"
     msg2 = b"            "
     msg3 = b""

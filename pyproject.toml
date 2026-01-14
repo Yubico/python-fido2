@@ -1,6 +1,6 @@
 [project]
 name = "fido2"
-version = "2.1.0-dev.0"
+version = "2.1.1-dev.0"
 description = "FIDO2/WebAuthn library for implementing clients and servers."
 authors = [{ name = "Dain Nilsson", email = "<dain@yubico.com>" }]
 readme = "README.adoc"

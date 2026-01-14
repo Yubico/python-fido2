@@ -255,9 +255,9 @@ class DeviceManager:
                 self._reader = readers[0]
                 dev = self._connect_pcsc(self._reader, False)
                 info2 = Ctap2(dev).info
-                assert replace(info, enc_identifier=None) == replace(
-                    info2, enc_identifier=None
-                )
+                assert replace(
+                    info, enc_identifier=None, enc_cred_store_state=None
+                ) == replace(info2, enc_identifier=None, enc_cred_store_state=None)
 
                 return dev
             elif not removed and len(readers) == 0:

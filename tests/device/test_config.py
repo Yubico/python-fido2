@@ -1,3 +1,4 @@
+from hashlib import new
 import pytest
 
 from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client
@@ -95,63 +96,88 @@ def test_min_pin_length(
     config = get_config(ctap2, pin_protocol)
 
     orig_len = ctap2.info.min_pin_length
+    expected_len = orig_len
+    max_len = ctap2.info.max_pin_length
+    if orig_len >= max_len:
+        pytest.skip("Cannot increase min PIN length further")
 
-    config.set_min_pin_length(min_pin_length=orig_len + 2)
+    try:
+        expected_len += 1
+        config.set_min_pin_length(min_pin_length=expected_len)
 
-    pin = TEST_PIN * 4
+        pin = TEST_PIN * 4
 
-    # Too short
-    with pytest.raises(CtapError, match="PIN_POLICY_VIOLATION"):
-        client_pin.change_pin(TEST_PIN, pin[:orig_len])
+        # Too short
+        with pytest.raises(CtapError, match="PIN_POLICY_VIOLATION"):
+            client_pin.change_pin(TEST_PIN, pin[:orig_len])
 
-    # Just long enough
-    client_pin.change_pin(TEST_PIN, pin[: orig_len + 2])
+        # Just long enough
+        new_pin = pin[:expected_len]
+        client_pin.change_pin(TEST_PIN, new_pin)
 
-    # Even longer
-    client_pin.change_pin(pin[: orig_len + 2], pin[: orig_len + 4])
+        if max_len >= orig_len + 2:
+            # Even longer
+            client_pin.change_pin(new_pin, pin[: expected_len + 1])
+            # Change back
+            client_pin.change_pin(pin[: expected_len + 1], new_pin)
 
-    config = get_config(ctap2, pin_protocol, pin=pin[: orig_len + 4])
+        config = get_config(ctap2, pin_protocol, pin=new_pin)
 
-    # Cannot shorten min pin length
-    with pytest.raises(CtapError, match="PIN_POLICY_VIOLATION"):
-        config.set_min_pin_length(min_pin_length=orig_len)
+        # Cannot shorten min pin length
+        with pytest.raises(CtapError, match="PIN_POLICY_VIOLATION"):
+            config.set_min_pin_length(min_pin_length=orig_len)
 
-    config.set_min_pin_length(min_pin_length=orig_len + 6)
+        if max_len >= orig_len + 2:
+            expected_len = orig_len + 2
+            config.set_min_pin_length(min_pin_length=expected_len)
 
-    # Current PIN is too short
-    assert ctap2.get_info().force_pin_change is True
+            # Current PIN is too short
+            assert ctap2.get_info().force_pin_change is True
 
-    client_pin.change_pin(pin[: orig_len + 4], pin[: orig_len + 6])
-    assert ctap2.get_info().force_pin_change is False
+            client_pin.change_pin(new_pin, pin[:expected_len])
+            new_pin = pin[:expected_len]
+            assert ctap2.get_info().force_pin_change is False
 
-    # Test minPinLength extension
-    rp = {"id": "example.com", "name": "Example RP"}
-    server = Fido2Server(rp)
-    user = {"id": b"user_id", "name": "A. User"}
+        # Test minPinLength extension
+        rp = {"id": "example.com", "name": "Example RP"}
+        server = Fido2Server(rp)
+        user = {"id": b"user_id", "name": "A. User"}
 
-    create_options, state = server.register_begin(user, user_verification="discouraged")
-
-    if "setMinPINLength" in ctap2.info.options:
-        config = get_config(ctap2, pin_protocol, pin=pin[: orig_len + 6])
-        config.set_min_pin_length(rp_ids=[rp["id"]])
-        client = Fido2Client(
-            dev_manager.device,
-            client_data_collector=DefaultClientDataCollector("https://example.com"),
-            user_interaction=CliInteraction(printer, pin[: orig_len + 6]),
+        create_options, state = server.register_begin(
+            user, user_verification="discouraged"
         )
 
-        result = client.make_credential(
-            {
-                **create_options["publicKey"],
-                "extensions": {"minPinLength": True},
-            }
-        )
-        auth_data = server.register_complete(state, result)
-        assert auth_data.extensions["minPinLength"] == orig_len + 6
+        if "setMinPINLength" in ctap2.info.options:
+            config = get_config(ctap2, pin_protocol, pin=new_pin)
+            config.set_min_pin_length(rp_ids=[rp["id"]])
+            client = Fido2Client(
+                dev_manager.device,
+                client_data_collector=DefaultClientDataCollector("https://example.com"),
+                user_interaction=CliInteraction(printer, new_pin),
+            )
 
-    # Restore original config
-    factory_reset(setup=True)
-    assert dev_manager.info.min_pin_length == orig_len
+            result = client.make_credential(
+                {
+                    **create_options["publicKey"],
+                    "extensions": {"minPinLength": True},
+                }
+            )
+            auth_data = server.register_complete(state, result)
+            assert auth_data.extensions["minPinLength"] == expected_len
+
+        if max_len > expected_len:
+            # Increase min pin length to max
+            config = get_config(ctap2, pin_protocol, pin=new_pin)
+            config.set_min_pin_length(min_pin_length=max_len)
+
+            assert ctap2.get_info().min_pin_length == max_len
+
+            # Current PIN is too short
+            assert ctap2.get_info().force_pin_change is True
+    finally:
+        # Restore original config
+        factory_reset(setup=True)
+        assert dev_manager.info.min_pin_length == orig_len
 
 
 @pytest.fixture(scope="module")

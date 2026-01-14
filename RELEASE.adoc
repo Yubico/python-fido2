@@ -21,8 +21,8 @@
 
 * Sign the release:
 
-  $ gpg --detach-sign -a dist/fido2-x.y.z.tar.gz
-  $ gpg --detach-sign -a dist/fido2-x.y.z-py3-none-any.whl
+  $ gpg --detach-sign dist/fido2-x.y.z.tar.gz
+  $ gpg --detach-sign dist/fido2-x.y.z-py3-none-any.whl
 
 * Upload the release to PyPI:
 
