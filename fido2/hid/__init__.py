@@ -48,11 +48,11 @@ elif sys.platform == "win32":
     from . import windows as backend
 elif sys.platform == "darwin":
     from . import macos as backend
-elif sys.platform == "freebsd":
+elif sys.platform.startswith("freebsd"):
     from . import freebsd as backend
-elif sys.platform == "netbsd":
+elif sys.platform.startswith("netbsd"):
     from . import netbsd as backend
-elif sys.platform == "openbsd":
+elif sys.platform.startswith("openbsd"):
     from . import openbsd as backend
 else:
     raise Exception("Unsupported platform")
