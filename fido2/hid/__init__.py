@@ -48,6 +48,7 @@ elif sys.platform == "win32":
     from . import windows as backend
 elif sys.platform == "darwin":
     from . import macos as backend
+# The following have version numbers at the end
 elif sys.platform.startswith("freebsd"):
     from . import freebsd as backend
 elif sys.platform.startswith("netbsd"):
