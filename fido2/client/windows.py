@@ -233,7 +233,7 @@ class WindowsClient(WebAuthnClient):
             prf = AuthenticatorExtensionsPRFInputs.from_dict(
                 cast(Mapping | None, options.extensions.get("prf"))
             )
-            if prf:
+            if prf is not None:
                 enable_prf = True
                 win_extensions.append(WebAuthNExtension("hmac-secret", BOOL(True)))
                 if prf.eval:
@@ -306,7 +306,7 @@ class WindowsClient(WebAuthnClient):
             if obj.dwVersion >= 4 and options.extensions.get("credProps"):
                 extension_outputs["credProps"] = {"rk": bool(obj.bResidentKey)}
             if "hmac-secret" in extensions_out:
-                if obj.dwVersion >= 7:
+                if obj.dwVersion >= 7 and obj.pHmacSecret:
                     secret = obj.pHmacSecret.contents
                     secrets = (secret.first, secret.second)
                 else:

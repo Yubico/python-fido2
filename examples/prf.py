@@ -32,6 +32,7 @@ derive two separate secrets.
 """
 
 import os
+import sys
 
 from exampleutils import get_client
 
@@ -54,11 +55,15 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
-# Create a credential
+# Generate a salt for PRF:
+salt = websafe_encode(os.urandom(32))
+print("Authenticate with salt:", salt)
+
+# Create a credential, using the salt if it is supported
 result = client.make_credential(
     {
         **create_options["publicKey"],
-        "extensions": {"prf": {}},
+        "extensions": {"prf": {"eval": {"first": salt}}},
     }
 )
 
@@ -70,37 +75,37 @@ credential = auth_data.credential_data
 if result.client_extension_results.get("prf", {}).get("enabled"):
     print("New credential created, with PRF")
 else:
-    # This fails on Windows, but we might still be able to use prf even if
-    # the credential wasn't made with it, so keep going
-    print("Failed to create credential with PRF, it might not work")
-
-print("New credential created, with the PRF extension.")
+    print("Failed to create credential with PRF")
+    sys.exit(1)
 
 # If created with UV, keep using UV
 if auth_data.is_user_verified():
     uv = "required"
 
-# Generate a salt for PRF:
-salt = websafe_encode(os.urandom(32))
-print("Authenticate with salt:", salt)
-
 # Prepare parameters for getAssertion
 credentials = [credential]
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
-# Authenticate the credential
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        "extensions": {"prf": {"eval": {"first": salt}}},
-    }
-)
+if result.client_extension_results.prf.results:
+    # hmac-secret-mc supported
+    output1 = result.client_extension_results["prf"]["results"]["first"]
+else:
+    print("hmac-secret-mc not supported, use getAssertion")
 
-# Only one cred in allowCredentials, only one response.
-response = result.get_response(0)
+    # Authenticate the credential
+    result = client.get_assertion(
+        {
+            **request_options["publicKey"],
+            "extensions": {"prf": {"eval": {"first": salt}}},
+        }
+    )
 
-output1 = response.client_extension_results["prf"]["results"]["first"]
-print("Authenticated, secret:", output1)
+    # Only one cred in allowCredentials, only one response.
+    response = result.get_response(0)
+
+    output1 = response.client_extension_results["prf"]["results"]["first"]
+
+print("Derived secret:", output1)
 
 # Authenticate again, using two salts to generate two secrets.
 

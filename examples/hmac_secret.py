@@ -93,11 +93,15 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
-# Create a credential
+# Generate a salt for HmacSecret:
+salt = os.urandom(32)
+print("Using salt:", salt.hex())
+
+# Create a credential, including the salt if it is supported
 result = client.make_credential(
     {
         **create_options["publicKey"],
-        "extensions": {"hmacCreateSecret": True},
+        "extensions": {"hmacCreateSecret": True, "hmacGetSecret": {"salt1": salt}},
     }
 )
 
@@ -109,31 +113,30 @@ credentials = [auth_data.credential_data]
 if result.client_extension_results.get("hmacCreateSecret"):
     print("New credential created, with HmacSecret")
 else:
-    # This fails on Windows, but we might still be able to use hmac-secret even if
-    # the credential wasn't made with it, so keep going
-    print("Failed to create credential with HmacSecret, it might not work")
-
-# Generate a salt for HmacSecret:
-salt = os.urandom(32)
-print("Authenticate with salt:", salt.hex())
-
+    print("Failed to create credential with HmacSecret")
+    sys.exit(1)
 
 # Prepare parameters for getAssertion
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
+if result.client_extension_results.hmac_get_secret:
+    output1 = result.client_extension_results.hmac_get_secret.output1
+else:
+    print("hmac-secret-mc not supported, use getAssertion")
 
-# Authenticate the credential
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        "extensions": {"hmacGetSecret": {"salt1": salt}},
-    }
-)
+    # Authenticate the credential
+    result = client.get_assertion(
+        {
+            **request_options["publicKey"],
+            "extensions": {"hmacGetSecret": {"salt1": salt}},
+        }
+    )
 
-# Only one cred in allowCredentials, only one response.
-result = result.get_response(0)
+    # Only one cred in allowCredentials, only one response.
+    result = result.get_response(0)
 
-output1 = result.client_extension_results.hmac_get_secret.output1
-print("Authenticated, secret:", output1.hex())
+    output1 = result.client_extension_results.hmac_get_secret.output1
+
+print("Derived secret:", output1.hex())
 
 # Authenticate again, using two salts to generate two secrets:
 
