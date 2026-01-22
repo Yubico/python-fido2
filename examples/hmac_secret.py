@@ -39,11 +39,10 @@ import ctypes
 import os
 import sys
 
-from exampleutils import CliInteraction, enumerate_devices
+from exampleutils import CliInteraction, enumerate_devices, server, user
 
 from fido2.client import DefaultClientDataCollector, Fido2Client
 from fido2.ctap2.extensions import HmacSecretExtension
-from fido2.server import Fido2Server
 
 # Use the Windows WebAuthn API if available, and we're not running as admin
 try:
@@ -55,8 +54,6 @@ try:
 except ImportError:
     use_winclient = False
 
-
-uv = "discouraged"
 
 client_data_collector = DefaultClientDataCollector("https://example.com")
 
@@ -82,28 +79,19 @@ else:
         print("No Authenticator with the HmacSecret extension found!")
         sys.exit(1)
 
-server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
-user = {"id": b"user_id", "name": "A. User"}
+salt = os.urandom(32)
 
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
-    resident_key_requirement="discouraged",
-    user_verification=uv,
-    authenticator_attachment="cross-platform",
+    extensions={"hmacCreateSecret": True, "hmacGetSecret": {"salt1": salt}},
 )
 
 # Generate a salt for HmacSecret:
-salt = os.urandom(32)
 print("Using salt:", salt.hex())
 
 # Create a credential, including the salt if it is supported
-result = client.make_credential(
-    {
-        **create_options["publicKey"],
-        "extensions": {"hmacCreateSecret": True, "hmacGetSecret": {"salt1": salt}},
-    }
-)
+result = client.make_credential(create_options.public_key)
 
 # Complete registration
 auth_data = server.register_complete(state, result)
@@ -116,20 +104,18 @@ else:
     print("Failed to create credential with HmacSecret")
     sys.exit(1)
 
-# Prepare parameters for getAssertion
-request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 if result.client_extension_results.hmac_get_secret:
     output1 = result.client_extension_results.hmac_get_secret.output1
 else:
     print("hmac-secret-mc not supported, use getAssertion")
 
-    # Authenticate the credential
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {"hmacGetSecret": {"salt1": salt}},
-        }
+    # Prepare parameters for getAssertion
+    request_options, state = server.authenticate_begin(
+        credentials,
+        extensions={"hmacGetSecret": {"salt1": salt}},
     )
+    # Authenticate the credential
+    result = client.get_assertion(request_options.public_key)
 
     # Only one cred in allowCredentials, only one response.
     result = result.get_response(0)
@@ -145,13 +131,12 @@ salt2 = os.urandom(32)
 print("Authenticate with second salt:", salt2.hex())
 
 # The first salt is reused, which should result in the same secret.
-
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        "extensions": {"hmacGetSecret": {"salt1": salt, "salt2": salt2}},
-    }
+# Prepare parameters for getAssertion
+request_options, state = server.authenticate_begin(
+    credentials,
+    extensions={"hmacGetSecret": {"salt1": salt, "salt2": salt2}},
 )
+result = client.get_assertion(request_options.public_key)
 
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)

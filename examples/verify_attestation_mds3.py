@@ -42,7 +42,7 @@ See https://fidoalliance.org/metadata/ for more info.
 import sys
 from base64 import b64decode
 
-from exampleutils import get_client
+from exampleutils import get_client, rp, user
 
 from fido2.attestation import UntrustedAttestation
 from fido2.mds3 import MdsAttestationVerifier, parse_blob
@@ -93,17 +93,21 @@ client, _ = get_client()
 # The MDS verifier is passed to the server to verify that new credentials registered
 # exist in the MDS blob, else the registration will fail.
 server = Fido2Server(
-    {"id": "example.com", "name": "Example RP"},
-    attestation="direct",
+    rp,
     verify_attestation=mds,
+    creation_defaults=dict(
+        # Direct attestation is required to get the full attestation statement
+        attestation="direct",
+        authenticator_selection={
+            "authenticatorAttachment": "cross-platform",
+            "userVerification": "discouraged",
+        },
+        hints=["security-key"],
+    ),
 )
-
-user = {"id": b"user_id", "name": "A. User"}
 
 # Prepare parameters for makeCredential
-create_options, state = server.register_begin(
-    user, user_verification="discouraged", authenticator_attachment="cross-platform"
-)
+create_options, state = server.register_begin(user)
 
 # Create a credential
 result = client.make_credential(create_options["publicKey"])

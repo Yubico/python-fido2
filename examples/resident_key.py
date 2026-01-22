@@ -32,9 +32,7 @@ This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
 
-from exampleutils import get_client
-
-from fido2.server import Fido2Server
+from exampleutils import get_client, server, user
 
 # Locate a suitable FIDO authenticator
 client, info = get_client(lambda info: info.options.get("rk"))
@@ -45,27 +43,20 @@ if info and info.options.get("uv") or info.options.get("bioEnroll"):
     uv = "preferred"
     print("Authenticator is configured for User Verification")
 
-server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
-
-user = {"id": b"user_id", "name": "A. User"}
-
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
-    resident_key_requirement="required",
-    user_verification=uv,
-    authenticator_attachment="cross-platform",
+    authenticator_selection={
+        "residentKey": "required",
+        "userVerification": uv,
+    },
+    # This extension isn't needed, but can be used to verify that the created
+    # credential uses resident key
+    extensions={"credProps": True},
 )
 
 # Create a credential
-result = client.make_credential(
-    {
-        **create_options["publicKey"],
-        # This extension isn't needed, but can be used to verify that the created
-        # credential uses resident key
-        "extensions": {"credProps": True},
-    }
-)
+result = client.make_credential(create_options.public_key)
 
 
 # Complete registration
@@ -91,7 +82,7 @@ print("CredProps", cred_props)
 request_options, state = server.authenticate_begin(user_verification=uv)
 
 # Authenticate the credential
-selection = client.get_assertion(request_options["publicKey"])
+selection = client.get_assertion(request_options.public_key)
 result = selection.get_response(0)  # There may be multiple responses, get the first.
 
 

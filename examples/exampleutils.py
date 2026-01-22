@@ -34,6 +34,14 @@ from getpass import getpass
 
 from fido2.client import DefaultClientDataCollector, Fido2Client, UserInteraction
 from fido2.hid import CtapHidDevice
+from fido2.server import Fido2Server
+from fido2.webauthn import (
+    AuthenticatorAttachment,
+    AuthenticatorSelectionCriteria,
+    PublicKeyCredentialRpEntity,
+    PublicKeyCredentialUserEntity,
+    UserVerificationRequirement,
+)
 
 # Support NFC devices if we can
 try:
@@ -60,12 +68,12 @@ class CliInteraction(UserInteraction):
     def prompt_up(self):
         print("\nTouch your authenticator device now...\n")
 
-    def request_pin(self, permissions, rd_id):
+    def request_pin(self, permissions, rp_id):
         if not self._pin:
             self._pin = getpass("Enter PIN: ")
         return self._pin
 
-    def request_uv(self, permissions, rd_id):
+    def request_uv(self, permissions, rp_id):
         print("User Verification required.")
         return True
 
@@ -110,3 +118,24 @@ def get_client(predicate=None, **kwargs):
             return client, client.info
     else:
         raise ValueError("No suitable Authenticator found!")
+
+
+user = PublicKeyCredentialUserEntity(id=b"user_id", name="A. User")
+rp = PublicKeyCredentialRpEntity(id="example.com", name="Example RP")
+
+
+# Set up a FIDO2 server instance with reasonable defaults for usage in examples
+server = Fido2Server(
+    rp,
+    creation_defaults=dict(
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            user_verification=UserVerificationRequirement.DISCOURAGED,
+            authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+        ),
+        hints=["security-key"],
+    ),
+    assertion_defaults=dict(
+        user_verification=UserVerificationRequirement.DISCOURAGED,
+        hints=["security-key"],
+    ),
+)

@@ -32,9 +32,7 @@ This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
 
-from exampleutils import get_client
-
-from fido2.server import Fido2Server
+from exampleutils import get_client, server, user
 
 # Locate a suitable FIDO authenticator
 client, info = get_client()
@@ -47,15 +45,9 @@ if info and (info.options.get("uv") or info.options.get("bioEnroll")):
 else:
     uv = "discouraged"
 
-
-server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
-
-user = {"id": b"user_id", "name": "A. User"}
-
-
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
-    user, user_verification=uv, authenticator_attachment="cross-platform"
+    user, authenticator_selection={"userVerification": uv}
 )
 
 # Create a credential

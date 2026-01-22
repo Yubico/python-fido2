@@ -34,26 +34,15 @@ derive two separate secrets.
 import os
 import sys
 
-from exampleutils import get_client
+from exampleutils import get_client, server, user
 
-from fido2.server import Fido2Server
 from fido2.utils import websafe_encode
 
 # Locate a suitable FIDO authenticator
 client, _ = get_client(lambda info: "hmac-secret" in info.extensions)
 
-uv = "discouraged"
-
-server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
-user = {"id": b"user_id", "name": "A. User"}
-
 # Prepare parameters for makeCredential
-create_options, state = server.register_begin(
-    user,
-    resident_key_requirement="discouraged",
-    user_verification=uv,
-    authenticator_attachment="cross-platform",
-)
+create_options, state = server.register_begin(user)
 
 # Generate a salt for PRF:
 salt = websafe_encode(os.urandom(32))
@@ -79,26 +68,23 @@ else:
     sys.exit(1)
 
 # If created with UV, keep using UV
-if auth_data.is_user_verified():
-    uv = "required"
+uv = "required" if auth_data.is_user_verified() else "discouraged"
 
-# Prepare parameters for getAssertion
 credentials = [credential]
-request_options, state = server.authenticate_begin(credentials, user_verification=uv)
-
 if result.client_extension_results.prf.results:
     # hmac-secret-mc supported
     output1 = result.client_extension_results["prf"]["results"]["first"]
 else:
     print("hmac-secret-mc not supported, use getAssertion")
 
-    # Authenticate the credential
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {"prf": {"eval": {"first": salt}}},
-        }
+    # Prepare parameters for getAssertion
+    request_options, state = server.authenticate_begin(
+        credentials,
+        user_verification=uv,
+        extensions={"prf": {"eval": {"first": salt}}},
     )
+    # Authenticate the credential
+    result = client.get_assertion(request_options.public_key)
 
     # Only one cred in allowCredentials, only one response.
     response = result.get_response(0)
@@ -118,21 +104,22 @@ salt2 = websafe_encode(os.urandom(32))
 print("Authenticate with second salt:", salt2)
 # The first salt is reused, which should result in the same secret.
 
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        "extensions": {
-            "prf": {
-                "evalByCredential": {
-                    websafe_encode(credential.credential_id): {
-                        "first": salt,
-                        "second": salt2,
-                    }
+# Prepare parameters for getAssertion
+request_options, state = server.authenticate_begin(
+    credentials,
+    user_verification=uv,
+    extensions={
+        "prf": {
+            "evalByCredential": {
+                websafe_encode(credential.credential_id): {
+                    "first": salt,
+                    "second": salt2,
                 }
             }
-        },
-    }
+        }
+    },
 )
+result = client.get_assertion(request_options.public_key)
 
 # Only one cred in allowCredentials, only one response.
 response = result.get_response(0)

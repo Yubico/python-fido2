@@ -39,7 +39,13 @@ import os
 from flask import Flask, abort, jsonify, redirect, request, session
 
 from fido2.server import Fido2Server
-from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
+from fido2.webauthn import (
+    AuthenticatorAttachment,
+    AuthenticatorSelectionCriteria,
+    PublicKeyCredentialRpEntity,
+    PublicKeyCredentialUserEntity,
+    UserVerificationRequirement,
+)
 
 app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
@@ -67,8 +73,10 @@ def register_begin():
             display_name="A. User",
         ),
         credentials,
-        user_verification="discouraged",
-        authenticator_attachment="cross-platform",
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            user_verification=UserVerificationRequirement.DISCOURAGED,
+            authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+        ),
     )
 
     session["state"] = state
@@ -95,7 +103,10 @@ def authenticate_begin():
     if not credentials:
         abort(404)
 
-    options, state = server.authenticate_begin(credentials)
+    options, state = server.authenticate_begin(
+        credentials,
+        user_verification=UserVerificationRequirement.DISCOURAGED,
+    )
     session["state"] = state
 
     return jsonify(dict(options))
