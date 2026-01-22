@@ -70,7 +70,10 @@ def test_enroll_use_delete(device, ctap2, pin_protocol, printer):
     rp = {"id": "example.com", "name": "Example RP"}
     server = Fido2Server(rp)
     user = {"id": b"user_id", "name": "A. User"}
-    create_options, state = server.register_begin(user, user_verification="required")
+    create_options, state = server.register_begin(
+        user,
+        authenticator_selection={"userVerification": "required"},
+    )
 
     client = Fido2Client(
         device,

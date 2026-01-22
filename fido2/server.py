@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from typing import Any, Callable, Mapping, Sequence
 
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
@@ -36,7 +37,7 @@ from cryptography.hazmat.primitives import constant_time
 
 from .cose import CoseKey
 from .rpid import verify_rp_id
-from .utils import websafe_decode, websafe_encode
+from .utils import websafe_encode
 from .webauthn import (
     AttestationConveyancePreference,
     AttestationObject,
@@ -71,7 +72,7 @@ def _verify_origin_for_rp(rp_id: str) -> VerifyOrigin:
     return lambda o: verify_rp_id(rp_id, o)
 
 
-def _validata_challenge(challenge: bytes | None) -> bytes:
+def _validate_challenge(challenge: bytes | None) -> bytes:
     if challenge is None:
         challenge = os.urandom(32)
     else:
@@ -122,6 +123,20 @@ def _ignore_attestation(
     """Ignore attestation."""
 
 
+def _merge_dicts(primary: Mapping[str, Any], secondary: Mapping[str, Any]) -> dict:
+    result = dict(secondary)
+    for key, value in primary.items():
+        # Existing key with dict value in both primary and secondary are merged
+        # Note: lists are not merged
+        if key in result and isinstance(value, dict) and isinstance(result[key], dict):
+            result[key] = _merge_dicts(value, result[key])
+        else:
+            result[key] = value
+    return result
+
+
+# TODO: 3.0 Remove deprecated properties and parameters
+# TODO: 3.0 Replace state with CredentialCreationOptions
 class Fido2Server:
     """FIDO2 server.
 
@@ -132,6 +147,8 @@ class Fido2Server:
         invoked with attestation_object and client_data_hash. It should return nothing
         and raise an exception on failure. By default, attestation is ignored.
         Attestation is also ignored if `attestation` is set to `none`.
+    :param creation_defaults: (optional) Default parameters for `register_begin`.
+    :param assertion_defaults: (optional) Default parameters for `authenticate_begin`.
     """
 
     def __init__(
@@ -140,20 +157,86 @@ class Fido2Server:
         attestation: AttestationConveyancePreference | None = None,
         verify_origin: VerifyOrigin | None = None,
         verify_attestation: VerifyAttestation | None = None,
+        creation_defaults: Mapping[str, Any] | None = None,
+        assertion_defaults: Mapping[str, Any] | None = None,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         assert self.rp.id is not None  # noqa: S101
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
-        self.timeout = None
-        self.attestation = AttestationConveyancePreference(attestation)
-        self.allowed_algorithms = [
-            PublicKeyCredentialParameters(
-                type=PublicKeyCredentialType.PUBLIC_KEY, alg=alg
-            )
-            for alg in CoseKey.supported_algorithms()
-        ]
         self._verify_attestation = verify_attestation or _ignore_attestation
+        self._creation_defaults = dict(creation_defaults) if creation_defaults else {}
+        if "pub_key_cred_params" not in self._creation_defaults:
+            self._creation_defaults["pub_key_cred_params"] = [
+                PublicKeyCredentialParameters(
+                    type=PublicKeyCredentialType.PUBLIC_KEY, alg=alg
+                )
+                for alg in CoseKey.supported_algorithms()
+            ]
+        if attestation:
+            warnings.warn(
+                "Deprecated: set attestation in creation_defaults instead.",
+                DeprecationWarning,
+            )
+            self._creation_defaults["attestation"] = AttestationConveyancePreference(
+                attestation
+            )
+
+        self._assertion_defaults = (
+            dict(assertion_defaults) if assertion_defaults else {}
+        )
+
+        # Validate default options
+        PublicKeyCredentialCreationOptions(
+            rp=self.rp,
+            user=PublicKeyCredentialUserEntity(id=b"", name="", display_name=""),
+            challenge=b"",
+            exclude_credentials=None,
+            **self._creation_defaults,
+        )
+        PublicKeyCredentialRequestOptions(
+            challenge=b"",
+            rp_id=self.rp.id,
+            allow_credentials=None,
+            **self._assertion_defaults,
+        )
+
         logger.debug(f"Fido2Server initialized for RP: {self.rp}")
+
+    @property
+    def allowed_algorithms(self) -> list[PublicKeyCredentialParameters]:
+        """List of allowed PublicKeyCredentialParameters."""
+        warnings.warn(
+            "Deprecated: do not read allowed_algorithms.",
+            DeprecationWarning,
+        )
+        return self._creation_defaults["pub_key_cred_params"]
+
+    @property
+    def attestation(self) -> AttestationConveyancePreference | None:
+        """Attestation conveyance preference."""
+        warnings.warn(
+            "Deprecated: do not read attestation.",
+            DeprecationWarning,
+        )
+        return self._creation_defaults.get("attestation")
+
+    @property
+    def timeout(self) -> int | None:
+        """Timeout in milliseconds for operations."""
+        warnings.warn(
+            "Deprecated: do not read timeout.",
+            DeprecationWarning,
+        )
+        return self._creation_defaults.get("timeout")
+
+    @timeout.setter
+    def timeout(self, value: int | None) -> None:
+        warnings.warn(
+            "Deprecated: use creation_defaults and assertion_defaults to set timeout.",
+            DeprecationWarning,
+        )
+        self._creation_defaults["timeout"] = value
+        self._assertion_defaults["timeout"] = value
 
     def register_begin(
         self,
@@ -161,11 +244,12 @@ class Fido2Server:
         credentials: (
             Sequence[AttestedCredentialData | PublicKeyCredentialDescriptor] | None
         ) = None,
+        # TODO: 3.0 Remove these three params in favor of using authenticator_selection
         resident_key_requirement: ResidentKeyRequirement | None = None,
         user_verification: UserVerificationRequirement | None = None,
         authenticator_attachment: AuthenticatorAttachment | None = None,
         challenge: bytes | None = None,
-        extensions=None,
+        **kwargs,
     ) -> tuple[CredentialCreationOptions, Any]:
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
@@ -181,51 +265,59 @@ class Fido2Server:
         :param challenge: A custom challenge to sign and verify or None to use
             OS-specific random bytes.
         :return: Registration data, internal state."""
-        if not self.allowed_algorithms:
-            raise ValueError("Server has no allowed algorithms.")
 
-        challenge = _validata_challenge(challenge)
+        challenge = _validate_challenge(challenge)
         descriptors = _wrap_credentials(credentials)
-        state = self._make_internal_state(challenge, user_verification)
+
+        kwargs = _merge_dicts(kwargs, self._creation_defaults)
+
+        # TODO: 3.0 Remove in favor of using authenticator_selection
+        if any(
+            (
+                authenticator_attachment,
+                resident_key_requirement,
+                user_verification,
+            )
+        ):
+            warnings.warn(
+                "Deprecated: parameters authenticator_attachment, "
+                "resident_key_requirement, and user_verification are deprecated; use "
+                "authenticator_selection instead.",
+                DeprecationWarning,
+            )
+            selection = AuthenticatorSelectionCriteria.from_dict(
+                kwargs.pop("authenticator_selection", {})
+            )
+            selection = AuthenticatorSelectionCriteria(
+                authenticator_attachment=authenticator_attachment
+                or selection.authenticator_attachment,
+                resident_key=resident_key_requirement or selection.resident_key,
+                user_verification=user_verification or selection.user_verification,
+            )
+            kwargs["authenticator_selection"] = selection
+
+        options = CredentialCreationOptions(
+            public_key=PublicKeyCredentialCreationOptions(
+                rp=self.rp,
+                user=user,
+                challenge=challenge,
+                exclude_credentials=descriptors,
+                **kwargs,
+            )
+        )
+        if not options.public_key.pub_key_cred_params:
+            raise ValueError("Request has no allowed algorithms.")
+
         logger.debug(
             "Starting new registration, existing credentials: "
             + ", ".join(d.id.hex() for d in descriptors or [])
         )
 
-        return (
-            CredentialCreationOptions(
-                public_key=PublicKeyCredentialCreationOptions(
-                    rp=self.rp,
-                    user=PublicKeyCredentialUserEntity.from_dict(user),
-                    challenge=challenge,
-                    pub_key_cred_params=self.allowed_algorithms,
-                    timeout=self.timeout,
-                    exclude_credentials=descriptors,
-                    authenticator_selection=(
-                        AuthenticatorSelectionCriteria(
-                            authenticator_attachment=authenticator_attachment,
-                            resident_key=resident_key_requirement,
-                            user_verification=user_verification,
-                        )
-                        if any(
-                            (
-                                authenticator_attachment,
-                                resident_key_requirement,
-                                user_verification,
-                            )
-                        )
-                        else None
-                    ),
-                    attestation=self.attestation,
-                    extensions=extensions,
-                )
-            ),
-            state,
-        )
+        return (options, dict(options))
 
     def register_complete(
         self,
-        state,
+        state: dict,
         response: RegistrationResponse | Mapping[str, Any],
     ) -> AuthenticatorData:
         """Verify the correctness of the registration data received from
@@ -236,6 +328,8 @@ class Fido2Server:
         :param response: The registration response from the client.
         :return: The authenticator data
         """
+        options = CredentialCreationOptions.from_dict(state).public_key
+
         registration = RegistrationResponse.from_dict(response)
         client_data = registration.response.client_data
         attestation_object = registration.response.attestation_object
@@ -244,9 +338,7 @@ class Fido2Server:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
-        if not constant_time.bytes_eq(
-            websafe_decode(state["challenge"]), client_data.challenge
-        ):
+        if not constant_time.bytes_eq(options.challenge, client_data.challenge):
             raise ValueError("Wrong challenge in response.")
         if not constant_time.bytes_eq(
             self.rp.id_hash or b"", attestation_object.auth_data.rp_id_hash
@@ -256,21 +348,30 @@ class Fido2Server:
             raise ValueError("User Present flag not set.")
 
         if (
-            state["user_verification"] == UserVerificationRequirement.REQUIRED
+            options.authenticator_selection
+            and options.authenticator_selection.user_verification
+            == UserVerificationRequirement.REQUIRED
             and not attestation_object.auth_data.is_user_verified()
         ):
             raise ValueError(
                 "User verification required, but User Verified flag not set."
             )
 
-        if self.attestation not in (None, AttestationConveyancePreference.NONE):
+        # Validate the attestation statement
+        if options.attestation not in (None, AttestationConveyancePreference.NONE):
             logger.debug(f"Verifying attestation of type {attestation_object.fmt}")
             self._verify_attestation(attestation_object, client_data.hash)
         # We simply ignore attestation if self.attestation == 'none', as not all
         # clients strip the attestation.
 
         auth_data = attestation_object.auth_data
+
+        # Make sure the algorithm is allowed
         assert auth_data.credential_data is not None  # noqa: S101
+        key_alg = auth_data.credential_data.public_key.ALGORITHM
+        if key_alg not in [p.alg for p in options.pub_key_cred_params]:
+            raise ValueError(f"Unsupported public key algorithm: {key_alg}")
+
         logger.info(
             "New credential registered: "
             + auth_data.credential_data.credential_id.hex()
@@ -282,9 +383,10 @@ class Fido2Server:
         credentials: (
             Sequence[AttestedCredentialData | PublicKeyCredentialDescriptor] | None
         ) = None,
+        # TODO: 3.0 Remove in favor of using user_verification in kwargs
         user_verification: UserVerificationRequirement | None = None,
         challenge: bytes | None = None,
-        extensions=None,
+        **kwargs,
     ) -> tuple[CredentialRequestOptions, Any]:
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
@@ -296,9 +398,12 @@ class Fido2Server:
         :param challenge: A custom challenge to sign and verify or None to use
             OS-specific random bytes.
         :return: Assertion data, internal state."""
-        challenge = _validata_challenge(challenge)
+        challenge = _validate_challenge(challenge)
         descriptors = _wrap_credentials(credentials)
-        state = self._make_internal_state(challenge, user_verification)
+        kwargs = _merge_dicts(kwargs, self._assertion_defaults)
+        if user_verification is not None:
+            kwargs["user_verification"] = user_verification
+
         if descriptors is None:
             logger.debug("Starting new authentication without credentials")
         else:
@@ -307,23 +412,20 @@ class Fido2Server:
                 + ", ".join(d.id.hex() for d in descriptors)
             )
 
-        return (
-            CredentialRequestOptions(
-                public_key=PublicKeyCredentialRequestOptions(
-                    challenge=challenge,
-                    timeout=self.timeout,
-                    rp_id=self.rp.id,
-                    allow_credentials=descriptors,
-                    user_verification=user_verification,
-                    extensions=extensions,
-                )
-            ),
-            state,
+        options = CredentialRequestOptions(
+            public_key=PublicKeyCredentialRequestOptions(
+                challenge=challenge,
+                rp_id=self.rp.id,
+                allow_credentials=descriptors,
+                **kwargs,
+            )
         )
+
+        return (options, dict(options))
 
     def authenticate_complete(
         self,
-        state,
+        state: dict,
         credentials: Sequence[AttestedCredentialData],
         response: AuthenticationResponse | Mapping[str, Any],
     ) -> AttestedCredentialData:
@@ -338,6 +440,8 @@ class Fido2Server:
         :param auth_data: The authenticator data.
         :param signature: The signature provided by the client."""
 
+        options = CredentialRequestOptions.from_dict(state).public_key
+
         authentication = AuthenticationResponse.from_dict(response)
         credential_id = authentication.raw_id
         client_data = authentication.response.client_data
@@ -348,7 +452,7 @@ class Fido2Server:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
-        if websafe_decode(state["challenge"]) != client_data.challenge:
+        if not constant_time.bytes_eq(options.challenge, client_data.challenge):
             raise ValueError("Wrong challenge in response.")
         if not constant_time.bytes_eq(self.rp.id_hash or b"", auth_data.rp_id_hash):
             raise ValueError("Wrong RP ID hash in response.")
@@ -356,7 +460,7 @@ class Fido2Server:
             raise ValueError("User Present flag not set.")
 
         if (
-            state["user_verification"] == UserVerificationRequirement.REQUIRED
+            options.user_verification == UserVerificationRequirement.REQUIRED
             and not auth_data.is_user_verified()
         ):
             raise ValueError(
@@ -375,9 +479,7 @@ class Fido2Server:
 
     @staticmethod
     def _make_internal_state(
-        challenge: bytes, user_verification: UserVerificationRequirement | None
+        challenge: bytes,
+        **kwargs,
     ):
-        return {
-            "challenge": websafe_encode(challenge),
-            "user_verification": user_verification,
-        }
+        return {"challenge": websafe_encode(challenge), **kwargs}

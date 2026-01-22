@@ -33,17 +33,13 @@ def test_list_and_delete(client, ctap2, pin_protocol, algorithm):
 
     create_options, state = server.register_begin(
         user,
-        resident_key_requirement="required",
+        authenticator_selection={"residentKey": "required"},
+        pub_key_cred_params=[algorithm],
+        extensions={"credProps": True},
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "pubKeyCredParams": [algorithm],
-            "extensions": {"credProps": True},
-        }
-    )
+    result = client.make_credential(create_options.public_key)
 
     # Need new PIN token as old one is expired by make_credential
     credman = get_credman(ctap2, pin_protocol)
@@ -90,16 +86,12 @@ def test_update(client, ctap2, pin_protocol):
 
     create_options, state = server.register_begin(
         user,
-        resident_key_requirement="required",
+        authenticator_selection={"residentKey": "required"},
+        extensions={"credProps": True},
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"credProps": True},
-        }
-    )
+    result = client.make_credential(create_options.public_key)
     auth_data = server.register_complete(state, result)
     cred_id = {"id": auth_data.credential_data.credential_id, "type": "public-key"}
 
@@ -170,7 +162,7 @@ def test_read_only_management(dev_manager, pin_protocol):
 
     create_options, state = server.register_begin(
         user,
-        resident_key_requirement="required",
+        authenticator_selection={"residentKey": "required"},
     )
 
     token = ClientPin(dev_manager.ctap2, pin_protocol).get_pin_token(

@@ -22,15 +22,14 @@ def test_prf(client, pin_protocol):
     user = {"id": b"user_id", "name": "A. User"}
     uv = "required"
 
-    create_options, state = server.register_begin(user, user_verification=uv)
+    create_options, state = server.register_begin(
+        user,
+        authenticator_selection={"userVerification": uv},
+        extensions={"prf": {}},
+    )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"prf": {}},
-        }
-    )
+    result = client.make_credential(create_options.public_key)
     assert result.client_extension_results.prf.enabled is True
     assert result.client_extension_results["prf"]["enabled"] is True
 
@@ -108,7 +107,11 @@ def test_hmac_secret(device, pin_protocol, printer):
     user = {"id": b"user_id", "name": "A. User"}
     uv = "required"
 
-    create_options, state = server.register_begin(user, user_verification=uv)
+    create_options, state = server.register_begin(
+        user,
+        authenticator_selection={"userVerification": uv},
+        extensions={"hmacCreateSecret": True},
+    )
 
     client = Fido2Client(
         device,
@@ -118,12 +121,7 @@ def test_hmac_secret(device, pin_protocol, printer):
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"hmacCreateSecret": True},
-        }
-    )
+    result = client.make_credential(create_options.public_key)
     assert result.client_extension_results.hmac_create_secret is True
     assert result.client_extension_results["hmacCreateSecret"] is True
 
@@ -176,7 +174,10 @@ def test_prf_mc(client, pin_protocol, info):
     user = {"id": b"user_id", "name": "A. User"}
     uv = "required"
 
-    create_options, state = server.register_begin(user, user_verification=uv)
+    create_options, state = server.register_begin(
+        user,
+        authenticator_selection={"userVerification": uv},
+    )
 
     # Generate salts for PRF:
     salt1 = websafe_encode(os.urandom(32))

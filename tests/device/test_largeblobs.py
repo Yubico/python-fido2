@@ -123,8 +123,10 @@ def test_large_blob_key(client, ctap2, pin_protocol, clear_creds):
 
     create_options, state = server.register_begin(
         user,
-        resident_key_requirement="required",
-        user_verification="required",
+        authenticator_selection={
+            "residentKey": "required",
+            "userVerification": "required",
+        },
     )
 
     # Create a credential
@@ -141,7 +143,8 @@ def test_large_blob_key(client, ctap2, pin_protocol, clear_creds):
     assert result.client_extension_results["largeBlob"]["supported"] is True
 
     request_options, state = server.authenticate_begin(
-        credentials, user_verification="required"
+        credentials,
+        user_verification="required",
     )
 
     data = b"test data"

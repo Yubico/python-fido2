@@ -60,13 +60,12 @@ class TestFido2Server(unittest.TestCase):
         rp = PublicKeyCredentialRpEntity(name="Example", id="example.com")
         server = Fido2Server(rp)
 
-        state = {
-            "challenge": "GAZPACHO!",
-            "user_verification": UserVerificationRequirement.PREFERRED,
-        }
+        challenge = b"1234567890123456"
+        request, state = server.register_begin(USER, challenge=challenge)
+
         client_data = CollectedClientData.create(
             CollectedClientData.TYPE.GET,
-            "GAZPACHO!",
+            challenge,
             "https://example.com",
         )
         _AUTH_DATA = bytes.fromhex(

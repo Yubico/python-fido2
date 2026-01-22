@@ -41,7 +41,7 @@ def discoverable_credential(request, dev_manager):
 
     create_options, state = server.register_begin(
         user,
-        resident_key_requirement="required",
+        authenticator_selection={"residentKey": "required"},
     )
     result = dev_manager.client.make_credential(create_options.public_key)
     auth_data = server.register_complete(state, result)

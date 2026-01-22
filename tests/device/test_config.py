@@ -47,10 +47,15 @@ def test_always_uv(ctap2, pin_protocol, device, printer):
     assert ctap2.get_info().options["alwaysUv"] is True
 
     rp = {"id": "example.com", "name": "Example RP"}
-    server = Fido2Server(rp)
+    server = Fido2Server(
+        rp,
+        creation_defaults=dict(
+            authenticator_selection={"userVerification": "discouraged"}
+        ),
+    )
     user = {"id": b"user_id", "name": "A. User"}
 
-    create_options, state = server.register_begin(user, user_verification="discouraged")
+    create_options, state = server.register_begin(user)
 
     # Create a credential
     client = Fido2Client(
@@ -140,12 +145,14 @@ def test_min_pin_length(
 
         # Test minPinLength extension
         rp = {"id": "example.com", "name": "Example RP"}
-        server = Fido2Server(rp)
-        user = {"id": b"user_id", "name": "A. User"}
-
-        create_options, state = server.register_begin(
-            user, user_verification="discouraged"
+        server = Fido2Server(
+            rp,
+            creation_defaults=dict(
+                authenticator_selection={"userVerification": "discouraged"},
+                extensions={"minPinLength": True},
+            ),
         )
+        user = {"id": b"user_id", "name": "A. User"}
 
         if "setMinPINLength" in ctap2.info.options:
             config = get_config(ctap2, pin_protocol, pin=new_pin)
@@ -156,12 +163,9 @@ def test_min_pin_length(
                 user_interaction=CliInteraction(printer, new_pin),
             )
 
-            result = client.make_credential(
-                {
-                    **create_options["publicKey"],
-                    "extensions": {"minPinLength": True},
-                }
-            )
+            create_options, state = server.register_begin(user)
+
+            result = client.make_credential(create_options.public_key)
             auth_data = server.register_complete(state, result)
             assert auth_data.extensions["minPinLength"] == expected_len
 
@@ -205,7 +209,7 @@ def att_cert(dev_manager):
     rp = {"id": "example.com", "name": "Example RP"}
     user = {"id": b"user_id", "name": "A. User"}
 
-    server = Fido2Server(rp, attestation="direct")
+    server = Fido2Server(rp, creation_defaults=dict(attestation="direct"))
     create_options, state = server.register_begin(user)
     result = dev_manager.client.make_credential(create_options.public_key)
     return result.response.attestation_object.att_stmt["x5c"][0]
@@ -215,7 +219,7 @@ def test_ep_platform(client, enable_ep, att_cert):
     rp = {"id": "example.com", "name": "Example RP"}
     user = {"id": b"user_id", "name": "A. User"}
 
-    server = Fido2Server(rp, attestation="enterprise")
+    server = Fido2Server(rp, creation_defaults=dict(attestation="enterprise"))
     create_options, state = server.register_begin(user)
 
     client._enterprise_rpid_list = [rp["id"]]
@@ -233,7 +237,7 @@ def test_ep_vendor(pytestconfig, device, printer, enable_ep, att_cert):
     rp = {"id": ep_rp_id, "name": "Example RP"}
     user = {"id": b"user_id", "name": "A. User"}
 
-    server = Fido2Server(rp, attestation="enterprise")
+    server = Fido2Server(rp, creation_defaults=dict(attestation="enterprise"))
     create_options, state = server.register_begin(user)
 
     client = Fido2Client(
