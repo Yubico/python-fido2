@@ -1,4 +1,3 @@
-from hashlib import new
 import pytest
 
 from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client

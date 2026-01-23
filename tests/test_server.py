@@ -9,7 +9,6 @@ from fido2.webauthn import (
     AuthenticatorData,
     CollectedClientData,
     PublicKeyCredentialRpEntity,
-    UserVerificationRequirement,
 )
 
 from .test_ctap2 import _ATT_CRED_DATA, _CRED_ID
