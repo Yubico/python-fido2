@@ -235,8 +235,10 @@ class CtapPcscDevice(CtapDevice):
         else:
             raise CtapError(CtapError.ERR.INVALID_COMMAND)
 
-    def close(self) -> None:
+    def close(self, release: bool = False) -> None:
         self._conn.disconnect()
+        if release and hasattr(self._conn, "release"):
+            self._conn.release()
 
     @classmethod
     def list_devices(cls, name: str = "") -> Iterator[CtapPcscDevice]:

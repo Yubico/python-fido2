@@ -242,6 +242,7 @@ class DeviceManager:
     def _reconnect_ccid(self):
         name = self._reader.name
         info = Ctap2(self._dev).info
+        self._dev.close(release=True)
 
         logger.debug(f"Reconnect over CCID: {name}")
         from fido2.pcsc import _list_readers
