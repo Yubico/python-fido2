@@ -489,8 +489,7 @@ def _validate_tpm_cert(cert):
     # https://www.w3.org/TR/webauthn/#tpm-cert-requirements
     _validate_cert_common(cert)
 
-    s = cert.subject.get_attributes_for_oid(x509.NameOID)
-    if s:
+    if len(cert.subject) > 0:
         raise InvalidData("Certificate should not have Subject")
 
     s = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
