@@ -12,17 +12,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ['3.10', '3.11', '3.12', '3.13', '3.14', 'pypy3.10']
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
         architecture: [x86, x64]
         exclude:
           - os: ubuntu-latest
             architecture: x86
           - os: macos-latest
             architecture: x86
-          - os: windows-latest
-            python: pypy3
-          - os: macos-latest
-            python: pypy3
           - os: macos-latest
             python: 3.10
 
