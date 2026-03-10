@@ -33,7 +33,7 @@ from base64 import b64decode, b64encode
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum, unique
+from enum import unique
 from typing import Any, Callable, Mapping, Sequence
 
 from cryptography import x509
@@ -47,7 +47,7 @@ from .attestation import (
 )
 from .cose import CoseKey
 from .utils import _JsonDataObject, websafe_decode
-from .webauthn import Aaguid, AttestationObject
+from .webauthn import Aaguid, AttestationObject, _StringEnum
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ class EcdaaTrustAnchor(_JsonDataObject):
 
 
 @unique
-class AuthenticatorStatus(str, Enum):
+class AuthenticatorStatus(_StringEnum):
     """Status of an Authenticator."""
 
     NOT_FIDO_CERTIFIED = "NOT_FIDO_CERTIFIED"

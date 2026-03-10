@@ -341,10 +341,33 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
         )
 
 
+class _StringEnumMeta(EnumMeta):
+    def _get_value(cls, value):
+        return None
+
+    def __call__(cls, value, *args, **kwargs):  # type: ignore
+        try:
+            return super().__call__(value, *args, **kwargs)
+        except ValueError:
+            return cls._get_value(value)
+
+
+# TODO: Python 3.11 use StrEnum, instead of "str, Enum" remove custom __str__().
+class _StringEnum(str, Enum, metaclass=_StringEnumMeta):
+    """Enum of strings for WebAuthn types.
+
+    Unrecognized values are treated as missing.
+    """
+
+    # Needed in Python 3.15, can be removed when StrEnum is available.
+    def __str__(self):
+        return self.value
+
+
 @dataclass(init=False, frozen=True)
 class CollectedClientData(bytes):
     @unique
-    class TYPE(str, Enum):
+    class TYPE(_StringEnum):
         CREATE = "webauthn.create"
         GET = "webauthn.get"
 
@@ -376,6 +399,7 @@ class CollectedClientData(bytes):
             encoded_challenge = websafe_encode(challenge)
         else:
             encoded_challenge = challenge
+
         return cls(
             json.dumps(
                 {
@@ -399,24 +423,6 @@ class CollectedClientData(bytes):
     @property
     def hash(self) -> bytes:
         return sha256(self)
-
-
-class _StringEnumMeta(EnumMeta):
-    def _get_value(cls, value):
-        return None
-
-    def __call__(cls, value, *args, **kwargs):  # type: ignore
-        try:
-            return super().__call__(value, *args, **kwargs)
-        except ValueError:
-            return cls._get_value(value)
-
-
-class _StringEnum(str, Enum, metaclass=_StringEnumMeta):
-    """Enum of strings for WebAuthn types.
-
-    Unrecognized values are treated as missing.
-    """
 
 
 @unique
