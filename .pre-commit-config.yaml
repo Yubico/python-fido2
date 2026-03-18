@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.14.10
+  rev: v0.15.6
   hooks:
   # Run the linter
   - id: ruff-check
@@ -14,7 +14,7 @@ repos:
     exclude: ^docs/
     files: ^fido2/
 - repo: https://github.com/RobertCraigie/pyright-python
-  rev: v1.1.407
+  rev: v1.1.408
   hooks:
   - id: pyright
 - repo: local
