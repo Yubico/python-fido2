@@ -46,9 +46,9 @@ class CliInteraction(UserInteraction):
     def prompt_up(self):
         self.printer.touch()
 
-    def request_pin(self, permissions, rd_id):
+    def request_pin(self, permissions, rp_id):
         return self.pin
 
-    def request_uv(self, permissions, rd_id):
+    def request_uv(self, permissions, rp_id):
         self.printer.print("User Verification required.")
         return True

@@ -1,5 +1,6 @@
-import pytest
+from typing import Any
 
+import pytest
 from fido2.ctap import CtapError
 from fido2.ctap2.credman import CredentialManagement
 from fido2.ctap2.pin import ClientPin
@@ -123,7 +124,7 @@ def test_update(client, ctap2, pin_protocol):
     assert creds[0][CredentialManagement.RESULT.USER] == user
 
     # Update user data
-    user2 = {"id": b"user_id"}
+    user2: dict[str, Any] = {"id": b"user_id"}
     if stores_name:
         user2["name"] = "A. User 2"
     if stores_display_name:

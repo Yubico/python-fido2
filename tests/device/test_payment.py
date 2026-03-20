@@ -101,6 +101,7 @@ def test_payment_extension(device, printer, ctap2, pin_protocol):
     result = result.get_response(0)
 
     # Verify that the key includes the payment extension
+    assert result.response.authenticator_data.extensions
     assert result.response.authenticator_data.extensions["thirdPartyPayment"] is True
 
     # Verify that the client has added the payment data

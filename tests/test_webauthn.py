@@ -179,10 +179,10 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.name, "Example")
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialRpEntity(id="example.com")
+            PublicKeyCredentialRpEntity(id="example.com")  # ty:ignore[missing-argument]
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialRpEntity()
+            PublicKeyCredentialRpEntity()  # ty:ignore[missing-argument]
 
     def test_user_entity(self):
         o = PublicKeyCredentialUserEntity(
@@ -201,10 +201,10 @@ class TestWebAuthnDataTypes(unittest.TestCase):
         self.assertEqual(o.display_name, "Display")
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialUserEntity(name=b"user")
+            PublicKeyCredentialUserEntity(name=b"user")  # ty:ignore[missing-argument]
 
         with self.assertRaises(TypeError):
-            PublicKeyCredentialUserEntity()
+            PublicKeyCredentialUserEntity()  # ty:ignore[missing-argument]
 
     def test_parameters(self):
         o = PublicKeyCredentialParameters(type="public-key", alg=-7)

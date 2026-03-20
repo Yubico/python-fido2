@@ -1,7 +1,6 @@
 import os
 
 import pytest
-
 from fido2.server import Fido2Server
 
 
@@ -33,6 +32,7 @@ def test_read_write(client, ctap2, clear_creds):
     auth_data = server.register_complete(state, result)
     credentials = [auth_data.credential_data]
 
+    assert auth_data.extensions
     assert auth_data.extensions["credBlob"] is True
 
     request_options, state = server.authenticate_begin(

@@ -22,7 +22,7 @@ repos:
   - id: ty-check
     name: ty-check
     language: python
-    entry: ty check fido2
+    entry: ty check fido2 tests
     pass_filenames: false
     args: [--python=.venv/]
     additional_dependencies: [ty]

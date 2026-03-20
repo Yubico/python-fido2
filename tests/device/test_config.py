@@ -1,5 +1,4 @@
 import pytest
-
 from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client
 from fido2.ctap import CtapError
 from fido2.ctap2.config import Config
@@ -162,6 +161,7 @@ def test_min_pin_length(
                 }
             )
             auth_data = server.register_complete(state, result)
+            assert auth_data.extensions
             assert auth_data.extensions["minPinLength"] == expected_len
 
         if max_len > expected_len:
