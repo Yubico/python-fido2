@@ -247,6 +247,8 @@ def sign(dev_manager):
 def if_arkg(algorithm, public_key):
     if algorithm == -65539:
         arkg_pub_seed = public_key
+        assert arkg_pub_seed[3] == -65700, "Expected alg: ARKG-P256"
+        assert arkg_pub_seed[-3] == -9, "Expected dkalg: ESP256"
         arkg_ikm = os.urandom(32)
         arkg_ctx = b"python-fido2.test_sign_extension_v4"
         return arkg_pub_seed.derive_public_key(arkg_ikm, arkg_ctx)
