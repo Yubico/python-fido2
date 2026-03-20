@@ -32,6 +32,7 @@ from typing import Sequence, Tuple
 from cryptography.hazmat.primitives.asymmetric.ec import (
     ECDH,
     SECP256R1,
+    EllipticCurve,
     EllipticCurvePublicKey,
     EllipticCurvePublicNumbers,
     derive_private_key,
@@ -53,11 +54,35 @@ as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-
 """
 
 
-# P-256 curve constants
-_P256_PRIME = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
-_P256_A = _P256_PRIME - 3
-_P256_ORDER = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
-_P256_CURVE = SECP256R1()
+@dataclass(frozen=True)
+class _CurveParams:
+    """Parameters needed for EC point arithmetic on a specific curve."""
+
+    prime: int
+    a: int
+    order: int
+
+
+_CURVE_PARAMS: dict[str, _CurveParams] = {
+    "secp256r1": _CurveParams(
+        prime=0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF,
+        a=0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC,
+        order=0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551,
+    ),
+}
+
+
+def _params_for_curve(curve: EllipticCurve) -> _CurveParams:
+    """Look up curve parameters, or raise ValueError for unsupported curves."""
+    try:
+        return _CURVE_PARAMS[curve.name]
+    except KeyError:
+        raise ValueError(f"Unsupported curve: {curve.name}")
+
+
+def _params_for_key(key: EllipticCurvePublicKey) -> _CurveParams:
+    """Look up curve parameters for a public key."""
+    return _params_for_curve(key.curve)
 
 
 def strxor(a: bytes, b: bytes) -> bytes:
@@ -67,31 +92,38 @@ def strxor(a: bytes, b: bytes) -> bytes:
 def _point_add(
     p1: EllipticCurvePublicKey, p2: EllipticCurvePublicKey
 ) -> EllipticCurvePublicKey:
-    """Add two EC points on the P-256 curve."""
+    """Add two EC points. Both points must be on the same supported curve."""
+    if p1.curve.name != p2.curve.name:
+        raise ValueError("Cannot add points from different curves")
+
+    params = _params_for_key(p1)
     n1 = p1.public_numbers()
     n2 = p2.public_numbers()
     x1, y1 = n1.x, n1.y
     x2, y2 = n2.x, n2.y
-    p = _P256_PRIME
+    p = params.prime
 
     if x1 == x2 and y1 == y2:
-        lam = (3 * x1 * x1 + _P256_A) * pow(2 * y1, -1, p) % p
+        lam = (3 * x1 * x1 + params.a) * pow(2 * y1, -1, p) % p
     else:
         lam = (y2 - y1) * pow(x2 - x1, -1, p) % p
 
     x3 = (lam * lam - x1 - x2) % p
     y3 = (lam * (x1 - x3) - y1) % p
 
-    return EllipticCurvePublicNumbers(x3, y3, _P256_CURVE).public_key()
+    return EllipticCurvePublicNumbers(x3, y3, p1.curve).public_key()
 
 
-def _scalar_mult_g(scalar: int) -> EllipticCurvePublicKey:
-    """Compute scalar * G for the P-256 curve."""
-    return derive_private_key(scalar, _P256_CURVE).public_key()
+def _scalar_mult_g(curve: EllipticCurve, scalar: int) -> EllipticCurvePublicKey:
+    """Compute scalar * G for the given curve."""
+    _params_for_curve(curve)  # validate curve is supported
+    return derive_private_key(scalar, curve).public_key()
 
 
-def ecdh(point: EllipticCurvePublicKey, scalar: int) -> bytes:
-    return derive_private_key(scalar, _P256_CURVE).exchange(ECDH(), point)
+def _ecdh(curve: EllipticCurve, point: EllipticCurvePublicKey, scalar: int) -> bytes:
+    """Compute ECDH: returns the x-coordinate of scalar * point."""
+    _params_for_key(point)  # validate curve is supported
+    return derive_private_key(scalar, curve).exchange(ECDH(), point)
 
 
 @dataclass
@@ -214,7 +246,7 @@ class HTF:
 
 @dataclass
 class BL:
-    order: int
+    crv: EllipticCurve
     Hash: HashAlgorithm
     DST_ext: bytes
 
@@ -234,7 +266,7 @@ class BL:
                                 defined in hash-to-crv-suite
         """
         dst_tau = b"ARKG-BL-EC." + self.DST_ext + ctx
-        htf = HTF(dst_tau, self.order, 48, self.Hash)
+        htf = HTF(dst_tau, _params_for_curve(self.crv).order, 48, self.Hash)
         tau = htf.hash_to_field(ikm_tau, 1)[0]
 
         return tau
@@ -247,13 +279,13 @@ class BL:
 
             pk_tau = pk + tau * G
         """
-        tau_g = _scalar_mult_g(tau)
+        tau_g = _scalar_mult_g(self.crv, tau)
         return _point_add(pk, tau_g)
 
 
 @dataclass
 class KEM:
-    order: int
+    crv: EllipticCurve
     Hash: HashAlgorithm
     DST_ext: bytes
 
@@ -273,9 +305,14 @@ class KEM:
 
             pk = sk * G
         """
-        htf = HTF(b"ARKG-KEM-ECDH-KG." + self.DST_ext, self.order, 48, self.Hash)
+        htf = HTF(
+            b"ARKG-KEM-ECDH-KG." + self.DST_ext,
+            _params_for_curve(self.crv).order,
+            48,
+            self.Hash,
+        )
         sk = htf.hash_to_field(ikm, 1)[0]
-        pk = _scalar_mult_g(sk)
+        pk = _scalar_mult_g(self.crv, sk)
 
         return pk, sk
 
@@ -298,7 +335,7 @@ class KEM:
             c = Elliptic-Curve-Point-to-Octet-String(pk')
         """
         pk_prime, sk_prime = self.sub_kem_derive_key_pair(ikm)
-        k = ecdh(pk, sk_prime)
+        k = _ecdh(self.crv, pk, sk_prime)
         c = pk_prime.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
 
         return k, c
@@ -428,7 +465,7 @@ class ARKG:
 
 def _cose2point(cose: CoseKey) -> EllipticCurvePublicKey:
     return EllipticCurvePublicNumbers(
-        bytes2int(cose[-2]), bytes2int(cose[-3]), _P256_CURVE
+        bytes2int(cose[-2]), bytes2int(cose[-3]), SECP256R1()
     ).public_key()
 
 
@@ -473,8 +510,8 @@ class ARKG_P256(CoseKey):
 
     ALGORITHM = -65700
     _ARKG = ARKG(
-        bl=BL(order=_P256_ORDER, Hash=SHA256(), DST_ext=b"ARKG-P256"),
-        kem=KEM(order=_P256_ORDER, Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
+        bl=BL(crv=SECP256R1(), Hash=SHA256(), DST_ext=b"ARKG-P256"),
+        kem=KEM(crv=SECP256R1(), Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
     )
 
     @property
