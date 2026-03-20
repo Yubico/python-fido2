@@ -122,14 +122,25 @@ class Credential:
         self.flags = flags
         self.options = options
         self.extensions = extensions
-        algorithm, key_handle, public_key, att_obj = generated_key or [None]*4
+        algorithm, key_handle, public_key, att_obj = generated_key or [None] * 4
         self.algorithm = algorithm
         self.key_handle = key_handle
         self.public_key = public_key
         self.att_obj = att_obj
 
     def __repr__(self):
-        return repr((self.response, self.flags, self.options, self.extensions, self.algorithm, self.key_handle, self.public_key, self.att_obj))
+        return repr(
+            (
+                self.response,
+                self.flags,
+                self.options,
+                self.extensions,
+                self.algorithm,
+                self.key_handle,
+                self.public_key,
+                self.att_obj,
+            )
+        )
 
 
 class CredentialCache:
@@ -320,8 +331,7 @@ def test_two_keys_same_alg(credential_cache, sign):
 
     algorithms2 = [cred.algorithm]
     cred2 = credential_cache.make_cred_or_skip(
-        lambda cred2:
-        cred2.algorithm == cred.algorithm
+        lambda cred2: cred2.algorithm == cred.algorithm
         and cred2.flags == 0b000
         and cred2.response.auth_data.credential_data.credential_id
         != cred.response.auth_data.credential_data.credential_id,
@@ -359,8 +369,7 @@ def test_two_keys_different_alg(credential_cache, sign):
 
     algorithms2 = [alg for alg in algorithms if alg != cred.algorithm]
     cred2 = credential_cache.make_cred_or_skip(
-        lambda cred2:
-        cred2.algorithm in algorithms2
+        lambda cred2: cred2.algorithm in algorithms2
         and cred2.flags == 0b000
         and cred2.response.auth_data.credential_data.credential_id
         != cred.response.auth_data.credential_data.credential_id
