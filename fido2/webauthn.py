@@ -345,7 +345,9 @@ class _StringEnumMeta(EnumMeta):
     def _get_value(cls, value):
         return None
 
-    def __call__(cls, value, *args, **kwargs):  # type: ignore
+    def __call__(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls, value, *args, **kwargs
+    ):
         try:
             return super().__call__(value, *args, **kwargs)
         except ValueError:

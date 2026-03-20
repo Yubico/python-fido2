@@ -62,7 +62,7 @@ def args(*params) -> dict[int, Any]:
 class _CborDataObject(_DataClassMapping[int]):
     @classmethod
     def _get_field_key(cls, field: Field) -> int:
-        return fields(cls).index(field) + 1  # type: ignore
+        return fields(cls).index(field) + 1
 
 
 @dataclass(eq=False, frozen=True)

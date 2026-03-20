@@ -63,3 +63,13 @@ venvPath = "."
 venv = ".venv"
 exclude = ["tests/", "docs/", "examples/"]
 reportPrivateImportUsage = false
+
+[tool.ty.src]
+exclude = ["docs"]
+
+[[tool.ty.overrides]]
+include = ["tests/**", "**/test_*.py"]
+
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"

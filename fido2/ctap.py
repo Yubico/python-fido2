@@ -30,7 +30,7 @@ from __future__ import annotations
 import abc
 from enum import IntEnum, unique
 from threading import Event
-from typing import Callable, Iterator
+from typing import Callable, Iterator, cast
 
 
 @unique
@@ -177,5 +177,5 @@ class CtapError(Exception):
         try:
             self.code = CtapError.ERR(code)
         except ValueError:
-            self.code = CtapError.UNKNOWN_ERR(code)  # type: ignore
+            self.code = cast(CtapError.ERR, CtapError.UNKNOWN_ERR(code))
         super().__init__(f"CTAP error: {self.code}")

@@ -849,7 +849,7 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
 
 
 HRESULT = ctypes.HRESULT  # type: ignore
-WEBAUTHN = windll.webauthn  # type: ignore
+WEBAUTHN = windll.webauthn
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
 
 WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.argtypes = [

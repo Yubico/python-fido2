@@ -31,7 +31,7 @@ import abc
 from dataclasses import dataclass
 from enum import IntEnum, unique
 from functools import wraps
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
@@ -197,7 +197,7 @@ def _validate_cert_common(cert):
 
 def _default_attestations():
     return [
-        cls()  # type: ignore
+        cast(type[Any], cls)()
         for cls in Attestation.__subclasses__()
         if getattr(cls, "FORMAT", "none") != "none"
     ]
