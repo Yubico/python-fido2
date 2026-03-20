@@ -748,7 +748,7 @@ class SignExtension(Ctap2Extension):
                     7
                 ]
                 att_obj = AttestationResponse.from_dict(
-                    cbor.decode(att_obj_bytes)  # type: ignore
+                    cast(Mapping, cbor.decode(att_obj_bytes))
                 )
                 cred_data = att_obj.auth_data.credential_data
                 assert cred_data is not None  # noqa: S101

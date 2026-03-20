@@ -1,15 +1,14 @@
 import os
-
 from collections.abc import Callable
 from enum import IntEnum
+from typing import Mapping, cast
 
-import cryptography
+import cryptography.exceptions
 import pytest
-
 from fido2 import arkg, cbor
 from fido2.cose import CoseKey
-from fido2.ctap2.pin import ClientPin
 from fido2.ctap import CtapError
+from fido2.ctap2.pin import ClientPin
 from fido2.utils import sha256
 from fido2.webauthn import AttestationObject
 
@@ -76,7 +75,9 @@ def parse_generate_key_outputs(response):
         unsigned_outputs = response.unsigned_extension_outputs["previewSign"]
 
         assert AuthenticatorOutput.ATT_OBJ in unsigned_outputs
-        att_obj_cbor = cbor.decode(unsigned_outputs[AuthenticatorOutput.ATT_OBJ])
+        att_obj_cbor = cast(
+            Mapping, cbor.decode(unsigned_outputs[AuthenticatorOutput.ATT_OBJ])
+        )
         att_obj = AttestationObject.create(
             att_obj_cbor[1], att_obj_cbor[2], att_obj_cbor[3]
         )
@@ -122,14 +123,25 @@ class Credential:
         self.flags = flags
         self.options = options
         self.extensions = extensions
-        algorithm, key_handle, public_key, att_obj = generated_key or [None]*4
+        algorithm, key_handle, public_key, att_obj = generated_key or [None] * 4
         self.algorithm = algorithm
         self.key_handle = key_handle
         self.public_key = public_key
         self.att_obj = att_obj
 
     def __repr__(self):
-        return repr((self.response, self.flags, self.options, self.extensions, self.algorithm, self.key_handle, self.public_key, self.att_obj))
+        return repr(
+            (
+                self.response,
+                self.flags,
+                self.options,
+                self.extensions,
+                self.algorithm,
+                self.key_handle,
+                self.public_key,
+                self.att_obj,
+            )
+        )
 
 
 class CredentialCache:
@@ -141,7 +153,7 @@ class CredentialCache:
         self,
         cache_filter: Callable[[Credential], bool],
         algorithms: list[int],
-        flags: 0b000 | 0b001 | 0b101 = 0b000,
+        flags=0b000,
         options=None,
         extensions={},
     ) -> Credential | None:
@@ -320,11 +332,12 @@ def test_two_keys_same_alg(credential_cache, sign):
 
     algorithms2 = [cred.algorithm]
     cred2 = credential_cache.make_cred_or_skip(
-        lambda cred2:
-        cred2.algorithm == cred.algorithm
-        and cred2.flags == 0b000
-        and cred2.response.auth_data.credential_data.credential_id
-        != cred.response.auth_data.credential_data.credential_id,
+        lambda cred2: (
+            cred2.algorithm == cred.algorithm
+            and cred2.flags == 0b000
+            and cred2.response.auth_data.credential_data.credential_id
+            != cred.response.auth_data.credential_data.credential_id
+        ),
         algorithms2,
     )
     assert cred2 is not None
@@ -359,12 +372,13 @@ def test_two_keys_different_alg(credential_cache, sign):
 
     algorithms2 = [alg for alg in algorithms if alg != cred.algorithm]
     cred2 = credential_cache.make_cred_or_skip(
-        lambda cred2:
-        cred2.algorithm in algorithms2
-        and cred2.flags == 0b000
-        and cred2.response.auth_data.credential_data.credential_id
-        != cred.response.auth_data.credential_data.credential_id
-        and cred2.algorithm != cred.algorithm,
+        lambda cred2: (
+            cred2.algorithm in algorithms2
+            and cred2.flags == 0b000
+            and cred2.response.auth_data.credential_data.credential_id
+            != cred.response.auth_data.credential_data.credential_id
+            and cred2.algorithm != cred.algorithm
+        ),
         algorithms2,
     )
     assert cred2 is not None
@@ -403,21 +417,22 @@ def test_register_invalid_flags(generate_key, flags):
         generate_key(ALL_ALGORITHMS, flags=flags)
     else:
         with pytest.raises(CtapError) as exc_info:
-            cred = generate_key(ALL_ALGORITHMS, flags=flags)
+            generate_key(ALL_ALGORITHMS, flags=flags)
 
         assert exc_info.value.code == CtapError.ERR.INVALID_OPTION
 
 
 def test_assert_empty_allow_list(ctap2, on_keepalive, credential_cache):
     cred = credential_cache.make_cred_or_skip(
-        lambda cred: cred.flags == 0b000
-        and (cred.options or {}).get("rk", False)
-        and (cred.extensions or {}).get("credProtect", None) == 0x01,
+        lambda cred: (
+            cred.flags == 0b000
+            and (cred.options or {}).get("rk", False)
+            and (cred.extensions or {}).get("credProtect", None) == 0x01
+        ),
         ALL_ALGORITHMS,
         options={"rk": True},  # Required for allow_list=None to succees
         extensions={"credProtect": 0x01},  # Required for allow_list=None with up=False
     )
-    credential_id = cred.response.auth_data.credential_data.credential_id
     tbs = os.urandom(32)
     public_key, args = if_arkg(cred.algorithm, cred.public_key)
     ext_inputs = sign_inputs(cred, tbs, additional_args=args)
@@ -559,12 +574,11 @@ def test_assert_missing_args(ctap2, on_keepalive, credential_cache, sign):
         lambda cred: cred.algorithm == arkg.ARKG_P256_ESP256 and cred.flags == 0b000,
         [arkg.ARKG_P256_ESP256],
     )
-    credential_id = cred.response.auth_data.credential_data.credential_id
     tbs = os.urandom(32)
     public_key, args = if_arkg(cred.algorithm, cred.public_key)
     if args is None:
         pytest.skip("Algorithm does not use additional arguments")
-    ext_inputs = sign_inputs(cred, tbs, additional_args=args)
+    sign_inputs(cred, tbs, additional_args=args)
 
     response1 = sign(cred, tbs, additional_args=args)
     assert response1 is not None

@@ -30,6 +30,8 @@
 
 import pytest
 
+ARKG_P256: type
+
 
 @pytest.fixture(autouse=True, scope="module")
 def preconditions():
