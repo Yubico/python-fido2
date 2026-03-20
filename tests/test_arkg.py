@@ -30,16 +30,7 @@
 
 import pytest
 
-ARKG_P256: type
-
-
-@pytest.fixture(autouse=True, scope="module")
-def preconditions():
-    global ARKG_P256
-    try:
-        from fido2.arkg import ARKG_P256
-    except ImportError:
-        pytest.skip("ecdsa is not installed")
+from fido2.arkg import ARKG_P256
 
 
 TEST_VECTORS = [
