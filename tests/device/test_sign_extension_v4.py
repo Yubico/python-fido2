@@ -590,6 +590,23 @@ def test_assert_missing_args(ctap2, on_keepalive, credential_cache, sign):
     assert exc_info.value.code == CtapError.ERR.MISSING_PARAMETER
 
 
+def test_assert_unknown_args(ctap2, on_keepalive, credential_cache, sign):
+    cred = credential_cache.make_cred_or_skip(
+        lambda cred: cred.algorithm == arkg.ARKG_P256_ESP256 and cred.flags == 0b000,
+        [arkg.ARKG_P256_ESP256],
+    )
+    tbs = os.urandom(32)
+    public_key, args = if_arkg(cred.algorithm, cred.public_key)
+    if args is None:
+        pytest.skip("Algorithm does not use additional arguments")
+
+    response1 = sign(cred, tbs, additional_args=args)
+    assert response1 is not None
+
+    response2 = sign(cred, tbs, additional_args={**args, 42: 1337})
+    assert response2 is not None
+
+
 def test_assert_up_required(ctap2, on_keepalive, credential_cache, sign):
     cred = credential_cache.make_cred_or_skip(
         lambda cred: cred.flags & 0b001 == 0b001,
