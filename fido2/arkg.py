@@ -27,12 +27,13 @@
 
 import struct
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from typing import Mapping, Sequence, Tuple
 
 from cryptography.hazmat.primitives.asymmetric.ec import (
     ECDH,
     SECP256R1,
     EllipticCurve,
+    EllipticCurvePrivateKey,
     EllipticCurvePublicKey,
     EllipticCurvePublicNumbers,
     derive_private_key,
@@ -56,18 +57,16 @@ as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-
 
 @dataclass(frozen=True)
 class _CurveParams:
-    """Parameters needed for EC point arithmetic on a specific curve."""
+    """Weierstrass curve parameters needed for EC point addition."""
 
     prime: int
     a: int
-    order: int
 
 
 _CURVE_PARAMS: dict[str, _CurveParams] = {
     "secp256r1": _CurveParams(
         prime=0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF,
         a=0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC,
-        order=0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551,
     ),
 }
 
@@ -80,12 +79,7 @@ def _params_for_curve(curve: EllipticCurve) -> _CurveParams:
         raise ValueError(f"Unsupported curve: {curve.name}")
 
 
-def _params_for_key(key: EllipticCurvePublicKey) -> _CurveParams:
-    """Look up curve parameters for a public key."""
-    return _params_for_curve(key.curve)
-
-
-def strxor(a: bytes, b: bytes) -> bytes:
+def _strxor(a: bytes, b: bytes) -> bytes:
     return bytes(a[i] ^ b[i] for i in range(len(a)))
 
 
@@ -96,7 +90,7 @@ def _point_add(
     if p1.curve.name != p2.curve.name:
         raise ValueError("Cannot add points from different curves")
 
-    params = _params_for_key(p1)
+    params = _params_for_curve(p1.curve)
     n1 = p1.public_numbers()
     n2 = p2.public_numbers()
     x1, y1 = n1.x, n1.y
@@ -112,18 +106,6 @@ def _point_add(
     y3 = (lam * (x1 - x3) - y1) % p
 
     return EllipticCurvePublicNumbers(x3, y3, p1.curve).public_key()
-
-
-def _scalar_mult_g(curve: EllipticCurve, scalar: int) -> EllipticCurvePublicKey:
-    """Compute scalar * G for the given curve."""
-    _params_for_curve(curve)  # validate curve is supported
-    return derive_private_key(scalar, curve).public_key()
-
-
-def _ecdh(curve: EllipticCurve, point: EllipticCurvePublicKey, scalar: int) -> bytes:
-    """Compute ECDH: returns the x-coordinate of scalar * point."""
-    _params_for_key(point)  # validate curve is supported
-    return derive_private_key(scalar, curve).exchange(ECDH(), point)
 
 
 @dataclass
@@ -206,7 +188,7 @@ class HTF:
             d.update(b_xor + struct.pack(">B", i) + dst_prime)
             b_i = d.finalize()
             uniform_bytes.extend(b_i)
-            b_xor = strxor(b_0, b_i)
+            b_xor = _strxor(b_0, b_i)
 
         return bytes(uniform_bytes[:len_in_bytes])
 
@@ -266,7 +248,7 @@ class BL:
                                 defined in hash-to-crv-suite
         """
         dst_tau = b"ARKG-BL-EC." + self.DST_ext + ctx
-        htf = HTF(dst_tau, _params_for_curve(self.crv).order, 48, self.Hash)
+        htf = HTF(dst_tau, self.crv.group_order, 48, self.Hash)
         tau = htf.hash_to_field(ikm_tau, 1)[0]
 
         return tau
@@ -279,7 +261,7 @@ class BL:
 
             pk_tau = pk + tau * G
         """
-        tau_g = _scalar_mult_g(self.crv, tau)
+        tau_g = derive_private_key(tau, self.crv).public_key()
         return _point_add(pk, tau_g)
 
 
@@ -289,7 +271,7 @@ class KEM:
     Hash: HashAlgorithm
     DST_ext: bytes
 
-    def sub_kem_derive_key_pair(self, ikm: bytes) -> Tuple[EllipticCurvePublicKey, int]:
+    def sub_kem_derive_key_pair(self, ikm: bytes) -> EllipticCurvePrivateKey:
         """
         Sub-Kem-Derive-Key-Pair(ikm) -> (pk, sk)
 
@@ -307,14 +289,13 @@ class KEM:
         """
         htf = HTF(
             b"ARKG-KEM-ECDH-KG." + self.DST_ext,
-            _params_for_curve(self.crv).order,
+            self.crv.group_order,
             48,
             self.Hash,
         )
         sk = htf.hash_to_field(ikm, 1)[0]
-        pk = _scalar_mult_g(self.crv, sk)
 
-        return pk, sk
+        return derive_private_key(sk, self.crv)
 
     def sub_kem_encaps(
         self, pk: EllipticCurvePublicKey, ikm: bytes, ctx: bytes
@@ -334,8 +315,10 @@ class KEM:
             k = ECDH(pk, sk')
             c = Elliptic-Curve-Point-to-Octet-String(pk')
         """
-        pk_prime, sk_prime = self.sub_kem_derive_key_pair(ikm)
-        k = _ecdh(self.crv, pk, sk_prime)
+        sk_prime = self.sub_kem_derive_key_pair(ikm)
+        pk_prime = sk_prime.public_key()
+
+        k = sk_prime.exchange(ECDH(), pk)
         c = pk_prime.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
 
         return k, c
@@ -463,26 +446,13 @@ class ARKG:
         return pk_prime, kh
 
 
-def _cose2point(cose: CoseKey) -> EllipticCurvePublicKey:
+def _cose2key(cose: CoseKey, curve: EllipticCurve) -> EllipticCurvePublicKey:
     return EllipticCurvePublicNumbers(
-        bytes2int(cose[-2]), bytes2int(cose[-3]), SECP256R1()
+        bytes2int(cose[-2]), bytes2int(cose[-3]), curve
     ).public_key()
 
 
 ARKG_P256_ESP256 = -65539
-
-
-class ARKG_P256_SignArgs(dict):
-    @classmethod
-    def create(cls, kh: bytes, ctx: bytes):
-        return cls(
-            {
-                3: ARKG_P256_ESP256,  # alg: ESP256 with key derived by ARKG-P256
-                -1: kh,
-                -2: ctx,
-                -3: ARKG_P256.ALGORITHM,
-            }
-        )
 
 
 class ARKG_P256(CoseKey):
@@ -509,9 +479,10 @@ class ARKG_P256(CoseKey):
     """
 
     ALGORITHM = -65700
+    _CRV = SECP256R1()
     _ARKG = ARKG(
-        bl=BL(crv=SECP256R1(), Hash=SHA256(), DST_ext=b"ARKG-P256"),
-        kem=KEM(crv=SECP256R1(), Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
+        bl=BL(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-P256"),
+        kem=KEM(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
     )
 
     @property
@@ -522,12 +493,10 @@ class ARKG_P256(CoseKey):
     def pkkem(self) -> CoseKey:
         return CoseKey.parse(self[-2])
 
-    def derive_public_key(
-        self, ikm: bytes, ctx: bytes
-    ) -> Tuple[CoseKey, ARKG_P256_SignArgs]:
+    def derive_public_key(self, ikm: bytes, ctx: bytes) -> Tuple[CoseKey, Mapping]:
         pk, kh = self._ARKG.derive_public_key(
-            _cose2point(self.pkbl),
-            _cose2point(self.pkkem),
+            _cose2key(self.pkbl, self._CRV),
+            _cose2key(self.pkkem, self._CRV),
             ikm,
             ctx,
         )
@@ -543,5 +512,12 @@ class ARKG_P256(CoseKey):
                 -3: point_enc[1 + ln :],  # y-coordinate
             }
         )
-        args = ARKG_P256_SignArgs.create(kh=kh, ctx=ctx)
+
+        args = {
+            3: ARKG_P256_ESP256,  # alg: ESP256 with key derived by ARKG-P256
+            -1: kh,
+            -2: ctx,
+            -3: ARKG_P256.ALGORITHM,
+        }
+
         return pk_cose, args
