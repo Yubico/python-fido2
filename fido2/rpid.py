@@ -40,14 +40,41 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
-
 tld_fname = os.path.join(os.path.dirname(__file__), "public_suffix_list.dat")
 with open(tld_fname, "rb") as f:
-    suffixes = [
-        entry
-        for entry in (line.decode("utf8").strip() for line in f.readlines())
-        if entry and not entry.startswith("//")
-    ]
+    _suffix_set: set[str] = set()
+    _wildcard_set: set[str] = set()
+    _exception_set: set[str] = set()
+    for _line in f:
+        _entry = _line.decode("utf8").strip()
+        if not _entry or _entry.startswith("//"):
+            continue
+        if _entry.startswith("!"):
+            _exception_set.add(_entry[1:])
+        elif _entry.startswith("*."):
+            _wildcard_set.add(_entry[2:])
+        else:
+            _suffix_set.add(_entry)
+
+# Keep `suffixes` as a list for backward compatibility
+suffixes = sorted(
+    _suffix_set | {f"*.{w}" for w in _wildcard_set} | {f"!{e}" for e in _exception_set}
+)
+
+
+def _is_public_suffix(domain: str) -> bool:
+    """Check if a domain is a public suffix per the PSL algorithm.
+
+    https://github.com/publicsuffix/list/wiki/Format
+    """
+    if domain in _exception_set:
+        return False
+    if domain in _suffix_set:
+        return True
+    parts = domain.split(".", 1)
+    if len(parts) == 2 and parts[1] in _wildcard_set:
+        return True
+    return False
 
 
 def verify_rp_id(rp_id: str, origin: str) -> bool:
@@ -73,6 +100,6 @@ def verify_rp_id(rp_id: str, origin: str) -> bool:
         return False
     if host == rp_id:
         return True
-    if host and host.endswith("." + rp_id) and rp_id not in suffixes:
+    if host and host.endswith("." + rp_id) and not _is_public_suffix(rp_id):
         return True
     return False

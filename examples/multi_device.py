@@ -30,11 +30,18 @@ Connects to each FIDO device found, and causes them all to blink until the user
 triggers one to select it. A new credential is created for that authenticator,
 and the operation is cancelled for the others.
 """
-from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, ClientError, UserInteraction
-from threading import Event, Thread
-from getpass import getpass
+
 import sys
+from getpass import getpass
+from threading import Event, Thread
+
+from fido2.client import (
+    ClientError,
+    DefaultClientDataCollector,
+    Fido2Client,
+    UserInteraction,
+)
+from fido2.hid import CtapHidDevice
 
 # Locate a device
 devs = list(CtapHidDevice.list_devices())
@@ -58,7 +65,11 @@ class CliInteraction(UserInteraction):
 
 cli_interaction = CliInteraction()
 clients = [
-    Fido2Client(d, "https://example.com", user_interaction=cli_interaction)
+    Fido2Client(
+        d,
+        client_data_collector=DefaultClientDataCollector("https://example.com"),
+        user_interaction=cli_interaction,
+    )
     for d in devs
 ]
 
@@ -107,8 +118,9 @@ if cancel.is_set():
     )
 
     print("New credential created!")
-    print("ATTESTATION OBJECT:", result.attestation_object)
+    response = result.response
+    print("ATTESTATION OBJECT:", response.attestation_object)
     print()
-    print("CREDENTIAL DATA:", result.attestation_object.auth_data.credential_data)
+    print("CREDENTIAL DATA:", response.attestation_object.auth_data.credential_data)
 else:
     print("Operation timed out!")

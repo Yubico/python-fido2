@@ -1,20 +1,28 @@
 repos:
--   repo: https://github.com/PyCQA/flake8
-    rev: 7.1.1
-    hooks:
-    -   id: flake8
--   repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-    -   id: black
--   repo: https://github.com/PyCQA/bandit
-    rev: 1.7.10
-    hooks:
-    -   id: bandit
-        exclude: ^(tests/|docs/)
--   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
-    hooks:
-    -   id: mypy
-        exclude: ^docs/
-        files: ^fido2/
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.15.6
+  hooks:
+  # Run the linter
+  - id: ruff-check
+    args: [ --fix ]
+  # Run the formatter
+  - id: ruff-format
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.19.1
+  hooks:
+  - id: mypy
+    exclude: ^docs/
+    files: ^fido2/
+- repo: https://github.com/RobertCraigie/pyright-python
+  rev: v1.1.408
+  hooks:
+  - id: pyright
+- repo: local
+  hooks:
+  - id: ty-check
+    name: ty-check
+    language: python
+    entry: ty check fido2
+    pass_filenames: false
+    args: [--python=.venv/]
+    additional_dependencies: [ty]

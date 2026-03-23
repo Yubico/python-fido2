@@ -35,11 +35,11 @@ www.acs.com.hk/en/driver/100/acr122u-nfc-reader-with-sam-slot-proprietary/
 
 import time
 
-from fido2.utils import sha256
-from fido2.ctap1 import CTAP1
-
 from smartcard.Exceptions import CardConnectionException
+
+from fido2.ctap1 import CTAP1
 from fido2.pcsc import CtapPcscDevice
+from fido2.utils import sha256
 
 
 class Acr122uSamPcscDevice(CtapPcscDevice):

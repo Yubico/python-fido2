@@ -34,42 +34,43 @@ NOTE: This extension is not enabled by default as direct access to the extension
 is now allowed in a browser setting. See also prf.py for an example which uses
 the PRF extension which is enabled by default.
 """
-from fido2.hid import CtapHidDevice
-from fido2.server import Fido2Server
-from fido2.client import Fido2Client, WindowsClient
-from fido2.ctap2.extensions import HmacSecretExtension
-from exampleutils import CliInteraction
+
 import ctypes
-import sys
 import os
+import sys
 
+from exampleutils import CliInteraction, enumerate_devices
+
+from fido2.client import DefaultClientDataCollector, Fido2Client
+from fido2.ctap2.extensions import HmacSecretExtension
+from fido2.server import Fido2Server
+
+# Use the Windows WebAuthn API if available, and we're not running as admin
 try:
-    from fido2.pcsc import CtapPcscDevice
+    from fido2.client.windows import WindowsClient
+
+    use_winclient = (
+        WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin()
+    )
 except ImportError:
-    CtapPcscDevice = None
-
-
-def enumerate_devices():
-    for dev in CtapHidDevice.list_devices():
-        yield dev
-    if CtapPcscDevice:
-        for dev in CtapPcscDevice.list_devices():
-            yield dev
+    use_winclient = False
 
 
 uv = "discouraged"
 
-if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
+client_data_collector = DefaultClientDataCollector("https://example.com")
+
+if use_winclient:
     # Use the Windows WebAuthn API if available, and we're not running as admin
     # By default only the PRF extension is allowed, we need to explicitly
     # configure the client to allow hmac-secret
-    client = WindowsClient("https://example.com", allow_hmac_secret=True)
+    client = WindowsClient(client_data_collector, allow_hmac_secret=True)
 else:
     # Locate a device
     for dev in enumerate_devices():
         client = Fido2Client(
             dev,
-            "https://example.com",
+            client_data_collector=client_data_collector,
             user_interaction=CliInteraction(),
             # By default only the PRF extension is allowed, we need to explicitly
             # configure the client to allow hmac-secret
@@ -101,21 +102,16 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 # HmacSecret result:
-if not result.extension_results.get("hmacCreateSecret"):
-    print("Failed to create credential with HmacSecret")
-    sys.exit(1)
-
-credential = result.attestation_object.auth_data.credential_data
-print("New credential created, with the HmacSecret extension.")
-
-# Prepare parameters for getAssertion
-allow_list = [{"type": "public-key", "id": credential.credential_id}]
+if result.client_extension_results.get("hmacCreateSecret"):
+    print("New credential created, with HmacSecret")
+else:
+    # This fails on Windows, but we might still be able to use hmac-secret even if
+    # the credential wasn't made with it, so keep going
+    print("Failed to create credential with HmacSecret, it might not work")
 
 # Generate a salt for HmacSecret:
 salt = os.urandom(32)
@@ -136,7 +132,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-output1 = result.extension_results.hmac_get_secret.output1
+output1 = result.client_extension_results.hmac_get_secret.output1
 print("Authenticated, secret:", output1.hex())
 
 # Authenticate again, using two salts to generate two secrets:
@@ -157,6 +153,6 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)
 
-output = result.extension_results.hmac_get_secret
+output = result.client_extension_results.hmac_get_secret
 print("Old secret:", output.output1.hex())
 print("New secret:", output.output2.hex())

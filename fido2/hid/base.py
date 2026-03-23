@@ -27,11 +27,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Tuple, Union, Optional
-import struct
 import abc
 import os
+import struct
+from dataclasses import dataclass
 
 FIDO_USAGE_PAGE = 0xF1D0
 FIDO_USAGE = 0x1
@@ -39,13 +38,13 @@ FIDO_USAGE = 0x1
 
 @dataclass
 class HidDescriptor:
-    path: Union[str, bytes]
+    path: str | bytes
     vid: int
     pid: int
     report_size_in: int
     report_size_out: int
-    product_name: Optional[str]
-    serial_number: Optional[str]
+    product_name: str | None
+    serial_number: str | None
 
 
 class CtapHidConnection(abc.ABC):
@@ -72,8 +71,8 @@ class FileCtapHidConnection(CtapHidConnection):
     def close(self):
         os.close(self.handle)
 
-    def write_packet(self, packet):
-        if os.write(self.handle, packet) != len(packet):
+    def write_packet(self, data):
+        if os.write(self.handle, data) != len(data):
             raise OSError("failed to write entire packet")
 
     def read_packet(self):
@@ -91,7 +90,7 @@ USAGE_PAGE = 0x04
 USAGE = 0x08
 
 
-def parse_report_descriptor(data: bytes) -> Tuple[int, int]:
+def parse_report_descriptor(data: bytes) -> tuple[int, int]:
     # Parse report descriptor data
     usage, usage_page = None, None
     max_input_size, max_output_size = None, None

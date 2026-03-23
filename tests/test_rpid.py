@@ -27,8 +27,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.rpid import verify_rp_id
 import unittest
+
+from fido2.rpid import verify_rp_id
 
 
 class TestRpId(unittest.TestCase):
@@ -58,6 +59,18 @@ class TestRpId(unittest.TestCase):
         self.assertTrue(
             verify_rp_id("example.appspot.com", "https://example.appspot.com")
         )
+
+    def test_suffix_list_wildcard(self):
+        # *.bd means any X.bd is a public suffix
+        self.assertFalse(verify_rp_id("example.bd", "https://evil.example.bd"))
+        self.assertFalse(verify_rp_id("example.ck", "https://evil.example.ck"))
+        self.assertFalse(verify_rp_id("example.np", "https://evil.example.np"))
+        # Exact match still works
+        self.assertTrue(verify_rp_id("example.bd", "https://example.bd"))
+
+    def test_suffix_list_wildcard_exception(self):
+        # !www.ck means www.ck is NOT a public suffix despite *.ck
+        self.assertTrue(verify_rp_id("www.ck", "https://sub.www.ck"))
 
     def test_localhost_http_secure_context(self):
         # Localhost and subdomains are secure contexts in most browsers

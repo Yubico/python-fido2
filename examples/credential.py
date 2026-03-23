@@ -31,15 +31,17 @@ creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
-from fido2.server import Fido2Server
+
 from exampleutils import get_client
 
+from fido2.server import Fido2Server
+
 # Locate a suitable FIDO authenticator
-client = get_client()
+client, info = get_client()
 
 
 # Prefer UV if supported and configured
-if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+if info and (info.options.get("uv") or info.options.get("bioEnroll")):
     uv = "preferred"
     print("Authenticator supports User Verification")
 else:
@@ -60,15 +62,14 @@ create_options, state = server.register_begin(
 result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 print("New credential created!")
+response = result.response
 
-print("CLIENT DATA:", result.client_data)
-print("ATTESTATION OBJECT:", result.attestation_object)
+print("CLIENT DATA:", response.client_data)
+print("ATTESTATION OBJECT:", response.attestation_object)
 print()
 print("CREDENTIAL DATA:", auth_data.credential_data)
 
@@ -77,23 +78,17 @@ print("CREDENTIAL DATA:", auth_data.credential_data)
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
 # Authenticate the credential
-result = client.get_assertion(request_options["publicKey"])
+results = client.get_assertion(request_options["publicKey"])
 
 # Only one cred in allowCredentials, only one response.
-result = result.get_response(0)
+result = results.get_response(0)
 
 # Complete authenticator
-server.authenticate_complete(
-    state,
-    credentials,
-    result.credential_id,
-    result.client_data,
-    result.authenticator_data,
-    result.signature,
-)
+server.authenticate_complete(state, credentials, result)
 
 print("Credential authenticated!")
+response = result.response
 
-print("CLIENT DATA:", result.client_data)
+print("CLIENT DATA:", response.client_data)
 print()
-print("AUTH DATA:", result.authenticator_data)
+print("AUTH DATA:", response.authenticator_data)

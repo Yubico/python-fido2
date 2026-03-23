@@ -30,8 +30,7 @@ from __future__ import annotations
 import abc
 from enum import IntEnum, unique
 from threading import Event
-
-from typing import Optional, Callable, Iterator
+from typing import Callable, Iterator
 
 
 @unique
@@ -60,8 +59,8 @@ class CtapDevice(abc.ABC):
         self,
         cmd: int,
         data: bytes = b"",
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[STATUS], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[STATUS], None] | None = None,
     ) -> bytes:
         """Sends a command to the authenticator, and reads the response.
 

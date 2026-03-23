@@ -1,8 +1,8 @@
-from fido2.pcsc import CtapPcscDevice
-from fido2.utils import sha256
-from fido2.ctap1 import Ctap1
 import sys
 
+from fido2.ctap1 import Ctap1
+from fido2.pcsc import CtapPcscDevice
+from fido2.utils import sha256
 
 dev = next(CtapPcscDevice.list_devices(), None)
 if not dev:

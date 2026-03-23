@@ -30,15 +30,16 @@ Connects to the first FIDO device found which supports the PRF extension,
 creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
-from fido2.server import Fido2Server
-from fido2.utils import websafe_encode
-from exampleutils import get_client
-import sys
+
 import os
 
+from exampleutils import get_client
+
+from fido2.server import Fido2Server
+from fido2.utils import websafe_encode
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: "hmac-secret" in client.info.extensions)
+client, _ = get_client(lambda info: "hmac-secret" in info.extensions)
 
 uv = "discouraged"
 
@@ -62,20 +63,21 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credential = auth_data.credential_data
 
 # PRF result:
-if not result.extension_results.get("prf", {}).get("enabled"):
-    print("Failed to create credential with PRF", result.extension_results)
-    sys.exit(1)
+if result.client_extension_results.get("prf", {}).get("enabled"):
+    print("New credential created, with PRF")
+else:
+    # This fails on Windows, but we might still be able to use prf even if
+    # the credential wasn't made with it, so keep going
+    print("Failed to create credential with PRF, it might not work")
 
 print("New credential created, with the PRF extension.")
 
 # If created with UV, keep using UV
-if result.attestation_object.auth_data.is_user_verified():
+if auth_data.is_user_verified():
     uv = "required"
 
 # Generate a salt for PRF:
@@ -97,7 +99,7 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 response = result.get_response(0)
 
-output1 = response.extension_results["prf"]["results"]["first"]
+output1 = response.client_extension_results["prf"]["results"]["first"]
 print("Authenticated, secret:", output1)
 
 # Authenticate again, using two salts to generate two secrets.
@@ -130,6 +132,6 @@ result = client.get_assertion(
 # Only one cred in allowCredentials, only one response.
 response = result.get_response(0)
 
-output = response.extension_results["prf"]["results"]
+output = response.client_extension_results["prf"]["results"]
 print("Old secret:", output["first"])
 print("New secret:", output["second"])

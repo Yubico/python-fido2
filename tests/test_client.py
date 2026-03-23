@@ -29,21 +29,22 @@
 
 import unittest
 from unittest import mock
+
 from fido2 import cbor
-from fido2.utils import sha256
-from fido2.hid import CAPABILITY
+from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client
 from fido2.ctap import CtapError
 from fido2.ctap1 import RegistrationData
-from fido2.ctap2 import Info, AttestationResponse
-from fido2.client import ClientError, Fido2Client
+from fido2.ctap2 import AttestationResponse, Info
+from fido2.hid import CAPABILITY
+from fido2.utils import sha256
 from fido2.webauthn import (
-    PublicKeyCredentialCreationOptions,
     AttestationObject,
     CollectedClientData,
+    PublicKeyCredentialCreationOptions,
 )
 
-
 APP_ID = "https://foo.example.com"
+CLIENT_DATA_COLLECTOR = DefaultClientDataCollector(APP_ID)
 REG_DATA = RegistrationData(
     bytes.fromhex(
         "0504b174bc49c7ca254b70d2e5c207cee9cf174820ebd77ea3c65508c26da51b657c1cc6b952f8621697936482da0a6d3d3826a59095daf6cd7c03e2e60385d2f6d9402a552dfdb7477ed65fd84133f86196010b2215b57da75d315b7b9e8fe2e3925a6019551bab61d16591659cbaf00b4950f7abfe6660e2e006f76868b772d70c253082013c3081e4a003020102020a47901280001155957352300a06082a8648ce3d0403023017311530130603550403130c476e756262792050696c6f74301e170d3132303831343138323933325a170d3133303831343138323933325a3031312f302d0603550403132650696c6f74476e756262792d302e342e312d34373930313238303030313135353935373335323059301306072a8648ce3d020106082a8648ce3d030107034200048d617e65c9508e64bcc5673ac82a6799da3c1446682c258c463fffdf58dfd2fa3e6c378b53d795c4a4dffb4199edd7862f23abaf0203b4b8911ba0569994e101300a06082a8648ce3d0403020347003044022060cdb6061e9c22262d1aac1d96d8c70829b2366531dda268832cb836bcd30dfa0220631b1459f09e6330055722c8d89b7f48883b9089b88d60d1d9795902b30410df304502201471899bcc3987e62e8202c9b39c33c19033f7340352dba80fcab017db9230e402210082677d673d891933ade6f617e5dbde2e247e70423fd5ad7804a6d3d3961ef871"  # noqa E501
@@ -65,7 +66,7 @@ class TestFido2Client(unittest.TestCase):
     def test_ctap1_info(self):
         dev = mock.Mock()
         dev.capabilities = 0
-        client = Fido2Client(dev, APP_ID)
+        client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
         self.assertEqual(client.info.versions, ["U2F_V2"])
         self.assertEqual(client.info.pin_uv_protocols, [])
 
@@ -76,14 +77,14 @@ class TestFido2Client(unittest.TestCase):
         ctap2 = mock.MagicMock()
         ctap2.get_info.return_value = Info.from_dict(cbor.decode(_INFO_NO_PIN))
         PatchedCtap2.return_value = ctap2
-        client = Fido2Client(dev, APP_ID)
+        client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
         try:
             client.make_credential(
                 PublicKeyCredentialCreationOptions(
-                    {"id": "bar.example.com", "name": "Invalid RP"},
-                    user,
-                    challenge,
-                    [{"type": "public-key", "alg": -7}],
+                    rp={"id": "bar.example.com", "name": "Invalid RP"},
+                    user=user,
+                    challenge=challenge,
+                    pub_key_cred_params=[{"type": "public-key", "alg": -7}],
                 )
             )
             self.fail("make_credential did not raise error")
@@ -99,15 +100,15 @@ class TestFido2Client(unittest.TestCase):
         ctap2.info = ctap2.get_info()
         ctap2.make_credential.side_effect = CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
         PatchedCtap2.return_value = ctap2
-        client = Fido2Client(dev, APP_ID)
+        client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
 
         try:
             client.make_credential(
                 PublicKeyCredentialCreationOptions(
-                    rp,
-                    user,
-                    challenge,
-                    [{"type": "public-key", "alg": -7}],
+                    rp=rp,
+                    user=user,
+                    challenge=challenge,
+                    pub_key_cred_params=[{"type": "public-key", "alg": -7}],
                     authenticator_selection={"userVerification": "discouraged"},
                 )
             )
@@ -128,18 +129,18 @@ class TestFido2Client(unittest.TestCase):
             cbor.decode(_MC_RESP)
         )
         PatchedCtap2.return_value = ctap2
-        client = Fido2Client(dev, APP_ID)
+        client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
 
         response = client.make_credential(
             PublicKeyCredentialCreationOptions(
-                rp,
-                user,
-                challenge,
-                [{"type": "public-key", "alg": -7}],
+                rp=rp,
+                user=user,
+                challenge=challenge,
+                pub_key_cred_params=[{"type": "public-key", "alg": -7}],
                 timeout=1000,
                 authenticator_selection={"userVerification": "discouraged"},
             )
-        )
+        ).response
 
         self.assertIsInstance(response.attestation_object, AttestationObject)
         self.assertIsInstance(response.client_data, CollectedClientData)
@@ -166,7 +167,7 @@ class TestFido2Client(unittest.TestCase):
     def test_make_credential_ctap1(self):
         dev = mock.Mock()
         dev.capabilities = 0  # No CTAP2
-        client = Fido2Client(dev, APP_ID)
+        client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
 
         ctap1_mock = mock.MagicMock()
         ctap1_mock.get_version.return_value = "U2F_V2"
@@ -175,9 +176,12 @@ class TestFido2Client(unittest.TestCase):
 
         response = client.make_credential(
             PublicKeyCredentialCreationOptions(
-                rp, user, challenge, [{"type": "public-key", "alg": -7}]
+                rp=rp,
+                user=user,
+                challenge=challenge,
+                pub_key_cred_params=[{"type": "public-key", "alg": -7}],
             )
-        )
+        ).response
 
         self.assertIsInstance(response.attestation_object, AttestationObject)
         self.assertIsInstance(response.client_data, CollectedClientData)

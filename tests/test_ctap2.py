@@ -27,21 +27,22 @@
 
 import unittest
 from unittest import mock
-from fido2.ctap1 import RegistrationData
-from fido2.ctap2 import (
-    Ctap2,
-    ClientPin,
-    PinProtocolV1,
-    Info,
-    AttestationResponse,
-    AssertionResponse,
-)
-from fido2.webauthn import AttestationObject, AuthenticatorData, AttestedCredentialData
-from fido2.attestation import Attestation
-from fido2 import cbor
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from fido2 import cbor
+from fido2.attestation import Attestation
+from fido2.ctap1 import RegistrationData
+from fido2.ctap2 import (
+    AssertionResponse,
+    AttestationResponse,
+    ClientPin,
+    Ctap2,
+    Info,
+    PinProtocolV1,
+)
+from fido2.webauthn import AttestationObject, AttestedCredentialData, AuthenticatorData
 
 _AAGUID = bytes.fromhex("F8A011F38C0A4D15800617111F9EDC7D")
 _INFO = bytes.fromhex(

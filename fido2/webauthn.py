@@ -27,26 +27,35 @@
 
 from __future__ import annotations
 
+import json
+import struct
+from dataclasses import dataclass, field
+from enum import Enum, EnumMeta, IntFlag, unique
+from typing import Any, Mapping, Sequence, cast
+
 from . import cbor
-from .cose import CoseKey, ES256
+from .cose import ES256, CoseKey
 from .utils import (
+    ByteBuffer,
+    _JsonDataObject,
     sha256,
     websafe_decode,
     websafe_encode,
-    ByteBuffer,
-    _JsonDataObject,
 )
-from .features import webauthn_json_mapping
-from enum import Enum, EnumMeta, unique, IntFlag
-from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Sequence, Tuple, Union, cast
-import struct
-import json
 
 """
 Data classes based on the W3C WebAuthn specification (https://www.w3.org/TR/webauthn/).
 
 See the specification for a description and details on their usage.
+
+Most of these classes can be serialized to JSON-compatible dictionaries by passing them
+to dict(), and then deserialized by calling DataClass.from_dict(data). For example:
+
+    user = PublicKeyCredentialUserEntity(id=b"1234", name="Alice")
+    data = dict(user)
+    # data is now a JSON-compatible dictionary, json.dumps(data) will work
+    user2 = PublicKeyCredentialUserEntity.from_dict(data)
+    assert user == user2
 """
 
 # Binary types
@@ -98,7 +107,7 @@ class AttestedCredentialData(bytes):
         return repr(self)
 
     @staticmethod
-    def _parse(data: bytes) -> Tuple[bytes, bytes, CoseKey, bytes]:
+    def _parse(data: bytes) -> tuple[bytes, bytes, CoseKey, bytes]:
         """Parse the components of an AttestedCredentialData from a binary
         string, and return them.
 
@@ -130,7 +139,7 @@ class AttestedCredentialData(bytes):
         )
 
     @classmethod
-    def unpack_from(cls, data: bytes) -> Tuple[AttestedCredentialData, bytes]:
+    def unpack_from(cls, data: bytes) -> tuple[AttestedCredentialData, bytes]:
         """Unpack an AttestedCredentialData from a byte string, returning it and
         any remaining data.
 
@@ -193,8 +202,8 @@ class AuthenticatorData(bytes):
     rp_id_hash: bytes
     flags: AuthenticatorData.FLAG
     counter: int
-    credential_data: Optional[AttestedCredentialData]
-    extensions: Optional[Mapping]
+    credential_data: AttestedCredentialData | None
+    extensions: Mapping | None
 
     def __init__(self, _: bytes):
         super().__init__()
@@ -230,7 +239,7 @@ class AuthenticatorData(bytes):
         flags: AuthenticatorData.FLAG,
         counter: int,
         credential_data: bytes = b"",
-        extensions: Optional[Mapping] = None,
+        extensions: Mapping | None = None,
     ):
         """Create an AuthenticatorData instance.
 
@@ -332,13 +341,37 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
         )
 
 
+class _StringEnumMeta(EnumMeta):
+    def _get_value(cls, value):
+        return None
+
+    def __call__(cls, value, *args, **kwargs):  # type: ignore
+        try:
+            return super().__call__(value, *args, **kwargs)
+        except ValueError:
+            return cls._get_value(value)
+
+
+# TODO: Python 3.11 use StrEnum, instead of "str, Enum" remove custom __str__().
+class _StringEnum(str, Enum, metaclass=_StringEnumMeta):
+    """Enum of strings for WebAuthn types.
+
+    Unrecognized values are treated as missing.
+    """
+
+    # Needed in Python 3.15, can be removed when StrEnum is available.
+    def __str__(self):
+        return self.value
+
+
 @dataclass(init=False, frozen=True)
 class CollectedClientData(bytes):
     @unique
-    class TYPE(str, Enum):
+    class TYPE(_StringEnum):
         CREATE = "webauthn.create"
         GET = "webauthn.get"
 
+    _data: Mapping[str, Any]
     type: str
     challenge: bytes
     origin: str
@@ -347,17 +380,17 @@ class CollectedClientData(bytes):
     def __init__(self, _: bytes):
         super().__init__()
 
-        data = json.loads(self.decode())
-        object.__setattr__(self, "type", data["type"])
-        object.__setattr__(self, "challenge", websafe_decode(data["challenge"]))
-        object.__setattr__(self, "origin", data["origin"])
-        object.__setattr__(self, "cross_origin", data.get("crossOrigin", False))
+        object.__setattr__(self, "_data", json.loads(self.decode()))
+        object.__setattr__(self, "type", self._data["type"])
+        object.__setattr__(self, "challenge", websafe_decode(self._data["challenge"]))
+        object.__setattr__(self, "origin", self._data["origin"])
+        object.__setattr__(self, "cross_origin", self._data.get("crossOrigin", False))
 
     @classmethod
     def create(
         cls,
         type: str,
-        challenge: Union[bytes, str],
+        challenge: bytes | str,
         origin: str,
         cross_origin: bool = False,
         **kwargs,
@@ -366,6 +399,7 @@ class CollectedClientData(bytes):
             encoded_challenge = websafe_encode(challenge)
         else:
             encoded_challenge = challenge
+
         return cls(
             json.dumps(
                 {
@@ -389,24 +423,6 @@ class CollectedClientData(bytes):
     @property
     def hash(self) -> bytes:
         return sha256(self)
-
-
-class _StringEnumMeta(EnumMeta):
-    def _get_value(cls, value):
-        return None
-
-    def __call__(cls, value, *args, **kwargs):
-        try:
-            return super().__call__(value, *args, **kwargs)
-        except ValueError:
-            return cls._get_value(value)
-
-
-class _StringEnum(str, Enum, metaclass=_StringEnumMeta):
-    """Enum of strings for WebAuthn types.
-
-    Unrecognized values are treated as missing.
-    """
 
 
 @unique
@@ -451,65 +467,56 @@ class PublicKeyCredentialType(_StringEnum):
     PUBLIC_KEY = "public-key"
 
 
-class _WebAuthnDataObject(_JsonDataObject):
-    def __getitem__(self, key):
-        if webauthn_json_mapping.enabled:
-            return super().__getitem__(key)
-        return super(_JsonDataObject, self).__getitem__(key)
-
-    @classmethod
-    def _parse_value(cls, t, value):
-        if webauthn_json_mapping.enabled:
-            return super()._parse_value(t, value)
-        return super(_JsonDataObject, cls)._parse_value(t, value)
-
-    @classmethod
-    def from_dict(cls, data):
-        webauthn_json_mapping.warn()
-        return super().from_dict(data)
+@unique
+class PublicKeyCredentialHint(_StringEnum):
+    SECURITY_KEY = "security-key"
+    CLIENT_DEVICE = "client-device"
+    HYBRID = "hybrid"
 
 
-def _as_cbor(data: _WebAuthnDataObject) -> Mapping[str, Any]:
+def _as_cbor(data: _JsonDataObject) -> Mapping[str, Any]:
     return {k: super(_JsonDataObject, data).__getitem__(k) for k in data}
 
 
-@dataclass(eq=False, frozen=True)
-class PublicKeyCredentialRpEntity(_WebAuthnDataObject):
+@dataclass(eq=False, frozen=True, kw_only=True)
+class PublicKeyCredentialRpEntity(_JsonDataObject):
     name: str
-    id: Optional[str] = None
+    id: str | None = None
 
     @property
-    def id_hash(self) -> Optional[bytes]:
+    def id_hash(self) -> bytes | None:
         """Return SHA256 hash of the identifier."""
         return sha256(self.id.encode("utf8")) if self.id else None
 
 
-@dataclass(eq=False, frozen=True)
-class PublicKeyCredentialUserEntity(_WebAuthnDataObject):
-    name: str
+# Note that name and display_name are required in the WebAuthn spec, but CTAP2
+# allows them to be omitted, so we make them optional here.
+@dataclass(eq=False, frozen=True, kw_only=True)
+class PublicKeyCredentialUserEntity(_JsonDataObject):
+    name: str | None = None
     id: bytes
-    display_name: Optional[str] = None
+    display_name: str | None = None
 
 
-@dataclass(eq=False, frozen=True)
-class PublicKeyCredentialParameters(_WebAuthnDataObject):
+@dataclass(eq=False, frozen=True, kw_only=True)
+class PublicKeyCredentialParameters(_JsonDataObject):
     type: PublicKeyCredentialType
     alg: int
 
 
-@dataclass(eq=False, frozen=True)
-class PublicKeyCredentialDescriptor(_WebAuthnDataObject):
+@dataclass(eq=False, frozen=True, kw_only=True)
+class PublicKeyCredentialDescriptor(_JsonDataObject):
     type: PublicKeyCredentialType
     id: bytes
-    transports: Optional[Sequence[AuthenticatorTransport]] = None
+    transports: Sequence[AuthenticatorTransport] | None = None
 
 
-@dataclass(eq=False, frozen=True)
-class AuthenticatorSelectionCriteria(_WebAuthnDataObject):
-    authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    resident_key: Optional[ResidentKeyRequirement] = None
-    user_verification: Optional[UserVerificationRequirement] = None
-    require_resident_key: Optional[bool] = False
+@dataclass(eq=False, frozen=True, kw_only=True)
+class AuthenticatorSelectionCriteria(_JsonDataObject):
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    resident_key: ResidentKeyRequirement | None = None
+    user_verification: UserVerificationRequirement | None = None
+    require_resident_key: bool | None = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -531,124 +538,44 @@ class AuthenticatorSelectionCriteria(_WebAuthnDataObject):
         )
 
 
-@dataclass(eq=False, frozen=True)
-class PublicKeyCredentialCreationOptions(_WebAuthnDataObject):
+@dataclass(eq=False, frozen=True, kw_only=True)
+class PublicKeyCredentialCreationOptions(_JsonDataObject):
     rp: PublicKeyCredentialRpEntity
     user: PublicKeyCredentialUserEntity
     challenge: bytes
     pub_key_cred_params: Sequence[PublicKeyCredentialParameters]
-    timeout: Optional[int] = None
-    exclude_credentials: Optional[Sequence[PublicKeyCredentialDescriptor]] = None
-    authenticator_selection: Optional[AuthenticatorSelectionCriteria] = None
-    attestation: Optional[AttestationConveyancePreference] = None
-    extensions: Optional[Mapping[str, Any]] = None
+    timeout: int | None = None
+    exclude_credentials: Sequence[PublicKeyCredentialDescriptor] | None = None
+    authenticator_selection: AuthenticatorSelectionCriteria | None = None
+    hints: Sequence[PublicKeyCredentialHint] | None = None
+    attestation: AttestationConveyancePreference | None = None
+    attestation_formats: Sequence[str] | None = None
+    extensions: Mapping[str, Any] | None = None
 
 
-@dataclass(eq=False, frozen=True)
-class PublicKeyCredentialRequestOptions(_WebAuthnDataObject):
+@dataclass(eq=False, frozen=True, kw_only=True)
+class PublicKeyCredentialRequestOptions(_JsonDataObject):
     challenge: bytes
-    timeout: Optional[int] = None
-    rp_id: Optional[str] = None
-    allow_credentials: Optional[Sequence[PublicKeyCredentialDescriptor]] = None
-    user_verification: Optional[UserVerificationRequirement] = None
-    extensions: Optional[Mapping[str, Any]] = None
+    timeout: int | None = None
+    rp_id: str | None = None
+    allow_credentials: Sequence[PublicKeyCredentialDescriptor] | None = None
+    user_verification: UserVerificationRequirement | None = None
+    hints: Sequence[PublicKeyCredentialHint] | None = None
+    extensions: Mapping[str, Any] | None = None
 
 
-# TODO 2.0: Move extension results to RegistrationResponse, remove methods
-@dataclass(eq=False, frozen=True)
-class AuthenticatorAttestationResponse(_WebAuthnDataObject):
+@dataclass(eq=False, frozen=True, kw_only=True)
+class AuthenticatorAttestationResponse(_JsonDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     attestation_object: AttestationObject
-    extension_results: Optional[Mapping[str, Any]] = None
-
-    def __getitem__(self, key):
-        if key == "clientData" and not webauthn_json_mapping.enabled:
-            return self.client_data
-        return super().__getitem__(key)
-
-    @classmethod
-    def from_dict(cls, data):
-        if data is not None and not webauthn_json_mapping.enabled:
-            value = dict(data)
-            value["clientDataJSON"] = value.pop("clientData", None)
-            data = value
-        return super().from_dict(data)
-
-    @classmethod
-    def _parse_value(cls, t, value):
-        if t == Optional[Mapping[str, Any]]:
-            # Don't convert extension_results
-            return value
-        return super()._parse_value(t, value)
 
 
-# TODO 2.0: Move extension results to AuthenticationResponse, remove methods
-@dataclass(eq=False, frozen=True)
-class AuthenticatorAssertionResponse(_WebAuthnDataObject):
+@dataclass(eq=False, frozen=True, kw_only=True)
+class AuthenticatorAssertionResponse(_JsonDataObject):
     client_data: CollectedClientData = field(metadata=dict(name="clientDataJSON"))
     authenticator_data: AuthenticatorData
     signature: bytes
-    user_handle: Optional[bytes] = None
-    credential_id: Optional[bytes] = None
-    extension_results: Optional[Mapping[str, Any]] = None
-
-    def __getitem__(self, key):
-        if key == "clientData" and not webauthn_json_mapping.enabled:
-            return self.client_data
-        return super().__getitem__(key)
-
-    @classmethod
-    def from_dict(cls, data):
-        if data is not None and not webauthn_json_mapping.enabled:
-            value = dict(data)
-            value["clientDataJSON"] = value.pop("clientData", None)
-            data = value
-        return super().from_dict(data)
-
-    @classmethod
-    def _parse_value(cls, t, value):
-        if t == Optional[Mapping[str, Any]]:
-            # Don't convert extension_results
-            return value
-        return super()._parse_value(t, value)
-
-
-# TODO 2.0: Re-align against WebAuthn spec and use in client
-@dataclass(eq=False, frozen=True)
-class RegistrationResponse(_WebAuthnDataObject):
-    id: bytes
-    response: AuthenticatorAttestationResponse
-    authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    client_extension_results: Optional[AuthenticationExtensionsClientOutputs] = None
-    type: Optional[PublicKeyCredentialType] = None
-
-    def __post_init__(self):
-        webauthn_json_mapping.require()
-        super().__post_init__()
-
-
-# TODO 2.0: Re-align against WebAuthn spec and use in client
-@dataclass(eq=False, frozen=True)
-class AuthenticationResponse(_WebAuthnDataObject):
-    id: bytes
-    response: AuthenticatorAssertionResponse
-    authenticator_attachment: Optional[AuthenticatorAttachment] = None
-    client_extension_results: Optional[AuthenticationExtensionsClientOutputs] = None
-    type: Optional[PublicKeyCredentialType] = None
-
-    def __post_init__(self):
-        webauthn_json_mapping.require()
-        super().__post_init__()
-
-
-@dataclass(eq=False, frozen=True)
-class CredentialCreationOptions(_WebAuthnDataObject):
-    public_key: PublicKeyCredentialCreationOptions
-
-
-@dataclass(eq=False, frozen=True)
-class CredentialRequestOptions(_WebAuthnDataObject):
-    public_key: PublicKeyCredentialRequestOptions
+    user_handle: bytes | None = None
 
 
 class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
@@ -660,7 +587,7 @@ class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
     When accessed using attributes, richer types will instead be returned.
     """
 
-    def __init__(self, outputs: Mapping[str, Any]):
+    def __init__(self, outputs: Mapping[str, Any] = {}):
         self._members = {k: v for k, v in outputs.items() if v is not None}
 
     def __iter__(self):
@@ -684,3 +611,96 @@ class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
 
     def __repr__(self):
         return repr(dict(self))
+
+
+@dataclass(eq=False, frozen=True, kw_only=True)
+class RegistrationResponse(_JsonDataObject):
+    """
+    Represents the RegistrationResponse structure from the WebAuthn specification,
+    with fields modeled after the JSON serialization.
+
+    Serializing this object to JSON can be done by using json.dumps(dict(response)).
+
+    See: https://www.w3.org/TR/webauthn-3/#dictdef-registrationresponsejson
+    """
+
+    id: str = field(init=False)
+    raw_id: bytes
+    response: AuthenticatorAttestationResponse
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    client_extension_results: AuthenticationExtensionsClientOutputs = field(
+        default_factory=AuthenticationExtensionsClientOutputs
+    )
+    type: PublicKeyCredentialType = PublicKeyCredentialType.PUBLIC_KEY
+
+    def __post_init__(self):
+        object.__setattr__(self, "id", websafe_encode(self.raw_id))
+        super().__post_init__()
+
+    @classmethod
+    def _parse_value(cls, t, value):
+        if t == Mapping[str, Any] | None:
+            # Don't convert extension_results
+            return value
+        return super()._parse_value(t, value)
+
+    @classmethod
+    def _parse_from_dict(cls, data):
+        if "id" in data:
+            data = dict(data)
+            credential_id = data.pop("id")
+            if credential_id != data["rawId"]:
+                raise ValueError("id does not match rawId")
+
+        return super()._parse_from_dict(data)
+
+
+@dataclass(eq=False, frozen=True, kw_only=True)
+class AuthenticationResponse(_JsonDataObject):
+    """
+    Represents the AuthenticationResponse structure from the WebAuthn specification,
+    with fields modeled after the JSON serialization.
+
+    Serializing this object to JSON can be done by using json.dumps(dict(response)).
+
+    See: https://www.w3.org/TR/webauthn-3/#dictdef-authenticationresponsejson
+    """
+
+    id: str = field(init=False)
+    raw_id: bytes
+    response: AuthenticatorAssertionResponse
+    authenticator_attachment: AuthenticatorAttachment | None = None
+    client_extension_results: AuthenticationExtensionsClientOutputs = field(
+        default_factory=AuthenticationExtensionsClientOutputs
+    )
+    type: PublicKeyCredentialType = PublicKeyCredentialType.PUBLIC_KEY
+
+    def __post_init__(self):
+        object.__setattr__(self, "id", websafe_encode(self.raw_id))
+        super().__post_init__()
+
+    @classmethod
+    def _parse_value(cls, t, value):
+        if t == Mapping[str, Any] | None:
+            # Don't convert extension_results
+            return value
+        return super()._parse_value(t, value)
+
+    @classmethod
+    def _parse_from_dict(cls, data):
+        if "id" in data:
+            data = dict(data)
+            credential_id = data.pop("id")
+            if credential_id != data["rawId"]:
+                raise ValueError("id does not match rawId")
+        return super()._parse_from_dict(data)
+
+
+@dataclass(eq=False, frozen=True, kw_only=True)
+class CredentialCreationOptions(_JsonDataObject):
+    public_key: PublicKeyCredentialCreationOptions
+
+
+@dataclass(eq=False, frozen=True, kw_only=True)
+class CredentialRequestOptions(_JsonDataObject):
+    public_key: PublicKeyCredentialRequestOptions

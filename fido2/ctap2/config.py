@@ -27,13 +27,13 @@
 
 from __future__ import annotations
 
+import struct
+from enum import IntEnum, unique
+from typing import Any
+
 from .. import cbor
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
-
-from typing import Optional, List, Dict, Any
-from enum import IntEnum, unique
-import struct
 
 
 class Config:
@@ -56,6 +56,7 @@ class Config:
         NEW_MIN_PIN_LENGTH = 0x01
         MIN_PIN_LENGTH_RPIDS = 0x02
         FORCE_CHANGE_PIN = 0x03
+        PIN_COMPLEXITY_POLICY = 0x04
 
     @staticmethod
     def is_supported(info: Info) -> bool:
@@ -64,8 +65,8 @@ class Config:
     def __init__(
         self,
         ctap: Ctap2,
-        pin_uv_protocol: Optional[PinProtocol] = None,
-        pin_uv_token: Optional[bytes] = None,
+        pin_uv_protocol: PinProtocol | None = None,
+        pin_uv_token: bytes | None = None,
     ):
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support Config")
@@ -76,8 +77,12 @@ class Config:
             if pin_uv_protocol and pin_uv_token
             else None
         )
+        self._subcommands = self.ctap.info.authenticator_config_commands
 
     def _call(self, sub_cmd, params=None):
+        if self._subcommands is not None and sub_cmd not in self._subcommands:
+            raise ValueError(f"Config command {sub_cmd} not supported by Authenticator")
+
         if self.pin_uv:
             msg = b"\xff" * 32 + b"\x0d" + struct.pack("<B", sub_cmd)
             if params is not None:
@@ -105,9 +110,10 @@ class Config:
 
     def set_min_pin_length(
         self,
-        min_pin_length: Optional[int] = None,
-        rp_ids: Optional[List[str]] = None,
+        min_pin_length: int | None = None,
+        rp_ids: list[str] | None = None,
         force_change_pin: bool = False,
+        pin_complexity_policy: bool = False,
     ) -> None:
         """Set the minimum PIN length allowed when setting/changing the PIN.
 
@@ -116,10 +122,18 @@ class Config:
             minimum PIN length.
         :param force_change_pin: True if the Authenticator should enforce changing the
             PIN before the next use.
+        :param pin_complexity_policy: True if the Authenticator should enforce an
+            additional PIN complexity policy beyond minPINLength.
         """
-        params: Dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
+        params: dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
         if min_pin_length is not None:
             params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
         if rp_ids is not None:
             params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
+        if pin_complexity_policy:
+            if self.ctap.info.pin_complexity_policy is None:
+                raise ValueError(
+                    "Authenticator does not support setting PIN complexity policy"
+                )
+            params[Config.PARAM.PIN_COMPLEXITY_POLICY] = True
         self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)

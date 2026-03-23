@@ -34,11 +34,13 @@ creates a new credential for it, and verifies that attestation is signed by the
 Yubico FIDO root CA (this will only work for Yubico devices).
 On Windows, the native WebAuthn API will be used.
 """
-from fido2.server import Fido2Server
-from fido2.attestation import AttestationVerifier
-from exampleutils import get_client
+
 from base64 import b64decode
 
+from exampleutils import get_client
+
+from fido2.attestation import AttestationVerifier
+from fido2.server import Fido2Server
 
 # Official Yubico root CA for FIDO Authenticators
 YUBICO_CA = b64decode(
@@ -77,7 +79,7 @@ class YubicoAttestationVerifier(AttestationVerifier):
 
 
 # Locate a suitable FIDO authenticator
-client = get_client()
+client, _ = get_client()
 
 server = Fido2Server(
     {"id": "example.com", "name": "Example RP"},
@@ -96,9 +98,7 @@ create_options, state = server.register_begin(
 result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 print("New credential created, attestation verified!")

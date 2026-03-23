@@ -17,19 +17,17 @@
 
 from __future__ import annotations
 
-from .base import HidDescriptor, CtapHidConnection, FIDO_USAGE_PAGE, FIDO_USAGE
-
-from ctypes import wintypes, LibraryLoader
-from typing import Dict, cast
-
 import ctypes
-import platform
 import logging
+import platform
 import sys
+from typing import cast
+
+from .base import FIDO_USAGE, FIDO_USAGE_PAGE, CtapHidConnection, HidDescriptor
 
 # Only typecheck this file on Windows
-assert sys.platform == "win32"  # nosec
-from ctypes import WinDLL, WinError  # noqa: E402
+assert sys.platform == "win32"  # noqa: S101
+from ctypes import LibraryLoader, WinDLL, WinError, wintypes  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -206,8 +204,8 @@ class WinCtapHidConnection(CtapHidConnection):
     def close(self):
         kernel32.CloseHandle(self.handle)
 
-    def write_packet(self, packet):
-        out = b"\0" + packet  # Prepend report ID
+    def write_packet(self, data):
+        out = b"\0" + data  # Prepend report ID
         num_written = wintypes.DWORD()
         ret = kernel32.WriteFile(
             self.handle, out, len(out), ctypes.byref(num_written), None
@@ -314,7 +312,7 @@ def open_connection(descriptor):
 
 
 _SKIP = cast(HidDescriptor, object())
-_descriptor_cache: Dict[bytes, HidDescriptor] = {}
+_descriptor_cache: dict[bytes, HidDescriptor] = {}
 
 
 def list_descriptors():

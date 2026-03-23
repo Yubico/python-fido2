@@ -27,18 +27,18 @@
 
 from __future__ import annotations
 
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from cryptography.hazmat.backends import default_backend
+
+from ..cose import ES256
 from .base import (
     Attestation,
-    AttestationType,
     AttestationResult,
+    AttestationType,
     InvalidSignature,
     catch_builtins,
 )
-from ..cose import ES256
-
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
 
 
 class FidoU2FAttestation(Attestation):
@@ -47,6 +47,7 @@ class FidoU2FAttestation(Attestation):
     @catch_builtins
     def verify(self, statement, auth_data, client_data_hash):
         cd = auth_data.credential_data
+        assert cd is not None  # noqa: S101
         pk = b"\x04" + cd.public_key[-2] + cd.public_key[-3]
         x5c = statement["x5c"]
         FidoU2FAttestation.verify_signature(

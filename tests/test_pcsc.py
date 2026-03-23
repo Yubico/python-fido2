@@ -25,60 +25,63 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import unittest
-import sys
 from unittest import mock
+
+import pytest
+
 from fido2.hid import CTAPHID
 
-sys.modules["smartcard"] = mock.Mock()
-sys.modules["smartcard.Exceptions"] = mock.Mock()
-sys.modules["smartcard.System"] = mock.Mock()
-sys.modules["smartcard.CardConnection"] = mock.Mock()
-sys.modules["smartcard.pcsc"] = mock.Mock()
-sys.modules["smartcard.pcsc.PCSCExceptions"] = mock.Mock()
-sys.modules["smartcard.pcsc.PCSCContext"] = mock.Mock()
-from fido2.pcsc import CtapPcscDevice  # noqa E402
+
+@pytest.fixture(autouse=True, scope="module")
+def preconditions():
+    global CtapPcscDevice
+    try:
+        from fido2.pcsc import CtapPcscDevice
+    except ImportError:
+        pytest.skip("pyscard is not installed")
 
 
-class PcscTest(unittest.TestCase):
-    def test_pcsc_call_cbor(self):
-        connection = mock.Mock()
-        connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x90, 0x00)]
+def test_pcsc_call_cbor():
+    connection = mock.Mock()
+    connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x90, 0x00)]
 
-        CtapPcscDevice(connection, "Mock")
+    CtapPcscDevice(connection, "Mock")
 
-        connection.transmit.assert_called_with(
-            [0x80, 0x10, 0x80, 0x00, 0x01, 0x04, 0x00], None
-        )
+    connection.transmit.assert_called_with(
+        [0x80, 0x10, 0x80, 0x00, 0x01, 0x04, 0x00], None
+    )
 
-    def test_pcsc_call_u2f(self):
-        connection = mock.Mock()
-        connection.transmit.side_effect = [
-            (b"U2F_V2", 0x90, 0x00),
-            (b"", 0x90, 0x00),
-            (b"u2f_resp", 0x90, 0x00),
-        ]
 
-        dev = CtapPcscDevice(connection, "Mock")
-        res = dev.call(CTAPHID.MSG, b"\x00\x01\x00\x00\x05" + b"\x01" * 5 + b"\x00")
+def test_pcsc_call_u2f():
+    connection = mock.Mock()
+    connection.transmit.side_effect = [
+        (b"U2F_V2", 0x90, 0x00),
+        (b"", 0x90, 0x00),
+        (b"u2f_resp", 0x90, 0x00),
+    ]
 
-        connection.transmit.assert_called_with(
-            [0x00, 0x01, 0x00, 0x00, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00], None
-        )
-        self.assertEqual(res, b"u2f_resp\x90\x00")
+    dev = CtapPcscDevice(connection, "Mock")
+    res = dev.call(CTAPHID.MSG, b"\x00\x01\x00\x00\x05" + b"\x01" * 5 + b"\x00")
 
-    def test_pcsc_call_version_2(self):
-        connection = mock.Mock()
-        connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x90, 0x00)]
+    connection.transmit.assert_called_with(
+        [0x00, 0x01, 0x00, 0x00, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00], None
+    )
+    assert res == b"u2f_resp\x90\x00"
 
-        dev = CtapPcscDevice(connection, "Mock")
 
-        self.assertEqual(dev.version, 2)
+def test_pcsc_call_version_2():
+    connection = mock.Mock()
+    connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x90, 0x00)]
 
-    def test_pcsc_call_version_1(self):
-        connection = mock.Mock()
-        connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x63, 0x85)]
+    dev = CtapPcscDevice(connection, "Mock")
 
-        dev = CtapPcscDevice(connection, "Mock")
+    assert dev.version == 2
 
-        self.assertEqual(dev.version, 1)
+
+def test_pcsc_call_version_1():
+    connection = mock.Mock()
+    connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x63, 0x85)]
+
+    dev = CtapPcscDevice(connection, "Mock")
+
+    assert dev.version == 1

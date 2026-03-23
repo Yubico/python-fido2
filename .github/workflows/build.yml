@@ -2,6 +2,8 @@ name: build
 
 on: [push, pull_request]
 
+permissions: read-all
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -10,47 +12,49 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ['3.8', '3.9', '3.10', '3.11', '3.12', 'pypy3.9']
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
         architecture: [x86, x64]
         exclude:
           - os: ubuntu-latest
             architecture: x86
           - os: macos-latest
             architecture: x86
-          - os: windows-latest
-            python: pypy3
-          - os: macos-latest
-            python: pypy3
-          - os: macos-latest
-            python: 3.8
-          - os: macos-latest
-            python: 3.9
           - os: macos-latest
             python: 3.10
 
     name: ${{ matrix.os }} Py ${{ matrix.python }} ${{ matrix.architecture }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
           architecture: ${{ matrix.architecture }}
 
-      - name: Install python dependencies
+      - name: Install dependencies
+        if: "startsWith(matrix.os, 'ubuntu')"
         run: |
-          python -m pip install --upgrade pip setuptools poetry
-          poetry update
+          sudo apt-get install -qq swig libpcsclite-dev
+
+      - name: Install the project
+        run: uv sync --all-extras
 
       - name: Run pre-commit
-        if: "!startsWith(matrix.python, 'pypy') && !startsWith(matrix.python, '3.7') && !startsWith(matrix.python, '3.8')"
+        if: "!startsWith(matrix.python, 'pypy')"
+        shell: bash
         run: |
-          python -m pip install pre-commit
+          uv tool install pre-commit
+          echo $(python --version) | grep -q "Python 3.10" && export SKIP=pyright
           pre-commit run --all-files
 
       - name: Run unit tests
-        run: poetry run pytest
+        run: uv run pytest --no-device
 
   build:
     #needs: test
@@ -60,18 +64,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.x
 
       - name: Build source package
         run: |
-          python -m pip install --upgrade pip setuptools poetry
-          poetry build
+          # poetry will by default set all timestamps to 0, which Debian doesn't allow
+          export SOURCE_DATE_EPOCH=$(git show --no-patch --format=%ct)
+          uv build
 
       - name: Upload source package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fido2-python-sdist
           path: dist
@@ -81,24 +91,23 @@ jobs:
     name: Build sphinx documentation
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.12
-
-      - name: Install python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install poetry
-          poetry install
+          python-version: 3.14
 
       - name: Build sphinx documentation
-        run: poetry run make -C docs/ html
+        run: uv run make -C docs/ html
 
       - name: Upload documentation
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: python-fido2-docs
           path: docs/_build/html

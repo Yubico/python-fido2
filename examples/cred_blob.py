@@ -29,19 +29,21 @@
 Connects to the first FIDO device found which supports the CredBlob extension,
 creates a new credential for it with the extension enabled, and stores some data.
 """
-from fido2.server import Fido2Server
-from exampleutils import get_client
-import sys
-import os
 
+import os
+import sys
+
+from exampleutils import get_client
+
+from fido2.server import Fido2Server
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: "credBlob" in client.info.extensions)
+client, info = get_client(lambda info: "credBlob" in info.extensions)
 
 
 # Prefer UV token if supported
 uv = "discouraged"
-if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+if info and (info.options.get("uv") or info.options.get("bioEnroll")):
     uv = "preferred"
     print("Authenticator is configured for User Verification")
 
@@ -69,9 +71,7 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 
@@ -94,7 +94,7 @@ result = client.get_assertion(
     }
 ).get_response(0)
 
-blob_res = result.authenticator_data.extensions.get("credBlob")
+blob_res = result.response.authenticator_data.extensions.get("credBlob")
 
 if blob == blob_res:
     print("Authenticated, got correct blob:", blob.hex())

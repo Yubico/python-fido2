@@ -43,20 +43,3 @@ NOTE: You must register a credential prior to authentication.
 2. If not already inserted, insert your U2F/FIDO2 Authenticator now.
 3. Touch the button to activate the Authenticator.
 4. A popup will indicate whether the authentication was successful. Click `OK`.
-
-=== Supporting existing U2F credentials
-If you have existing U2F credentials that you wish to support, this library
-offers a U2FFido2Server class which can help with this. This directory includes
-a slightly altered version of the example server which uses this class to
-authenticate U2F credentials as well as WebAuthn credentials. To run this
-version of the server, run:
-
-  $ poetry run server-u2f
-
-This version allows registration both using the newer WebAuthn APIs and by using
-the legacy U2F APIs, so that you can test authentication using both credential
-types. The source code for this version of the server is in
-`server/server_u2f.py`.
-
-NOTE: There should be no need to support registration of new U2F credentials as
-new registrations should be using the WebAuthn APIs, even for existing users.

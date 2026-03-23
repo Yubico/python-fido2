@@ -38,12 +38,15 @@ On Windows, the native WebAuthn API will be used.
 NOTE: You need to retrieve a MDS3 blob to run this example.
 See https://fidoalliance.org/metadata/ for more info.
 """
-from fido2.server import Fido2Server
-from fido2.attestation import UntrustedAttestation
-from fido2.mds3 import parse_blob, MdsAttestationVerifier
-from exampleutils import get_client
-from base64 import b64decode
+
 import sys
+from base64 import b64decode
+
+from exampleutils import get_client
+
+from fido2.attestation import UntrustedAttestation
+from fido2.mds3 import MdsAttestationVerifier, parse_blob
+from fido2.server import Fido2Server
 
 # Load the root CA used to sign the Metadata Statement blob
 ca = b64decode(
@@ -85,7 +88,7 @@ with open(sys.argv[1], "rb") as f:
 mds = MdsAttestationVerifier(metadata)
 
 # Locate a suitable FIDO authenticator
-client = get_client()
+client, _ = get_client()
 
 # The MDS verifier is passed to the server to verify that new credentials registered
 # exist in the MDS blob, else the registration will fail.
@@ -107,14 +110,13 @@ result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 try:
-    auth_data = server.register_complete(
-        state, result.client_data, result.attestation_object
-    )
+    auth_data = server.register_complete(state, result)
     print("Registration completed")
 
     # mds can also be used to get the metadata for the Authenticator,
     # regardless of if it was used to verify the attestation or not:
-    entry = mds.find_entry(result.attestation_object, result.client_data.hash)
+    response = result.response
+    entry = mds.find_entry(response.attestation_object, response.client_data.hash)
     print("Authenticator description:", entry.metadata_statement.description)
 except UntrustedAttestation:
     print("Authenticator metadata not found")

@@ -32,12 +32,14 @@ fingerprint. This requires that a PIN is already set.
 NOTE: This uses a draft bio enrollment specification which is not yet final.
 Consider this highly experimental.
 """
-from fido2.hid import CtapHidDevice
-from fido2.ctap2 import Ctap2, FPBioEnrollment, CaptureError
-from fido2.ctap2.pin import ClientPin
-from fido2.ctap2.bio import BioEnrollment
-from getpass import getpass
+
 import sys
+from getpass import getpass
+
+from fido2.ctap2 import CaptureError, Ctap2, FPBioEnrollment
+from fido2.ctap2.bio import BioEnrollment
+from fido2.ctap2.pin import ClientPin
+from fido2.hid import CtapHidDevice
 
 pin = None
 uv = "discouraged"
@@ -47,7 +49,7 @@ for dev in CtapHidDevice.list_devices():
         ctap = Ctap2(dev)
         if BioEnrollment.is_supported(ctap.info):
             break
-    except Exception:  # nosec
+    except Exception:  # noqa: S112
         continue
 else:
     print("No Authenticator supporting bioEnroll found")

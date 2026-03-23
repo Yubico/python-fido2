@@ -25,21 +25,21 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from .android import AndroidSafetynetAttestation  # noqa: F401
+from .apple import AppleAttestation  # noqa: F401
 from .base import (  # noqa: F401
     Attestation,
-    NoneAttestation,
-    AttestationType,
     AttestationResult,
+    AttestationType,
+    AttestationVerifier,
     InvalidData,
     InvalidSignature,
-    UnsupportedType,
+    NoneAttestation,
     UnsupportedAttestation,
+    UnsupportedType,
     UntrustedAttestation,
     verify_x509_chain,
-    AttestationVerifier,
 )
-from .apple import AppleAttestation  # noqa: F401
-from .android import AndroidSafetynetAttestation  # noqa: F401
 from .packed import PackedAttestation  # noqa: F401
-from .u2f import FidoU2FAttestation  # noqa: F401
 from .tpm import TpmAttestation  # noqa: F401
+from .u2f import FidoU2FAttestation  # noqa: F401

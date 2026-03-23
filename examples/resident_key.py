@@ -31,16 +31,17 @@ creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
-from fido2.server import Fido2Server
+
 from exampleutils import get_client
 
+from fido2.server import Fido2Server
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: client.info.options.get("rk"))
+client, info = get_client(lambda info: info.options.get("rk"))
 
 # Prefer UV if supported and configured
 uv = "discouraged"
-if client.info.options.get("uv") or client.info.options.get("bioEnroll"):
+if info and info.options.get("uv") or info.options.get("bioEnroll"):
     uv = "preferred"
     print("Authenticator is configured for User Verification")
 
@@ -68,22 +69,21 @@ result = client.make_credential(
 
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 print("New credential created!")
+response = result.response
 
-print("CLIENT DATA:", result.client_data)
-print("ATTESTATION OBJECT:", result.attestation_object)
+print("CLIENT DATA:", response.client_data)
+print("ATTESTATION OBJECT:", response.attestation_object)
 print()
 print("CREDENTIAL DATA:", auth_data.credential_data)
 print()
-print("Credential Properties:", result.extension_results.get("credProps"))
+print("Credential Properties:", result.client_extension_results.get("credProps"))
 
 # credProps:
-cred_props = result.extension_results.get("credProps")
+cred_props = result.client_extension_results.get("credProps")
 print("CredProps", cred_props)
 
 
@@ -94,20 +94,14 @@ request_options, state = server.authenticate_begin(user_verification=uv)
 selection = client.get_assertion(request_options["publicKey"])
 result = selection.get_response(0)  # There may be multiple responses, get the first.
 
-print("USER ID:", result.user_handle)
 
 # Complete authenticator
-server.authenticate_complete(
-    state,
-    credentials,
-    result.credential_id,
-    result.client_data,
-    result.authenticator_data,
-    result.signature,
-)
+server.authenticate_complete(state, credentials, result)
 
 print("Credential authenticated!")
+response = result.response
 
-print("CLIENT DATA:", result.client_data)
+print("USER ID:", response.user_handle)
+print("CLIENT DATA:", response.client_data)
 print()
-print("AUTHENTICATOR DATA:", result.authenticator_data)
+print("AUTHENTICATOR DATA:", response.authenticator_data)

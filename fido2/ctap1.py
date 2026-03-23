@@ -27,14 +27,15 @@
 
 from __future__ import annotations
 
-from .hid import CTAPHID
-from .ctap import CtapDevice
-from .utils import websafe_encode, websafe_decode, bytes2int, ByteBuffer
-from .cose import ES256
-from .attestation import FidoU2FAttestation
-from enum import IntEnum, unique
-from dataclasses import dataclass
 import struct
+from dataclasses import dataclass
+from enum import IntEnum, unique
+
+from .attestation import FidoU2FAttestation
+from .cose import ES256
+from .ctap import CtapDevice
+from .hid import CTAPHID
+from .utils import ByteBuffer, bytes2int, websafe_decode, websafe_encode
 
 
 @unique

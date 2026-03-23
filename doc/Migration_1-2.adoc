@@ -1,0 +1,214 @@
+= Migration Guide: python-fido2 1.x to 2.0
+
+This guide helps you migrate your code from python-fido2 version 1.x to 2.0. Most changes are backward-compatible, but a few are not and require manual updates. Follow the sections below to adapt your code.
+
+== FIDO Client Classes (`Fido2Client`, `WindowsClient`)
+
+The client classes have undergone changes to their constructor arguments and the return types of the `make_credential` and `get_assertion` methods.
+
+=== `ClientDataCollector` Replaces `origin` and `verify`
+
+In version 1.x, you passed a static `origin` and an optional function `verify` to validate an RP ID. These parameters have been replaced by a new `ClientDataCollector` class.
+
+`ClientDataCollector` is an abstract class, but the `DefaultClientDataCollector` implementation provides a one-to-one replacement for the old behavior.
+
+*Old Approach:*
+[source,python]
+----
+from fido2.client import Fido2Client
+
+client = Fido2Client(
+    device,
+    origin=origin,
+    verify=verify_rp_id,
+)
+----
+
+*New Approach:*
+[source,python]
+----
+from fido2.client import Fido2Client, DefaultClientDataCollector
+
+client = Fido2Client(
+    device,
+    client_data_collector=DefaultClientDataCollector(origin=origin, verify=verify_rp_id),
+)
+----
+
+Note: The `verify` parameter remains optional and can still be omitted in the new API, just as in the old API.
+
+=== Updated Return Values for `make_credential` and `get_assertion`
+
+These methods now return `RegistrationResponse` and `AuthenticationResponse` objects from the `fido2.webauthn` module, which correspond to the types described link:https://www.w3.org/TR/webauthn-3/#iface-pkcredential[here].
+These objects can easily be serialized to or from JSON. This allows transmission to a server for validation. Note that for JSON serialization you will need to explicitly convert the object to a `dict`. See the following example:
+[source,python]
+----
+import json
+from fido2.webauthn import RegistrationResponse
+
+result = client.make_credential(...)
+result_json = json.dumps(dict(result))  # Convert into a JSON (RegistrationResponseJSON)
+
+result = RegistrationResponse.from_dict(json.loads(result_json))  # The JSON can be deserialized
+----
+
+==== `client.make_credential`
+
+The `make_credential` method now returns a `RegistrationResponse` object instead of an `AuthenticatorAttestationResponse`.
+
+*Old Approach:*
+[source,python]
+----
+result = client.make_credential(...)  # Returns an AuthenticatorAttestationResponse
+
+print(result.client_data, result.attestation_object)
+----
+
+*New Approach:*
+[source,python]
+----
+result = client.make_credential(...)  # Returns a RegistrationResponse
+
+response = result.response  # Extract the AuthenticatorAttestationResponse
+
+print(response.client_data, response.attestation_object)
+----
+
+==== `client.get_assertion`
+
+The `get_assertion` method now returns an `AuthenticationResponse` object instead of an `AuthenticatorAssertionResponse`.
+
+*Old Approach:*
+[source,python]
+----
+selection = client.get_assertion(...)
+result = selection.get_response(0)  # Returns an AuthenticatorAssertionResponse
+
+print(result.client_data, result.authenticator_data, result.signature)
+----
+
+*New Approach:*
+[source,python]
+----
+selection = client.get_assertion(...)
+result = selection.get_response(0)  # Returns an AuthenticationResponse
+
+response = result.response  # Extract the AuthenticatorAssertionResponse
+
+print(response.client_data, response.authenticator_data, response.signature)
+----
+
+== Server Parameter Changes
+
+For the `Fido2Server` methods `register_complete` and `authenticate_complete`, the parameters now require `RegistrationResponse` and `AuthenticationResponse` objects. These parameter types have been supported since version 1.1.0, so you may already be using them. However, the older method signatures are no longer supported in version 2.0.
+
+This change aligns the server parameter types with the updated client return values, simplifying data exchange between client and server.
+
+== Changes to the Windows Client
+
+The `WindowsClient` class has been moved to a new module, `fido2.client.windows`. Additionally, this class is no longer importable on non-Windows platforms. If you are writing cross-platform code, you will need to handle imports conditionally or catch exceptions.
+
+*Old Approach:*
+[source,python]
+----
+from fido2.client import WindowsClient  # Always importable
+
+if WindowsClient.is_available():  # Check if the OS supports the webauthn.h API
+    client = WindowsClient(...)
+else:
+    # Handle platforms that do not support WindowsClient
+    ...
+----
+
+*New Approach:*
+[source,python]
+----
+try:
+    from fido2.client.windows import WindowsClient
+    if WindowsClient.is_available():  # Check if Windows supports the webauthn.h API
+        client = WindowsClient(...)
+    else:
+        # Handle Windows versions that do not support WindowsClient
+        ...
+except ImportError:
+    # Handle non-Windows platforms (e.g., MacOS, Linux)
+    ...
+----
+
+== Changes to Dataclasses in `fido2.webauthn`
+
+Many dataclasses in the `fido2.webauthn` module have been updated with new fields to align with the latest version of the WebAuthn specification. These updates include some backwards-incompatible changes that require adjustments to your code.
+
+=== Backwards-Incompatible Changes
+
+* **Keyword-only arguments**:
+   All dataclass constructors now require arguments to be passed as keyword arguments. Positional arguments are no longer supported.
+
+*Old Approach:*
+[source,python]
+----
+from fido2.webauthn import PublicKeyCredentialRpEntity
+
+rp_entity = PublicKeyCredentialRpEntity("example.com", "Example")
+----
+
+*New Approach:*
+[source,python]
+----
+from fido2.webauthn import PublicKeyCredentialRpEntity
+
+rp_entity = PublicKeyCredentialRpEntity(id="example.com", name="Example")
+----
+
+* **Removal of `extension_results`**:
+   - `AuthenticatorAttestationResponse.extension_results` has been removed. Instead, use `RegistrationResponse.client_extension_results` to access extension results.
+   - `AuthenticatorAssertionResponse.extension_results` has been removed. Instead, use `AuthenticationResponse.client_extension_results` to access extension results.
+
+== Other Breaking Changes
+
+=== Removal of `features.webauthn_json_mapping`
+
+The `features.webauthn_json_mapping` feature has been removed as its behavior is now the standard.
+
+*Old Approach:*
+[source,python]
+----
+from fido2 import features
+features.webauthn_json_mapping = True
+----
+
+*New Approach:*
+This is no longer needed as JSON serialization is the default behavior.
+
+=== Removal of `__version__`
+
+The `__version__` attribute has been removed from `fido2/__init__.py`. Use `importlib.metadata` instead.
+
+*Old Approach:*
+[source,python]
+----
+from fido2 import __version__
+print(__version__)
+----
+
+*New Approach:*
+[source,python]
+----
+from importlib.metadata import version
+
+print(version("fido2"))
+----
+
+== Migration Checklist
+
+- Update `Fido2Client` and `WindowsClient` constructors to use `ClientDataCollector`.
+- Update return value handling for `make_credential` and `get_assertion` methods.
+- Update `Fido2Server` methods to use `RegistrationResponse` and `AuthenticationResponse` objects.
+- Update dataclass constructors to use keyword arguments.
+- Replace references to `extension_results` with `client_extension_results`.
+- Remove references to `features.webauthn_json_mapping`.
+- Avoid direct usage of CBOR utility functions.
+- Refactor imports for `WindowsClient` for cross-platform compatibility.
+- Use `importlib.metadata` for version queries instead of `__version__`.
+
+By following this guide, you should be able to migrate your code to `python-fido2` version 2.0 smoothly. If there are additional questions or issues, please refer to the repository documentation or open an issue.

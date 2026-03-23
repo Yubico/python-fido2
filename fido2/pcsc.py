@@ -28,19 +28,19 @@
 
 from __future__ import annotations
 
-from .ctap import CtapDevice, CtapError, STATUS
-from .hid import CAPABILITY, CTAPHID
-from .utils import LOG_LEVEL_TRAFFIC
+import logging
+import struct
+from threading import Event
+from typing import Callable, Iterator
+
 from smartcard import System
 from smartcard.CardConnection import CardConnection
+from smartcard.CardConnectionDecorator import CardConnectionDecorator
 from smartcard.pcsc.PCSCExceptions import ListReadersException
-from smartcard.pcsc.PCSCContext import PCSCContext
 
-from threading import Event
-from typing import Tuple, Optional, Callable, Iterator
-import struct
-import logging
-
+from .ctap import STATUS, CtapDevice, CtapError
+from .hid import CAPABILITY, CTAPHID
+from .utils import LOG_LEVEL_TRAFFIC
 
 AID_FIDO = b"\xa0\x00\x00\x06\x47\x2f\x00\x01"
 SW_SUCCESS = (0x90, 0x00)
@@ -58,10 +58,11 @@ class CtapPcscDevice(CtapDevice):
     This class is intended for use with NFC readers.
     """
 
-    def __init__(self, connection: CardConnection, name: str):
+    def __init__(self, connection: CardConnection | CardConnectionDecorator, name: str):
         self._name = name
         self._capabilities = CAPABILITY(0)
         self.use_ext_apdu = False
+        self.use_nfcctap_getresponse = True
         self._conn = connection
         self.connect()
 
@@ -90,22 +91,22 @@ class CtapPcscDevice(CtapDevice):
         return self._capabilities
 
     @property
-    def product_name(self) -> Optional[str]:
+    def product_name(self) -> str | None:
         """Product name of device."""
         return None
 
     @property
-    def serial_number(self) -> Optional[int]:
+    def serial_number(self) -> int | None:
         """Serial number of device."""
         return None
 
     def get_atr(self) -> bytes:
         """Get the ATR/ATS of the connected card."""
-        return bytes(self._conn.getATR())
+        return bytes(self._conn.getATR() or b"")
 
     def apdu_exchange(
-        self, apdu: bytes, protocol: Optional[int] = None
-    ) -> Tuple[bytes, int, int]:
+        self, apdu: bytes, protocol: int | None = None
+    ) -> tuple[bytes, int, int]:
         """Exchange data with smart card.
 
         :param apdu: byte string. data to exchange with card
@@ -144,7 +145,7 @@ class CtapPcscDevice(CtapDevice):
 
     def _chain_apdus(
         self, cla: int, ins: int, p1: int, p2: int, data: bytes = b""
-    ) -> Tuple[bytes, int, int]:
+    ) -> tuple[bytes, int, int]:
         if self.use_ext_apdu:
             header = struct.pack("!BBBBBH", cla, ins, p1, p2, 0x00, len(data))
             resp, sw1, sw2 = self.apdu_exchange(header + data)
@@ -166,7 +167,7 @@ class CtapPcscDevice(CtapDevice):
                 resp += lres
             return resp, sw1, sw2
 
-    def _chained_apdu_exchange(self, apdu: bytes) -> Tuple[bytes, int, int]:
+    def _chained_apdu_exchange(self, apdu: bytes) -> tuple[bytes, int, int]:
         if len(apdu) >= 7 and apdu[4] == 0:
             # Extended APDU
             data_len = struct.unpack("!H", apdu[5:7])[0]
@@ -188,37 +189,45 @@ class CtapPcscDevice(CtapDevice):
     def _call_cbor(
         self,
         data: bytes = b"",
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[STATUS], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[STATUS], None] | None = None,
     ) -> bytes:
         event = event or Event()
+
         # NFCCTAP_MSG
-        resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, 0x80, 0x00, data)
+        p1 = 0x80 if self.use_nfcctap_getresponse else 0x00
+        resp, sw1, sw2 = self._chain_apdus(0x80, 0x10, p1, 0x00, data)
         last_ka = None
 
-        while not event.is_set():
+        # NFCCTAP_GETRESPONSE
+        p1 = 0x00
+        try:
             while (sw1, sw2) == SW_UPDATE:
                 ka_status = STATUS(resp[0])
                 if on_keepalive and last_ka != ka_status:
                     last_ka = ka_status
                     on_keepalive(ka_status)
 
-                # NFCCTAP_GETRESPONSE
-                resp, sw1, sw2 = self._chain_apdus(0x80, 0x11, 0x00, 0x00)
+                if event.wait(0.1):
+                    p1 = 0x11  # cancel
+                resp, sw1, sw2 = self._chain_apdus(0x80, 0x11, p1, 0x00)
+        except KeyboardInterrupt:
+            logger.debug("Keyboard interrupt, cancelling...")
+            self._chain_apdus(0x80, 0x11, 0x11, 0x00)
 
-            if (sw1, sw2) != SW_SUCCESS:
-                raise CtapError(CtapError.ERR.OTHER)  # TODO: Map from SW error
+            raise
 
-            return resp
+        if (sw1, sw2) != SW_SUCCESS:
+            raise CtapError(CtapError.ERR.OTHER)  # TODO: Map from SW error
 
-        raise CtapError(CtapError.ERR.KEEPALIVE_CANCEL)
+        return resp
 
     def call(
         self,
         cmd: int,
         data: bytes = b"",
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[STATUS], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[STATUS], None] | None = None,
     ) -> bytes:
         if cmd == CTAPHID.CBOR:
             return self._call_cbor(data, event, on_keepalive)
@@ -227,8 +236,10 @@ class CtapPcscDevice(CtapDevice):
         else:
             raise CtapError(CtapError.ERR.INVALID_COMMAND)
 
-    def close(self) -> None:
+    def close(self, release: bool = False) -> None:
         self._conn.disconnect()
+        if release and hasattr(self._conn, "release"):
+            self._conn.release()
 
     @classmethod
     def list_devices(cls, name: str = "") -> Iterator[CtapPcscDevice]:
@@ -243,9 +254,15 @@ class CtapPcscDevice(CtapDevice):
 def _list_readers():
     try:
         return System.readers()
-    except ListReadersException:
+    except ListReadersException as e:
         # If the PCSC system has restarted the context might be stale, try
         # forcing a new context (This happens on Windows if the last reader is
         # removed):
-        PCSCContext.instance = None
-        return System.readers()
+        try:
+            from smartcard.pcsc.PCSCContext import PCSCContext  # type: ignore
+
+            PCSCContext.instance = None
+            return System.readers()
+        except ImportError:
+            # As of pyscard 2.2.2 the PCSCContext singleton has been removed
+            raise e

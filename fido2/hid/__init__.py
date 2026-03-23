@@ -27,26 +27,28 @@
 
 from __future__ import annotations
 
-from .base import HidDescriptor
-from ..ctap import CtapDevice, CtapError, STATUS
-from ..utils import LOG_LEVEL_TRAFFIC
-from threading import Event
-from enum import IntEnum, IntFlag, unique
-from typing import Tuple, Optional, Callable, Iterator
+import logging
+import os
 import struct
 import sys
-import os
-import logging
+from enum import IntEnum, IntFlag, unique
+from threading import Event
+from typing import Callable, Iterator
+
+from ..ctap import STATUS, CtapDevice, CtapError
+from ..utils import LOG_LEVEL_TRAFFIC
+from .base import CtapHidConnection, HidDescriptor
 
 logger = logging.getLogger(__name__)
 
 
-if sys.platform.startswith("linux"):
+if sys.platform == "linux":
     from . import linux as backend
-elif sys.platform.startswith("win32"):
+elif sys.platform == "win32":
     from . import windows as backend
-elif sys.platform.startswith("darwin"):
+elif sys.platform == "darwin":
     from . import macos as backend
+# The following have version numbers at the end
 elif sys.platform.startswith("freebsd"):
     from . import freebsd as backend
 elif sys.platform.startswith("netbsd"):
@@ -103,7 +105,7 @@ class CtapHidDevice(CtapDevice):
     :cvar descriptor: Device descriptor.
     """
 
-    def __init__(self, descriptor: HidDescriptor, connection):
+    def __init__(self, descriptor: HidDescriptor, connection: CtapHidConnection):
         self.descriptor = descriptor
         self._packet_size = descriptor.report_size_out
         self._connection = connection
@@ -133,7 +135,7 @@ class CtapHidDevice(CtapDevice):
         return self._u2fhid_version
 
     @property
-    def device_version(self) -> Tuple[int, int, int]:
+    def device_version(self) -> tuple[int, int, int]:
         """Device version number."""
         return self._device_version
 
@@ -143,12 +145,12 @@ class CtapHidDevice(CtapDevice):
         return self._capabilities
 
     @property
-    def product_name(self) -> Optional[str]:
+    def product_name(self) -> str | None:
         """Product name of device."""
         return self.descriptor.product_name
 
     @property
-    def serial_number(self) -> Optional[str]:
+    def serial_number(self) -> str | None:
         """Serial number of device."""
         return self.descriptor.serial_number
 
@@ -163,8 +165,8 @@ class CtapHidDevice(CtapDevice):
         self,
         cmd: int,
         data: bytes = b"",
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[STATUS], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[STATUS], None] | None = None,
     ) -> bytes:
         event = event or Event()
 
@@ -196,6 +198,7 @@ class CtapHidDevice(CtapDevice):
         try:
             # Read response
             seq = 0
+            r_len = 0
             response = b""
             last_ka = None
             while True:
@@ -266,9 +269,7 @@ class CtapHidDevice(CtapDevice):
         self.call(CTAPHID.LOCK, struct.pack(">B", lock_time))
 
     def close(self) -> None:
-        if self._connection:
-            self._connection.close()
-            self._connection = None
+        self._connection.close()
 
     @classmethod
     def list_devices(cls) -> Iterator[CtapHidDevice]:

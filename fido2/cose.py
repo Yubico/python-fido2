@@ -27,11 +27,17 @@
 
 from __future__ import annotations
 
-from .utils import bytes2int, int2bytes
+from typing import TYPE_CHECKING, Any, Mapping, Sequence, TypeVar
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding, ed25519, types
-from typing import Sequence, Type, Mapping, Any, TypeVar
+from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, padding, rsa
+
+from .utils import bytes2int, int2bytes
+
+if TYPE_CHECKING:
+    # This type isn't available on cryptography <40.
+    from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 
 
 class CoseKey(dict):
@@ -53,7 +59,7 @@ class CoseKey(dict):
 
     @classmethod
     def from_cryptography_key(
-        cls: Type[T_CoseKey], public_key: types.PublicKeyTypes
+        cls: type[T_CoseKey], public_key: PublicKeyTypes
     ) -> T_CoseKey:
         """Converts a PublicKey object from Cryptography into a COSE key.
 
@@ -63,28 +69,42 @@ class CoseKey(dict):
         raise NotImplementedError("Creation from cryptography not supported.")
 
     @staticmethod
-    def for_alg(alg: int) -> Type[CoseKey]:
+    def for_alg(alg: int) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
-        for cls in CoseKey.__subclasses__():
-            if cls.ALGORITHM == alg:
-                return cls
-        return UnsupportedKey
+
+        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
+            for cls in base_cls.__subclasses__():
+                if cls.ALGORITHM == alg:
+                    return cls
+                subresult = find_subclass(cls)
+                if subresult:
+                    return subresult
+            return None
+
+        return find_subclass(CoseKey) or UnsupportedKey
 
     @staticmethod
-    def for_name(name: str) -> Type[CoseKey]:
+    def for_name(name: str) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
-        for cls in CoseKey.__subclasses__():
-            if cls.__name__ == name:
-                return cls
-        return UnsupportedKey
+
+        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
+            for cls in base_cls.__subclasses__():
+                if cls.__name__ == name:
+                    return cls
+                subresult = find_subclass(cls)
+                if subresult:
+                    return subresult
+            return None
+
+        return find_subclass(CoseKey) or UnsupportedKey
 
     @staticmethod
     def parse(cose: Mapping[int, Any]) -> CoseKey:
@@ -97,7 +117,7 @@ class CoseKey(dict):
     @staticmethod
     def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
-        algs: Sequence[Type[CoseKey]] = [
+        algs: Sequence[type[CoseKey]] = [
             ES256,
             EdDSA,
             ES384,
@@ -131,7 +151,7 @@ class ES256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {
@@ -153,6 +173,11 @@ class ES256(CoseKey):
         return cls({1: 2, 3: cls.ALGORITHM, -1: 1, -2: data[1:33], -3: data[33:65]})
 
 
+class ESP256(ES256):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-10.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -9
+
+
 class ES384(CoseKey):
     ALGORITHM = -35
     _HASH_ALG = hashes.SHA384()
@@ -168,7 +193,7 @@ class ES384(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {
@@ -179,6 +204,11 @@ class ES384(CoseKey):
                 -3: int2bytes(pn.y, 48),
             }
         )
+
+
+class ESP384(ES384):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -51
 
 
 class ES512(CoseKey):
@@ -196,7 +226,7 @@ class ES512(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {
@@ -207,6 +237,11 @@ class ES512(CoseKey):
                 -3: int2bytes(pn.y, 66),
             }
         )
+
+
+class ESP512(ES512):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-elliptic-curve-digital-sign  # noqa:E501
+    ALGORITHM = -52
 
 
 class RS256(CoseKey):
@@ -220,7 +255,7 @@ class RS256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
+        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -243,7 +278,7 @@ class PS256(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
+        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -258,7 +293,7 @@ class EdDSA(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ed25519.Ed25519PublicKey)  # nosec
+        assert isinstance(public_key, ed25519.Ed25519PublicKey)  # noqa: S101
         return cls(
             {
                 1: 1,
@@ -271,9 +306,38 @@ class EdDSA(CoseKey):
         )
 
 
+class Ed25519(EdDSA):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
+    ALGORITHM = -19
+
+
+class Ed448(CoseKey):
+    # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
+    ALGORITHM = -53
+
+    def verify(self, message, signature):
+        if self[-1] != 7:
+            raise ValueError("Unsupported elliptic curve")
+        ed448.Ed448PublicKey.from_public_bytes(self[-2]).verify(signature, message)
+
+    @classmethod
+    def from_cryptography_key(cls, public_key):
+        assert isinstance(public_key, ed448.Ed448PublicKey)  # noqa: S101
+        return cls(
+            {
+                1: 1,
+                3: cls.ALGORITHM,
+                -1: 7,
+                -2: public_key.public_bytes(
+                    serialization.Encoding.Raw, serialization.PublicFormat.Raw
+                ),
+            }
+        )
+
+
 class RS1(CoseKey):
     ALGORITHM = -65535
-    _HASH_ALG = hashes.SHA1()  # nosec
+    _HASH_ALG = hashes.SHA1()  # noqa: S303
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
@@ -282,7 +346,7 @@ class RS1(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, rsa.RSAPublicKey)  # nosec
+        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
@@ -302,7 +366,7 @@ class ES256K(CoseKey):
 
     @classmethod
     def from_cryptography_key(cls, public_key):
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # nosec
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
             {

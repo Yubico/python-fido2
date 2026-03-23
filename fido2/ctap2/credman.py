@@ -27,6 +27,11 @@
 
 from __future__ import annotations
 
+import logging
+import struct
+from enum import IntEnum, unique
+from typing import Any, Mapping, Sequence
+
 from .. import cbor
 from ..ctap import CtapError
 from ..webauthn import (
@@ -36,12 +41,6 @@ from ..webauthn import (
 )
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
-
-from enum import IntEnum, unique
-from typing import Mapping, Sequence, Any
-
-import struct
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +83,7 @@ class CredentialManagement:
         TOTAL_CREDENTIALS = 0x09
         CRED_PROTECT = 0x0A
         LARGE_BLOB_KEY = 0x0B
+        THIRD_PARTY_PAYMENT = 0x0C
 
     @staticmethod
     def is_supported(info: Info) -> bool:
@@ -99,6 +99,10 @@ class CredentialManagement:
         # Not supported in credentialMgmtPreview
         return bool(info.options.get("credMgmt"))
 
+    @staticmethod
+    def is_readonly_supported(info: Info) -> bool:
+        return bool(info.options.get("perCredMgmtRO"))
+
     def __init__(
         self,
         ctap: Ctap2,
@@ -112,7 +116,7 @@ class CredentialManagement:
         self.pin_uv = _PinUv(pin_uv_protocol, pin_uv_token)
 
     def _call(self, sub_cmd, params=None, auth=True):
-        kwargs = {"sub_cmd": sub_cmd, "sub_cmd_params": params}
+        kwargs: dict[str, Any] = {"sub_cmd": sub_cmd, "sub_cmd_params": params}
         if auth:
             msg = struct.pack(">B", sub_cmd)
             if params is not None:

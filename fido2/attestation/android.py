@@ -27,21 +27,21 @@
 
 from __future__ import annotations
 
-from .base import (
-    Attestation,
-    AttestationType,
-    AttestationResult,
-    InvalidData,
-    catch_builtins,
-)
-from ..cose import CoseKey
-from ..utils import sha256, websafe_decode
+import json
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.constant_time import bytes_eq
 
-import json
+from ..cose import CoseKey
+from ..utils import sha256, websafe_decode
+from .base import (
+    Attestation,
+    AttestationResult,
+    AttestationType,
+    InvalidData,
+    catch_builtins,
+)
 
 
 class AndroidSafetynetAttestation(Attestation):

@@ -1,5 +1,6 @@
-from fido2.pcsc import CtapPcscDevice
 import time
+
+from fido2.pcsc import CtapPcscDevice
 
 
 class Acr122uPcscDevice(object):

@@ -31,19 +31,20 @@ creates a new credential for it, and authenticates the credential.
 This works with both FIDO 2.0 devices as well as with U2F devices.
 On Windows, the native WebAuthn API will be used.
 """
-from fido2.server import Fido2Server
-from exampleutils import get_client
-from fido2.utils import websafe_encode, websafe_decode
+
 import sys
 
+from exampleutils import get_client
+
+from fido2.server import Fido2Server
+from fido2.utils import websafe_decode, websafe_encode
 
 # Locate a suitable FIDO authenticator
-client = get_client(lambda client: "largeBlobKey" in client.info.extensions)
-
+client, info = get_client(lambda info: "largeBlobKey" in info.extensions)
 
 # LargeBlob requires UV if it is configured
 uv = "discouraged"
-if client.info.options.get("clientPin"):
+if info.options.get("clientPin"):
     uv = "required"
 
 
@@ -70,16 +71,14 @@ result = client.make_credential(
 )
 
 # Complete registration
-auth_data = server.register_complete(
-    state, result.client_data, result.attestation_object
-)
+auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 
 if auth_data.is_user_verified():
     # The WindowsClient doesn't know about authenticator config until now
     uv = "required"
 
-if not result.extension_results.get("largeBlob", {}).get("supported"):
+if not result.client_extension_results.get("largeBlob", {}).get("supported"):
     print("Credential does not support largeBlob, failure!")
     sys.exit(1)
 
@@ -101,7 +100,7 @@ selection = client.get_assertion(
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-if not result.extension_results.get("largeBlob", {}).get("written"):
+if not result.client_extension_results.get("largeBlob", {}).get("written"):
     print("Failed to write blob!")
     sys.exit(1)
 
@@ -118,4 +117,6 @@ selection = client.get_assertion(
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
-print("Read blob:", websafe_decode(result.extension_results["largeBlob"]["blob"]))
+print(
+    "Read blob:", websafe_decode(result.client_extension_results["largeBlob"]["blob"])
+)

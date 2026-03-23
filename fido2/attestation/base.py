@@ -27,17 +27,18 @@
 
 from __future__ import annotations
 
-from ..webauthn import AuthenticatorData, AttestationObject
-from enum import IntEnum, unique
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import padding, ec, rsa
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from dataclasses import dataclass
-from functools import wraps
-from typing import List, Type, Mapping, Sequence, Optional, Any
-
 import abc
+from dataclasses import dataclass
+from enum import IntEnum, unique
+from functools import wraps
+from typing import Any, Mapping, Sequence
+
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature as _InvalidSignature
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+
+from ..webauthn import AttestationObject, AuthenticatorData
 
 
 class InvalidAttestation(Exception):
@@ -85,7 +86,7 @@ class AttestationResult:
     """The result of verifying an attestation."""
 
     attestation_type: AttestationType
-    trust_path: List[bytes]
+    trust_path: list[bytes]
 
 
 def catch_builtins(f):
@@ -102,7 +103,7 @@ def catch_builtins(f):
 
 
 @catch_builtins
-def verify_x509_chain(chain: List[bytes]) -> None:
+def verify_x509_chain(chain: list[bytes]) -> None:
     """Verifies a chain of certificates.
 
     Checks that the first item in the chain is signed by the next, and so on.
@@ -116,7 +117,7 @@ def verify_x509_chain(chain: List[bytes]) -> None:
         pub = cert.public_key()
         try:
             if isinstance(pub, rsa.RSAPublicKey):
-                assert child.signature_hash_algorithm is not None  # nosec
+                assert child.signature_hash_algorithm is not None  # noqa: S101
                 pub.verify(
                     child.signature,
                     child.tbs_certificate_bytes,
@@ -124,7 +125,7 @@ def verify_x509_chain(chain: List[bytes]) -> None:
                     child.signature_hash_algorithm,
                 )
             elif isinstance(pub, ec.EllipticCurvePublicKey):
-                assert child.signature_hash_algorithm is not None  # nosec
+                assert child.signature_hash_algorithm is not None  # noqa: S101
                 pub.verify(
                     child.signature,
                     child.tbs_certificate_bytes,
@@ -152,7 +153,7 @@ class Attestation(abc.ABC):
         """
 
     @staticmethod
-    def for_type(fmt: str) -> Type[Attestation]:
+    def for_type(fmt: str) -> type[Attestation]:
         """Get an Attestation subclass type for the given format."""
         for cls in Attestation.__subclasses__():
             if getattr(cls, "FORMAT", None) == fmt:
@@ -209,13 +210,13 @@ class AttestationVerifier(abc.ABC):
     to verify the trust path from the attestation.
     """
 
-    def __init__(self, attestation_types: Optional[Sequence[Attestation]] = None):
+    def __init__(self, attestation_types: Sequence[Attestation] | None = None):
         self._attestation_types = attestation_types or _default_attestations()
 
     @abc.abstractmethod
     def ca_lookup(
         self, attestation_result: AttestationResult, auth_data: AuthenticatorData
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         """Lookup a CA certificate to be used to verify a trust path.
 
         :param attestation_result: The result of the attestation

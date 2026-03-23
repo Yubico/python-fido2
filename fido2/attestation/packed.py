@@ -27,21 +27,20 @@
 
 from __future__ import annotations
 
-from .base import (
-    Attestation,
-    AttestationType,
-    AttestationResult,
-    InvalidData,
-    InvalidSignature,
-    catch_builtins,
-    _validate_cert_common,
-)
-from ..cose import CoseKey
-
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography.hazmat.backends import default_backend
 
+from ..cose import CoseKey
+from .base import (
+    Attestation,
+    AttestationResult,
+    AttestationType,
+    InvalidData,
+    InvalidSignature,
+    _validate_cert_common,
+    catch_builtins,
+)
 
 OID_AAGUID = x509.ObjectIdentifier("1.3.6.1.4.1.45724.1.1.4")
 
@@ -74,8 +73,7 @@ def _validate_packed_cert(cert, aaguid):
         ext_aaguid = ext.value.value[2:]
         if ext_aaguid != aaguid:
             raise InvalidData(
-                "AAGUID in Authenticator data does not "
-                "match attestation certificate!"
+                "AAGUID in Authenticator data does not match attestation certificate!"
             )
     except x509.ExtensionNotFound:
         pass  # If missing, ignore
@@ -90,6 +88,7 @@ class PackedAttestation(Attestation):
             raise NotImplementedError("ECDAA not implemented")
         alg = statement["alg"]
         x5c = statement.get("x5c")
+        assert auth_data.credential_data is not None  # noqa: S101
         if x5c:
             cert = x509.load_der_x509_certificate(x5c[0], default_backend())
             _validate_packed_cert(cert, auth_data.credential_data.aaguid)

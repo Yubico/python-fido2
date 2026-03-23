@@ -29,29 +29,28 @@
 
 from __future__ import annotations
 
-from .base import (
-    Attestation,
-    AttestationType,
-    AttestationResult,
-    InvalidData,
-    InvalidSignature,
-    catch_builtins,
-    _validate_cert_common,
-)
-from ..cose import CoseKey
-from ..utils import bytes2int, ByteBuffer
-
+import struct
+from dataclasses import dataclass
 from enum import IntEnum, unique
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa, ec
-from cryptography.hazmat.primitives import hashes
+from typing import TypeAlias, cast
+
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from dataclasses import dataclass
-from typing import Tuple, Union, cast
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
-import struct
-
+from ..cose import CoseKey
+from ..utils import ByteBuffer, bytes2int
+from .base import (
+    Attestation,
+    AttestationResult,
+    AttestationType,
+    InvalidData,
+    InvalidSignature,
+    _validate_cert_common,
+    catch_builtins,
+)
 
 TPM_ALG_NULL = 0x0010
 OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
@@ -80,7 +79,7 @@ class TpmAlgHash(IntEnum):
 
     def _hash_alg(self) -> hashes.HashAlgorithm:
         if self == TpmAlgHash.SHA1:
-            return hashes.SHA1()  # nosec
+            return hashes.SHA1()  # noqa: S303
         elif self == TpmAlgHash.SHA256:
             return hashes.SHA256()
         elif self == TpmAlgHash.SHA384:
@@ -131,7 +130,7 @@ class TpmAttestationFormat:
 
     name: bytes
     data: bytes
-    clock_info: Tuple[int, int, int, bool]
+    clock_info: tuple[int, int, int, bool]
     firmware_version: int
     attested: TpmsCertifyInfo
 
@@ -389,9 +388,9 @@ class ATTRIBUTES(IntEnum):
     )
 
 
-_PublicKey = Union[rsa.RSAPublicKey, ec.EllipticCurvePublicKey]
-_Parameters = Union[TpmsRsaParms, TpmsEccParms]
-_Unique = Union[Tpm2bPublicKeyRsa, TpmsEccPoint]
+_PublicKey: TypeAlias = rsa.RSAPublicKey | ec.EllipticCurvePublicKey
+_Parameters = TpmsRsaParms | TpmsEccParms
+_Unique = Tpm2bPublicKeyRsa | TpmsEccPoint
 
 
 @dataclass
@@ -490,8 +489,7 @@ def _validate_tpm_cert(cert):
     # https://www.w3.org/TR/webauthn/#tpm-cert-requirements
     _validate_cert_common(cert)
 
-    s = cert.subject.get_attributes_for_oid(x509.NameOID)
-    if s:
+    if len(cert.subject) > 0:
         raise InvalidData("Certificate should not have Subject")
 
     s = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
@@ -530,6 +528,7 @@ class TpmAttestation(Attestation):
         # Verify that the public key specified by the parameters and unique
         # fields of pubArea is identical to the credentialPublicKey in the
         # attestedCredentialData in authenticatorData.
+        assert auth_data.credential_data is not None  # noqa: S101
         if (
             auth_data.credential_data.public_key.from_cryptography_key(
                 pub_area.public_key()

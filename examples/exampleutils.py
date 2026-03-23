@@ -29,16 +29,27 @@
 Utilities for common functionality used by several examples in this directory.
 """
 
-from fido2.hid import CtapHidDevice
-from fido2.client import Fido2Client, WindowsClient, UserInteraction
-from getpass import getpass
 import ctypes
+from getpass import getpass
 
+from fido2.client import DefaultClientDataCollector, Fido2Client, UserInteraction
+from fido2.hid import CtapHidDevice
 
+# Support NFC devices if we can
 try:
     from fido2.pcsc import CtapPcscDevice
 except ImportError:
     CtapPcscDevice = None
+
+# Use the Windows WebAuthn API if available, and we're not running as admin
+try:
+    from fido2.client.windows import WindowsClient
+
+    use_winclient = (
+        WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin()
+    )
+except ImportError:
+    use_winclient = False
 
 
 # Handle user interaction via CLI prompts
@@ -74,10 +85,14 @@ def get_client(predicate=None, **kwargs):
     a webauthn.dll based client will be returned.
 
     Extra kwargs will be passed to the constructor of Fido2Client.
+
+    The client will be returned, with the CTAP2 Info, if available.
     """
-    if WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin():
-        # Use the Windows WebAuthn API if available, and we're not running as admin
-        return WindowsClient("https://example.com")
+
+    client_data_collector = DefaultClientDataCollector("https://example.com")
+
+    if use_winclient:
+        return WindowsClient(client_data_collector), None
 
     user_interaction = kwargs.pop("user_interaction", None) or CliInteraction()
 
@@ -86,12 +101,12 @@ def get_client(predicate=None, **kwargs):
         # Set up a FIDO 2 client using the origin https://example.com
         client = Fido2Client(
             dev,
-            "https://example.com",
+            client_data_collector=client_data_collector,
             user_interaction=user_interaction,
             **kwargs,
         )
         # Check if it is suitable for use
-        if predicate is None or predicate(client):
-            return client
+        if predicate is None or predicate(client.info):
+            return client, client.info
     else:
         raise ValueError("No suitable Authenticator found!")

@@ -27,19 +27,18 @@
 
 from __future__ import annotations
 
-from .base import (
-    Attestation,
-    AttestationType,
-    AttestationResult,
-    InvalidData,
-    catch_builtins,
-)
-from ..utils import sha256
-
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.constant_time import bytes_eq
 
+from ..utils import sha256
+from .base import (
+    Attestation,
+    AttestationResult,
+    AttestationType,
+    InvalidData,
+    catch_builtins,
+)
 
 OID_APPLE = x509.ObjectIdentifier("1.2.840.113635.100.8.2")
 
@@ -53,7 +52,8 @@ class AppleAttestation(Attestation):
         expected_nonce = sha256(auth_data + client_data_hash)
         cert = x509.load_der_x509_certificate(x5c[0], default_backend())
         ext = cert.extensions.get_extension_for_oid(OID_APPLE)
-        ext_nonce = ext.value.value[6:]  # Sequence of single element of octet string
+        # Sequence of single element of octet string
+        ext_nonce = ext.value.public_bytes()[6:]
         if not bytes_eq(expected_nonce, ext_nonce):
             raise InvalidData("Nonce does not match!")
         return AttestationResult(AttestationType.ANON_CA, x5c)

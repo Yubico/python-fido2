@@ -27,24 +27,29 @@
 
 from __future__ import annotations
 
-from .. import cbor
-from ..utils import _DataClassMapping
-from ..ctap import CtapDevice, CtapError
-from ..cose import CoseKey
-from ..hid import CTAPHID, CAPABILITY
-from ..webauthn import AuthenticatorData, Aaguid
-
-from enum import IntEnum, unique
-from dataclasses import dataclass, field, fields, Field
-from threading import Event
-from typing import Mapping, Dict, Any, List, Optional, Callable
-import struct
 import logging
+import struct
+from dataclasses import Field, dataclass, field, fields
+from enum import IntEnum, unique
+from threading import Event
+from typing import Any, Callable, Mapping, cast
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+from .. import cbor
+from ..cose import CoseKey
+from ..ctap import CtapDevice, CtapError
+from ..hid import CAPABILITY, CTAPHID
+from ..utils import _DataClassMapping
+from ..webauthn import Aaguid, AuthenticatorData
 
 logger = logging.getLogger(__name__)
 
 
-def args(*params) -> Dict[int, Any]:
+def args(*params) -> dict[int, Any]:
     """Constructs a dict from a list of arguments for sending a CBOR command.
     None elements will be omitted.
 
@@ -64,41 +69,79 @@ class _CborDataObject(_DataClassMapping[int]):
 class Info(_CborDataObject):
     """Binary CBOR encoded response data returned by the CTAP2 GET_INFO command.
 
+    See:
+    https://fidoalliance.org/specs/fido-v2.2-rd-20230321/fido-client-to-authenticator-protocol-v2.2-rd-20230321.html#authenticatorGetInfo
+    for descriptions of these fields.
+
+    Note that while many fields are optional when returned by the authenticator,
+    this dataclass uses defaults to represent a missing value such as empty lists
+    or dicts, or the integer value 0. These are used rather than None for omitted
+    values as long as this can be done without introducing any practical ambiguity.
+    This also means that several of these fields may have a 0 value even if the
+    specification states that they should be non-zero when returned from the
+    authenticator.
+
     :param _: The binary content of the Info data.
-    :ivar versions: The versions supported by the authenticator.
-    :ivar extensions: The extensions supported by the authenticator.
-    :ivar aaguid: The AAGUID of the authenticator.
-    :ivar options: The options supported by the authenticator.
-    :ivar max_msg_size: The max message size supported by the authenticator.
-    :ivar pin_uv_protocols: The PIN/UV protocol versions supported by the authenticator.
-    :ivar max_creds_in_list: Max number of credentials supported in list at a time.
-    :ivar max_cred_id_length: Max length of Credential ID supported.
-    :ivar transports: List of supported transports.
-    :ivar algorithms: List of supported algorithms for credential creation.
-    :ivar data: The Info members, in the form of a dict.
     """
 
-    versions: List[str]
-    extensions: List[str] = field(default_factory=list)
+    versions: list[str]
+    extensions: list[str] = field(default_factory=list)
     aaguid: Aaguid = Aaguid.NONE
-    options: Dict[str, bool] = field(default_factory=dict)
+    options: dict[str, bool] = field(default_factory=dict)
     max_msg_size: int = 1024
-    pin_uv_protocols: List[int] = field(default_factory=list)
-    max_creds_in_list: Optional[int] = None
-    max_cred_id_length: Optional[int] = None
-    transports: List[str] = field(default_factory=list)
-    algorithms: Optional[List[Dict[str, Any]]] = None
-    max_large_blob: Optional[int] = None
+    pin_uv_protocols: list[int] = field(default_factory=list)
+    max_creds_in_list: int = 0
+    max_cred_id_length: int = 0
+    transports: list[str] = field(default_factory=list)
+    algorithms: list[dict[str, Any]] = field(default_factory=list)
+    max_large_blob: int = 0
     force_pin_change: bool = False
     min_pin_length: int = 4
-    firmware_version: Optional[int] = None
-    max_cred_blob_length: Optional[int] = None
+    firmware_version: int = 0
+    max_cred_blob_length: int = 0
     max_rpids_for_min_pin: int = 0
-    preferred_platform_uv_attempts: Optional[int] = None
-    uv_modality: Optional[int] = None
-    certifications: Optional[Dict] = None
-    remaining_disc_creds: Optional[int] = None
-    vendor_prototype_config_commands: Optional[List[int]] = None
+    preferred_platform_uv_attempts: int = 0
+    uv_modality: int = 0
+    certifications: dict = field(default_factory=dict)
+    remaining_disc_creds: int | None = None
+    vendor_prototype_config_commands: list[int] = field(default_factory=list)
+    attestation_formats: list[str] = field(default_factory=lambda: ["packed"])
+    uv_count_since_pin: int | None = None
+    long_touch_for_reset: bool = False
+    enc_identifier: bytes | None = None
+    transports_for_reset: list[str] = field(default_factory=list)
+    pin_complexity_policy: bool | None = None
+    pin_complexity_policy_url: bytes | None = None
+    max_pin_length: int = 63
+    enc_cred_store_state: bytes | None = None
+    authenticator_config_commands: list[int] | None = None
+
+    def _decrypt(
+        self, encrypted: bytes | None, info: bytes, pin_token: bytes
+    ) -> bytes | None:
+        if not encrypted:
+            return None
+
+        iv, ct = encrypted[:16], encrypted[16:]
+        be = default_backend()
+        secret = HKDF(
+            algorithm=hashes.SHA256(),
+            length=16,
+            salt=b"\0" * 32,
+            info=info,
+            backend=be,
+        ).derive(pin_token)
+
+        dec = Cipher(algorithms.AES(secret), modes.CBC(iv), be).decryptor()
+        return dec.update(ct) + dec.finalize()
+
+    def get_identifier(self, pin_token: bytes) -> bytes | None:
+        """Decrypt the device identifier using a persistent PUAT."""
+        return self._decrypt(self.enc_identifier, b"encIdentifier", pin_token)
+
+    def get_cred_store_state(self, pin_token: bytes) -> bytes | None:
+        """Decrypt the credential store state using a persistent PUAT."""
+        return self._decrypt(self.enc_cred_store_state, b"encCredStoreState", pin_token)
 
 
 @dataclass(eq=False, frozen=True)
@@ -106,20 +149,20 @@ class AttestationResponse(_CborDataObject):
     """Binary CBOR encoded attestation object.
 
     :param _: The binary representation of the attestation object.
-    :type _: bytes
     :ivar fmt: The type of attestation used.
-    :type fmt: str
     :ivar auth_data: The attested authenticator data.
-    :type auth_data: AuthenticatorData
     :ivar att_stmt: The attestation statement.
-    :type att_stmt: Dict[str, Any]
+    :ivar ep_att: Whether an enterprise attestation was returned for this credential.
+    :ivar large_blob_key: The largeBlobKey for the credential, if requested.
+    :ivar unsigned_extension_outputs: Any unsigned outputs of extensions.
     """
 
     fmt: str
     auth_data: AuthenticatorData
-    att_stmt: Dict[str, Any]
-    ep_att: Optional[bool] = None
-    large_blob_key: Optional[bytes] = None
+    att_stmt: dict[str, Any]
+    ep_att: bool | None = None
+    large_blob_key: bytes | None = None
+    unsigned_extension_outputs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(eq=False, frozen=True)
@@ -138,10 +181,10 @@ class AssertionResponse(_CborDataObject):
     credential: Mapping[str, Any]
     auth_data: AuthenticatorData
     signature: bytes
-    user: Optional[Dict[str, Any]] = None
-    number_of_credentials: Optional[int] = None
-    user_selected: Optional[bool] = None
-    large_blob_key: Optional[bytes] = None
+    user: dict[str, Any] | None = None
+    number_of_credentials: int | None = None
+    user_selected: bool | None = None
+    large_blob_key: bytes | None = None
 
     def verify(self, client_param: bytes, public_key: CoseKey):
         """Verify the digital signature of the response with regard to the
@@ -205,7 +248,9 @@ class Ctap2:
             raise ValueError("Device does not support CTAP2.")
         self.device = device
         self._strict_cbor = strict_cbor
+        self._max_msg_size = 1024  # For initial get_info call
         self._info = self.get_info()
+        self._max_msg_size = self._info.max_msg_size
 
     @property
     def info(self) -> Info:
@@ -219,10 +264,10 @@ class Ctap2:
     def send_cbor(
         self,
         cmd: int,
-        data: Optional[Mapping[int, Any]] = None,
+        data: Mapping[int, Any] | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]:
         """Sends a CBOR message to the device, and waits for a response.
 
@@ -235,6 +280,8 @@ class Ctap2:
         request = struct.pack(">B", cmd)
         if data is not None:
             request += cbor.encode(data)
+        if len(request) > self._max_msg_size:
+            raise CtapError(CtapError.ERR.REQUEST_TOO_LARGE)
         response = self.device.call(CTAPHID.CBOR, request, event, on_keepalive)
         status = response[0]
         if status != 0x00:
@@ -251,7 +298,7 @@ class Ctap2:
                     f"Got: {enc.hex()}\nExpected: {expected.hex()}"
                 )
         if isinstance(decoded, Mapping):
-            return decoded
+            return cast(Mapping[int, Any], decoded)
         raise TypeError("Decoded value of wrong type")
 
     def get_info(self) -> Info:
@@ -265,15 +312,15 @@ class Ctap2:
         self,
         pin_uv_protocol: int,
         sub_cmd: int,
-        key_agreement: Optional[Mapping[int, Any]] = None,
-        pin_uv_param: Optional[bytes] = None,
-        new_pin_enc: Optional[bytes] = None,
-        pin_hash_enc: Optional[bytes] = None,
-        permissions: Optional[int] = None,
-        permissions_rpid: Optional[str] = None,
+        key_agreement: Mapping[int, Any] | None = None,
+        pin_uv_param: bytes | None = None,
+        new_pin_enc: bytes | None = None,
+        pin_hash_enc: bytes | None = None,
+        permissions: int | None = None,
+        permissions_rpid: str | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 clientPin command, used for various PIN operations.
 
@@ -314,8 +361,8 @@ class Ctap2:
     def reset(
         self,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> None:
         """CTAP2 reset command, erases all credentials and PIN.
 
@@ -331,16 +378,16 @@ class Ctap2:
         client_data_hash: bytes,
         rp: Mapping[str, Any],
         user: Mapping[str, Any],
-        key_params: List[Mapping[str, Any]],
-        exclude_list: Optional[List[Mapping[str, Any]]] = None,
-        extensions: Optional[Mapping[str, Any]] = None,
-        options: Optional[Mapping[str, Any]] = None,
-        pin_uv_param: Optional[bytes] = None,
-        pin_uv_protocol: Optional[int] = None,
-        enterprise_attestation: Optional[int] = None,
+        key_params: list[Mapping[str, Any]],
+        exclude_list: list[Mapping[str, Any]] | None = None,
+        extensions: Mapping[str, Any] | None = None,
+        options: Mapping[str, Any] | None = None,
+        pin_uv_param: bytes | None = None,
+        pin_uv_protocol: int | None = None,
+        enterprise_attestation: int | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> AttestationResponse:
         """CTAP2 makeCredential operation.
 
@@ -384,14 +431,14 @@ class Ctap2:
         self,
         rp_id: str,
         client_data_hash: bytes,
-        allow_list: Optional[List[Mapping[str, Any]]] = None,
-        extensions: Optional[Mapping[str, Any]] = None,
-        options: Optional[Mapping[str, Any]] = None,
-        pin_uv_param: Optional[bytes] = None,
-        pin_uv_protocol: Optional[int] = None,
+        allow_list: list[Mapping[str, Any]] | None = None,
+        extensions: Mapping[str, Any] | None = None,
+        options: Mapping[str, Any] | None = None,
+        pin_uv_param: bytes | None = None,
+        pin_uv_protocol: int | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> AssertionResponse:
         """CTAP2 getAssertion command.
 
@@ -432,7 +479,7 @@ class Ctap2:
         """
         return AssertionResponse.from_dict(self.send_cbor(Ctap2.CMD.GET_NEXT_ASSERTION))
 
-    def get_assertions(self, *args, **kwargs) -> List[AssertionResponse]:
+    def get_assertions(self, *args, **kwargs) -> list[AssertionResponse]:
         """Convenience method to get list of assertions.
 
         See get_assertion and get_next_assertion for details.
@@ -447,9 +494,9 @@ class Ctap2:
     def credential_mgmt(
         self,
         sub_cmd: int,
-        sub_cmd_params: Optional[Mapping[int, Any]] = None,
-        pin_uv_protocol: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
+        sub_cmd_params: Mapping[int, Any] | None = None,
+        pin_uv_protocol: int | None = None,
+        pin_uv_param: bytes | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 credentialManagement command, used to manage resident
         credentials.
@@ -480,15 +527,15 @@ class Ctap2:
 
     def bio_enrollment(
         self,
-        modality: Optional[int] = None,
-        sub_cmd: Optional[int] = None,
-        sub_cmd_params: Optional[Mapping[int, Any]] = None,
-        pin_uv_protocol: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
-        get_modality: Optional[bool] = None,
+        modality: int | None = None,
+        sub_cmd: int | None = None,
+        sub_cmd_params: Mapping[int, Any] | None = None,
+        pin_uv_protocol: int | None = None,
+        pin_uv_param: bytes | None = None,
+        get_modality: bool | None = None,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 bio enrollment command. Used to provision/enumerate/delete bio
         enrollments in the authenticator.
@@ -529,8 +576,8 @@ class Ctap2:
     def selection(
         self,
         *,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
     ) -> None:
         """CTAP2 authenticator selection command.
 
@@ -546,11 +593,11 @@ class Ctap2:
     def large_blobs(
         self,
         offset: int,
-        get: Optional[int] = None,
-        set: Optional[bytes] = None,
-        length: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
-        pin_uv_protocol: Optional[int] = None,
+        get: int | None = None,
+        set: bytes | None = None,
+        length: int | None = None,
+        pin_uv_param: bytes | None = None,
+        pin_uv_protocol: int | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 authenticator large blobs command.
 
@@ -574,9 +621,9 @@ class Ctap2:
     def config(
         self,
         sub_cmd: int,
-        sub_cmd_params: Optional[Mapping[int, Any]] = None,
-        pin_uv_protocol: Optional[int] = None,
-        pin_uv_param: Optional[bytes] = None,
+        sub_cmd_params: Mapping[int, Any] | None = None,
+        pin_uv_protocol: int | None = None,
+        pin_uv_param: bytes | None = None,
     ) -> Mapping[int, Any]:
         """CTAP2 authenticator config command.
 

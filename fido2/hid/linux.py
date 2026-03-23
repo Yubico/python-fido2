@@ -17,19 +17,17 @@
 
 from __future__ import annotations
 
-from .base import HidDescriptor, FileCtapHidConnection, parse_report_descriptor
-
-import glob
 import fcntl
-import struct
-from array import array
-from typing import Set
-
+import glob
 import logging
+import struct
 import sys
+from array import array
+
+from .base import FileCtapHidConnection, HidDescriptor, parse_report_descriptor
 
 # Don't typecheck this file on Windows
-assert sys.platform != "win32"  # nosec
+assert sys.platform != "win32"  # noqa: S101
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +40,9 @@ HIDIOCGRAWUNIQ = 0x90044808
 
 
 class LinuxCtapHidConnection(FileCtapHidConnection):
-    def write_packet(self, packet):
+    def write_packet(self, data):
         # Prepend the report ID
-        super().write_packet(b"\0" + packet)
+        super().write_packet(b"\0" + data)
 
 
 def open_connection(descriptor):
@@ -80,13 +78,13 @@ def get_descriptor(path):
         buf += array("B", [0] * size)
         fcntl.ioctl(f, HIDIOCGRDESC, buf, True)
 
-    data = bytearray(buf[4:])
+    data = bytes(buf[4:])
     max_in_size, max_out_size = parse_report_descriptor(data)
     return HidDescriptor(path, vid, pid, max_in_size, max_out_size, name, serial)
 
 
 # Cache for continuously failing devices
-_failed_cache: Set[str] = set()
+_failed_cache: set[str] = set()
 
 
 def list_descriptors():

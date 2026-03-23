@@ -27,16 +27,16 @@
 
 from __future__ import annotations
 
+import logging
+import struct
+from enum import IntEnum, unique
+from threading import Event
+from typing import Any, Callable, Mapping
+
 from .. import cbor
 from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol
-
-from enum import IntEnum, unique
-from threading import Event
-from typing import Optional, Callable, Mapping, Any, Tuple, Dict
-import struct
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ class BioEnrollment:
         LAST_SAMPLE_STATUS = 0x05
         REMAINING_SAMPLES = 0x06
         TEMPLATE_INFOS = 0x07
+        MAX_TEMPLATE_FRIENDLY_NAME = 0x08
 
     @unique
     class TEMPLATE_INFO(IntEnum):
@@ -108,17 +109,17 @@ class FPEnrollmentContext:
         sample has been captured).
     """
 
-    def __init__(self, bio: "FPBioEnrollment", timeout: Optional[int] = None):
+    def __init__(self, bio: "FPBioEnrollment", timeout: int | None = None):
         self._bio = bio
         self.timeout = timeout
-        self.template_id: Optional[bytes] = None
-        self.remaining: Optional[int] = None
+        self.template_id: bytes | None = None
+        self.remaining: int | None = None
 
     def capture(
         self,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> Optional[bytes]:
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
+    ) -> bytes | None:
         """Capture a fingerprint sample.
 
         This call will block for up to timeout milliseconds (or indefinitely, if
@@ -149,8 +150,7 @@ class FPEnrollmentContext:
 
 
 class FPBioEnrollment(BioEnrollment):
-    """Implementation of a draft specification of the bio enrollment API.
-    WARNING: This specification is not final and this class is likely to change.
+    """Implementation of the bio enrollment API.
 
     NOTE: The get_fingerprint_sensor_info method does not require authentication, and
     can be used by setting pin_uv_protocol and pin_uv_token to None.
@@ -203,7 +203,7 @@ class FPBioEnrollment(BioEnrollment):
         self.pin_uv_token = pin_uv_token
 
     def _call(self, sub_cmd, params=None, auth=True, event=None, on_keepalive=None):
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "modality": self.modality,
             "sub_cmd": sub_cmd,
             "sub_cmd_params": params,
@@ -229,10 +229,10 @@ class FPBioEnrollment(BioEnrollment):
 
     def enroll_begin(
         self,
-        timeout: Optional[int] = None,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> Tuple[bytes, FPBioEnrollment.FEEDBACK, int]:
+        timeout: int | None = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
+    ) -> tuple[bytes, FPBioEnrollment.FEEDBACK, int]:
         """Start fingerprint enrollment.
 
         Starts the process of enrolling a new fingerprint, and will wait for the user
@@ -263,10 +263,10 @@ class FPBioEnrollment(BioEnrollment):
     def enroll_capture_next(
         self,
         template_id: bytes,
-        timeout: Optional[int] = None,
-        event: Optional[Event] = None,
-        on_keepalive: Optional[Callable[[int], None]] = None,
-    ) -> Tuple[FPBioEnrollment.FEEDBACK, int]:
+        timeout: int | None = None,
+        event: Event | None = None,
+        on_keepalive: Callable[[int], None] | None = None,
+    ) -> tuple[FPBioEnrollment.FEEDBACK, int]:
         """Continue fingerprint enrollment.
 
         Continues enrolling a new fingerprint and will wait for the user to scan their
@@ -279,7 +279,7 @@ class FPBioEnrollment(BioEnrollment):
             remaining to complete the enrollment.
         """
         logger.debug(f"Capturing next sample with (timeout={timeout})")
-        params: Dict[int, Any] = {FPBioEnrollment.PARAM.TEMPLATE_ID: template_id}
+        params: dict[int, Any] = {FPBioEnrollment.PARAM.TEMPLATE_ID: template_id}
         if timeout is not None:
             params[FPBioEnrollment.PARAM.TIMEOUT_MS] = timeout
         result = self._call(
@@ -299,7 +299,7 @@ class FPBioEnrollment(BioEnrollment):
         logger.debug("Cancelling fingerprint enrollment.")
         self._call(FPBioEnrollment.CMD.ENROLL_CANCEL, auth=False)
 
-    def enroll(self, timeout: Optional[int] = None) -> FPEnrollmentContext:
+    def enroll(self, timeout: int | None = None) -> FPEnrollmentContext:
         """Convenience wrapper for doing fingerprint enrollment.
 
         See FPEnrollmentContext for details.
@@ -307,7 +307,7 @@ class FPBioEnrollment(BioEnrollment):
         """
         return FPEnrollmentContext(self, timeout)
 
-    def enumerate_enrollments(self) -> Mapping[bytes, Optional[str]]:
+    def enumerate_enrollments(self) -> Mapping[bytes, str | None]:
         """Get a dict of enrolled fingerprint templates which maps template ID's to
         their friendly names.
 

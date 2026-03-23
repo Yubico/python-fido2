@@ -33,15 +33,13 @@ See the file README.adoc in this directory for details.
 
 Navigate to http://localhost:5000 in a supported web browser.
 """
-from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
-from fido2.server import Fido2Server
-from flask import Flask, session, request, redirect, abort, jsonify
 
 import os
-import fido2.features
 
-fido2.features.webauthn_json_mapping.enabled = True
+from flask import Flask, abort, jsonify, redirect, request, session
 
+from fido2.server import Fido2Server
+from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
 
 app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
@@ -75,7 +73,7 @@ def register_begin():
 
     session["state"] = state
     print("\n\n\n\n")
-    print(options)
+    print(dict(options))
     print("\n\n\n\n")
 
     return jsonify(dict(options))
