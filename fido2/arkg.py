@@ -109,7 +109,7 @@ def _point_add(
 
 
 @dataclass
-class HTF:
+class _HTF:
     """
     hash_to_field(msg, count)
 
@@ -227,7 +227,7 @@ class HTF:
 
 
 @dataclass
-class BL:
+class _BL:
     crv: EllipticCurve
     Hash: HashAlgorithm
     DST_ext: bytes
@@ -248,7 +248,7 @@ class BL:
                                 defined in hash-to-crv-suite
         """
         dst_tau = b"ARKG-BL-EC." + self.DST_ext + ctx
-        htf = HTF(dst_tau, self.crv.group_order, 48, self.Hash)
+        htf = _HTF(dst_tau, self.crv.group_order, 48, self.Hash)
         tau = htf.hash_to_field(ikm_tau, 1)[0]
 
         return tau
@@ -266,7 +266,7 @@ class BL:
 
 
 @dataclass
-class KEM:
+class _KEM:
     crv: EllipticCurve
     Hash: HashAlgorithm
     DST_ext: bytes
@@ -287,7 +287,7 @@ class KEM:
 
             pk = sk * G
         """
-        htf = HTF(
+        htf = _HTF(
             b"ARKG-KEM-ECDH-KG." + self.DST_ext,
             self.crv.group_order,
             48,
@@ -379,15 +379,15 @@ class KEM:
 
 
 @dataclass
-class ARKG:
+class _ARKG:
     """
     ARKG instance parameters:
         BL        A key blinding scheme.
         KEM       A key encapsulation mechanism.
     """
 
-    bl: BL
-    kem: KEM
+    bl: _BL
+    kem: _KEM
 
     def derive_public_key(
         self,
@@ -431,7 +431,8 @@ class ARKG:
 
             kh = c
         """
-        assert len(ctx) <= 64  # noqa: S101
+        if len(ctx) > 64:
+            raise ValueError("Context too long, should be at most 64 bytes")
 
         ctx_prime = struct.pack(">B", len(ctx)) + ctx
         ctx_bl = b"ARKG-Derive-Key-BL." + ctx_prime
@@ -479,24 +480,25 @@ class ARKG_P256(CoseKey):
     """
 
     ALGORITHM = -65700
+
     _CRV = SECP256R1()
-    _ARKG = ARKG(
-        bl=BL(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-P256"),
-        kem=KEM(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
+    _ARKG = _ARKG(
+        bl=_BL(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-P256"),
+        kem=_KEM(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
     )
 
     @property
-    def pkbl(self) -> CoseKey:
+    def pk_bl(self) -> CoseKey:
         return CoseKey.parse(self[-1])
 
     @property
-    def pkkem(self) -> CoseKey:
+    def pk_kem(self) -> CoseKey:
         return CoseKey.parse(self[-2])
 
     def derive_public_key(self, ikm: bytes, ctx: bytes) -> Tuple[CoseKey, Mapping]:
         pk, kh = self._ARKG.derive_public_key(
-            _cose2key(self.pkbl, self._CRV),
-            _cose2key(self.pkkem, self._CRV),
+            _cose2key(self.pk_bl, self._CRV),
+            _cose2key(self.pk_kem, self._CRV),
             ikm,
             ctx,
         )
@@ -517,7 +519,6 @@ class ARKG_P256(CoseKey):
             3: ARKG_P256_ESP256,  # alg: ESP256 with key derived by ARKG-P256
             -1: kh,
             -2: ctx,
-            -3: ARKG_P256.ALGORITHM,
         }
 
         return pk_cose, args
