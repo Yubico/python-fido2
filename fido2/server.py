@@ -31,8 +31,8 @@ import logging
 import os
 from typing import Any, Callable, Mapping, Sequence
 
+from _fido2_native.utils import bytes_eq as _bytes_eq
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from cryptography.hazmat.primitives import constant_time
 
 from .cose import CoseKey
 from .rpid import verify_rp_id
@@ -244,11 +244,9 @@ class Fido2Server:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
-        if not constant_time.bytes_eq(
-            websafe_decode(state["challenge"]), client_data.challenge
-        ):
+        if not _bytes_eq(websafe_decode(state["challenge"]), client_data.challenge):
             raise ValueError("Wrong challenge in response.")
-        if not constant_time.bytes_eq(
+        if not _bytes_eq(
             self.rp.id_hash or b"", attestation_object.auth_data.rp_id_hash
         ):
             raise ValueError("Wrong RP ID hash in response.")
@@ -350,7 +348,7 @@ class Fido2Server:
             raise ValueError("Invalid origin in CollectedClientData.")
         if websafe_decode(state["challenge"]) != client_data.challenge:
             raise ValueError("Wrong challenge in response.")
-        if not constant_time.bytes_eq(self.rp.id_hash or b"", auth_data.rp_id_hash):
+        if not _bytes_eq(self.rp.id_hash or b"", auth_data.rp_id_hash):
             raise ValueError("Wrong RP ID hash in response.")
         if not auth_data.is_user_present():
             raise ValueError("User Present flag not set.")

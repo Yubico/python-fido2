@@ -32,8 +32,7 @@ import struct
 import zlib
 from typing import Any, Mapping, Sequence, cast
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from _fido2_native.utils import aes_gcm_decrypt, aes_gcm_encrypt
 
 from .. import cbor
 from ..utils import sha256
@@ -58,9 +57,8 @@ def _lb_ad(orig_size):
 def _lb_pack(key, data):
     orig_size = len(data)
     nonce = os.urandom(12)
-    aesgcm = AESGCM(key)
 
-    ciphertext = aesgcm.encrypt(nonce, _compress(data), _lb_ad(orig_size))
+    ciphertext = aes_gcm_encrypt(key, nonce, _compress(data), _lb_ad(orig_size))
 
     return {
         1: ciphertext,
@@ -74,12 +72,11 @@ def _lb_unpack(key, entry):
         ciphertext = entry[1]
         nonce = entry[2]
         orig_size = entry[3]
-        aesgcm = AESGCM(key)
-        compressed = aesgcm.decrypt(nonce, ciphertext, _lb_ad(orig_size))
+        compressed = aes_gcm_decrypt(key, nonce, ciphertext, _lb_ad(orig_size))
         return compressed, orig_size
     except (TypeError, IndexError, KeyError):
         raise ValueError("Invalid entry")
-    except InvalidTag:
+    except ValueError:
         raise ValueError("Wrong key")
 
 

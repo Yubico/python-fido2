@@ -69,6 +69,71 @@ pub fn websafe_decode(data: &str) -> Result<Vec<u8>, base64::DecodeError> {
     URL_SAFE_NO_PAD.decode(&normalized)
 }
 
+/// Constant-time byte comparison to prevent timing attacks.
+pub fn bytes_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    // Use XOR accumulator to avoid short-circuit evaluation
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// AES-256-GCM encrypt.
+/// Returns nonce (12 bytes) + ciphertext + tag.
+pub fn aes_gcm_encrypt(
+    key: &[u8],
+    nonce: &[u8],
+    plaintext: &[u8],
+    aad: &[u8],
+) -> Result<Vec<u8>, &'static str> {
+    use aes_gcm::aead::Aead;
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+
+    if key.len() != 32 {
+        return Err("Key must be 32 bytes");
+    }
+    if nonce.len() != 12 {
+        return Err("Nonce must be 12 bytes");
+    }
+
+    let cipher = Aes256Gcm::new(key.into());
+    let nonce = Nonce::from_slice(nonce);
+    let payload = aes_gcm::aead::Payload { msg: plaintext, aad };
+
+    cipher.encrypt(nonce, payload).map_err(|_| "Encryption failed")
+}
+
+/// AES-256-GCM decrypt.
+pub fn aes_gcm_decrypt(
+    key: &[u8],
+    nonce: &[u8],
+    ciphertext: &[u8],
+    aad: &[u8],
+) -> Result<Vec<u8>, &'static str> {
+    use aes_gcm::aead::Aead;
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+
+    if key.len() != 32 {
+        return Err("Key must be 32 bytes");
+    }
+    if nonce.len() != 12 {
+        return Err("Nonce must be 12 bytes");
+    }
+
+    let cipher = Aes256Gcm::new(key.into());
+    let nonce = Nonce::from_slice(nonce);
+    let payload = aes_gcm::aead::Payload {
+        msg: ciphertext,
+        aad,
+    };
+
+    cipher.decrypt(nonce, payload).map_err(|_| "Decryption failed")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -27,9 +27,9 @@
 
 from __future__ import annotations
 
+from _fido2_native.utils import bytes_eq
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.constant_time import bytes_eq
 
 from ..utils import sha256
 from .base import (
