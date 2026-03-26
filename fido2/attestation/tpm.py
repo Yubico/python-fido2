@@ -38,7 +38,7 @@ from typing import cast
 from _fido2_native.x509 import Certificate
 
 from ..cose import CoseKey
-from ..utils import ByteBuffer, bytes2int, int2bytes
+from ..utils import bytes2int, int2bytes
 from .base import (
     Attestation,
     AttestationResult,
@@ -133,8 +133,9 @@ class TpmAttestationFormat:
 
     @classmethod
     def parse(cls, data: bytes) -> TpmAttestationFormat:
-        reader = ByteBuffer(data)
-        generated_value = reader.read(4)
+        offset = 0
+        generated_value = data[offset : offset + 4]
+        offset += 4
 
         # Verify that magic is set to TPM_GENERATED_VALUE.
         # see https://w3c.github.io/webauthn/#sctn-tpm-attestation
@@ -145,32 +146,52 @@ class TpmAttestationFormat:
         # Verify that type is set to TPM_ST_ATTEST_CERTIFY.
         # see https://w3c.github.io/webauthn/#sctn-tpm-attestation
         #     verification procedure
-        tpmi_st_attest = reader.read(2)
+        tpmi_st_attest = data[offset : offset + 2]
+        offset += 2
         if tpmi_st_attest != TPM_ST_ATTEST_CERTIFY:
             raise ValueError("tpmi_st_attest field is invalid")
 
         try:
-            name = reader.read(reader.unpack("!H"))
-            data = reader.read(reader.unpack("!H"))
+            name_len = struct.unpack_from("!H", data, offset)[0]
+            offset += 2
+            name = data[offset : offset + name_len]
+            offset += name_len
 
-            clock = reader.unpack("!Q")
-            reset_count = reader.unpack("!L")
-            restart_count = reader.unpack("!L")
-            safe_value = reader.unpack("B")
+            data_len = struct.unpack_from("!H", data, offset)[0]
+            offset += 2
+            extra_data = data[offset : offset + data_len]
+            offset += data_len
+
+            clock = struct.unpack_from("!Q", data, offset)[0]
+            offset += 8
+            reset_count = struct.unpack_from("!L", data, offset)[0]
+            offset += 4
+            restart_count = struct.unpack_from("!L", data, offset)[0]
+            offset += 4
+            safe_value = struct.unpack_from("B", data, offset)[0]
+            offset += 1
             if safe_value not in (0, 1):
                 raise ValueError(f"invalid value 0x{safe_value:x} for boolean")
             safe = safe_value == 1
 
-            firmware_version = reader.unpack("!Q")
+            firmware_version = struct.unpack_from("!Q", data, offset)[0]
+            offset += 8
 
-            attested_name = reader.read(reader.unpack("!H"))
-            attested_qualified_name = reader.read(reader.unpack("!H"))
+            attested_name_len = struct.unpack_from("!H", data, offset)[0]
+            offset += 2
+            attested_name = data[offset : offset + attested_name_len]
+            offset += attested_name_len
+
+            attested_qn_len = struct.unpack_from("!H", data, offset)[0]
+            offset += 2
+            attested_qualified_name = data[offset : offset + attested_qn_len]
+            offset += attested_qn_len
         except struct.error as e:
             raise ValueError(e)
 
         return cls(
             name=name,
-            data=data,
+            data=extra_data,
             clock_info=(clock, reset_count, restart_count, safe),
             firmware_version=firmware_version,
             attested=TpmsCertifyInfo(
@@ -194,8 +215,11 @@ class TpmsRsaParms:
     exponent: int
 
     @classmethod
-    def parse(cls, reader, attributes):
-        symmetric = reader.unpack("!H")
+    def parse(
+        cls, data: bytes, offset: int, attributes: int
+    ) -> tuple[TpmsRsaParms, int]:
+        symmetric = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
 
         restricted_decryption = attributes & (
             ATTRIBUTES.RESTRICTED | ATTRIBUTES.DECRYPT
@@ -210,7 +234,8 @@ class TpmsRsaParms:
         # Otherwise should be set to a supported symmetric algorithm, keysize and mode
         # TODO(baloo): Should we have non-null value here, do we expect more data?
 
-        scheme = reader.unpack("!H")
+        scheme = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
 
         restricted_sign = attributes & (ATTRIBUTES.RESTRICTED | ATTRIBUTES.SIGN_ENCRYPT)
         is_unrestricted_signing_key = restricted_sign == ATTRIBUTES.SIGN_ENCRYPT
@@ -255,19 +280,25 @@ class TpmsRsaParms:
                 "expected to be TPM_ALG_NULL"
             )
 
-        key_bits = reader.unpack("!H")
-        exponent = reader.unpack("!L")
+        key_bits = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
+        exponent = struct.unpack_from("!L", data, offset)[0]
+        offset += 4
         if exponent == 0:
             # When  zero,  indicates  that  the  exponent  is  the  default  of 2^16 + 1
             exponent = (2**16) + 1
 
-        return cls(symmetric, scheme, key_bits, exponent)
+        return cls(symmetric, scheme, key_bits, exponent), offset
 
 
 class Tpm2bPublicKeyRsa(bytes):
     @classmethod
-    def parse(cls, reader: ByteBuffer) -> Tpm2bPublicKeyRsa:
-        return cls(reader.read(reader.unpack("!H")))
+    def parse(cls, data: bytes, offset: int) -> tuple[Tpm2bPublicKeyRsa, int]:
+        length = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
+        value = data[offset : offset + length]
+        offset += length
+        return cls(value), offset
 
 
 @unique
@@ -319,18 +350,22 @@ class TpmsEccParms:
     kdf: TpmiAlgKdf
 
     @classmethod
-    def parse(cls, reader: ByteBuffer) -> TpmsEccParms:
-        symmetric = reader.unpack("!H")
-        scheme = reader.unpack("!H")
+    def parse(cls, data: bytes, offset: int) -> tuple[TpmsEccParms, int]:
+        symmetric = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
+        scheme = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
         if symmetric != TPM_ALG_NULL:
             raise ValueError("symmetric is expected to be NULL")
         if scheme != TPM_ALG_NULL:
             raise ValueError("scheme is expected to be NULL")
 
-        curve_id = TpmEccCurve(reader.unpack("!H"))
-        kdf_scheme = TpmiAlgKdf(reader.unpack("!H"))
+        curve_id = TpmEccCurve(struct.unpack_from("!H", data, offset)[0])
+        offset += 2
+        kdf_scheme = TpmiAlgKdf(struct.unpack_from("!H", data, offset)[0])
+        offset += 2
 
-        return cls(symmetric, scheme, curve_id, kdf_scheme)
+        return cls(symmetric, scheme, curve_id, kdf_scheme), offset
 
 
 @dataclass
@@ -344,11 +379,18 @@ class TpmsEccPoint:
     y: bytes
 
     @classmethod
-    def parse(cls, reader: ByteBuffer) -> TpmsEccPoint:
-        x = reader.read(reader.unpack("!H"))
-        y = reader.read(reader.unpack("!H"))
+    def parse(cls, data: bytes, offset: int) -> tuple[TpmsEccPoint, int]:
+        x_len = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
+        x = data[offset : offset + x_len]
+        offset += x_len
 
-        return cls(x, y)
+        y_len = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
+        y = data[offset : offset + y_len]
+        offset += y_len
+
+        return cls(x, y), offset
 
 
 @unique
@@ -409,27 +451,34 @@ class TpmPublicFormat:
 
     @classmethod
     def parse(cls, data: bytes) -> TpmPublicFormat:
-        reader = ByteBuffer(data)
-        sign_alg = TpmAlgAsym(reader.unpack("!H"))
-        name_alg = TpmAlgHash(reader.unpack("!H"))
+        offset = 0
+        sign_alg = TpmAlgAsym(struct.unpack_from("!H", data, offset)[0])
+        offset += 2
+        name_alg = TpmAlgHash(struct.unpack_from("!H", data, offset)[0])
+        offset += 2
 
-        attributes = reader.unpack("!L")
+        attributes = struct.unpack_from("!L", data, offset)[0]
+        offset += 4
         if attributes & ATTRIBUTES.SHALL_BE_ZERO != 0:
             raise ValueError(f"attributes is not formated correctly: 0x{attributes:x}")
 
-        auth_policy = reader.read(reader.unpack("!H"))
+        auth_policy_len = struct.unpack_from("!H", data, offset)[0]
+        offset += 2
+        auth_policy = data[offset : offset + auth_policy_len]
+        offset += auth_policy_len
 
         if sign_alg == TpmAlgAsym.RSA:
-            parameters: _Parameters = TpmsRsaParms.parse(reader, attributes)
-            unique: _Unique = Tpm2bPublicKeyRsa.parse(reader)
+            parameters: _Parameters
+            parameters, offset = TpmsRsaParms.parse(data, offset, attributes)
+            unique: _Unique
+            unique, offset = Tpm2bPublicKeyRsa.parse(data, offset)
         elif sign_alg == TpmAlgAsym.ECC:
-            parameters = TpmsEccParms.parse(reader)
-            unique = TpmsEccPoint.parse(reader)
+            parameters, offset = TpmsEccParms.parse(data, offset)
+            unique, offset = TpmsEccPoint.parse(data, offset)
         else:
             raise NotImplementedError(f"sign alg {sign_alg:x} is not supported")
 
-        rest = reader.read()
-        if len(rest) != 0:
+        if offset != len(data):
             raise ValueError("there should not be any data left in buffer")
 
         return cls(

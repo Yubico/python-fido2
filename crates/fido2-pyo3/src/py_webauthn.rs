@@ -25,7 +25,7 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-use fido2::webauthn::{AttestedCredentialData, AttestationObject, CollectedClientData};
+use fido2::webauthn::{AttestedCredentialData, AttestationObject, AuthenticatorData, CollectedClientData};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -88,11 +88,47 @@ fn parse_collected_client_data<'py>(
     Ok((cd.type_, challenge, cd.origin, cd.cross_origin))
 }
 
+/// Parse AuthenticatorData from binary data.
+///
+/// Returns (rp_id_hash, flags, counter, credential_data_bytes, extensions).
+#[pyfunction]
+fn parse_authenticator_data<'py>(
+    py: Python<'py>,
+    data: &[u8],
+) -> PyResult<(
+    Bound<'py, PyBytes>,
+    u8,
+    u32,
+    Option<Bound<'py, PyBytes>>,
+    Option<PyObject>,
+)> {
+    let auth_data =
+        AuthenticatorData::from_bytes(data).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    let rp_id_hash = PyBytes::new(py, &auth_data.rp_id_hash);
+    let flags = auth_data.flags.bits();
+    let counter = auth_data.counter;
+
+    let credential_data = auth_data
+        .credential_data
+        .as_ref()
+        .map(|cd| PyBytes::new(py, cd.as_bytes()));
+
+    let extensions = auth_data
+        .extensions
+        .as_ref()
+        .map(|ext| value_to_py(py, ext).map(|v| v.into()))
+        .transpose()?;
+
+    Ok((rp_id_hash, flags, counter, credential_data, extensions))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "webauthn")?;
     sub.add_function(wrap_pyfunction!(parse_credential_data, &sub)?)?;
     sub.add_function(wrap_pyfunction!(parse_attestation_object, &sub)?)?;
     sub.add_function(wrap_pyfunction!(parse_collected_client_data, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(parse_authenticator_data, &sub)?)?;
     m.add_submodule(&sub)?;
 
     let sys = m.py().import("sys")?;

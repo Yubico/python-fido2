@@ -35,7 +35,7 @@ from .attestation import FidoU2FAttestation
 from .cose import ES256
 from .ctap import CtapDevice
 from .hid import CTAPHID
-from .utils import ByteBuffer, bytes2int, websafe_decode, websafe_encode
+from .utils import bytes2int, websafe_decode, websafe_encode
 
 
 @unique
@@ -84,22 +84,28 @@ class RegistrationData(bytes):
     def __init__(self, _: bytes):
         super().__init__()
 
-        reader = ByteBuffer(self)
-        if reader.unpack("B") != 0x05:
+        if struct.unpack_from("B", self, 0)[0] != 0x05:
             raise ValueError("Reserved byte != 0x05")
 
-        self.public_key = reader.read(65)
-        self.key_handle = reader.read(reader.unpack("B"))
+        self.public_key = self[1:66]
+        off = 66
+        kh_len = struct.unpack_from("B", self, off)[0]
+        off += 1
+        self.key_handle = self[off : off + kh_len]
+        off += kh_len
 
-        cert_buf = reader.read(2)  # Tag and first length byte
+        cert_buf = self[off : off + 2]  # Tag and first length byte
+        off += 2
         cert_len = cert_buf[1]
         if cert_len > 0x80:  # Multi-byte length
             n_bytes = cert_len - 0x80
-            len_bytes = reader.read(n_bytes)
+            len_bytes = self[off : off + n_bytes]
+            off += n_bytes
             cert_buf += len_bytes
             cert_len = bytes2int(len_bytes)
-        self.certificate = cert_buf + reader.read(cert_len)
-        self.signature = reader.read()
+        self.certificate = cert_buf + self[off : off + cert_len]
+        off += cert_len
+        self.signature = self[off:]
 
     @property
     def b64(self) -> str:
@@ -149,10 +155,9 @@ class SignatureData(bytes):
     def __init__(self, _: bytes):
         super().__init__()
 
-        reader = ByteBuffer(self)
-        self.user_presence = reader.unpack("B")
-        self.counter = reader.unpack(">I")
-        self.signature = reader.read()
+        self.user_presence = struct.unpack_from("B", self, 0)[0]
+        self.counter = struct.unpack_from(">I", self, 1)[0]
+        self.signature = self[5:]
 
     @property
     def b64(self) -> str:

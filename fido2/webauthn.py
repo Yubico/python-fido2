@@ -37,6 +37,9 @@ from _fido2_native.webauthn import (
     parse_attestation_object as _parse_attestation_object,
 )
 from _fido2_native.webauthn import (
+    parse_authenticator_data as _parse_authenticator_data,
+)
+from _fido2_native.webauthn import (
     parse_collected_client_data as _parse_collected_client_data,
 )
 from _fido2_native.webauthn import (
@@ -46,7 +49,6 @@ from _fido2_native.webauthn import (
 from . import cbor
 from .cose import ES256, CoseKey
 from .utils import (
-    ByteBuffer,
     _JsonDataObject,
     sha256,
     websafe_encode,
@@ -214,26 +216,18 @@ class AuthenticatorData(bytes):
     def __init__(self, _: bytes):
         super().__init__()
 
-        reader = ByteBuffer(self)
-        object.__setattr__(self, "rp_id_hash", reader.read(32))
-        object.__setattr__(self, "flags", reader.unpack("B"))
-        object.__setattr__(self, "counter", reader.unpack(">I"))
-        rest = reader.read()
-
-        if self.flags & AuthenticatorData.FLAG.AT:
-            credential_data, rest = AttestedCredentialData.unpack_from(rest)
+        rp_id_hash, flags, counter, cred_data_bytes, extensions = (
+            _parse_authenticator_data(bytes(self))
+        )
+        object.__setattr__(self, "rp_id_hash", rp_id_hash)
+        object.__setattr__(self, "flags", AuthenticatorData.FLAG(flags))
+        object.__setattr__(self, "counter", counter)
+        if cred_data_bytes is not None:
+            credential_data = AttestedCredentialData(cred_data_bytes)
         else:
             credential_data = None
         object.__setattr__(self, "credential_data", credential_data)
-
-        if self.flags & AuthenticatorData.FLAG.ED:
-            extensions, rest = cbor.decode_from(rest)
-        else:
-            extensions = None
         object.__setattr__(self, "extensions", extensions)
-
-        if rest:
-            raise ValueError("Wrong length")
 
     def __str__(self):  # Override default implementation from bytes.
         return repr(self)

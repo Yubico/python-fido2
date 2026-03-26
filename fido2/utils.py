@@ -33,6 +33,7 @@ This module contains various functions used throughout the rest of the project.
 from __future__ import annotations
 
 import struct
+import warnings
 from abc import abstractmethod
 from dataclasses import Field, fields
 from io import BytesIO
@@ -98,7 +99,19 @@ def int2bytes(value: int, minlen: int = -1) -> bytes:
 
 
 class ByteBuffer(BytesIO):
-    """BytesIO-like object with the ability to unpack values."""
+    """BytesIO-like object with the ability to unpack values.
+
+    .. deprecated::
+        ByteBuffer is deprecated and will be removed in a future version.
+    """
+
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "ByteBuffer is deprecated and will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
     def unpack(self, fmt: str):
         """Reads and unpacks a value from the buffer.

@@ -7,3 +7,6 @@ def parse_attestation_object(
 def parse_collected_client_data(
     data: bytes,
 ) -> tuple[str, bytes, str, bool]: ...
+def parse_authenticator_data(
+    data: bytes,
+) -> tuple[bytes, int, int, bytes | None, object | None]: ...
