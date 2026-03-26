@@ -61,7 +61,8 @@ _EMOJI_MAP = {
 def _replace_emoji(text):
     for emoji, replacement in _EMOJI_MAP.items():
         text = text.replace(emoji, replacement)
-    return text
+    # Strip variation selectors and other non-displayable characters
+    return text.translate({0xFE0E: None, 0xFE0F: None, 0x200D: None})
 
 
 def _gui_process(msg_queue, ready_event):
@@ -71,7 +72,7 @@ def _gui_process(msg_queue, ready_event):
 
     root = tk.Tk()
     root.title("FIDO2 Device Tests")
-    root.geometry("500x400")
+    root.geometry("600x400")
     root.configure(bg="#1e1e1e")
 
     header = tk.Label(
@@ -117,7 +118,7 @@ def _gui_process(msg_queue, ready_event):
                 fg="#ffffff",
                 font=label_font_bold,
                 anchor=tk.W,
-                wraplength=460,
+                wraplength=560,
                 justify=tk.LEFT,
                 pady=3,
             )
