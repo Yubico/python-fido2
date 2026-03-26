@@ -54,8 +54,9 @@ def test_read_write(ctap2, pin_protocol):
 
 
 def test_invalid_checksum(ctap2, pin_protocol):
-    lb = get_lb(ctap2, pin_protocol)
-
+    token = ClientPin(ctap2, pin_protocol).get_pin_token(
+        TEST_PIN, ClientPin.PERMISSION.LARGE_BLOB_WRITE
+    )
     data = cbor.encode([])
     # Set the checksum to an invalid value to ensure the authenticator checks it
     data += sha256(data)[:15] + b"\xff"
@@ -64,7 +65,7 @@ def test_invalid_checksum(ctap2, pin_protocol):
 
     msg = b"\xff" * 32 + b"\x0c\x00" + struct.pack("<I", offset) + sha256(data)
     pin_uv_protocol = pin_protocol.VERSION
-    pin_uv_param = pin_protocol.authenticate(lb.pin_uv.token, msg)
+    pin_uv_param = pin_protocol.authenticate(token, msg)
 
     with pytest.raises(CtapError, match="INTEGRITY_FAILURE"):
         ctap2.large_blobs(

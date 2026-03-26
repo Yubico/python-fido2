@@ -33,7 +33,7 @@ from _fido2_native.ctap import NativeLargeBlobs
 
 from ..ctap import CtapError
 from .base import Ctap2, Info
-from .pin import PinProtocol, _PinUv
+from .pin import PinProtocol
 
 
 class LargeBlobs:
@@ -59,19 +59,13 @@ class LargeBlobs:
         if not self.is_supported(ctap.info):
             raise ValueError("Authenticator does not support LargeBlobs")
 
-        self.ctap = ctap
-        self.max_fragment_length = self.ctap.info.max_msg_size - 64
-        self.pin_uv = (
-            _PinUv(pin_uv_protocol, pin_uv_token)
-            if pin_uv_protocol and pin_uv_token
-            else None
-        )
+        max_fragment_length = ctap.info.max_msg_size - 64
 
         self._native = NativeLargeBlobs(
             ctap._native.device,
             ctap._native.strict_cbor,
             ctap._native.max_msg_size,
-            self.max_fragment_length,
+            max_fragment_length,
             pin_uv_protocol.VERSION if pin_uv_protocol else None,
             pin_uv_token,
         )

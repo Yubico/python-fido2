@@ -35,6 +35,7 @@ from threading import Event, Timer
 from typing import Any, Callable, Mapping, Sequence, overload
 
 from _fido2_native.client import ClientDataCollector as NativeClientDataCollector
+from _fido2_native.client import NativeCtap2ClientBackend
 
 from ..cose import ES256
 from ..ctap import CtapDevice, CtapError
@@ -561,58 +562,47 @@ class _Ctap2ClientBackend(_ClientBackend):
         self.info = self.ctap2.info
         self._extensions = extensions
         self.user_interaction = user_interaction
+        try:
+            self._native: NativeCtap2ClientBackend | None = NativeCtap2ClientBackend(
+                self.ctap2._native.device,
+                self.ctap2._native.strict_cbor,
+                self.ctap2._native.max_msg_size,
+            )
+        except TypeError:
+            self._native = None
+
+    @staticmethod
+    def _handle_native_error(e: ValueError) -> None:
+        msg = str(e)
+        if msg.startswith("CTAP_ERR:"):
+            raise CtapError(int(msg.split(":")[1])) from None
+        if msg.startswith("CLIENT_CONFIG_UNSUPPORTED:"):
+            raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(
+                msg.split(":", 1)[1]
+            ) from None
+        if msg == "CLIENT_PIN_REQUIRED":
+            raise PinRequiredError() from None
+        raise
 
     def _filter_creds(
         self, rp_id, cred_list, pin_protocol, pin_token, event, on_keepalive
     ):
-        # Use fresh info
-        info = self.ctap2.get_info()
-
-        # Filter out credential IDs which are too long
-        max_len = info.max_cred_id_length
-        if max_len:
-            cred_list = [c for c in cred_list if len(c.id) <= max_len]
-
-        client_data_hash = b"\0" * 32
-        if pin_token:
-            pin_auth = pin_protocol.authenticate(pin_token, client_data_hash)
-            version = pin_protocol.VERSION
-        else:
-            pin_auth = None
-            version = None
-
-        max_creds = info.max_creds_in_list or 1
-        while cred_list:
-            chunk = cred_list[:max_creds]
-            try:
-                assertions = self.ctap2.get_assertions(
-                    rp_id,
-                    client_data_hash,
-                    _cbor_list(chunk),
-                    None,
-                    {"up": False},
-                    pin_auth,
-                    version,
-                    event=event,
-                    on_keepalive=on_keepalive,
-                )
-                if len(chunk) == 1:
-                    # Credential ID might be omitted from assertions
-                    return chunk[0]
-                else:
-                    return PublicKeyCredentialDescriptor(**assertions[0].credential)
-            except CtapError as e:
-                match e.code:
-                    case CtapError.ERR.REQUEST_TOO_LARGE if max_creds > 1:
-                        # Message is too large, try smaller chunks
-                        max_creds -= 1
-                    case CtapError.ERR.NO_CREDENTIALS:
-                        # All creds in chunk are discarded
-                        cred_list = cred_list[max_creds:]
-                    case _:
-                        raise
-
-        # No matches found
+        if self._native is None:
+            raise RuntimeError("Native backend not available")
+        try:
+            result = self._native.filter_creds(
+                rp_id,
+                _cbor_list(cred_list),
+                pin_protocol.VERSION if pin_protocol else None,
+                pin_token,
+                event,
+                on_keepalive,
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
+            raise
+        if result is not None:
+            return PublicKeyCredentialDescriptor(**result)
         return None
 
     def selection(self, event):
@@ -711,6 +701,23 @@ class _Ctap2ClientBackend(_ClientBackend):
         event,
         on_keepalive,
     ):
+        if self._native is not None:
+            try:
+                return self._native.get_auth_params(
+                    rp_id,
+                    user_verification,
+                    int(permissions),
+                    pin_protocol.VERSION if pin_protocol else None,
+                    allow_uv,
+                    event,
+                    on_keepalive,
+                    self.user_interaction,
+                )
+            except ValueError as e:
+                self._handle_native_error(e)
+                raise
+
+        # Fallback for when native is unavailable (e.g. mocked Ctap2 in tests)
         info = self.ctap2.get_info()
 
         pin_token = None

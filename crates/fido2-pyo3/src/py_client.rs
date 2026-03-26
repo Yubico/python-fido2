@@ -25,10 +25,15 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+use fido2::cbor::Value;
 use fido2::client;
+use fido2::ctap2;
+use fido2::pin::PinProtocol;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+
+use crate::py_ctap::PyCtapDevice;
 
 /// Native client data collector.
 ///
@@ -122,9 +127,193 @@ impl ClientDataCollector {
     }
 }
 
+// ---- Error conversion helpers ----
+
+fn client_err(e: client::ClientError) -> PyErr {
+    match e {
+        client::ClientError::BadRequest(msg) => {
+            PyValueError::new_err(format!("CLIENT_BAD_REQUEST:{}", msg))
+        }
+        client::ClientError::ConfigurationUnsupported(msg) => {
+            PyValueError::new_err(format!("CLIENT_CONFIG_UNSUPPORTED:{}", msg))
+        }
+        client::ClientError::PinRequired => {
+            PyValueError::new_err("CLIENT_PIN_REQUIRED".to_string())
+        }
+        client::ClientError::Ctap(e) => crate::py_ctap::ctap_err(e),
+    }
+}
+
+// ---- UserInteraction bridge ----
+
+/// Bridges a Python UserInteraction object to the Rust UserInteraction trait.
+struct PyUserInteraction {
+    py_obj: PyObject,
+    permissions: u32,
+    rp_id: Option<String>,
+}
+
+impl client::UserInteraction for PyUserInteraction {
+    fn request_pin(&self, _permissions: u32, _rp_id: Option<&str>) -> Option<String> {
+        Python::with_gil(|py| {
+            let rp_id = self
+                .rp_id
+                .as_ref()
+                .map_or_else(|| py.None(), |s| s.clone().into_pyobject(py).unwrap().into_any().unbind());
+            self.py_obj
+                .call_method1(py, "request_pin", (self.permissions, rp_id))
+                .ok()
+                .and_then(|result| result.extract::<Option<String>>(py).ok().flatten())
+        })
+    }
+
+    fn request_uv(&self, _permissions: u32, _rp_id: Option<&str>) -> bool {
+        Python::with_gil(|py| {
+            let rp_id = self
+                .rp_id
+                .as_ref()
+                .map_or_else(|| py.None(), |s| s.clone().into_pyobject(py).unwrap().into_any().unbind());
+            self.py_obj
+                .call_method1(py, "request_uv", (self.permissions, rp_id))
+                .ok()
+                .and_then(|result| result.extract::<bool>(py).ok())
+                .unwrap_or(false)
+        })
+    }
+}
+
+// ---- NativeCtap2ClientBackend ----
+
+#[pyclass]
+struct NativeCtap2ClientBackend {
+    device: PyObject,
+    strict_cbor: bool,
+    max_msg_size: usize,
+}
+
+#[pymethods]
+impl NativeCtap2ClientBackend {
+    #[new]
+    fn new(device: PyObject, strict_cbor: bool, max_msg_size: usize) -> Self {
+        Self {
+            device,
+            strict_cbor,
+            max_msg_size,
+        }
+    }
+
+    /// Filter credential list against the authenticator.
+    ///
+    /// Returns the matching credential descriptor (as a Python dict), or None.
+    #[pyo3(signature = (rp_id, cred_list, pin_version, pin_token, event=None, on_keepalive=None))]
+    fn filter_creds(
+        &self,
+        py: Python<'_>,
+        rp_id: &str,
+        cred_list: Vec<PyObject>,
+        pin_version: Option<u32>,
+        pin_token: Option<&[u8]>,
+        event: Option<PyObject>,
+        on_keepalive: Option<PyObject>,
+    ) -> PyResult<Option<PyObject>> {
+        // Convert Python credential descriptors to CBOR Values
+        let values: Vec<Value> = cred_list
+            .into_iter()
+            .map(|obj| crate::py_ctap::py_to_val(py, obj))
+            .collect::<PyResult<Vec<_>>>()?;
+
+        // Compute pin_auth if we have a token
+        let pin_auth = match (pin_token, pin_version) {
+            (Some(token), Some(version)) => {
+                let protocol = match version {
+                    1 => PinProtocol::V1,
+                    2 => PinProtocol::V2,
+                    _ => return Err(PyValueError::new_err("Unsupported protocol version")),
+                };
+                let client_data_hash = [0u8; 32];
+                Some(protocol.authenticate(token, &client_data_hash))
+            }
+            _ => None,
+        };
+
+        let dev = PyCtapDevice::with_event(
+            py,
+            self.device.clone_ref(py),
+            event,
+            on_keepalive,
+        )?;
+        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+
+        let result = client::filter_creds(
+            &ctap,
+            rp_id,
+            &values,
+            pin_auth.as_deref(),
+            pin_version,
+            &mut |_| {},
+        )
+        .map_err(crate::py_ctap::ctap_err)?;
+
+        match result {
+            Some(val) => Ok(Some(crate::py_ctap::val_to_pyobj(py, &val)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Get auth parameters (pin_token, internal_uv) for a CTAP2 operation.
+    ///
+    /// Returns (pin_token: Optional[bytes], internal_uv: bool).
+    #[pyo3(signature = (rp_id, user_verification, permissions, pin_version, allow_uv, event=None, on_keepalive=None, user_interaction=None))]
+    fn get_auth_params<'py>(
+        &self,
+        py: Python<'py>,
+        rp_id: &str,
+        user_verification: Option<&str>,
+        permissions: u32,
+        pin_version: Option<u32>,
+        allow_uv: bool,
+        event: Option<PyObject>,
+        on_keepalive: Option<PyObject>,
+        user_interaction: Option<PyObject>,
+    ) -> PyResult<(Option<Bound<'py, PyBytes>>, bool)> {
+        let dev = PyCtapDevice::with_event(
+            py,
+            self.device.clone_ref(py),
+            event,
+            on_keepalive,
+        )?;
+        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+
+        let ui = user_interaction
+            .ok_or_else(|| PyValueError::new_err("user_interaction is required"))?;
+
+        let py_ui = PyUserInteraction {
+            py_obj: ui,
+            permissions,
+            rp_id: Some(rp_id.to_string()),
+        };
+
+        let (pin_token, internal_uv) = client::get_auth_params(
+            &ctap,
+            rp_id,
+            user_verification,
+            permissions,
+            allow_uv,
+            &mut |_| {},
+            &py_ui,
+            pin_version,
+        )
+        .map_err(client_err)?;
+
+        let py_token = pin_token.map(|t| PyBytes::new(py, &t));
+        Ok((py_token, internal_uv))
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "client")?;
     sub.add_class::<ClientDataCollector>()?;
+    sub.add_class::<NativeCtap2ClientBackend>()?;
     m.add_submodule(&sub)?;
 
     let sys = m.py().import("sys")?;

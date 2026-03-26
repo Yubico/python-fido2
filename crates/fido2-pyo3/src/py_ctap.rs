@@ -46,7 +46,7 @@ use crate::py_cbor;
 
 /// Wraps a Python CtapDevice object to implement the Rust CtapDevice trait.
 /// Optionally carries event and on_keepalive to forward to Python's device.call().
-struct PyCtapDevice {
+pub struct PyCtapDevice {
     py_device: PyObject,
     capabilities: u8,
     event: Option<PyObject>,
@@ -57,7 +57,7 @@ struct PyCtapDevice {
 }
 
 impl PyCtapDevice {
-    fn new(py: Python<'_>, py_device: PyObject) -> PyResult<Self> {
+    pub fn new(py: Python<'_>, py_device: PyObject) -> PyResult<Self> {
         let capabilities: u8 = py_device.getattr(py, "capabilities")?.extract(py)?;
         Ok(Self {
             py_device,
@@ -68,7 +68,7 @@ impl PyCtapDevice {
         })
     }
 
-    fn with_event(
+    pub fn with_event(
         py: Python<'_>,
         py_device: PyObject,
         event: Option<PyObject>,
@@ -126,7 +126,7 @@ impl CtapDevice for PyCtapDevice {
 
 // ---- Error conversion helpers ----
 
-fn ctap_err(e: CtapError) -> PyErr {
+pub fn ctap_err(e: CtapError) -> PyErr {
     match e {
         CtapError::StatusError(status) => {
             PyValueError::new_err(format!("CTAP_ERR:{}", status.as_byte()))
@@ -145,7 +145,7 @@ fn apdu_err(e: ApduError) -> PyErr {
 
 // ---- Conversion helpers ----
 
-fn py_to_val(py: Python<'_>, obj: PyObject) -> PyResult<fido2::cbor::Value> {
+pub fn py_to_val(py: Python<'_>, obj: PyObject) -> PyResult<fido2::cbor::Value> {
     py_cbor::py_to_value(obj.bind(py))
 }
 
@@ -153,7 +153,7 @@ fn py_opt_to_val(py: Python<'_>, obj: Option<PyObject>) -> PyResult<Option<fido2
     obj.map(|o| py_to_val(py, o)).transpose()
 }
 
-fn val_to_pyobj(py: Python<'_>, val: &fido2::cbor::Value) -> PyResult<PyObject> {
+pub fn val_to_pyobj(py: Python<'_>, val: &fido2::cbor::Value) -> PyResult<PyObject> {
     Ok(py_cbor::value_to_py(py, val)?.unbind())
 }
 

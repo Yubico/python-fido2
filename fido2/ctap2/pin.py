@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import abc
 import logging
-from dataclasses import dataclass
 from enum import IntEnum, IntFlag, unique
 from threading import Event
 from typing import Any, Callable, ClassVar, Mapping, NoReturn
@@ -70,12 +69,6 @@ class PinProtocol(abc.ABC):
         """Validates that a token is well-formed.
         Returns the token, or if invalid, raises a ValueError.
         """
-
-
-@dataclass
-class _PinUv:
-    protocol: PinProtocol
-    token: bytes
 
 
 class PinProtocolV1(PinProtocol):
@@ -174,7 +167,6 @@ class ClientPin:
         return info.options.get("pinUvAuthToken") is True
 
     def __init__(self, ctap: Ctap2, protocol: PinProtocol | None = None):
-        self.ctap = ctap
         if protocol is None:
             for proto in ClientPin.PROTOCOLS:
                 if proto.VERSION in ctap.info.pin_uv_protocols:

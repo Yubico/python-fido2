@@ -40,7 +40,7 @@ from ..webauthn import (
     _as_cbor,
 )
 from .base import Ctap2, Info
-from .pin import PinProtocol, _PinUv
+from .pin import PinProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,6 @@ class CredentialManagement:
             raise ValueError("Authenticator does not support Credential Management")
 
         self.ctap = ctap
-        self.pin_uv = _PinUv(pin_uv_protocol, pin_uv_token)
 
         if "credMgmt" in ctap.info.options:
             cmd_byte = 0x0A

@@ -199,8 +199,6 @@ class FPBioEnrollment(BioEnrollment):
 
     def __init__(self, ctap: Ctap2, pin_uv_protocol: PinProtocol, pin_uv_token: bytes):
         super().__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)
-        self.pin_uv_protocol = pin_uv_protocol
-        self.pin_uv_token = pin_uv_token
 
         if "bioEnroll" in ctap.info.options:
             cmd_byte = 0x09

@@ -34,7 +34,7 @@ from _fido2_native.ctap import NativeConfig
 
 from ..ctap import CtapError
 from .base import Ctap2, Info
-from .pin import PinProtocol, _PinUv
+from .pin import PinProtocol
 
 
 class Config:
@@ -73,12 +73,6 @@ class Config:
             raise ValueError("Authenticator does not support Config")
 
         self.ctap = ctap
-        self.pin_uv = (
-            _PinUv(pin_uv_protocol, pin_uv_token)
-            if pin_uv_protocol and pin_uv_token
-            else None
-        )
-        self._subcommands = self.ctap.info.authenticator_config_commands
 
         self._native = NativeConfig(
             ctap._native.device,

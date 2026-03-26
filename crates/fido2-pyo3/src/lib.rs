@@ -28,7 +28,7 @@
 mod py_cbor;
 mod py_client;
 mod py_cose;
-mod py_ctap;
+pub(crate) mod py_ctap;
 mod py_hid;
 mod py_logging;
 mod py_pcsc;
