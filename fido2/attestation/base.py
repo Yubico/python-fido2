@@ -33,10 +33,7 @@ from enum import IntEnum, unique
 from functools import wraps
 from typing import Any, Mapping, Sequence, cast
 
-from cryptography import x509
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from _fido2_native.x509 import verify_x509_chain as _verify_x509_chain
 
 from ..webauthn import AttestationObject, AuthenticatorData
 
@@ -109,32 +106,10 @@ def verify_x509_chain(chain: list[bytes]) -> None:
     Checks that the first item in the chain is signed by the next, and so on.
     The first item is the leaf, the last is the root.
     """
-    certs = [x509.load_der_x509_certificate(der, default_backend()) for der in chain]
-    cert = certs.pop(0)
-    while certs:
-        child = cert
-        cert = certs.pop(0)
-        pub = cert.public_key()
-        try:
-            if isinstance(pub, rsa.RSAPublicKey):
-                assert child.signature_hash_algorithm is not None  # noqa: S101
-                pub.verify(
-                    child.signature,
-                    child.tbs_certificate_bytes,
-                    padding.PKCS1v15(),
-                    child.signature_hash_algorithm,
-                )
-            elif isinstance(pub, ec.EllipticCurvePublicKey):
-                assert child.signature_hash_algorithm is not None  # noqa: S101
-                pub.verify(
-                    child.signature,
-                    child.tbs_certificate_bytes,
-                    ec.ECDSA(child.signature_hash_algorithm),
-                )
-            else:
-                raise ValueError("Unsupported signature key type")
-        except _InvalidSignature:
-            raise InvalidSignature()
+    try:
+        _verify_x509_chain(chain)
+    except ValueError:
+        raise InvalidSignature()
 
 
 class Attestation(abc.ABC):
@@ -184,15 +159,14 @@ class NoneAttestation(Attestation):
 
 
 def _validate_cert_common(cert):
-    if cert.version != x509.Version.v3:
+    if cert.version() != 2:  # v3 = 2 (0-indexed)
         raise InvalidData("Attestation certificate must use version 3!")
 
-    try:
-        bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
-        if bc.value.ca:
-            raise InvalidData("Attestation certificate must have CA=false!")
-    except x509.ExtensionNotFound:
+    bc = cert.basic_constraints_ca()
+    if bc is None:
         raise InvalidData("Attestation certificate must have Basic Constraints!")
+    if bc:
+        raise InvalidData("Attestation certificate must have CA=false!")
 
 
 def _default_attestations():

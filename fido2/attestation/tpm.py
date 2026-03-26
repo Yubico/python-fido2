@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from enum import IntEnum, unique
 from typing import TypeAlias, cast
 
-from cryptography import x509
+from _fido2_native.x509 import Certificate
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -53,7 +53,7 @@ from .base import (
 )
 
 TPM_ALG_NULL = 0x0010
-OID_AIK_CERTIFICATE = x509.ObjectIdentifier("2.23.133.8.3")
+OID_AIK_CERTIFICATE = "2.23.133.8.3"
 
 
 @unique
@@ -489,15 +489,12 @@ def _validate_tpm_cert(cert):
     # https://www.w3.org/TR/webauthn/#tpm-cert-requirements
     _validate_cert_common(cert)
 
-    if len(cert.subject) > 0:
+    if not cert.subject_is_empty():
         raise InvalidData("Certificate should not have Subject")
 
-    s = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-    if not s:
+    if not cert.has_subject_alternative_name():
         raise InvalidData("Certificate should have SubjectAlternativeName")
-    ext = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
-    has_aik = [x == OID_AIK_CERTIFICATE for x in ext.value]
-    if True not in has_aik:
+    if not cert.extended_key_usage_contains(OID_AIK_CERTIFICATE):
         raise InvalidData(
             'Extended key usage MUST contain the "joint-iso-itu-t(2) '
             "internationalorganizations(23) 133 tcg-kp(8) "
@@ -515,10 +512,10 @@ class TpmAttestation(Attestation):
         alg = statement["alg"]
         x5c = statement["x5c"]
         cert_info = statement["certInfo"]
-        cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+        cert = Certificate(x5c[0])
         _validate_tpm_cert(cert)
 
-        pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
+        pub_key = CoseKey.parse(cert.public_key_as_cose(alg))
 
         try:
             pub_area = TpmPublicFormat.parse(statement["pubArea"])

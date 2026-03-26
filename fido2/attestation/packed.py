@@ -27,9 +27,8 @@
 
 from __future__ import annotations
 
-from cryptography import x509
+from _fido2_native.x509 import Certificate
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from cryptography.hazmat.backends import default_backend
 
 from ..cose import CoseKey
 from .base import (
@@ -42,41 +41,35 @@ from .base import (
     catch_builtins,
 )
 
-OID_AAGUID = x509.ObjectIdentifier("1.3.6.1.4.1.45724.1.1.4")
+OID_AAGUID = "1.3.6.1.4.1.45724.1.1.4"
 
 
 def _validate_packed_cert(cert, aaguid):
     # https://www.w3.org/TR/webauthn/#packed-attestation-cert-requirements
     _validate_cert_common(cert)
 
-    c = cert.subject.get_attributes_for_oid(x509.NameOID.COUNTRY_NAME)
-    if not c:
+    if cert.subject_string("2.5.4.6") is None:  # C
         raise InvalidData("Subject must have C set!")
-    o = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
-    if not o:
+    if cert.subject_string("2.5.4.10") is None:  # O
         raise InvalidData("Subject must have O set!")
-    ous = cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATIONAL_UNIT_NAME)
-    if not ous:
+    ou = cert.subject_string("2.5.4.11")  # OU
+    if ou is None:
         raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
-
-    ou = ous[0]
-    if ou.value != "Authenticator Attestation":
+    if ou != "Authenticator Attestation":
         raise InvalidData('Subject must have OU = "Authenticator Attestation"!')
-    cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
-    if not cn:
+    if cert.subject_string("2.5.4.3") is None:  # CN
         raise InvalidData("Subject must have CN set!")
 
-    try:
-        ext = cert.extensions.get_extension_for_oid(OID_AAGUID)
-        if ext.critical:
+    ext = cert.extension_value(OID_AAGUID)
+    if ext is not None:
+        critical, value = ext
+        if critical:
             raise InvalidData("AAGUID extension must not be marked as critical")
-        ext_aaguid = ext.value.value[2:]
+        ext_aaguid = value[2:]
         if ext_aaguid != aaguid:
             raise InvalidData(
                 "AAGUID in Authenticator data does not match attestation certificate!"
             )
-    except x509.ExtensionNotFound:
-        pass  # If missing, ignore
 
 
 class PackedAttestation(Attestation):
@@ -90,10 +83,10 @@ class PackedAttestation(Attestation):
         x5c = statement.get("x5c")
         assert auth_data.credential_data is not None  # noqa: S101
         if x5c:
-            cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+            cert = Certificate(x5c[0])
             _validate_packed_cert(cert, auth_data.credential_data.aaguid)
 
-            pub_key = CoseKey.for_alg(alg).from_cryptography_key(cert.public_key())
+            pub_key = CoseKey.parse(cert.public_key_as_cose(alg))
             att_type = AttestationType.BASIC
         else:
             pub_key = CoseKey.parse(auth_data.credential_data.public_key)

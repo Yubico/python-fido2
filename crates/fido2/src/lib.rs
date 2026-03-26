@@ -32,3 +32,4 @@ pub mod pin;
 pub mod transport;
 pub mod utils;
 pub mod webauthn;
+pub mod x509;

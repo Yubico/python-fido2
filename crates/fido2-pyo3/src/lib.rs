@@ -32,6 +32,7 @@ mod py_logging;
 mod py_pcsc;
 mod py_pin;
 mod py_utils;
+mod py_x509;
 
 use pyo3::prelude::*;
 
@@ -44,5 +45,6 @@ fn _fido2_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     py_pcsc::register(m)?;
     py_pin::register(m)?;
     py_utils::register(m)?;
+    py_x509::register(m)?;
     Ok(())
 }

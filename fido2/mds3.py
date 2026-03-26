@@ -36,8 +36,7 @@ from datetime import date
 from enum import unique
 from typing import Any, Callable, Mapping, Sequence
 
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
+from _fido2_native.x509 import Certificate
 
 from .attestation import (
     Attestation,
@@ -429,8 +428,8 @@ class MdsAttestationVerifier(AttestationVerifier):
         This method does not take the attestation_filter into account.
         """
         for der in certificate_chain:
-            cert = x509.load_der_x509_certificate(der, default_backend())
-            ski = x509.SubjectKeyIdentifier.from_public_key(cert.public_key()).digest
+            cert = Certificate(der)
+            ski = cert.subject_key_identifier()
             if ski in self._ski_table:
                 return self._ski_table[ski]
         return None
@@ -460,18 +459,14 @@ class MdsAttestationVerifier(AttestationVerifier):
                 )
                 return None
 
-            issuer = x509.load_der_x509_certificate(
-                attestation_result.trust_path[-1], default_backend()
-            ).issuer
+            issuer_der = Certificate(attestation_result.trust_path[-1]).issuer_der()
 
             for root in entry.metadata_statement.attestation_root_certificates:
-                subject = x509.load_der_x509_certificate(
-                    root, default_backend()
-                ).subject
-                if subject == issuer:
+                subject_der = Certificate(root).subject_der()
+                if subject_der == issuer_der:
                     _last_entry.set(entry)
                     return root
-            logger.info(f"No attestation root matching subject: {issuer}")
+            logger.info("No attestation root matching issuer")
         return None
 
     def find_entry(
@@ -515,10 +510,9 @@ def parse_blob(blob: bytes, trust_root: bytes | None) -> MetadataBlobPayload:
         verify_x509_chain(chain)
 
         # Verify blob signature using leaf
-        leaf = x509.load_der_x509_certificate(chain[0], default_backend())
-        public_key = CoseKey.for_name(header["alg"]).from_cryptography_key(
-            leaf.public_key()
-        )
+        leaf = Certificate(chain[0])
+        alg_cls = CoseKey.for_name(header["alg"])
+        public_key = CoseKey.parse(leaf.public_key_as_cose(alg_cls.ALGORITHM))
         public_key.verify(message, signature)
     else:
         logger.warning(

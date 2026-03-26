@@ -27,11 +27,10 @@
 
 from __future__ import annotations
 
-from cryptography import x509
+from _fido2_native.x509 import Certificate
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from cryptography.hazmat.backends import default_backend
 
-from ..cose import ES256
+from ..cose import ES256, CoseKey
 from .base import (
     Attestation,
     AttestationResult,
@@ -65,8 +64,8 @@ class FidoU2FAttestation(Attestation):
         app_param, client_param, key_handle, public_key, cert_bytes, signature
     ):
         m = b"\0" + app_param + client_param + key_handle + public_key
-        cert = x509.load_der_x509_certificate(cert_bytes, default_backend())
+        cert = Certificate(cert_bytes)
         try:
-            ES256.from_cryptography_key(cert.public_key()).verify(m, signature)
+            CoseKey.parse(cert.public_key_as_cose(ES256.ALGORITHM)).verify(m, signature)
         except _InvalidSignature:
             raise InvalidSignature()

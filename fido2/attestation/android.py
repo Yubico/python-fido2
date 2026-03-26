@@ -30,8 +30,7 @@ from __future__ import annotations
 import json
 
 from _fido2_native.utils import bytes_eq
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
+from _fido2_native.x509 import Certificate
 
 from ..cose import CoseKey
 from ..utils import sha256, websafe_decode
@@ -63,13 +62,13 @@ class AndroidSafetynetAttestation(Attestation):
 
         data = json.loads(header.decode("utf8"))
         x5c = [websafe_decode(x) for x in data["x5c"]]
-        cert = x509.load_der_x509_certificate(x5c[0], default_backend())
+        cert = Certificate(x5c[0])
 
-        cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
-        if cn[0].value != "attest.android.com":
+        cn = cert.subject_string("2.5.4.3")  # CN
+        if cn != "attest.android.com":
             raise InvalidData("Certificate not issued to attest.android.com!")
 
-        CoseKey.for_name(data["alg"]).from_cryptography_key(cert.public_key()).verify(
-            jwt.rsplit(b".", 1)[0], sig
-        )
+        alg_cls = CoseKey.for_name(data["alg"])
+        pub_key = CoseKey.parse(cert.public_key_as_cose(alg_cls.ALGORITHM))
+        pub_key.verify(jwt.rsplit(b".", 1)[0], sig)
         return AttestationResult(AttestationType.BASIC, x5c)
