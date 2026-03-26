@@ -251,7 +251,7 @@ impl CoseKey {
         let sec1 = self.ec_sec1_uncompressed()?;
         let vk =
             VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
-        let sig = Signature::from_bytes(signature.into())
+        let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
         vk.verify(message, &sig)
@@ -265,7 +265,7 @@ impl CoseKey {
         let sec1 = self.ec_sec1_uncompressed()?;
         let vk =
             VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
-        let sig = Signature::from_bytes(signature.into())
+        let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
         vk.verify(message, &sig)
@@ -279,7 +279,7 @@ impl CoseKey {
         let sec1 = self.ec_sec1_uncompressed()?;
         let vk =
             VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
-        let sig = Signature::from_bytes(signature.into())
+        let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
         vk.verify(message, &sig)
@@ -293,7 +293,7 @@ impl CoseKey {
         let sec1 = self.ec_sec1_uncompressed()?;
         let vk =
             VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
-        let sig = Signature::from_bytes(signature.into())
+        let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
         vk.verify(message, &sig)

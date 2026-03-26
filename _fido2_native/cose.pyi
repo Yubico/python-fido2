@@ -1,0 +1,3 @@
+from typing import Any, Mapping
+
+def verify(key: Mapping[int, Any], message: bytes, signature: bytes) -> None: ...

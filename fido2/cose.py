@@ -29,14 +29,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping, Sequence, TypeVar
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, padding, rsa
+from cryptography.hazmat.primitives import hashes
 
-from .utils import bytes2int, int2bytes
+from _fido2_native.cose import verify as _native_verify
+
+from .utils import int2bytes
 
 if TYPE_CHECKING:
-    # This type isn't available on cryptography <40.
     from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 
 
@@ -55,7 +54,7 @@ class CoseKey(dict):
         :param message: The message which was signed.
         :param signature: The signature to check.
         """
-        raise NotImplementedError("Signature verification not supported.")
+        _native_verify(self, message, signature)
 
     @classmethod
     def from_cryptography_key(
@@ -135,22 +134,18 @@ T_CoseKey = TypeVar("T_CoseKey", bound=CoseKey)
 class UnsupportedKey(CoseKey):
     """A COSE key with an unsupported algorithm."""
 
+    def verify(self, message, signature):
+        raise NotImplementedError("Signature verification not supported.")
+
 
 class ES256(CoseKey):
     ALGORITHM = -7
     _HASH_ALG = hashes.SHA256()
 
-    def verify(self, message, signature):
-        if self[-1] != 1:
-            raise ValueError("Unsupported elliptic curve")
-        ec.EllipticCurvePublicNumbers(
-            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256R1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives.asymmetric import ec
+
         assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
@@ -182,17 +177,10 @@ class ES384(CoseKey):
     ALGORITHM = -35
     _HASH_ALG = hashes.SHA384()
 
-    def verify(self, message, signature):
-        if self[-1] != 2:
-            raise ValueError("Unsupported elliptic curve")
-        ec.EllipticCurvePublicNumbers(
-            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP384R1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives.asymmetric import ec
+
         assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
@@ -215,17 +203,10 @@ class ES512(CoseKey):
     ALGORITHM = -36
     _HASH_ALG = hashes.SHA512()
 
-    def verify(self, message, signature):
-        if self[-1] != 3:
-            raise ValueError("Unsupported elliptic curve")
-        ec.EllipticCurvePublicNumbers(
-            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP521R1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives.asymmetric import ec
+
         assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(
@@ -248,13 +229,10 @@ class RS256(CoseKey):
     ALGORITHM = -257
     _HASH_ALG = hashes.SHA256()
 
-    def verify(self, message, signature):
-        rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
-            default_backend()
-        ).verify(signature, message, padding.PKCS1v15(), self._HASH_ALG)
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
         assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
@@ -264,20 +242,10 @@ class PS256(CoseKey):
     ALGORITHM = -37
     _HASH_ALG = hashes.SHA256()
 
-    def verify(self, message, signature):
-        rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
-            default_backend()
-        ).verify(
-            signature,
-            message,
-            padding.PSS(
-                mgf=padding.MGF1(self._HASH_ALG), salt_length=padding.PSS.MAX_LENGTH
-            ),
-            self._HASH_ALG,
-        )
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
         assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
@@ -286,13 +254,11 @@ class PS256(CoseKey):
 class EdDSA(CoseKey):
     ALGORITHM = -8
 
-    def verify(self, message, signature):
-        if self[-1] != 6:
-            raise ValueError("Unsupported elliptic curve")
-        ed25519.Ed25519PublicKey.from_public_bytes(self[-2]).verify(signature, message)
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
         assert isinstance(public_key, ed25519.Ed25519PublicKey)  # noqa: S101
         return cls(
             {
@@ -315,13 +281,11 @@ class Ed448(CoseKey):
     # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
     ALGORITHM = -53
 
-    def verify(self, message, signature):
-        if self[-1] != 7:
-            raise ValueError("Unsupported elliptic curve")
-        ed448.Ed448PublicKey.from_public_bytes(self[-2]).verify(signature, message)
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ed448
+
         assert isinstance(public_key, ed448.Ed448PublicKey)  # noqa: S101
         return cls(
             {
@@ -339,13 +303,10 @@ class RS1(CoseKey):
     ALGORITHM = -65535
     _HASH_ALG = hashes.SHA1()  # noqa: S303
 
-    def verify(self, message, signature):
-        rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
-            default_backend()
-        ).verify(signature, message, padding.PKCS1v15(), self._HASH_ALG)
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
         assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
@@ -355,17 +316,10 @@ class ES256K(CoseKey):
     ALGORITHM = -47
     _HASH_ALG = hashes.SHA256()
 
-    def verify(self, message, signature):
-        if self[-1] != 8:
-            raise ValueError("Unsupported elliptic curve")
-        ec.EllipticCurvePublicNumbers(
-            bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256K1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
-
     @classmethod
     def from_cryptography_key(cls, public_key):
+        from cryptography.hazmat.primitives.asymmetric import ec
+
         assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
         pn = public_key.public_numbers()
         return cls(

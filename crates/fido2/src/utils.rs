@@ -53,8 +53,20 @@ pub fn websafe_encode(data: &[u8]) -> String {
 }
 
 /// Decode a base64url-encoded string (with or without padding).
+/// Also accepts standard base64 characters (+/) for compatibility.
+/// Invalid characters are silently ignored, matching Python's behavior.
 pub fn websafe_decode(data: &str) -> Result<Vec<u8>, base64::DecodeError> {
-    URL_SAFE_NO_PAD.decode(data.trim_end_matches('='))
+    let normalized: String = data
+        .chars()
+        .filter_map(|c| match c {
+            '+' => Some('-'),
+            '/' => Some('_'),
+            '=' => None,
+            c if c.is_ascii_alphanumeric() || c == '-' || c == '_' => Some(c),
+            _ => None,
+        })
+        .collect();
+    URL_SAFE_NO_PAD.decode(&normalized)
 }
 
 #[cfg(test)]

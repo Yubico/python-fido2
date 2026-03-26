@@ -25,16 +25,22 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+mod py_cbor;
+mod py_cose;
 mod py_hid;
 mod py_logging;
 mod py_pcsc;
+mod py_utils;
 
 use pyo3::prelude::*;
 
 #[pymodule]
 fn _fido2_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     py_logging::init();
+    py_cbor::register(m)?;
+    py_cose::register(m)?;
     py_hid::register(m)?;
     py_pcsc::register(m)?;
+    py_utils::register(m)?;
     Ok(())
 }

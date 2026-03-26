@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import struct
 from abc import abstractmethod
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import Field, fields
 from io import BytesIO
 from typing import (
@@ -58,8 +57,7 @@ if TYPE_CHECKING:
         # Fallback for Python 3.10 and earlier
         Self = TypeVar("Self", bound="_DataClassMapping")
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, hmac
+from _fido2_native.utils import hmac_sha256, sha256, websafe_decode, websafe_encode
 
 __all__ = [
     "websafe_encode",
@@ -72,29 +70,6 @@ __all__ = [
 
 
 LOG_LEVEL_TRAFFIC = 5
-
-
-def sha256(data: bytes) -> bytes:
-    """Produces a SHA256 hash of the input.
-
-    :param data: The input data to hash.
-    :return: The resulting hash.
-    """
-    h = hashes.Hash(hashes.SHA256(), default_backend())
-    h.update(data)
-    return h.finalize()
-
-
-def hmac_sha256(key: bytes, data: bytes) -> bytes:
-    """Performs an HMAC-SHA256 operation on the given data, using the given key.
-
-    :param key: The key to use.
-    :param data: The input data to hash.
-    :return: The resulting hash.
-    """
-    h = hmac.HMAC(key, hashes.SHA256(), default_backend())
-    h.update(data)
-    return h.finalize()
 
 
 def bytes2int(value: bytes) -> int:
@@ -120,32 +95,6 @@ def int2bytes(value: int, minlen: int = -1) -> bytes:
     ba.append(value)
     ba.extend([0] * (minlen - len(ba)))
     return bytes(reversed(ba))
-
-
-def websafe_decode(data: str | bytes) -> bytes:
-    """Decodes a websafe-base64 encoded string.
-    See: "Base 64 Encoding with URL and Filename Safe Alphabet" from Section 5
-    in RFC4648 without padding.
-
-    :param data: The input to decode.
-    :return: The decoded bytes.
-    """
-    if isinstance(data, str):
-        data_b = data.encode("ascii")
-    else:
-        data_b = bytes(data)
-
-    data_b += b"=" * (-len(data_b) % 4)
-    return urlsafe_b64decode(data_b)
-
-
-def websafe_encode(data: bytes) -> str:
-    """Encodes a byte string into websafe-base64 encoding.
-
-    :param data: The input to encode.
-    :return: The encoded string.
-    """
-    return urlsafe_b64encode(data).replace(b"=", b"").decode("ascii")
 
 
 class ByteBuffer(BytesIO):
