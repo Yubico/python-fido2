@@ -31,7 +31,17 @@ import json
 import struct
 from dataclasses import dataclass, field
 from enum import Enum, EnumMeta, IntFlag, unique
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Mapping, Sequence
+
+from _fido2_native.webauthn import (
+    parse_attestation_object as _parse_attestation_object,
+)
+from _fido2_native.webauthn import (
+    parse_collected_client_data as _parse_collected_client_data,
+)
+from _fido2_native.webauthn import (
+    parse_credential_data as _parse_credential_data,
+)
 
 from . import cbor
 from .cose import ES256, CoseKey
@@ -39,7 +49,6 @@ from .utils import (
     ByteBuffer,
     _JsonDataObject,
     sha256,
-    websafe_decode,
     websafe_encode,
 )
 
@@ -114,11 +123,8 @@ class AttestedCredentialData(bytes):
         :param data: A binary string containing an attested credential data.
         :return: AAGUID, credential ID, public key, and remaining data.
         """
-        reader = ByteBuffer(data)
-        aaguid = Aaguid(reader.read(16))
-        cred_id = reader.read(reader.unpack(">H"))
-        pub_key, rest = cbor.decode_from(reader.read())
-        return aaguid, cred_id, CoseKey.parse(pub_key), rest
+        aaguid, cred_id, pub_key, rest = _parse_credential_data(data)
+        return Aaguid(aaguid), cred_id, CoseKey.parse(pub_key), rest
 
     @classmethod
     def create(
@@ -300,10 +306,10 @@ class AttestationObject(bytes):  # , Mapping[str, Any]):
     def __init__(self, _: bytes):
         super().__init__()
 
-        data = cast(Mapping[str, Any], cbor.decode(bytes(self)))
-        object.__setattr__(self, "fmt", data["fmt"])
-        object.__setattr__(self, "auth_data", AuthenticatorData(data["authData"]))
-        object.__setattr__(self, "att_stmt", data["attStmt"])
+        fmt, auth_data_bytes, att_stmt = _parse_attestation_object(bytes(self))
+        object.__setattr__(self, "fmt", fmt)
+        object.__setattr__(self, "auth_data", AuthenticatorData(auth_data_bytes))
+        object.__setattr__(self, "att_stmt", att_stmt)
 
     def __str__(self):  # Override default implementation from bytes.
         return repr(self)
@@ -382,11 +388,14 @@ class CollectedClientData(bytes):
     def __init__(self, _: bytes):
         super().__init__()
 
+        type_, challenge, origin, cross_origin = _parse_collected_client_data(
+            bytes(self)
+        )
         object.__setattr__(self, "_data", json.loads(self.decode()))
-        object.__setattr__(self, "type", self._data["type"])
-        object.__setattr__(self, "challenge", websafe_decode(self._data["challenge"]))
-        object.__setattr__(self, "origin", self._data["origin"])
-        object.__setattr__(self, "cross_origin", self._data.get("crossOrigin", False))
+        object.__setattr__(self, "type", type_)
+        object.__setattr__(self, "challenge", challenge)
+        object.__setattr__(self, "origin", origin)
+        object.__setattr__(self, "cross_origin", cross_origin)
 
     @classmethod
     def create(

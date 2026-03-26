@@ -1,0 +1,9 @@
+def parse_credential_data(
+    data: bytes,
+) -> tuple[bytes, bytes, dict[int, object], bytes]: ...
+def parse_attestation_object(
+    data: bytes,
+) -> tuple[str, bytes, dict[str, object]]: ...
+def parse_collected_client_data(
+    data: bytes,
+) -> tuple[str, bytes, str, bool]: ...
