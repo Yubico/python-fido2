@@ -23,9 +23,6 @@ classifiers = [
 ]
 dependencies = ["cryptography (>=2.6, !=35, <49)"]
 
-[project.optional-dependencies]
-pcsc = ["pyscard (>=1.9, <3)"]
-
 [dependency-groups]
 dev = [
     "pytest>=9.0,<10",
@@ -37,20 +34,23 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/Yubico/python-fido2"
 
-[tool.poetry]
-include = [
-  { path = "COPYING", format = "sdist" },
-  { path = "COPYING.MPLv2", format = "sdist" },
-  { path = "COPYING.APLv2", format = "sdist" },
-  { path = "NEWS", format = "sdist" },
-  { path = "README.adoc", format = "sdist" },
-  { path = "tests/", format = "sdist" },
-  { path = "examples/", format = "sdist" },
-]
-
 [build-system]
-requires = ["poetry-core>=2.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+manifest-path = "crates/fido2-pyo3/Cargo.toml"
+module-name = "_fido2_native"
+python-packages = ["fido2"]
+include = [
+  "COPYING",
+  "COPYING.MPLv2",
+  "COPYING.APLv2",
+  "NEWS",
+  "README.adoc",
+  "tests/**",
+  "examples/**",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -66,6 +66,9 @@ reportPrivateImportUsage = false
 
 [tool.ty.src]
 exclude = ["docs"]
+
+[tool.ty.analysis]
+allowed-unresolved-imports = ["_fido2_native.**", "smartcard.**"]
 
 [[tool.ty.overrides]]
 include = ["tests/**", "**/test_*.py"]

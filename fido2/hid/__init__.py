@@ -28,40 +28,21 @@
 from __future__ import annotations
 
 import logging
-import os
 import struct
-import sys
 from enum import IntEnum, IntFlag, unique
 from threading import Event
 from typing import Callable, Iterator
 
-from ..ctap import STATUS, CtapDevice, CtapError
-from ..utils import LOG_LEVEL_TRAFFIC
-from .base import CtapHidConnection, HidDescriptor
+from _fido2_native import hid as _hid  # type: ignore[reportAttributeAccessIssue]
+
+from ..ctap import STATUS, CtapDevice
+from ..ctap import CtapError as CtapError
 
 logger = logging.getLogger(__name__)
 
 
-if sys.platform == "linux":
-    from . import linux as backend
-elif sys.platform == "win32":
-    from . import windows as backend
-elif sys.platform == "darwin":
-    from . import macos as backend
-# The following have version numbers at the end
-elif sys.platform.startswith("freebsd"):
-    from . import freebsd as backend
-elif sys.platform.startswith("netbsd"):
-    from . import netbsd as backend
-elif sys.platform.startswith("openbsd"):
-    from . import openbsd as backend
-else:
-    raise Exception("Unsupported platform")
-
-
-list_descriptors = backend.list_descriptors
-get_descriptor = backend.get_descriptor
-open_connection = backend.open_connection
+def list_descriptors():
+    return _hid.list_descriptors()
 
 
 class ConnectionFailure(Exception):
@@ -100,31 +81,16 @@ TYPE_INIT = 0x80
 
 class CtapHidDevice(CtapDevice):
     """
-    CtapDevice implementation using the HID transport.
+    CtapDevice implementation using the HID transport (native Rust backend).
 
     :cvar descriptor: Device descriptor.
     """
 
-    def __init__(self, descriptor: HidDescriptor, connection: CtapHidConnection):
+    def __init__(self, descriptor: _hid.HidDescriptor):
         self.descriptor = descriptor
-        self._packet_size = descriptor.report_size_out
-        self._connection = connection
-
-        nonce = os.urandom(8)
-        self._channel_id = 0xFFFFFFFF
-        response = self.call(CTAPHID.INIT, nonce)
-        r_nonce, response = response[:8], response[8:]
-        if r_nonce != nonce:
-            raise ConnectionFailure("Wrong nonce")
-        (
-            self._channel_id,
-            self._u2fhid_version,
-            v1,
-            v2,
-            v3,
-            self._capabilities,
-        ) = struct.unpack_from(">IBBBBB", response)
-        self._device_version = (v1, v2, v3)
+        self._connection = _hid.CtapHidConnection(descriptor)
+        self._capabilities = self._connection.capabilities
+        self._device_version = self._connection.device_version
 
     def __repr__(self):
         return f"CtapHidDevice({self.descriptor.path!r})"
@@ -132,7 +98,7 @@ class CtapHidDevice(CtapDevice):
     @property
     def version(self) -> int:
         """CTAP HID protocol version."""
-        return self._u2fhid_version
+        return 2  # We only support CTAP HID v2
 
     @property
     def device_version(self) -> tuple[int, int, int]:
@@ -154,13 +120,6 @@ class CtapHidDevice(CtapDevice):
         """Serial number of device."""
         return self.descriptor.serial_number
 
-    def _send_cancel(self):
-        packet = struct.pack(">IB", self._channel_id, TYPE_INIT | CTAPHID.CANCEL).ljust(
-            self._packet_size, b"\0"
-        )
-        logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", packet.hex())
-        self._connection.write_packet(packet)
-
     def call(
         self,
         cmd: int,
@@ -172,85 +131,16 @@ class CtapHidDevice(CtapDevice):
 
         while True:
             try:
-                return self._do_call(cmd, data, event, on_keepalive)
-            except CtapError as e:
-                if e.code == CtapError.ERR.CHANNEL_BUSY:
+                # The native connection handles framing, keepalive is not yet
+                # forwarded from the Rust layer, but errors are mapped.
+                return self._connection.call(cmd, data)
+            except OSError as e:
+                err_msg = str(e)
+                if "ChannelBusy" in err_msg:
                     if not event.wait(0.1):
                         logger.warning("CTAP channel busy, trying again...")
-                        continue  # Keep retrying on BUSY while not cancelled
-                raise
-
-    def _do_call(self, cmd, data, event, on_keepalive):
-        remaining = data
-        seq = 0
-
-        # Send request
-        header = struct.pack(">IBH", self._channel_id, TYPE_INIT | cmd, len(remaining))
-        while remaining or seq == 0:
-            size = min(len(remaining), self._packet_size - len(header))
-            body, remaining = remaining[:size], remaining[size:]
-            packet = header + body
-            logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", packet.hex())
-            self._connection.write_packet(packet.ljust(self._packet_size, b"\0"))
-            header = struct.pack(">IB", self._channel_id, 0x7F & seq)
-            seq += 1
-
-        try:
-            # Read response
-            seq = 0
-            r_len = 0
-            response = b""
-            last_ka = None
-            while True:
-                if event.is_set():
-                    # Cancel
-                    logger.debug("Sending cancel...")
-                    self._send_cancel()
-
-                recv = self._connection.read_packet()
-                logger.log(LOG_LEVEL_TRAFFIC, "RECV: %s", recv.hex())
-
-                r_channel = struct.unpack_from(">I", recv)[0]
-                recv = recv[4:]
-                if r_channel != self._channel_id:
-                    raise ConnectionFailure("Wrong channel")
-
-                if not response:  # Initialization packet
-                    r_cmd, r_len = struct.unpack_from(">BH", recv)
-                    recv = recv[3:]
-                    if r_cmd == TYPE_INIT | cmd:
-                        pass  # first data packet
-                    elif r_cmd == TYPE_INIT | CTAPHID.KEEPALIVE:
-                        try:
-                            ka_status = STATUS(struct.unpack_from(">B", recv)[0])
-                            logger.debug(f"Got keepalive status: {ka_status:02x}")
-                        except ValueError:
-                            raise ConnectionFailure("Invalid keepalive status")
-                        if on_keepalive and ka_status != last_ka:
-                            last_ka = ka_status
-                            on_keepalive(ka_status)
                         continue
-                    elif r_cmd == TYPE_INIT | CTAPHID.ERROR:
-                        raise CtapError(struct.unpack_from(">B", recv)[0])
-                    else:
-                        raise CtapError(CtapError.ERR.INVALID_COMMAND)
-                else:  # Continuation packet
-                    r_seq = struct.unpack_from(">B", recv)[0]
-                    recv = recv[1:]
-                    if r_seq != seq:
-                        raise ConnectionFailure("Wrong sequence number")
-                    seq += 1
-
-                response += recv
-                if len(response) >= r_len:
-                    break
-
-            return response[:r_len]
-        except KeyboardInterrupt:
-            logger.debug("Keyboard interrupt, cancelling...")
-            self._send_cancel()
-
-            raise
+                raise
 
     def wink(self) -> None:
         """Causes the authenticator to blink."""
@@ -273,8 +163,11 @@ class CtapHidDevice(CtapDevice):
 
     @classmethod
     def list_devices(cls) -> Iterator[CtapHidDevice]:
-        for d in list_descriptors():
-            yield cls(d, open_connection(d))
+        for d in _hid.list_descriptors():
+            try:
+                yield cls(d)
+            except Exception:
+                logger.debug("Failed to open device %s", d.path, exc_info=True)
 
 
 def list_devices() -> Iterator[CtapHidDevice]:
@@ -282,5 +175,7 @@ def list_devices() -> Iterator[CtapHidDevice]:
 
 
 def open_device(path) -> CtapHidDevice:
-    descriptor = get_descriptor(path)
-    return CtapHidDevice(descriptor, open_connection(descriptor))
+    for d in _hid.list_descriptors():
+        if d.path == path:
+            return CtapHidDevice(d)
+    raise ValueError(f"Device not found: {path}")

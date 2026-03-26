@@ -13,7 +13,6 @@ from fido2.hid import (
     CAPABILITY,
     CtapHidDevice,
     list_descriptors,
-    open_connection,
     open_device,
 )
 
@@ -86,7 +85,7 @@ class DeviceManager:
         selected = []
 
         def select(descriptor):
-            dev = CtapHidDevice(descriptor, open_connection(descriptor))
+            dev = CtapHidDevice(descriptor)
             # This client is only used for selection
             client = Fido2Client(
                 dev,

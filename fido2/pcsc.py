@@ -33,10 +33,7 @@ import struct
 from threading import Event
 from typing import Callable, Iterator
 
-from smartcard import System
-from smartcard.CardConnection import CardConnection
-from smartcard.CardConnectionDecorator import CardConnectionDecorator
-from smartcard.pcsc.PCSCExceptions import ListReadersException
+from _fido2_native import pcsc as _pcsc  # type: ignore[reportAttributeAccessIssue]
 
 from .ctap import STATUS, CtapDevice, CtapError
 from .hid import CAPABILITY, CTAPHID
@@ -51,14 +48,18 @@ SW1_MORE_DATA = 0x61
 logger = logging.getLogger(__name__)
 
 
+def _list_readers():
+    return _pcsc.list_readers()
+
+
 class CtapPcscDevice(CtapDevice):
     """
-    CtapDevice implementation using pyscard (PCSC).
+    CtapDevice implementation using native Rust PC/SC backend.
 
     This class is intended for use with NFC readers.
     """
 
-    def __init__(self, connection: CardConnection | CardConnectionDecorator, name: str):
+    def __init__(self, connection: _pcsc.PcscConnection, name: str):
         self._name = name
         self._capabilities = CAPABILITY(0)
         self.use_ext_apdu = False
@@ -102,7 +103,7 @@ class CtapPcscDevice(CtapDevice):
 
     def get_atr(self) -> bytes:
         """Get the ATR/ATS of the connected card."""
-        return bytes(self._conn.getATR() or b"")
+        return bytes(self._conn.get_atr())
 
     def apdu_exchange(
         self, apdu: bytes, protocol: int | None = None
@@ -114,8 +115,18 @@ class CtapPcscDevice(CtapDevice):
         """
 
         logger.log(LOG_LEVEL_TRAFFIC, "SEND: %s", apdu.hex())
-        resp, sw1, sw2 = self._conn.transmit(list(apdu), protocol)
-        response = bytes(resp)
+        result = self._conn.transmit(apdu)
+        if isinstance(result, tuple):
+            # Legacy mock/pyscard API: returns (data, sw1, sw2)
+            response, sw1, sw2 = result
+            response = bytes(response)
+        else:
+            # Native Rust API: returns full response bytes including SW
+            resp = bytes(result)
+            if len(resp) < 2:
+                raise OSError("Response too short")
+            sw1, sw2 = resp[-2], resp[-1]
+            response = resp[:-2]
         logger.log(LOG_LEVEL_TRAFFIC, "RECV: %s SW=%02X%02X", response.hex(), sw1, sw2)
 
         return response, sw1, sw2
@@ -127,13 +138,9 @@ class CtapPcscDevice(CtapDevice):
         :param control_data: byte string. data to send to driver
         :return: byte string. response
         """
-
-        logger.log(LOG_LEVEL_TRAFFIC, "Send control: %s", control_data.hex())
-        response = self._conn.control(control_code, list(control_data))
-        response = bytes(response)
-        logger.log(LOG_LEVEL_TRAFFIC, "Control response: %s", response.hex())
-
-        return response
+        raise NotImplementedError(
+            "control_exchange not yet supported on native backend"
+        )
 
     def _select(self) -> None:
         apdu = b"\x00\xa4\x04\x00" + struct.pack("!B", len(AID_FIDO)) + AID_FIDO
@@ -238,31 +245,17 @@ class CtapPcscDevice(CtapDevice):
 
     def close(self, release: bool = False) -> None:
         self._conn.disconnect()
-        if release and hasattr(self._conn, "release"):
-            self._conn.release()
 
     @classmethod
     def list_devices(cls, name: str = "") -> Iterator[CtapPcscDevice]:
-        for reader in _list_readers():
-            if name in reader.name:
+        try:
+            readers = _pcsc.list_readers()
+        except OSError:
+            return
+        for reader_name in readers:
+            if name in reader_name:
                 try:
-                    yield cls(reader.createConnection(), reader.name)
+                    conn = _pcsc.PcscConnection(reader_name, exclusive=False)
+                    yield cls(conn, reader_name)
                 except Exception as e:
                     logger.debug("Error %r", e)
-
-
-def _list_readers():
-    try:
-        return System.readers()
-    except ListReadersException as e:
-        # If the PCSC system has restarted the context might be stale, try
-        # forcing a new context (This happens on Windows if the last reader is
-        # removed):
-        try:
-            from smartcard.pcsc.PCSCContext import PCSCContext  # type: ignore
-
-            PCSCContext.instance = None
-            return System.readers()
-        except ImportError:
-            # As of pyscard 2.2.2 the PCSCContext singleton has been removed
-            raise e

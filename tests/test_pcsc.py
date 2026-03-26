@@ -44,35 +44,39 @@ def preconditions():
 
 def test_pcsc_call_cbor():
     connection = mock.Mock()
-    connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x90, 0x00)]
+    connection.transmit.side_effect = [
+        b"U2F_V2\x90\x00",
+        b"\x00\x90\x00",
+    ]
 
     CtapPcscDevice(connection, "Mock")
 
-    connection.transmit.assert_called_with(
-        [0x80, 0x10, 0x80, 0x00, 0x01, 0x04, 0x00], None
-    )
+    connection.transmit.assert_called_with(b"\x80\x10\x80\x00\x01\x04\x00")
 
 
 def test_pcsc_call_u2f():
     connection = mock.Mock()
     connection.transmit.side_effect = [
-        (b"U2F_V2", 0x90, 0x00),
-        (b"", 0x90, 0x00),
-        (b"u2f_resp", 0x90, 0x00),
+        b"U2F_V2\x90\x00",
+        b"\x00\x90\x00",
+        b"u2f_resp\x90\x00",
     ]
 
     dev = CtapPcscDevice(connection, "Mock")
     res = dev.call(CTAPHID.MSG, b"\x00\x01\x00\x00\x05" + b"\x01" * 5 + b"\x00")
 
     connection.transmit.assert_called_with(
-        [0x00, 0x01, 0x00, 0x00, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00], None
+        b"\x00\x01\x00\x00\x05\x01\x01\x01\x01\x01\x00"
     )
     assert res == b"u2f_resp\x90\x00"
 
 
 def test_pcsc_call_version_2():
     connection = mock.Mock()
-    connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x90, 0x00)]
+    connection.transmit.side_effect = [
+        b"U2F_V2\x90\x00",
+        b"\x00\x90\x00",
+    ]
 
     dev = CtapPcscDevice(connection, "Mock")
 
@@ -81,7 +85,10 @@ def test_pcsc_call_version_2():
 
 def test_pcsc_call_version_1():
     connection = mock.Mock()
-    connection.transmit.side_effect = [(b"U2F_V2", 0x90, 0x00), (b"", 0x63, 0x85)]
+    connection.transmit.side_effect = [
+        b"U2F_V2\x90\x00",
+        b"\x00\x63\x85",
+    ]
 
     dev = CtapPcscDevice(connection, "Mock")
 

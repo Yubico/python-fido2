@@ -1,0 +1,13 @@
+[package]
+name = "fido2-pyo3"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "_fido2_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+fido2 = { path = "../fido2" }
+pyo3 = { version = "0.25", features = ["extension-module"] }
+log = "0.4"
