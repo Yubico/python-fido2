@@ -21,7 +21,7 @@ classifiers = [
   "Topic :: Security :: Cryptography",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = ["cryptography (>=2.6, !=35, <49)"]
+dependencies = []
 
 [dependency-groups]
 dev = [

@@ -27,8 +27,6 @@
 
 import unittest
 
-from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
-
 from fido2.attestation import (
     AndroidSafetynetAttestation,
     AppleAttestation,
@@ -213,16 +211,7 @@ ee18128ed50dd7a855e54d2459db005""".replace("\n", "")
             "057a0ecbe7e3e99e8926941614f6af078c802b110be89eb221d69be2e17a1ba4"
         )
 
-        try:
-            res = attestation.verify(statement, auth_data, client_param)
-        except UnsupportedAlgorithm as e:
-            if e._reason == _Reasons.UNSUPPORTED_HASH:
-                self.skipTest(
-                    "SHA1 signature verification not supported on this machine"
-                )
-            else:
-                raise e
-
+        res = attestation.verify(statement, auth_data, client_param)
         self.assertEqual(res.attestation_type, AttestationType.ATT_CA)
         verify_x509_chain(res.trust_path)
 
