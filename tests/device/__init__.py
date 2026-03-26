@@ -91,8 +91,21 @@ def _gui_process(msg_queue, ready_event):
     separator = tk.Frame(root, height=1, bg="#444444")
     separator.pack(fill=tk.X, padx=10)
 
-    frame = tk.Frame(root, bg="#1e1e1e")
-    frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+    canvas = tk.Canvas(root, bg="#1e1e1e", highlightthickness=0)
+    canvas.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+
+    frame = tk.Frame(canvas, bg="#1e1e1e")
+    frame_id = canvas.create_window((0, 0), window=frame, anchor=tk.NW)
+
+    def _on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.yview_moveto(1.0)
+
+    def _on_canvas_configure(event):
+        canvas.itemconfigure(frame_id, width=event.width)
+
+    frame.bind("<Configure>", _on_frame_configure)
+    canvas.bind("<Configure>", _on_canvas_configure)
 
     label_font = tkfont.Font(family="sans-serif", size=11)
     label_font_bold = tkfont.Font(family="sans-serif", size=13, weight="bold")
