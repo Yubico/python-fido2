@@ -30,3 +30,4 @@ pub mod cose;
 pub mod logging;
 pub mod transport;
 pub mod utils;
+pub mod webauthn;
