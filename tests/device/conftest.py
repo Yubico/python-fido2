@@ -16,7 +16,7 @@ from fido2.hid import (
     open_device,
 )
 
-from . import TEST_PIN, CliInteraction, Printer
+from . import TEST_PIN, CliInteraction, CliPrinter, CompositePrinter, GuiPrinter
 
 logger = logging.getLogger(__name__)
 
@@ -315,8 +315,17 @@ class DeviceManager:
 
 @pytest.fixture(scope="session")
 def printer(request):
+    outputs = request.config.getoption("output") or ["cli"]
     capmanager = request.config.pluginmanager.getplugin("capturemanager")
-    return Printer(capmanager)
+    printers = []
+    for output in outputs:
+        if output == "cli":
+            printers.append(CliPrinter(capmanager))
+        elif output == "gui":
+            printers.append(GuiPrinter())
+    printer = printers[0] if len(printers) == 1 else CompositePrinter(printers)
+    yield printer
+    printer.close()
 
 
 @pytest.fixture(scope="session", autouse=True)
