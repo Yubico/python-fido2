@@ -25,6 +25,8 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::Mutex;
+
 use fido2::transport::ctaphid;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::*;
@@ -73,10 +75,27 @@ fn list_descriptors() -> PyResult<Vec<HidDescriptor>> {
 }
 
 /// Native CTAP HID connection wrapping the Rust transport.
-#[pyclass(unsendable)]
+///
+/// Uses a Mutex internally so the connection can be safely used across Python threads.
+#[pyclass]
 pub struct CtapHidConnection {
-    inner: Option<ctaphid::CtapHidConnection>,
+    inner: Mutex<Option<ctaphid::CtapHidConnection>>,
     packet_size: usize,
+    device_version: (u8, u8, u8),
+    capabilities: u8,
+}
+
+impl CtapHidConnection {
+    fn with_conn<F, R>(&self, f: F) -> PyResult<R>
+    where
+        F: FnOnce(&ctaphid::CtapHidConnection) -> PyResult<R>,
+    {
+        let guard = self.inner.lock().map_err(|_| PyOSError::new_err("lock poisoned"))?;
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
+        f(conn)
+    }
 }
 
 #[pymethods]
@@ -93,17 +112,17 @@ impl CtapHidConnection {
             report_size_out: descriptor.report_size_out,
         };
         let conn = ctaphid::CtapHidConnection::open(&info).map_err(ctap_err)?;
+        let device_version = conn.device_version();
+        let capabilities = conn.capabilities().raw();
         Ok(Self {
-            inner: Some(conn),
+            inner: Mutex::new(Some(conn)),
             packet_size: descriptor.report_size_in,
+            device_version,
+            capabilities,
         })
     }
 
     fn write_packet(&self, data: &[u8]) -> PyResult<()> {
-        // The Rust connection handles framing internally via call(),
-        // but the Python HID protocol needs raw packet write.
-        // For now, this is unused — the Python CtapHidDevice will
-        // use call() directly instead.
         let _ = data;
         Err(PyOSError::new_err(
             "write_packet not supported on native connection; use call() instead",
@@ -119,30 +138,18 @@ impl CtapHidConnection {
 
     /// Send a CTAP HID command and receive the response.
     fn call<'py>(&self, py: Python<'py>, cmd: u8, data: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
-        let conn = self
-            .inner
-            .as_ref()
-            .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
-        let response = conn.call(cmd, data).map_err(ctap_err)?;
+        let response = self.with_conn(|conn| conn.call(cmd, data).map_err(ctap_err))?;
         Ok(PyBytes::new(py, &response))
     }
 
     #[getter]
-    fn device_version(&self) -> PyResult<(u8, u8, u8)> {
-        let conn = self
-            .inner
-            .as_ref()
-            .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
-        Ok(conn.device_version())
+    fn device_version(&self) -> (u8, u8, u8) {
+        self.device_version
     }
 
     #[getter]
-    fn capabilities(&self) -> PyResult<u8> {
-        let conn = self
-            .inner
-            .as_ref()
-            .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
-        Ok(conn.capabilities().raw())
+    fn capabilities(&self) -> u8 {
+        self.capabilities
     }
 
     #[getter]
@@ -150,8 +157,9 @@ impl CtapHidConnection {
         self.packet_size
     }
 
-    fn close(&mut self) -> PyResult<()> {
-        if let Some(mut conn) = self.inner.take() {
+    fn close(&self) -> PyResult<()> {
+        let mut guard = self.inner.lock().map_err(|_| PyOSError::new_err("lock poisoned"))?;
+        if let Some(mut conn) = guard.take() {
             conn.close();
         }
         Ok(())
@@ -162,7 +170,7 @@ impl CtapHidConnection {
     }
 
     fn __exit__(
-        &mut self,
+        &self,
         _exc_type: Option<&Bound<'_, PyAny>>,
         _exc_val: Option<&Bound<'_, PyAny>>,
         _exc_tb: Option<&Bound<'_, PyAny>>,

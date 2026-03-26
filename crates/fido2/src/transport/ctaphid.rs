@@ -185,6 +185,10 @@ pub struct CtapHidConnection {
     capabilities: CtapHidCapability,
 }
 
+// Safety: HidDevice uses libusb/hidraw file descriptors which are safe to use from
+// any thread. We ensure exclusive access through &mut self / single-owner semantics.
+unsafe impl Send for CtapHidConnection {}
+
 impl CtapHidConnection {
     /// Open a CTAP HID connection to the device at the given path.
     ///
