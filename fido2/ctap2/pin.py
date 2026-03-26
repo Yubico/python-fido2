@@ -29,20 +29,23 @@ from __future__ import annotations
 
 import abc
 import logging
-import os
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag, unique
 from threading import Event
 from typing import Any, Callable, ClassVar, Mapping
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from _fido2_native.pin import (
+    aes_cbc_decrypt_v1,
+    aes_cbc_decrypt_v2,
+    aes_cbc_encrypt_v1,
+    aes_cbc_encrypt_v2,
+    ecdh_p256,
+    kdf_v1,
+    kdf_v2,
+)
 
 from ..cose import CoseKey
-from ..utils import bytes2int, hmac_sha256, int2bytes, sha256
+from ..utils import hmac_sha256, sha256
 from .base import Ctap2
 
 logger = logging.getLogger(__name__)
@@ -106,39 +109,30 @@ class PinProtocolV1(PinProtocol):
     IV = b"\x00" * 16
 
     def kdf(self, z: bytes) -> bytes:
-        return sha256(z)
+        return kdf_v1(z)
 
     def encapsulate(self, peer_cose_key):
-        be = default_backend()
-        sk = ec.generate_private_key(ec.SECP256R1(), be)
-        pn = sk.public_key().public_numbers()
+        peer_x = peer_cose_key[-2]
+        peer_y = peer_cose_key[-3]
+
+        our_x, our_y, shared_secret_raw = ecdh_p256(peer_x, peer_y)
+
         key_agreement = {
             1: 2,
             3: -25,  # Per the spec, "although this is NOT the algorithm actually used"
             -1: 1,
-            -2: int2bytes(pn.x, 32),
-            -3: int2bytes(pn.y, 32),
+            -2: our_x,
+            -3: our_y,
         }
 
-        x = bytes2int(peer_cose_key[-2])
-        y = bytes2int(peer_cose_key[-3])
-        pk = ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key(be)
-        shared_secret = self.kdf(sk.exchange(ec.ECDH(), pk))  # x-coordinate, 32b
+        shared_secret = self.kdf(shared_secret_raw)
         return key_agreement, shared_secret
 
-    def _get_cipher_v1(self, secret):
-        be = default_backend()
-        return Cipher(algorithms.AES(secret), modes.CBC(PinProtocolV1.IV), be)
-
     def encrypt(self, key, plaintext):
-        cipher = self._get_cipher_v1(key)
-        enc = cipher.encryptor()
-        return enc.update(plaintext) + enc.finalize()
+        return aes_cbc_encrypt_v1(key, plaintext)
 
     def decrypt(self, key, ciphertext):
-        cipher = self._get_cipher_v1(key)
-        dec = cipher.decryptor()
-        return dec.update(ciphertext) + dec.finalize()
+        return aes_cbc_decrypt_v1(key, ciphertext)
 
     def authenticate(self, key, message):
         return hmac_sha256(key, message)[:16]
@@ -158,46 +152,17 @@ class PinProtocolV2(PinProtocolV1):
     """
 
     VERSION = 2
-    HKDF_SALT = b"\x00" * 32
-    HKDF_INFO_HMAC = b"CTAP2 HMAC key"
-    HKDF_INFO_AES = b"CTAP2 AES key"
 
     def kdf(self, z):
-        be = default_backend()
-        hmac_key = HKDF(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=PinProtocolV2.HKDF_SALT,
-            info=PinProtocolV2.HKDF_INFO_HMAC,
-            backend=be,
-        ).derive(z)
-        aes_key = HKDF(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=PinProtocolV2.HKDF_SALT,
-            info=PinProtocolV2.HKDF_INFO_AES,
-            backend=be,
-        ).derive(z)
-        return hmac_key + aes_key
-
-    def _get_cipher_v2(self, secret, iv):
-        be = default_backend()
-        return Cipher(algorithms.AES(secret), modes.CBC(iv), be)
+        return kdf_v2(z)
 
     def encrypt(self, key, plaintext):
         aes_key = key[32:]
-        iv = os.urandom(16)
-
-        cipher = self._get_cipher_v2(aes_key, iv)
-        enc = cipher.encryptor()
-        return iv + enc.update(plaintext) + enc.finalize()
+        return aes_cbc_encrypt_v2(aes_key, plaintext)
 
     def decrypt(self, key, ciphertext):
         aes_key = key[32:]
-        iv, ciphertext = ciphertext[:16], ciphertext[16:]
-        cipher = self._get_cipher_v2(aes_key, iv)
-        dec = cipher.decryptor()
-        return dec.update(ciphertext) + dec.finalize()
+        return aes_cbc_decrypt_v2(aes_key, ciphertext)
 
     def authenticate(self, key, message):
         hmac_key = key[:32]

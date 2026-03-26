@@ -30,6 +30,7 @@ mod py_cose;
 mod py_hid;
 mod py_logging;
 mod py_pcsc;
+mod py_pin;
 mod py_utils;
 
 use pyo3::prelude::*;
@@ -41,6 +42,7 @@ fn _fido2_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     py_cose::register(m)?;
     py_hid::register(m)?;
     py_pcsc::register(m)?;
+    py_pin::register(m)?;
     py_utils::register(m)?;
     Ok(())
 }

@@ -34,10 +34,7 @@ from enum import IntEnum, unique
 from threading import Event
 from typing import Any, Callable, Mapping, cast
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from _fido2_native.pin import aes_cbc_decrypt, hkdf_sha256
 
 from .. import cbor
 from ..cose import CoseKey
@@ -122,18 +119,9 @@ class Info(_CborDataObject):
         if not encrypted:
             return None
 
+        secret = hkdf_sha256(b"\0" * 32, pin_token, info, 16)
         iv, ct = encrypted[:16], encrypted[16:]
-        be = default_backend()
-        secret = HKDF(
-            algorithm=hashes.SHA256(),
-            length=16,
-            salt=b"\0" * 32,
-            info=info,
-            backend=be,
-        ).derive(pin_token)
-
-        dec = Cipher(algorithms.AES(secret), modes.CBC(iv), be).decryptor()
-        return dec.update(ct) + dec.finalize()
+        return aes_cbc_decrypt(secret, iv, ct)
 
     def get_identifier(self, pin_token: bytes) -> bytes | None:
         """Decrypt the device identifier using a persistent PUAT."""

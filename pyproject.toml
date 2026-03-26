@@ -58,9 +58,14 @@ testpaths = ["tests"]
 [tool.ruff.lint]
 extend-select = ["E", "I", "S"]
 
+[tool.mypy]
+mypy_path = "typestubs"
+
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+stubsPath = "typestubs"
+extraPaths = ["typestubs"]
 exclude = ["tests/", "docs/", "examples/"]
 reportPrivateImportUsage = false
 

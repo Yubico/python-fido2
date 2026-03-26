@@ -28,6 +28,7 @@
 pub mod cbor;
 pub mod cose;
 pub mod logging;
+pub mod pin;
 pub mod transport;
 pub mod utils;
 pub mod webauthn;

@@ -6,9 +6,12 @@ description = "FIDO2/WebAuthn library"
 license = "BSD-2-Clause"
 
 [dependencies]
+aes = "0.8"
 base64 = "0.22"
 bitflags = "2"
+cbc = { version = "0.1", features = ["alloc"] }
 digest = "0.10"
+hkdf = "0.12"
 ecdsa = { version = "0.16", features = ["verifying"] }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 elliptic-curve = { version = "0.13", features = ["sec1"] }
@@ -16,7 +19,7 @@ getrandom = "0.3"
 hmac = "0.12"
 k256 = { version = "0.13", features = ["ecdsa"] }
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
-p256 = { version = "0.13", features = ["ecdsa"] }
+p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
 p384 = { version = "0.13", features = ["ecdsa"] }
 p521 = { version = "0.13", features = ["ecdsa"] }
 pcsc = "2"

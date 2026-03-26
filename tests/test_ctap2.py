@@ -29,8 +29,6 @@ import unittest
 from typing import Any, Mapping, cast
 from unittest import mock
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import ec
 from fido2 import cbor
 from fido2.attestation import Attestation
 from fido2.ctap1 import RegistrationData
@@ -260,7 +258,6 @@ class TestCtap2(unittest.TestCase):
         self.assertIsNone(resp.number_of_credentials)
 
 
-EC_PRIV = 0x7452E599FEE739D8A653F6A507343D12D382249108A651402520B72F24FE7684
 EC_PUB_X = bytes.fromhex(
     "44D78D7989B97E62EA993496C9EF6E8FD58B8B00715F9A89153DDD9C4657E47F"
 )
@@ -273,6 +270,10 @@ DEV_PUB_X = bytes.fromhex(
 DEV_PUB_Y = bytes.fromhex(
     "D551B3ED46F665731F95B4532939C25D91DB7EB844BD96D4ABD4083785F8DF47"
 )
+# Raw ECDH shared secret (x-coordinate) from the fixed private key
+ECDH_RAW_SECRET = bytes.fromhex(
+    "001bc4b24d2372ce13715cbf731e660586bb713408f0d1f5ad79cb1088f9e53c"
+)
 SHARED = bytes.fromhex(
     "c42a039d548100dfba521e487debcbbb8b66bb7496f8b1862a7a395ed83e1a1c"
 )
@@ -282,15 +283,13 @@ PIN_HASH_ENC = bytes.fromhex("afe8327ce416da8ee3d057589c2ce1a9")
 
 
 class TestClientPin(unittest.TestCase):
-    @mock.patch("cryptography.hazmat.primitives.asymmetric.ec.generate_private_key")
-    def test_establish_shared_secret(self, patched_generate):
+    @mock.patch("fido2.ctap2.pin.ecdh_p256")
+    def test_establish_shared_secret(self, patched_ecdh):
         ctap = mock.MagicMock()
         ctap.info.options = {"clientPin": True}
         prot = ClientPin(ctap, PinProtocolV1())
 
-        patched_generate.return_value = ec.derive_private_key(
-            EC_PRIV, ec.SECP256R1(), default_backend()
-        )
+        patched_ecdh.return_value = (EC_PUB_X, EC_PUB_Y, ECDH_RAW_SECRET)
 
         ctap.client_pin.return_value = {
             1: {1: 2, 3: -25, -1: 1, -2: DEV_PUB_X, -3: DEV_PUB_Y}
@@ -357,6 +356,7 @@ class TestClientPin(unittest.TestCase):
         ctap = mock.MagicMock()
         ctap.info.options = {"clientPin": True}
         prot = ClientPin(ctap, PinProtocolV1())
+        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))  # ty:ignore[invalid-assignment]
 
         with self.assertRaises(ValueError):
             prot.set_pin("123")
@@ -365,6 +365,7 @@ class TestClientPin(unittest.TestCase):
         ctap = mock.MagicMock()
         ctap.info.options = {"clientPin": True}
         prot = ClientPin(ctap, PinProtocolV1())
+        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))  # ty:ignore[invalid-assignment]
 
         with self.assertRaises(ValueError):
             prot.set_pin("1" * 256)
