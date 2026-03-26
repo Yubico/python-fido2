@@ -48,6 +48,22 @@ class CliPrinter(Printer):
                 print(m)
 
 
+_EMOJI_MAP = {
+    "👉": "\u25b6",  # ▶
+    "🚫": "\u2718",  # ✘
+    "♻️": "\u21bb",  # ↻
+    "⚠️": "\u26a0",  # ⚠
+    "☠️": "\u2620",  # ☠
+    "✅": "\u2714",  # ✔
+}
+
+
+def _replace_emoji(text):
+    for emoji, replacement in _EMOJI_MAP.items():
+        text = text.replace(emoji, replacement)
+    return text
+
+
 def _gui_process(msg_queue, ready_event):
     """Run the tkinter GUI in a separate process."""
     import tkinter as tk
@@ -96,7 +112,7 @@ def _gui_process(msg_queue, ready_event):
                 continue
             label = tk.Label(
                 frame,
-                text=msg,
+                text=_replace_emoji(msg),
                 bg="#1e1e1e",
                 fg="#ffffff",
                 font=label_font_bold,
