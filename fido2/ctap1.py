@@ -31,10 +31,11 @@ import struct
 from dataclasses import dataclass
 from enum import IntEnum, unique
 
+from _fido2_native.ctap import NativeCtap1
+
 from .attestation import FidoU2FAttestation
 from .cose import ES256
 from .ctap import CtapDevice
-from .hid import CTAPHID
 from .utils import bytes2int, websafe_decode, websafe_encode
 
 
@@ -199,6 +200,7 @@ class Ctap1:
 
     def __init__(self, device: CtapDevice):
         self.device = device
+        self._native = NativeCtap1(device)
 
     def send_apdu(
         self, cla: int = 0, ins: int = 0, p1: int = 0, p2: int = 0, data: bytes = b""
@@ -216,14 +218,16 @@ class Ctap1:
         :return: The response APDU data of a successful request.
         :raise: ApduError
         """
-        apdu = struct.pack(">BBBBBH", cla, ins, p1, p2, 0, len(data)) + data + b"\0\0"
-
-        response = self.device.call(CTAPHID.MSG, apdu)
-        status = struct.unpack(">H", response[-2:])[0]
-        data = response[:-2]
-        if status != APDU.OK:
-            raise ApduError(status, data)
-        return data
+        try:
+            return bytes(self._native.send_apdu(cla, ins, p1, p2, data))
+        except ValueError as e:
+            msg = str(e)
+            if msg.startswith("APDU_ERR:"):
+                parts = msg.split(":", 2)
+                code = int(parts[1])
+                err_data = bytes.fromhex(parts[2]) if len(parts) > 2 else b""
+                raise ApduError(code, err_data) from None
+            raise
 
     def get_version(self) -> str:
         """Get the U2F version implemented by the authenticator.

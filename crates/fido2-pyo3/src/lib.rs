@@ -26,7 +26,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 mod py_cbor;
+mod py_client;
 mod py_cose;
+mod py_ctap;
 mod py_hid;
 mod py_logging;
 mod py_pcsc;
@@ -42,7 +44,9 @@ use pyo3::prelude::*;
 fn _fido2_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     py_logging::init();
     py_cbor::register(m)?;
+    py_client::register(m)?;
     py_cose::register(m)?;
+    py_ctap::register(m)?;
     py_hid::register(m)?;
     py_pcsc::register(m)?;
     py_pin::register(m)?;

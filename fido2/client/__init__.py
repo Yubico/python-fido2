@@ -33,7 +33,8 @@ from dataclasses import replace
 from enum import IntEnum, unique
 from threading import Event, Timer
 from typing import Any, Callable, Mapping, Sequence, overload
-from urllib.parse import urlparse
+
+from _fido2_native.client import ClientDataCollector as NativeClientDataCollector
 
 from ..cose import ES256
 from ..ctap import CtapDevice, CtapError
@@ -47,7 +48,6 @@ from ..ctap2.extensions import (
 )
 from ..ctap2.pin import ClientPin, PinProtocol
 from ..hid import STATUS
-from ..rpid import verify_rp_id
 from ..utils import sha256
 from ..webauthn import (
     Aaguid,
@@ -293,9 +293,13 @@ class DefaultClientDataCollector(ClientDataCollector):
     behavior.
     """
 
-    def __init__(self, origin: str, verify: Callable[[str, str], bool] = verify_rp_id):
+    def __init__(
+        self,
+        origin: str,
+        verify: Callable[[str, str], bool] | None = None,
+    ):
+        self._native = NativeClientDataCollector(origin, verify)
         self._origin = origin
-        self._verify = verify
 
     def get_rp_id(
         self,
@@ -310,24 +314,17 @@ class DefaultClientDataCollector(ClientDataCollector):
         else:
             raise ValueError("Invalid options type.")
 
-        if rp_id is None:
-            url = urlparse(origin)
-            if url.scheme != "https" or not url.netloc:
-                raise ClientError.ERR.BAD_REQUEST(
-                    "RP ID required for non-https origin."
-                )
-            return url.netloc
-        else:
-            return rp_id
+        try:
+            return self._native.get_rp_id(rp_id)
+        except ValueError:
+            raise ClientError.ERR.BAD_REQUEST("RP ID required for non-https origin.")
 
     def verify_rp_id(self, rp_id: str, origin: str) -> None:
         """Verify the RP ID for the given origin."""
         try:
-            if self._verify(rp_id, origin):
-                return
-        except Exception:  # noqa: S110
-            pass  # Fall through to ClientError
-        raise ClientError.ERR.BAD_REQUEST()
+            self._native.verify_rp_id_py(rp_id)
+        except ValueError:
+            raise ClientError.ERR.BAD_REQUEST()
 
     def get_request_type(self, options) -> str:
         """Get the request type for the given options."""
@@ -339,20 +336,23 @@ class DefaultClientDataCollector(ClientDataCollector):
             raise ValueError("Invalid options type.")
 
     def collect_client_data(self, options):
-        # Get the effective RP ID from the request options, falling back to the origin
-        rp_id = self.get_rp_id(options, self._origin)
-        # Validate that the RP ID is valid for the given origin
-        self.verify_rp_id(rp_id, self._origin)
+        if isinstance(options, PublicKeyCredentialCreationOptions):
+            rp_id = options.rp.id
+        elif isinstance(options, PublicKeyCredentialRequestOptions):
+            rp_id = options.rp_id
+        else:
+            raise ValueError("Invalid options type.")
 
-        # Construct the client data
-        return (
-            CollectedClientData.create(
-                type=self.get_request_type(options),
-                origin=self._origin,
-                challenge=options.challenge,
-            ),
-            rp_id,
-        )
+        try:
+            cd_bytes, effective_rp_id = self._native.collect_client_data(
+                self.get_request_type(options),
+                options.challenge,
+                rp_id,
+            )
+        except ValueError:
+            raise ClientError.ERR.BAD_REQUEST()
+
+        return CollectedClientData(cd_bytes), effective_rp_id
 
 
 def _user_keepalive(user_interaction):

@@ -25,26 +25,38 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-//! FIDO2 server verification logic.
+//! FIDO2 server implementation.
 //!
-//! Provides RP ID validation against origins using the Public Suffix List,
-//! and verification of registration and authentication responses.
+//! Provides [`Fido2Server`] for WebAuthn relying party operations, as well as
+//! RP ID validation against origins using the Public Suffix List.
 
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use crate::utils::bytes_eq;
+use crate::cose::{Algorithm, CoseKey};
+use crate::utils::{bytes_eq, sha256, websafe_encode};
 use crate::webauthn::{
-    AttestationObject, AuthenticatorData, AuthenticatorDataFlags, CollectedClientData,
+    AttestationConveyancePreference, AttestationObject, AuthenticatorAttachment,
+    AuthenticatorData, AuthenticatorDataFlags, AuthenticatorSelectionCriteria,
+    CollectedClientData, PublicKeyCredentialCreationOptions, PublicKeyCredentialDescriptor,
+    PublicKeyCredentialParameters, PublicKeyCredentialRequestOptions,
+    PublicKeyCredentialRpEntity, PublicKeyCredentialType, PublicKeyCredentialUserEntity,
+    ResidentKeyRequirement, UserVerificationRequirement,
 };
 
 // --- Error type ---
 
-/// Errors returned by server verification functions.
+/// Errors returned by server operations.
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     #[error("{0}")]
     Verification(String),
+    #[error("{0}")]
+    Configuration(String),
+    #[error("WebAuthn error: {0}")]
+    Webauthn(#[from] crate::webauthn::WebauthnError),
+    #[error("COSE error: {0}")]
+    Cose(#[from] crate::cose::CoseError),
 }
 
 // --- Public Suffix List ---
@@ -95,7 +107,6 @@ fn is_public_suffix(domain: &str) -> bool {
     if psl.suffixes.contains(domain) {
         return true;
     }
-    // Check wildcard: if domain is "foo.bar" and "bar" is in wildcards
     if let Some((_label, parent)) = domain.split_once('.') {
         if psl.wildcards.contains(parent) {
             return true;
@@ -146,12 +157,9 @@ pub fn verify_rp_id(rp_id: &str, origin: &str) -> bool {
     false
 }
 
-// --- Registration verification ---
+// --- Registration/Authentication verification ---
 
 /// Verify a registration (webauthn.create) response.
-///
-/// Checks that the collected client data and attestation object are consistent
-/// with the expected challenge, RP ID hash, and user verification requirements.
 pub fn verify_registration(
     client_data: &CollectedClientData,
     attestation_object: &AttestationObject,
@@ -194,12 +202,7 @@ pub fn verify_registration(
     Ok(())
 }
 
-// --- Authentication verification ---
-
 /// Verify an authentication (webauthn.get) response.
-///
-/// Checks that the collected client data and authenticator data are consistent
-/// with the expected challenge, RP ID hash, and user verification requirements.
 pub fn verify_authentication(
     client_data: &CollectedClientData,
     auth_data: &AuthenticatorData,
@@ -240,6 +243,275 @@ pub fn verify_authentication(
     }
 
     Ok(())
+}
+
+// --- Internal state ---
+
+/// Opaque state created by `register_begin` / `authenticate_begin` and
+/// consumed by the corresponding `*_complete` method.
+#[derive(Debug, Clone)]
+pub struct ServerState {
+    pub challenge: Vec<u8>,
+    pub user_verification: Option<UserVerificationRequirement>,
+}
+
+impl ServerState {
+    fn user_verification_required(&self) -> bool {
+        self.user_verification
+            .as_ref()
+            .map(|uv| *uv == UserVerificationRequirement::Required)
+            .unwrap_or(false)
+    }
+}
+
+// --- Challenge helper ---
+
+pub fn generate_or_validate_challenge(challenge: Option<&[u8]>) -> Result<Vec<u8>, ServerError> {
+    match challenge {
+        Some(c) => {
+            if c.len() < 16 {
+                return Err(ServerError::Configuration(
+                    "Custom challenge length must be >= 16.".into(),
+                ));
+            }
+            Ok(c.to_vec())
+        }
+        None => {
+            let mut buf = [0u8; 32];
+            getrandom::fill(&mut buf)
+                .map_err(|e| ServerError::Configuration(format!("RNG error: {e}")))?;
+            Ok(buf.to_vec())
+        }
+    }
+}
+
+// --- Fido2Server ---
+
+/// FIDO2 relying party server.
+///
+/// Handles the creation and verification of WebAuthn registration and
+/// authentication ceremonies.
+pub struct Fido2Server {
+    pub rp: PublicKeyCredentialRpEntity,
+    pub attestation: Option<AttestationConveyancePreference>,
+    pub timeout: Option<u64>,
+    pub allowed_algorithms: Vec<PublicKeyCredentialParameters>,
+    rp_id_hash: [u8; 32],
+}
+
+impl Fido2Server {
+    /// Create a new FIDO2 server for the given relying party.
+    ///
+    /// The RP entity must have an `id` set.
+    pub fn new(
+        rp: PublicKeyCredentialRpEntity,
+        attestation: Option<AttestationConveyancePreference>,
+    ) -> Result<Self, ServerError> {
+        let rp_id = rp
+            .id
+            .as_deref()
+            .ok_or_else(|| ServerError::Configuration("RP ID must be set.".into()))?;
+        let rp_id_hash = sha256(rp_id.as_bytes());
+
+        let allowed_algorithms = Algorithm::supported()
+            .iter()
+            .map(|alg| PublicKeyCredentialParameters {
+                type_: PublicKeyCredentialType::PublicKey,
+                alg: *alg as i64,
+            })
+            .collect();
+
+        Ok(Self {
+            rp,
+            attestation,
+            timeout: None,
+            allowed_algorithms,
+            rp_id_hash,
+        })
+    }
+
+    /// SHA-256 hash of the RP ID.
+    pub fn rp_id_hash(&self) -> &[u8; 32] {
+        &self.rp_id_hash
+    }
+
+    /// RP ID string.
+    pub fn rp_id(&self) -> &str {
+        // Safe: we validated this in `new`.
+        self.rp.id.as_deref().unwrap()
+    }
+
+    /// Verify that an origin is valid for this server's RP ID.
+    pub fn verify_origin(&self, origin: &str) -> bool {
+        verify_rp_id(self.rp_id(), origin)
+    }
+
+    /// Begin a registration ceremony.
+    ///
+    /// Returns the options to send to the client and the server state to
+    /// pass to [`register_complete`](Self::register_complete).
+    pub fn register_begin(
+        &self,
+        user: PublicKeyCredentialUserEntity,
+        exclude_credentials: Option<Vec<PublicKeyCredentialDescriptor>>,
+        resident_key: Option<ResidentKeyRequirement>,
+        user_verification: Option<UserVerificationRequirement>,
+        authenticator_attachment: Option<AuthenticatorAttachment>,
+        challenge: Option<&[u8]>,
+        extensions: Option<serde_json::Value>,
+    ) -> Result<(PublicKeyCredentialCreationOptions, ServerState), ServerError> {
+        if self.allowed_algorithms.is_empty() {
+            return Err(ServerError::Configuration(
+                "Server has no allowed algorithms.".into(),
+            ));
+        }
+
+        let challenge = generate_or_validate_challenge(challenge)?;
+        let state = ServerState {
+            challenge: challenge.clone(),
+            user_verification: user_verification.clone(),
+        };
+
+        let authenticator_selection =
+            if authenticator_attachment.is_some()
+                || resident_key.is_some()
+                || user_verification.is_some()
+            {
+                Some(AuthenticatorSelectionCriteria {
+                    authenticator_attachment,
+                    resident_key,
+                    user_verification: user_verification.clone(),
+                    require_resident_key: None,
+                })
+            } else {
+                None
+            };
+
+        let options = PublicKeyCredentialCreationOptions {
+            rp: self.rp.clone(),
+            user,
+            challenge,
+            pub_key_cred_params: self.allowed_algorithms.clone(),
+            timeout: self.timeout,
+            exclude_credentials,
+            authenticator_selection,
+            hints: None,
+            attestation: self.attestation.clone(),
+            attestation_formats: None,
+            extensions,
+        };
+
+        Ok((options, state))
+    }
+
+    /// Complete a registration ceremony.
+    ///
+    /// Verifies the client data and attestation object against the server
+    /// state. Returns the authenticator data on success.
+    ///
+    /// Note: This does NOT verify the attestation statement itself. If
+    /// attestation verification is required, the caller must verify
+    /// `attestation_object.att_stmt` separately (e.g., via the attestation
+    /// module).
+    pub fn register_complete<'a>(
+        &self,
+        state: &ServerState,
+        client_data: &CollectedClientData,
+        attestation_object: &'a AttestationObject,
+    ) -> Result<&'a AuthenticatorData, ServerError> {
+        if !self.verify_origin(&client_data.origin) {
+            return Err(ServerError::Verification(
+                "Invalid origin in CollectedClientData.".into(),
+            ));
+        }
+
+        verify_registration(
+            client_data,
+            attestation_object,
+            &state.challenge,
+            &self.rp_id_hash,
+            state.user_verification_required(),
+        )?;
+
+        Ok(&attestation_object.auth_data)
+    }
+
+    /// Begin an authentication ceremony.
+    ///
+    /// Returns the options to send to the client and the server state to
+    /// pass to [`authenticate_complete`](Self::authenticate_complete).
+    pub fn authenticate_begin(
+        &self,
+        allow_credentials: Option<Vec<PublicKeyCredentialDescriptor>>,
+        user_verification: Option<UserVerificationRequirement>,
+        challenge: Option<&[u8]>,
+        extensions: Option<serde_json::Value>,
+    ) -> Result<(PublicKeyCredentialRequestOptions, ServerState), ServerError> {
+        let challenge = generate_or_validate_challenge(challenge)?;
+        let state = ServerState {
+            challenge: challenge.clone(),
+            user_verification: user_verification.clone(),
+        };
+
+        let options = PublicKeyCredentialRequestOptions {
+            challenge,
+            timeout: self.timeout,
+            rp_id: self.rp.id.clone(),
+            allow_credentials,
+            user_verification,
+            hints: None,
+            extensions,
+        };
+
+        Ok((options, state))
+    }
+
+    /// Complete an authentication ceremony.
+    ///
+    /// Verifies the client data, authenticator data, and signature against the
+    /// server state and provided credentials. Returns the index (into the
+    /// `credentials` slice) of the credential that was authenticated.
+    pub fn authenticate_complete(
+        &self,
+        state: &ServerState,
+        credentials: &[(Vec<u8>, CoseKey)],
+        credential_id: &[u8],
+        client_data: &CollectedClientData,
+        auth_data: &AuthenticatorData,
+        signature: &[u8],
+    ) -> Result<usize, ServerError> {
+        if !self.verify_origin(&client_data.origin) {
+            return Err(ServerError::Verification(
+                "Invalid origin in CollectedClientData.".into(),
+            ));
+        }
+
+        verify_authentication(
+            client_data,
+            auth_data,
+            &state.challenge,
+            &self.rp_id_hash,
+            state.user_verification_required(),
+        )?;
+
+        for (i, (cred_id, public_key)) in credentials.iter().enumerate() {
+            if cred_id == credential_id {
+                let mut signed_data = auth_data.as_bytes().to_vec();
+                signed_data.extend_from_slice(&client_data.hash());
+                public_key.verify(&signed_data, signature).map_err(|_| {
+                    ServerError::Verification("Invalid signature.".into())
+                })?;
+                return Ok(i);
+            }
+        }
+
+        Err(ServerError::Verification("Unknown credential ID.".into()))
+    }
+
+    /// Encode a challenge as websafe base64 for serialization into state.
+    pub fn encode_challenge(challenge: &[u8]) -> String {
+        websafe_encode(challenge)
+    }
 }
 
 #[cfg(test)]
@@ -294,13 +566,122 @@ mod tests {
 
     #[test]
     fn test_is_public_suffix_wildcard() {
-        // *.ck is in the PSL, so "foo.ck" should be a public suffix
         assert!(is_public_suffix("foo.ck"));
     }
 
     #[test]
     fn test_is_public_suffix_exception() {
-        // !www.ck is an exception in the PSL
         assert!(!is_public_suffix("www.ck"));
+    }
+
+    #[test]
+    fn test_server_new() {
+        let rp = PublicKeyCredentialRpEntity {
+            name: "Example".into(),
+            id: Some("example.com".into()),
+        };
+        let server = Fido2Server::new(rp, None).unwrap();
+        assert_eq!(server.rp_id(), "example.com");
+        assert!(!server.allowed_algorithms.is_empty());
+    }
+
+    #[test]
+    fn test_server_new_no_id() {
+        let rp = PublicKeyCredentialRpEntity {
+            name: "Example".into(),
+            id: None,
+        };
+        assert!(Fido2Server::new(rp, None).is_err());
+    }
+
+    #[test]
+    fn test_server_verify_origin() {
+        let rp = PublicKeyCredentialRpEntity {
+            name: "Example".into(),
+            id: Some("example.com".into()),
+        };
+        let server = Fido2Server::new(rp, None).unwrap();
+        assert!(server.verify_origin("https://example.com"));
+        assert!(server.verify_origin("https://www.example.com"));
+        assert!(!server.verify_origin("http://example.com"));
+        assert!(!server.verify_origin("https://evil.com"));
+    }
+
+    #[test]
+    fn test_register_begin() {
+        let rp = PublicKeyCredentialRpEntity {
+            name: "Example".into(),
+            id: Some("example.com".into()),
+        };
+        let server = Fido2Server::new(rp, None).unwrap();
+
+        let user = PublicKeyCredentialUserEntity {
+            name: Some("alice".into()),
+            id: b"alice-id".to_vec(),
+            display_name: Some("Alice".into()),
+        };
+
+        let (options, state) = server
+            .register_begin(user.clone(), None, None, None, None, None, None)
+            .unwrap();
+
+        assert_eq!(options.rp.name, "Example");
+        assert_eq!(options.user.name, Some("alice".into()));
+        assert_eq!(options.challenge.len(), 32);
+        assert_eq!(state.challenge, options.challenge);
+    }
+
+    #[test]
+    fn test_register_begin_custom_challenge() {
+        let rp = PublicKeyCredentialRpEntity {
+            name: "Example".into(),
+            id: Some("example.com".into()),
+        };
+        let server = Fido2Server::new(rp, None).unwrap();
+
+        let user = PublicKeyCredentialUserEntity {
+            name: Some("alice".into()),
+            id: b"alice-id".to_vec(),
+            display_name: None,
+        };
+
+        let challenge = b"1234567890123456";
+        let (options, _) = server
+            .register_begin(user, None, None, None, None, Some(challenge), None)
+            .unwrap();
+        assert_eq!(options.challenge, challenge);
+    }
+
+    #[test]
+    fn test_register_begin_challenge_too_short() {
+        let rp = PublicKeyCredentialRpEntity {
+            name: "Example".into(),
+            id: Some("example.com".into()),
+        };
+        let server = Fido2Server::new(rp, None).unwrap();
+
+        let user = PublicKeyCredentialUserEntity {
+            name: Some("alice".into()),
+            id: b"alice-id".to_vec(),
+            display_name: None,
+        };
+
+        let result = server.register_begin(user, None, None, None, None, Some(b"short"), None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_authenticate_begin() {
+        let rp = PublicKeyCredentialRpEntity {
+            name: "Example".into(),
+            id: Some("example.com".into()),
+        };
+        let server = Fido2Server::new(rp, None).unwrap();
+
+        let (options, state) = server.authenticate_begin(None, None, None, None).unwrap();
+
+        assert_eq!(options.rp_id, Some("example.com".into()));
+        assert_eq!(options.challenge.len(), 32);
+        assert_eq!(state.challenge, options.challenge);
     }
 }

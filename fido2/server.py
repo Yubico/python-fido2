@@ -28,14 +28,11 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Callable, Mapping, Sequence
 
-from _fido2_native.server import verify_authentication as _verify_authentication
-from _fido2_native.server import verify_registration as _verify_registration
+from _fido2_native.server import Fido2Server as NativeFido2Server
 
-from .cose import CoseKey
-from .rpid import verify_rp_id
+from . import cbor
 from .utils import websafe_decode, websafe_encode
 from .webauthn import (
     AttestationConveyancePreference,
@@ -64,21 +61,6 @@ logger = logging.getLogger(__name__)
 
 VerifyAttestation = Callable[[AttestationObject, bytes], None]
 VerifyOrigin = Callable[[str], bool]
-
-
-def _verify_origin_for_rp(rp_id: str) -> VerifyOrigin:
-    return lambda o: verify_rp_id(rp_id, o)
-
-
-def _validata_challenge(challenge: bytes | None) -> bytes:
-    if challenge is None:
-        challenge = os.urandom(32)
-    else:
-        if not isinstance(challenge, bytes):
-            raise TypeError("Custom challenge must be of type 'bytes'.")
-        if len(challenge) < 16:
-            raise ValueError("Custom challenge length must be >= 16.")
-    return challenge
 
 
 def to_descriptor(
@@ -115,12 +97,6 @@ def _wrap_credentials(
     ]
 
 
-def _ignore_attestation(
-    attestation_object: AttestationObject, client_data_hash: bytes
-) -> None:
-    """Ignore attestation."""
-
-
 class Fido2Server:
     """FIDO2 server.
 
@@ -142,16 +118,31 @@ class Fido2Server:
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         assert self.rp.id is not None  # noqa: S101
-        self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
         self.timeout = None
         self.attestation = AttestationConveyancePreference(attestation)
+
+        # Wrap verify_attestation to adapt (bytes, bytes) -> (AttestationObject, bytes)
+        native_att_cb = None
+        if verify_attestation is not None:
+
+            def _att_adapter(att_obj_bytes: bytes, client_data_hash: bytes) -> None:
+                verify_attestation(AttestationObject(att_obj_bytes), client_data_hash)
+
+            native_att_cb = _att_adapter
+
+        self._native = NativeFido2Server(
+            self.rp.id,
+            self.rp.name,
+            str(self.attestation) if self.attestation else None,
+            verify_origin,
+            native_att_cb,
+        )
         self.allowed_algorithms = [
             PublicKeyCredentialParameters(
                 type=PublicKeyCredentialType.PUBLIC_KEY, alg=alg
             )
-            for alg in CoseKey.supported_algorithms()
+            for alg in self._native.allowed_algorithms
         ]
-        self._verify_attestation = verify_attestation or _ignore_attestation
         logger.debug(f"Fido2Server initialized for RP: {self.rp}")
 
     def register_begin(
@@ -183,7 +174,7 @@ class Fido2Server:
         if not self.allowed_algorithms:
             raise ValueError("Server has no allowed algorithms.")
 
-        challenge = _validata_challenge(challenge)
+        challenge = self._native.generate_challenge(challenge)
         descriptors = _wrap_credentials(credentials)
         state = self._make_internal_state(challenge, user_verification)
         logger.debug(
@@ -239,22 +230,12 @@ class Fido2Server:
         client_data = registration.response.client_data
         attestation_object = registration.response.attestation_object
 
-        if not self._verify(client_data.origin):
-            raise ValueError("Invalid origin in CollectedClientData.")
-
-        _verify_registration(
+        self._native.register_complete(
             bytes(client_data),
             bytes(attestation_object),
             websafe_decode(state["challenge"]),
-            self.rp.id_hash or b"",
             state["user_verification"] == UserVerificationRequirement.REQUIRED,
         )
-
-        if self.attestation not in (None, AttestationConveyancePreference.NONE):
-            logger.debug(f"Verifying attestation of type {attestation_object.fmt}")
-            self._verify_attestation(attestation_object, client_data.hash)
-        # We simply ignore attestation if self.attestation == 'none', as not all
-        # clients strip the attestation.
 
         auth_data = attestation_object.auth_data
         assert auth_data.credential_data is not None  # noqa: S101
@@ -283,7 +264,7 @@ class Fido2Server:
         :param challenge: A custom challenge to sign and verify or None to use
             OS-specific random bytes.
         :return: Assertion data, internal state."""
-        challenge = _validata_challenge(challenge)
+        challenge = self._native.generate_challenge(challenge)
         descriptors = _wrap_credentials(credentials)
         state = self._make_internal_state(challenge, user_verification)
         if descriptors is None:
@@ -331,26 +312,23 @@ class Fido2Server:
         auth_data = authentication.response.authenticator_data
         signature = authentication.response.signature
 
-        if not self._verify(client_data.origin):
-            raise ValueError("Invalid origin in CollectedClientData.")
+        cred_list = [
+            (bytes(c.credential_id), cbor.encode(dict(c.public_key)))
+            for c in credentials
+        ]
 
-        _verify_authentication(
+        index = self._native.authenticate_complete(
             bytes(client_data),
             bytes(auth_data),
             websafe_decode(state["challenge"]),
-            self.rp.id_hash or b"",
             state["user_verification"] == UserVerificationRequirement.REQUIRED,
+            cred_list,
+            bytes(credential_id),
+            bytes(signature),
         )
 
-        for cred in credentials:
-            if cred.credential_id == credential_id:
-                try:
-                    cred.public_key.verify(auth_data + client_data.hash, signature)
-                except ValueError:
-                    raise ValueError("Invalid signature.")
-                logger.info(f"Credential authenticated: {credential_id.hex()}")
-                return cred
-        raise ValueError("Unknown credential ID.")
+        logger.info(f"Credential authenticated: {credential_id.hex()}")
+        return credentials[index]
 
     @staticmethod
     def _make_internal_state(

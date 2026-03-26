@@ -28,18 +28,17 @@
 from __future__ import annotations
 
 import logging
-import struct
 from dataclasses import Field, dataclass, field, fields
 from enum import IntEnum, unique
 from threading import Event
-from typing import Any, Callable, Mapping, cast
+from typing import Any, Callable, Mapping, NoReturn, cast
 
+from _fido2_native.ctap import NativeCtap2
 from _fido2_native.pin import aes_cbc_decrypt, hkdf_sha256
 
-from .. import cbor
 from ..cose import CoseKey
 from ..ctap import CtapDevice, CtapError
-from ..hid import CAPABILITY, CTAPHID
+from ..hid import CAPABILITY
 from ..utils import _DataClassMapping
 from ..webauthn import Aaguid, AuthenticatorData
 
@@ -235,10 +234,8 @@ class Ctap2:
         if not device.capabilities & CAPABILITY.CBOR:
             raise ValueError("Device does not support CTAP2.")
         self.device = device
-        self._strict_cbor = strict_cbor
-        self._max_msg_size = 1024  # For initial get_info call
+        self._native = NativeCtap2(device, strict_cbor)
         self._info = self.get_info()
-        self._max_msg_size = self._info.max_msg_size
 
     @property
     def info(self) -> Info:
@@ -248,6 +245,13 @@ class Ctap2:
         :return: The response of calling GetAuthenticatorInfo.
         """
         return self._info
+
+    @staticmethod
+    def _handle_native_error(e: ValueError) -> NoReturn:
+        msg = str(e)
+        if msg.startswith("CTAP_ERR:"):
+            raise CtapError(int(msg.split(":")[1])) from None
+        raise
 
     def send_cbor(
         self,
@@ -265,28 +269,12 @@ class Ctap2:
         :param on_keepalive: Optional function called when keep-alive is sent by
             the authenticator.
         """
-        request = struct.pack(">B", cmd)
-        if data is not None:
-            request += cbor.encode(data)
-        if len(request) > self._max_msg_size:
-            raise CtapError(CtapError.ERR.REQUEST_TOO_LARGE)
-        response = self.device.call(CTAPHID.CBOR, request, event, on_keepalive)
-        status = response[0]
-        if status != 0x00:
-            raise CtapError(status)
-        enc = response[1:]
-        if not enc:
-            return {}
-        decoded = cbor.decode(enc)
-        if self._strict_cbor:
-            expected = cbor.encode(decoded)
-            if expected != enc:
-                raise ValueError(
-                    "Non-canonical CBOR from Authenticator.\n"
-                    f"Got: {enc.hex()}\nExpected: {expected.hex()}"
-                )
-        if isinstance(decoded, Mapping):
-            return cast(Mapping[int, Any], decoded)
+        try:
+            result = self._native.send_cbor(cmd, data, event, on_keepalive)
+        except ValueError as e:
+            self._handle_native_error(e)
+        if isinstance(result, Mapping):
+            return cast(Mapping[int, Any], result)
         raise TypeError("Decoded value of wrong type")
 
     def get_info(self) -> Info:
@@ -294,7 +282,9 @@ class Ctap2:
 
         :return: Information about the authenticator.
         """
-        return Info.from_dict(self.send_cbor(Ctap2.CMD.GET_INFO))
+        self._info = Info.from_dict(self.send_cbor(Ctap2.CMD.GET_INFO))
+        self._native.max_msg_size = self._info.max_msg_size
+        return self._info
 
     def client_pin(
         self,
@@ -508,10 +498,12 @@ class Ctap2:
             raise ValueError(
                 "Credential Management not supported by this Authenticator"
             )
-        return self.send_cbor(
-            cmd,
-            args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
-        )
+        try:
+            return self._native.credential_mgmt(
+                cmd, sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def bio_enrollment(
         self,
@@ -547,19 +539,20 @@ class Ctap2:
             cmd = Ctap2.CMD.BIO_ENROLLMENT_PRE
         else:
             raise ValueError("Authenticator does not support Bio Enroll")
-        return self.send_cbor(
-            cmd,
-            args(
+        try:
+            return self._native.bio_enrollment(
+                cmd,
                 modality,
                 sub_cmd,
                 sub_cmd_params,
                 pin_uv_protocol,
                 pin_uv_param,
                 get_modality,
-            ),
-            event=event,
-            on_keepalive=on_keepalive,
-        )
+                event,
+                on_keepalive,
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def selection(
         self,
@@ -601,10 +594,17 @@ class Ctap2:
         :param pin_uv_protocol: PIN/UV protocol version used.
         :param pin_uv_param: PIN/UV auth param.
         """
-        return self.send_cbor(
-            Ctap2.CMD.LARGE_BLOBS,
-            args(get, set, offset, length, pin_uv_param, pin_uv_protocol),
-        )
+        try:
+            return self._native.large_blobs(
+                offset,
+                get,
+                set,
+                length,
+                pin_uv_param,
+                pin_uv_protocol,
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def config(
         self,
@@ -626,7 +626,12 @@ class Ctap2:
         :param pin_uv_protocol: PIN/UV auth protocol version used.
         :param pin_uv_param: PIN/UV Auth parameter.
         """
-        return self.send_cbor(
-            Ctap2.CMD.CONFIG,
-            args(sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param),
-        )
+        try:
+            return self._native.config(
+                sub_cmd,
+                sub_cmd_params,
+                pin_uv_protocol,
+                pin_uv_param,
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
