@@ -26,5 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 pub mod cbor;
+pub mod cose;
 pub mod logging;
 pub mod transport;
+pub mod utils;

@@ -6,10 +6,26 @@ description = "FIDO2/WebAuthn library"
 license = "BSD-2-Clause"
 
 [dependencies]
+base64 = "0.22"
+digest = "0.10"
+ecdsa = { version = "0.16", features = ["verifying"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+elliptic-curve = { version = "0.13", features = ["sec1"] }
 getrandom = "0.3"
+hmac = "0.12"
+k256 = { version = "0.13", features = ["ecdsa"] }
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
+p256 = { version = "0.13", features = ["ecdsa"] }
+p384 = { version = "0.13", features = ["ecdsa"] }
+p521 = { version = "0.13", features = ["ecdsa"] }
 pcsc = "2"
+rsa = "0.9"
+sha1 = { version = "0.10", features = ["oid"] }
+sha2 = { version = "0.10", features = ["oid"] }
 thiserror = "2"
+
+[dev-dependencies]
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "2", default-features = false, features = ["linux-static-hidraw"] }
