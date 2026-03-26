@@ -1,5 +1,8 @@
 import json
 import multiprocessing
+import os
+import signal
+from threading import Thread
 
 from fido2.client import UserInteraction
 
@@ -146,11 +149,22 @@ class GuiPrinter(Printer):
         )
         self._process.start()
         self._ready.wait()
+        self._closing = False
+
+        # Monitor thread: abort tests if the GUI window is closed
+        monitor = Thread(target=self._monitor, daemon=True)
+        monitor.start()
+
+    def _monitor(self):
+        self._process.join()
+        if not self._closing:
+            os.kill(os.getpid(), signal.SIGINT)
 
     def print(self, *messages):
         self._msg_queue.put(json.dumps(messages))
 
     def close(self):
+        self._closing = True
         if self._process.is_alive():
             self._msg_queue.put(None)
             self._process.join(timeout=2)
