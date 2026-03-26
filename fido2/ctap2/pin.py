@@ -32,20 +32,18 @@ import logging
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag, unique
 from threading import Event
-from typing import Any, Callable, ClassVar, Mapping
+from typing import Any, Callable, ClassVar, Mapping, NoReturn
 
+from _fido2_native.ctap import NativeClientPin
 from _fido2_native.pin import (
-    aes_cbc_decrypt_v1,
-    aes_cbc_decrypt_v2,
-    aes_cbc_encrypt_v1,
-    aes_cbc_encrypt_v2,
+    NativePinProtocol,
     ecdh_p256,
     kdf_v1,
-    kdf_v2,
 )
 
 from ..cose import CoseKey
-from ..utils import hmac_sha256, sha256
+from ..ctap import CtapError
+from ..utils import sha256
 from .base import Ctap2
 
 logger = logging.getLogger(__name__)
@@ -108,6 +106,9 @@ class PinProtocolV1(PinProtocol):
     VERSION = 1
     IV = b"\x00" * 16
 
+    def __init__(self):
+        self._native = NativePinProtocol(self.VERSION)
+
     def kdf(self, z: bytes) -> bytes:
         return kdf_v1(z)
 
@@ -119,7 +120,7 @@ class PinProtocolV1(PinProtocol):
 
         key_agreement = {
             1: 2,
-            3: -25,  # Per the spec, "although this is NOT the algorithm actually used"
+            3: -25,
             -1: 1,
             -2: our_x,
             -3: our_y,
@@ -129,18 +130,16 @@ class PinProtocolV1(PinProtocol):
         return key_agreement, shared_secret
 
     def encrypt(self, key, plaintext):
-        return aes_cbc_encrypt_v1(key, plaintext)
+        return self._native.encrypt(key, plaintext)
 
     def decrypt(self, key, ciphertext):
-        return aes_cbc_decrypt_v1(key, ciphertext)
+        return self._native.decrypt(key, ciphertext)
 
     def authenticate(self, key, message):
-        return hmac_sha256(key, message)[:16]
+        return self._native.authenticate(key, message)
 
     def validate_token(self, token):
-        if len(token) not in (16, 32):
-            raise ValueError("PIN/UV token must be 16 or 32 bytes")
-        return token
+        return self._native.validate_token(token)
 
 
 class PinProtocolV2(PinProtocolV1):
@@ -152,26 +151,6 @@ class PinProtocolV2(PinProtocolV1):
     """
 
     VERSION = 2
-
-    def kdf(self, z):
-        return kdf_v2(z)
-
-    def encrypt(self, key, plaintext):
-        aes_key = key[32:]
-        return aes_cbc_encrypt_v2(aes_key, plaintext)
-
-    def decrypt(self, key, ciphertext):
-        aes_key = key[32:]
-        return aes_cbc_decrypt_v2(aes_key, ciphertext)
-
-    def authenticate(self, key, message):
-        hmac_key = key[:32]
-        return hmac_sha256(hmac_key, message)
-
-    def validate_token(self, token):
-        if len(token) != 32:
-            raise ValueError("PIN/UV token must be 32 bytes")
-        return token
 
 
 class ClientPin:
@@ -239,13 +218,33 @@ class ClientPin:
                 raise ValueError("No compatible PIN/UV protocols supported!")
         else:
             self.protocol = protocol
+        try:
+            self._native: NativeClientPin | None = NativeClientPin(
+                ctap._native.device,
+                ctap._native.strict_cbor,
+                ctap._native.max_msg_size,
+                self.protocol.VERSION,
+            )
+        except (TypeError, AttributeError):
+            self._native = None
+
+    @staticmethod
+    def _handle_native_error(e: ValueError) -> NoReturn:
+        msg = str(e)
+        if msg.startswith("CTAP_ERR:"):
+            raise CtapError(int(msg.split(":")[1])) from None
+        raise
 
     def _get_shared_secret(self):
+        if self._native is not None:
+            try:
+                return self._native.get_shared_secret()
+            except ValueError as e:
+                self._handle_native_error(e)
         resp = self.ctap.client_pin(
             self.protocol.VERSION, ClientPin.CMD.GET_KEY_AGREEMENT
         )
         pk = resp[ClientPin.RESULT.KEY_AGREEMENT]
-
         return self.protocol.encapsulate(pk)
 
     def get_pin_token(
@@ -261,6 +260,16 @@ class ClientPin:
         :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
+        if self._native is not None:
+            try:
+                return self._native.get_pin_token(
+                    pin,
+                    int(permissions) if permissions is not None else None,
+                    permissions_rpid,
+                )
+            except ValueError as e:
+                self._handle_native_error(e)
+
         if not ClientPin.is_supported(self.ctap.info):
             raise ValueError("Authenticator does not support get_pin_token")
 
@@ -273,7 +282,6 @@ class ClientPin:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN
         else:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN_LEGACY
-            # Ignore permissions if not supported
             permissions = None
             permissions_rpid = None
 
@@ -286,7 +294,6 @@ class ClientPin:
             permissions_rpid=permissions_rpid,
         )
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
-        logger.debug(f"Got PIN token for permissions: {permissions}")
         return self.protocol.validate_token(
             self.protocol.decrypt(shared_secret, pin_token_enc)
         )
@@ -309,6 +316,17 @@ class ClientPin:
             consecutive keep-alive messages with the same status.
         :return: A PIN/UV token.
         """
+        if self._native is not None:
+            try:
+                return self._native.get_uv_token(
+                    int(permissions) if permissions is not None else None,
+                    permissions_rpid,
+                    event,
+                    on_keepalive,
+                )
+            except ValueError as e:
+                self._handle_native_error(e)
+
         if not ClientPin.is_token_supported(self.ctap.info):
             raise ValueError("Authenticator does not support get_uv_token")
 
@@ -325,7 +343,6 @@ class ClientPin:
         )
 
         pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
-        logger.debug(f"Got UV token for permissions: {permissions}")
         return self.protocol.validate_token(
             self.protocol.decrypt(shared_secret, pin_token_enc)
         )
@@ -336,6 +353,12 @@ class ClientPin:
         :return: A tuple of the number of PIN attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
+        if self._native is not None:
+            try:
+                return self._native.get_pin_retries()
+            except ValueError as e:
+                self._handle_native_error(e)
+
         resp = self.ctap.client_pin(
             self.protocol.VERSION, ClientPin.CMD.GET_PIN_RETRIES
         )
@@ -350,6 +373,12 @@ class ClientPin:
         :return: A tuple of the number of UV attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
+        if self._native is not None:
+            try:
+                return self._native.get_uv_retries()
+            except ValueError as e:
+                self._handle_native_error(e)
+
         resp = self.ctap.client_pin(self.protocol.VERSION, ClientPin.CMD.GET_UV_RETRIES)
         return resp[ClientPin.RESULT.UV_RETRIES]
 
@@ -361,6 +390,12 @@ class ClientPin:
 
         :param pin: A PIN to set.
         """
+        if self._native is not None:
+            try:
+                return self._native.set_pin(pin)
+            except ValueError as e:
+                self._handle_native_error(e)
+
         if not ClientPin.is_supported(self.ctap.info):
             raise ValueError("Authenticator does not support ClientPin")
 
@@ -375,7 +410,6 @@ class ClientPin:
             new_pin_enc=pin_enc,
             pin_uv_param=pin_uv_param,
         )
-        logger.info("PIN has been set")
 
     def change_pin(self, old_pin: str, new_pin: str) -> None:
         """Change the PIN of the authenticator.
@@ -386,6 +420,12 @@ class ClientPin:
         :param old_pin: The currently set PIN.
         :param new_pin: The new PIN to set.
         """
+        if self._native is not None:
+            try:
+                return self._native.change_pin(old_pin, new_pin)
+            except ValueError as e:
+                self._handle_native_error(e)
+
         if not ClientPin.is_supported(self.ctap.info):
             raise ValueError("Authenticator does not support ClientPin")
 
@@ -405,4 +445,3 @@ class ClientPin:
             new_pin_enc=new_pin_enc,
             pin_uv_param=pin_uv_param,
         )
-        logger.info("PIN has been changed")

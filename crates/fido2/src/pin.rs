@@ -416,7 +416,7 @@ impl<'a> ClientPin<'a> {
     }
 
     /// Get the key agreement and shared secret from the authenticator.
-    fn _get_shared_secret(&self) -> Result<(CoseKeyAgreement, Vec<u8>), CtapError> {
+    pub fn _get_shared_secret(&self) -> Result<(CoseKeyAgreement, Vec<u8>), CtapError> {
         let resp = self.ctap.client_pin(
             self.protocol.version(),
             client_pin_cmd::GET_KEY_AGREEMENT,

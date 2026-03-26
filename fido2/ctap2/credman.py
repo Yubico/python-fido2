@@ -28,11 +28,11 @@
 from __future__ import annotations
 
 import logging
-import struct
 from enum import IntEnum, unique
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, NoReturn, Sequence
 
-from .. import cbor
+from _fido2_native.ctap import NativeCredentialManagement
+
 from ..ctap import CtapError
 from ..webauthn import (
     PublicKeyCredentialDescriptor,
@@ -115,17 +115,26 @@ class CredentialManagement:
         self.ctap = ctap
         self.pin_uv = _PinUv(pin_uv_protocol, pin_uv_token)
 
-    def _call(self, sub_cmd, params=None, auth=True):
-        kwargs: dict[str, Any] = {"sub_cmd": sub_cmd, "sub_cmd_params": params}
-        if auth:
-            msg = struct.pack(">B", sub_cmd)
-            if params is not None:
-                msg += cbor.encode(params)
-            kwargs["pin_uv_protocol"] = self.pin_uv.protocol.VERSION
-            kwargs["pin_uv_param"] = self.pin_uv.protocol.authenticate(
-                self.pin_uv.token, msg
-            )
-        return self.ctap.credential_mgmt(**kwargs)
+        if "credMgmt" in ctap.info.options:
+            cmd_byte = 0x0A
+        else:
+            cmd_byte = 0x41
+
+        self._native: NativeCredentialManagement = NativeCredentialManagement(
+            ctap._native.device,
+            ctap._native.strict_cbor,
+            ctap._native.max_msg_size,
+            pin_uv_protocol.VERSION,
+            pin_uv_token,
+            cmd_byte,
+        )
+
+    @staticmethod
+    def _handle_native_error(e: ValueError) -> NoReturn:
+        msg = str(e)
+        if msg.startswith("CTAP_ERR:"):
+            raise CtapError(int(msg.split(":")[1])) from None
+        raise
 
     def get_metadata(self) -> Mapping[int, Any]:
         """Get credentials metadata.
@@ -136,7 +145,10 @@ class CredentialManagement:
 
         :return: A dict containing EXISTING_CRED_COUNT, and MAX_REMAINING_COUNT.
         """
-        return self._call(CredentialManagement.CMD.GET_CREDS_METADATA)
+        try:
+            return self._native.get_metadata()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def enumerate_rps_begin(self) -> Mapping[int, Any]:
         """Start enumeration of RP entities of resident credentials.
@@ -146,7 +158,10 @@ class CredentialManagement:
 
         :return: A dict containing RP, RP_ID_HASH, and TOTAL_RPS.
         """
-        return self._call(CredentialManagement.CMD.ENUMERATE_RPS_BEGIN)
+        try:
+            return self._native.enumerate_rps_begin()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def enumerate_rps_next(self) -> Mapping[int, Any]:
         """Get the next RP entity stored.
@@ -156,7 +171,10 @@ class CredentialManagement:
 
         :return: A dict containing RP, and RP_ID_HASH.
         """
-        return self._call(CredentialManagement.CMD.ENUMERATE_RPS_NEXT, auth=False)
+        try:
+            return self._native.enumerate_rps_next()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def enumerate_rps(self) -> Sequence[Mapping[int, Any]]:
         """Convenience method to enumerate all RPs.
@@ -186,10 +204,10 @@ class CredentialManagement:
         :return: A dict containing USER, CREDENTIAL_ID, PUBLIC_KEY, and
             TOTAL_CREDENTIALS.
         """
-        return self._call(
-            CredentialManagement.CMD.ENUMERATE_CREDS_BEGIN,
-            {CredentialManagement.PARAM.RP_ID_HASH: rp_id_hash},
-        )
+        try:
+            return self._native.enumerate_creds_begin(rp_id_hash)
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def enumerate_creds_next(self) -> Mapping[int, Any]:
         """Get the next resident credential stored.
@@ -199,7 +217,10 @@ class CredentialManagement:
 
         :return: A dict containing USER, CREDENTIAL_ID, and PUBLIC_KEY.
         """
-        return self._call(CredentialManagement.CMD.ENUMERATE_CREDS_NEXT, auth=False)
+        try:
+            return self._native.enumerate_creds_next()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def enumerate_creds(self, *args, **kwargs) -> Sequence[Mapping[int, Any]]:
         """Convenience method to enumerate all resident credentials for an RP.
@@ -227,10 +248,10 @@ class CredentialManagement:
         """
         cred_id = PublicKeyCredentialDescriptor.from_dict(cred_id)
         logger.debug(f"Deleting credential with ID: {cred_id}")
-        self._call(
-            CredentialManagement.CMD.DELETE_CREDENTIAL,
-            {CredentialManagement.PARAM.CREDENTIAL_ID: _as_cbor(cred_id)},
-        )
+        try:
+            self._native.delete_cred(_as_cbor(cred_id))
+        except ValueError as e:
+            self._handle_native_error(e)
         logger.info("Credential deleted")
 
     def update_user_info(
@@ -249,11 +270,8 @@ class CredentialManagement:
         cred_id = PublicKeyCredentialDescriptor.from_dict(cred_id)
         user_info = PublicKeyCredentialUserEntity.from_dict(user_info)
         logger.debug(f"Updating credential: {cred_id} with user info: {user_info}")
-        self._call(
-            CredentialManagement.CMD.UPDATE_USER_INFO,
-            {
-                CredentialManagement.PARAM.CREDENTIAL_ID: _as_cbor(cred_id),
-                CredentialManagement.PARAM.USER: _as_cbor(user_info),
-            },
-        )
+        try:
+            self._native.update_user_info(_as_cbor(cred_id), _as_cbor(user_info))
+        except ValueError as e:
+            self._handle_native_error(e)
         logger.info("Credential user info updated")

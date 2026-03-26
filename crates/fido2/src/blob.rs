@@ -63,6 +63,16 @@ impl<'a> LargeBlobs<'a> {
         })
     }
 
+    /// Create without validation (for PyO3 wrappers).
+    pub fn from_parts(
+        ctap: &'a Ctap2<'a>,
+        max_fragment_length: usize,
+        protocol: Option<&'a PinProtocol>,
+        pin_uv_token: Option<&'a [u8]>,
+    ) -> Self {
+        Self { ctap, max_fragment_length, protocol, pin_uv_token }
+    }
+
     /// Read the entire large blob array.
     pub fn read_blob_array(&self) -> Result<Vec<Value>, CtapError> {
         let mut offset: u64 = 0;

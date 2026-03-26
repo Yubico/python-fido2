@@ -27,11 +27,12 @@
 
 from __future__ import annotations
 
-import struct
 from enum import IntEnum, unique
-from typing import Any
+from typing import NoReturn
 
-from .. import cbor
+from _fido2_native.ctap import NativeConfig
+
+from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
 
@@ -79,34 +80,40 @@ class Config:
         )
         self._subcommands = self.ctap.info.authenticator_config_commands
 
-    def _call(self, sub_cmd, params=None):
-        if self._subcommands is not None and sub_cmd not in self._subcommands:
-            raise ValueError(f"Config command {sub_cmd} not supported by Authenticator")
+        self._native = NativeConfig(
+            ctap._native.device,
+            ctap._native.strict_cbor,
+            ctap._native.max_msg_size,
+            pin_uv_protocol.VERSION if pin_uv_protocol else None,
+            pin_uv_token,
+        )
 
-        if self.pin_uv:
-            msg = b"\xff" * 32 + b"\x0d" + struct.pack("<B", sub_cmd)
-            if params is not None:
-                msg += cbor.encode(params)
-            pin_uv_protocol = self.pin_uv.protocol.VERSION
-            pin_uv_param = self.pin_uv.protocol.authenticate(self.pin_uv.token, msg)
-        else:
-            pin_uv_protocol = None
-            pin_uv_param = None
-        return self.ctap.config(sub_cmd, params, pin_uv_protocol, pin_uv_param)
+    @staticmethod
+    def _handle_native_error(e: ValueError) -> NoReturn:
+        msg = str(e)
+        if msg.startswith("CTAP_ERR:"):
+            raise CtapError(int(msg.split(":")[1])) from None
+        raise
 
     def enable_enterprise_attestation(self) -> None:
         """Enables Enterprise Attestation.
 
         If already enabled, this command is ignored.
         """
-        self._call(Config.CMD.ENABLE_ENTERPRISE_ATT)
+        try:
+            self._native.enable_enterprise_attestation()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def toggle_always_uv(self) -> None:
         """Toggle the alwaysUV setting.
 
         When true, the Authenticator always requires UV for credential assertion.
         """
-        self._call(Config.CMD.TOGGLE_ALWAYS_UV)
+        try:
+            self._native.toggle_always_uv()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def set_min_pin_length(
         self,
@@ -125,15 +132,12 @@ class Config:
         :param pin_complexity_policy: True if the Authenticator should enforce an
             additional PIN complexity policy beyond minPINLength.
         """
-        params: dict[int, Any] = {Config.PARAM.FORCE_CHANGE_PIN: force_change_pin}
-        if min_pin_length is not None:
-            params[Config.PARAM.NEW_MIN_PIN_LENGTH] = min_pin_length
-        if rp_ids is not None:
-            params[Config.PARAM.MIN_PIN_LENGTH_RPIDS] = rp_ids
         if pin_complexity_policy:
             if self.ctap.info.pin_complexity_policy is None:
                 raise ValueError(
                     "Authenticator does not support setting PIN complexity policy"
                 )
-            params[Config.PARAM.PIN_COMPLEXITY_POLICY] = True
-        self._call(Config.CMD.SET_MIN_PIN_LENGTH, params)
+        try:
+            self._native.set_min_pin_length(min_pin_length, rp_ids, force_change_pin)
+        except ValueError as e:
+            self._handle_native_error(e)

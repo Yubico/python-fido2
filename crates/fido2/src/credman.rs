@@ -101,6 +101,16 @@ impl<'a> CredentialManagement<'a> {
         })
     }
 
+    /// Create without validation (for PyO3 wrappers).
+    pub fn from_parts(
+        ctap: &'a Ctap2<'a>,
+        protocol: &'a PinProtocol,
+        pin_uv_token: &'a [u8],
+        cmd_byte: u8,
+    ) -> Self {
+        Self { ctap, protocol, pin_uv_token, cmd_byte }
+    }
+
     fn _call(
         &self,
         sub_cmd: u32,

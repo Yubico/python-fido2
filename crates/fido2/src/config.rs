@@ -75,6 +75,15 @@ impl<'a> Config<'a> {
         })
     }
 
+    /// Create without validation (for PyO3 wrappers).
+    pub fn from_parts(
+        ctap: &'a Ctap2<'a>,
+        protocol: Option<&'a PinProtocol>,
+        pin_uv_token: Option<&'a [u8]>,
+    ) -> Self {
+        Self { ctap, protocol, pin_uv_token }
+    }
+
     fn _call(
         &self,
         sub_cmd: u32,

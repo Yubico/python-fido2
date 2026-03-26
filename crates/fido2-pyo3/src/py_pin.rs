@@ -28,7 +28,7 @@
 use fido2::pin;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyTuple};
 
 fn pin_err(e: pin::PinError) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -134,6 +134,90 @@ fn kdf_v2<'py>(py: Python<'py>, z: &[u8]) -> Bound<'py, PyBytes> {
     PyBytes::new(py, &result)
 }
 
+#[pyclass]
+struct NativePinProtocol {
+    protocol: pin::PinProtocol,
+}
+
+#[pymethods]
+impl NativePinProtocol {
+    #[new]
+    fn new(version: u32) -> PyResult<Self> {
+        let protocol = match version {
+            1 => pin::PinProtocol::V1,
+            2 => pin::PinProtocol::V2,
+            _ => return Err(PyValueError::new_err("Unsupported protocol version")),
+        };
+        Ok(Self { protocol })
+    }
+
+    #[getter]
+    fn version(&self) -> u32 {
+        self.protocol.version()
+    }
+
+    /// Perform ECDH key agreement.
+    /// Returns (key_agreement_dict, shared_secret_bytes).
+    fn encapsulate<'py>(
+        &self,
+        py: Python<'py>,
+        peer_x: &[u8],
+        peer_y: &[u8],
+    ) -> PyResult<Bound<'py, PyTuple>> {
+        let (ka, shared) = self.protocol.encapsulate(peer_x, peer_y).map_err(pin_err)?;
+
+        // Build key_agreement as a Python dict: {1: 2, 3: -25, -1: 1, -2: x, -3: y}
+        let ka_dict = PyDict::new(py);
+        ka_dict.set_item(1i32, 2i32)?;
+        ka_dict.set_item(3i32, -25i32)?;
+        ka_dict.set_item(-1i32, 1i32)?;
+        ka_dict.set_item(-2i32, PyBytes::new(py, &ka.x))?;
+        ka_dict.set_item(-3i32, PyBytes::new(py, &ka.y))?;
+
+        let shared_bytes = PyBytes::new(py, &shared);
+        Ok(PyTuple::new(py, [ka_dict.into_any(), shared_bytes.into_any()])?)
+    }
+
+    fn encrypt<'py>(
+        &self,
+        py: Python<'py>,
+        key: &[u8],
+        plaintext: &[u8],
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let result = self.protocol.encrypt(key, plaintext).map_err(pin_err)?;
+        Ok(PyBytes::new(py, &result))
+    }
+
+    fn decrypt<'py>(
+        &self,
+        py: Python<'py>,
+        key: &[u8],
+        ciphertext: &[u8],
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let result = self.protocol.decrypt(key, ciphertext).map_err(pin_err)?;
+        Ok(PyBytes::new(py, &result))
+    }
+
+    fn authenticate<'py>(
+        &self,
+        py: Python<'py>,
+        key: &[u8],
+        message: &[u8],
+    ) -> Bound<'py, PyBytes> {
+        let result = self.protocol.authenticate(key, message);
+        PyBytes::new(py, &result)
+    }
+
+    fn validate_token<'py>(
+        &self,
+        py: Python<'py>,
+        token: &[u8],
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let result = self.protocol.validate_token(token).map_err(pin_err)?;
+        Ok(PyBytes::new(py, &result))
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "pin")?;
     sub.add_function(wrap_pyfunction!(ecdh_p256, &sub)?)?;
@@ -145,6 +229,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(hkdf_sha256, &sub)?)?;
     sub.add_function(wrap_pyfunction!(kdf_v1, &sub)?)?;
     sub.add_function(wrap_pyfunction!(kdf_v2, &sub)?)?;
+    sub.add_class::<NativePinProtocol>()?;
     m.add_submodule(&sub)?;
 
     let sys = m.py().import("sys")?;

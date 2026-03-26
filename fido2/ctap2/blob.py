@@ -27,57 +27,13 @@
 
 from __future__ import annotations
 
-import os
-import struct
-import zlib
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Mapping, NoReturn, Sequence
 
-from _fido2_native.utils import aes_gcm_decrypt, aes_gcm_encrypt
+from _fido2_native.ctap import NativeLargeBlobs
 
-from .. import cbor
-from ..utils import sha256
+from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol, _PinUv
-
-
-def _compress(data):
-    o = zlib.compressobj(wbits=-zlib.MAX_WBITS)
-    return o.compress(data) + o.flush()
-
-
-def _decompress(data):
-    o = zlib.decompressobj(wbits=-zlib.MAX_WBITS)
-    return o.decompress(data) + o.flush()
-
-
-def _lb_ad(orig_size):
-    return b"blob" + struct.pack("<Q", orig_size)
-
-
-def _lb_pack(key, data):
-    orig_size = len(data)
-    nonce = os.urandom(12)
-
-    ciphertext = aes_gcm_encrypt(key, nonce, _compress(data), _lb_ad(orig_size))
-
-    return {
-        1: ciphertext,
-        2: nonce,
-        3: orig_size,
-    }
-
-
-def _lb_unpack(key, entry):
-    try:
-        ciphertext = entry[1]
-        nonce = entry[2]
-        orig_size = entry[3]
-        compressed = aes_gcm_decrypt(key, nonce, ciphertext, _lb_ad(orig_size))
-        return compressed, orig_size
-    except (TypeError, IndexError, KeyError):
-        raise ValueError("Invalid entry")
-    except ValueError:
-        raise ValueError("Wrong key")
 
 
 class LargeBlobs:
@@ -111,24 +67,31 @@ class LargeBlobs:
             else None
         )
 
+        self._native = NativeLargeBlobs(
+            ctap._native.device,
+            ctap._native.strict_cbor,
+            ctap._native.max_msg_size,
+            self.max_fragment_length,
+            pin_uv_protocol.VERSION if pin_uv_protocol else None,
+            pin_uv_token,
+        )
+
+    @staticmethod
+    def _handle_native_error(e: ValueError) -> NoReturn:
+        msg = str(e)
+        if msg.startswith("CTAP_ERR:"):
+            raise CtapError(int(msg.split(":")[1])) from None
+        raise
+
     def read_blob_array(self) -> Sequence[Mapping[int, Any]]:
         """Gets the entire contents of the Large Blobs array.
 
         :return: The CBOR decoded list of Large Blobs.
         """
-        offset = 0
-        buf = b""
-        while True:
-            fragment = self.ctap.large_blobs(offset, get=self.max_fragment_length)[1]
-            buf += fragment
-            if len(fragment) < self.max_fragment_length:
-                break
-            offset += self.max_fragment_length
-
-        data, check = buf[:-16], buf[-16:]
-        if check != sha256(data)[:-16]:
-            return []
-        return cast(Sequence[Mapping[int, Any]], cbor.decode(data))
+        try:
+            return self._native.read_blob_array()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def write_blob_array(self, blob_array: Sequence[Mapping[int, Any]]) -> None:
         """Writes the entire Large Blobs array.
@@ -137,38 +100,10 @@ class LargeBlobs:
         """
         if not isinstance(blob_array, list):
             raise TypeError("large-blob array must be a list")
-
-        data = cbor.encode(blob_array)
-        data += sha256(data)[:16]
-        offset = 0
-        size = len(data)
-
-        while offset < size:
-            ln = min(size - offset, self.max_fragment_length)
-            _set = data[offset : offset + ln]
-
-            if self.pin_uv:
-                msg = (
-                    b"\xff" * 32
-                    + b"\x0c\x00"
-                    + struct.pack("<I", offset)
-                    + sha256(_set)
-                )
-                pin_uv_protocol = self.pin_uv.protocol.VERSION
-                pin_uv_param = self.pin_uv.protocol.authenticate(self.pin_uv.token, msg)
-            else:
-                pin_uv_param = None
-                pin_uv_protocol = None
-
-            self.ctap.large_blobs(
-                offset,
-                set=_set,
-                length=size if offset == 0 else None,
-                pin_uv_protocol=pin_uv_protocol,
-                pin_uv_param=pin_uv_param,
-            )
-
-            offset += ln
+        try:
+            self._native.write_blob_array(blob_array)
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_blob(self, large_blob_key: bytes) -> bytes | None:
         """Gets the Large Blob stored for a single credential.
@@ -176,15 +111,10 @@ class LargeBlobs:
         :param large_blob_key: The largeBlobKey for the credential, or None.
         :returns: The decrypted and deflated value stored for the credential.
         """
-        for entry in self.read_blob_array():
-            try:
-                compressed, orig_size = _lb_unpack(large_blob_key, entry)
-                decompressed = _decompress(compressed)
-                if len(decompressed) == orig_size:
-                    return decompressed
-            except (ValueError, zlib.error):
-                continue
-        return None
+        try:
+            return self._native.get_blob(large_blob_key)
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def put_blob(self, large_blob_key: bytes, data: bytes | None) -> None:
         """Stores a Large Blob for a single credential.
@@ -194,25 +124,17 @@ class LargeBlobs:
         :param large_blob_key: The largeBlobKey for the credential.
         :param data: The data to compress, encrypt and store.
         """
-        modified = data is not None
-        entries = []
-
-        for entry in self.read_blob_array():
-            try:
-                _lb_unpack(large_blob_key, entry)
-                modified = True
-            except ValueError:
-                entries.append(entry)
-
-        if data is not None:
-            entries.append(_lb_pack(large_blob_key, data))
-
-        if modified:
-            self.write_blob_array(entries)
+        try:
+            self._native.put_blob(large_blob_key, data)
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def delete_blob(self, large_blob_key: bytes) -> None:
         """Deletes any Large Blob(s) stored for a single credential.
 
         :param large_blob_key: The largeBlobKey for the credential.
         """
-        self.put_blob(large_blob_key, None)
+        try:
+            self._native.delete_blob(large_blob_key)
+        except ValueError as e:
+            self._handle_native_error(e)
