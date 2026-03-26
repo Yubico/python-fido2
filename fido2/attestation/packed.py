@@ -28,7 +28,6 @@
 from __future__ import annotations
 
 from _fido2_native.x509 import Certificate
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
 
 from ..cose import CoseKey
 from .base import (
@@ -96,5 +95,5 @@ class PackedAttestation(Attestation):
         try:
             pub_key.verify(auth_data + client_data_hash, statement["sig"])
             return AttestationResult(att_type, x5c or [])
-        except _InvalidSignature:
+        except ValueError:
             raise InvalidSignature()

@@ -29,19 +29,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import struct
 from dataclasses import dataclass
 from enum import IntEnum, unique
-from typing import TypeAlias, cast
+from typing import cast
 
 from _fido2_native.x509 import Certificate
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from ..cose import CoseKey
-from ..utils import ByteBuffer, bytes2int
+from ..utils import ByteBuffer, bytes2int, int2bytes
 from .base import (
     Attestation,
     AttestationResult,
@@ -77,17 +74,17 @@ class TpmAlgHash(IntEnum):
     SHA384 = 0x000C
     SHA512 = 0x000D
 
-    def _hash_alg(self) -> hashes.HashAlgorithm:
+    def _hashlib_name(self) -> str:
         if self == TpmAlgHash.SHA1:
-            return hashes.SHA1()  # noqa: S303
+            return "sha1"
         elif self == TpmAlgHash.SHA256:
-            return hashes.SHA256()
+            return "sha256"
         elif self == TpmAlgHash.SHA384:
-            return hashes.SHA384()
+            return "sha384"
         elif self == TpmAlgHash.SHA512:
-            return hashes.SHA512()
+            return "sha512"
 
-        raise NotImplementedError(f"_hash_alg is not implemented for {self!r}")
+        raise NotImplementedError(f"_hashlib_name is not implemented for {self!r}")
 
 
 @dataclass
@@ -290,19 +287,13 @@ class TpmEccCurve(IntEnum):
     BN_P638 = 0x0011
     SM2_P256 = 0x0020
 
-    def to_curve(self) -> ec.EllipticCurve:
-        if self == TpmEccCurve.NONE:
-            raise ValueError("No such curve")
-        elif self == TpmEccCurve.NIST_P192:
-            return ec.SECP192R1()
-        elif self == TpmEccCurve.NIST_P224:
-            return ec.SECP224R1()
-        elif self == TpmEccCurve.NIST_P256:
-            return ec.SECP256R1()
+    def to_cose_curve_id(self) -> int:
+        if self == TpmEccCurve.NIST_P256:
+            return 1
         elif self == TpmEccCurve.NIST_P384:
-            return ec.SECP384R1()
+            return 2
         elif self == TpmEccCurve.NIST_P521:
-            return ec.SECP521R1()
+            return 3
 
         raise ValueError("curve is not supported", self)
 
@@ -388,7 +379,6 @@ class ATTRIBUTES(IntEnum):
     )
 
 
-_PublicKey: TypeAlias = rsa.RSAPublicKey | ec.EllipticCurvePublicKey
 _Parameters = TpmsRsaParms | TpmsEccParms
 _Unique = Tpm2bPublicKeyRsa | TpmsEccPoint
 
@@ -446,20 +436,29 @@ class TpmPublicFormat:
             sign_alg, name_alg, attributes, auth_policy, parameters, unique, data
         )
 
-    def public_key(self) -> _PublicKey:
+    def public_key_cose(self) -> dict[int, object]:
+        """Build a COSE key dict from the TPM public area parameters."""
         if self.sign_alg == TpmAlgAsym.RSA:
             exponent = cast(TpmsRsaParms, self.parameters).exponent
-            modulus = bytes2int(cast(Tpm2bPublicKeyRsa, self.unique))
-            return rsa.RSAPublicNumbers(exponent, modulus).public_key(default_backend())
+            unique = cast(Tpm2bPublicKeyRsa, self.unique)
+            return {
+                1: 3,
+                -1: bytes(unique),
+                -2: int2bytes(exponent),
+            }
         elif self.sign_alg == TpmAlgAsym.ECC:
-            unique = cast(TpmsEccPoint, self.unique)
-            return ec.EllipticCurvePublicNumbers(
-                bytes2int(unique.x),
-                bytes2int(unique.y),
-                cast(TpmsEccParms, self.parameters).curve_id.to_curve(),
-            ).public_key(default_backend())
+            ecc_unique = cast(TpmsEccPoint, self.unique)
+            curve_id = cast(TpmsEccParms, self.parameters).curve_id
+            return {
+                1: 2,
+                -1: curve_id.to_cose_curve_id(),
+                -2: ecc_unique.x,
+                -3: ecc_unique.y,
+            }
 
-        raise NotImplementedError(f"public_key not implemented for {self.sign_alg!r}")
+        raise NotImplementedError(
+            f"public_key_cose not implemented for {self.sign_alg!r}"
+        )
 
     def name(self) -> bytes:
         """
@@ -477,11 +476,9 @@ class TpmPublicFormat:
             nvPublicArea contents of the TPMS_NV_PUBLIC associated with handle
         """
         output = struct.pack("!H", self.name_alg)
-
-        digest = hashes.Hash(self.name_alg._hash_alg(), backend=default_backend())
-        digest.update(self.data)
-        output += digest.finalize()
-
+        h = hashlib.new(self.name_alg._hashlib_name())
+        h.update(self.data)
+        output += h.digest()
         return output
 
 
@@ -500,6 +497,35 @@ def _validate_tpm_cert(cert):
             "internationalorganizations(23) 133 tcg-kp(8) "
             'tcg-kp-AIKCertificate(3)" OID.'
         )
+
+
+_ALG_HASH_NAME: dict[int, str] = {
+    -7: "sha256",  # ES256
+    -9: "sha256",  # ESP256
+    -35: "sha384",  # ES384
+    -36: "sha512",  # ES512
+    -37: "sha256",  # PS256
+    -47: "sha256",  # ES256K
+    -257: "sha256",  # RS256
+    -65535: "sha1",  # RS1
+}
+
+
+def _tpm_key_matches(tpm_key: dict[int, object], cred_key: CoseKey) -> bool:
+    """Check if TPM pubArea key parameters match the credential public key."""
+    kty = tpm_key.get(1)
+    if kty == 2:  # EC
+        return (
+            tpm_key.get(-1) == cred_key.get(-1)
+            and bytes2int(tpm_key[-2]) == bytes2int(cred_key[-2])  # type: ignore
+            and bytes2int(tpm_key[-3]) == bytes2int(cred_key[-3])  # type: ignore
+        )
+    elif kty == 3:  # RSA
+        return (
+            bytes2int(tpm_key[-1]) == bytes2int(cred_key[-1])  # type: ignore  # n
+            and bytes2int(tpm_key[-2]) == bytes2int(cred_key[-2])  # type: ignore  # e
+        )
+    return False
 
 
 class TpmAttestation(Attestation):
@@ -526,12 +552,9 @@ class TpmAttestation(Attestation):
         # fields of pubArea is identical to the credentialPublicKey in the
         # attestedCredentialData in authenticatorData.
         assert auth_data.credential_data is not None  # noqa: S101
-        if (
-            auth_data.credential_data.public_key.from_cryptography_key(
-                pub_area.public_key()
-            )
-            != auth_data.credential_data.public_key
-        ):
+        cred_key = auth_data.credential_data.public_key
+        tpm_key = pub_area.public_key_cose()
+        if not _tpm_key_matches(tpm_key, cred_key):
             raise InvalidSignature(
                 "attestation pubArea does not match attestedCredentialData"
             )
@@ -545,10 +568,10 @@ class TpmAttestation(Attestation):
             # Verify that extraData is set to the hash of attToBeSigned
             # using the hash algorithm employed in "alg".
             att_to_be_signed = auth_data + client_data_hash
-            hash_alg = pub_key._HASH_ALG  # type: ignore
-            digest = hashes.Hash(hash_alg, backend=default_backend())
-            digest.update(att_to_be_signed)
-            data = digest.finalize()
+            hash_name = _ALG_HASH_NAME.get(alg)
+            if hash_name is None:
+                raise InvalidData(f"Unknown hash for algorithm {alg}")
+            data = hashlib.new(hash_name, att_to_be_signed).digest()
 
             if tpm.data != data:
                 raise InvalidSignature(
@@ -571,5 +594,5 @@ class TpmAttestation(Attestation):
 
             pub_key.verify(cert_info, statement["sig"])
             return AttestationResult(AttestationType.ATT_CA, x5c)
-        except _InvalidSignature:
+        except ValueError:
             raise InvalidSignature("signature of certInfo does not match")

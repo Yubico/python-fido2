@@ -28,7 +28,6 @@
 from __future__ import annotations
 
 from _fido2_native.x509 import Certificate
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
 
 from ..cose import ES256, CoseKey
 from .base import (
@@ -67,5 +66,5 @@ class FidoU2FAttestation(Attestation):
         cert = Certificate(cert_bytes)
         try:
             CoseKey.parse(cert.public_key_as_cose(ES256.ALGORITHM)).verify(m, signature)
-        except _InvalidSignature:
+        except ValueError:
             raise InvalidSignature()

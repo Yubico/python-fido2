@@ -32,7 +32,6 @@ import os
 from typing import Any, Callable, Mapping, Sequence
 
 from _fido2_native.utils import bytes_eq as _bytes_eq
-from cryptography.exceptions import InvalidSignature as _InvalidSignature
 
 from .cose import CoseKey
 from .rpid import verify_rp_id
@@ -365,7 +364,7 @@ class Fido2Server:
             if cred.credential_id == credential_id:
                 try:
                     cred.public_key.verify(auth_data + client_data.hash, signature)
-                except _InvalidSignature:
+                except ValueError:
                     raise ValueError("Invalid signature.")
                 logger.info(f"Credential authenticated: {credential_id.hex()}")
                 return cred

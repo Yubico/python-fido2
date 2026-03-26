@@ -27,16 +27,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Sequence, TypeVar
-
-from cryptography.hazmat.primitives import hashes
+from typing import Any, Mapping, Sequence
 
 from _fido2_native.cose import verify as _native_verify
-
-from .utils import int2bytes
-
-if TYPE_CHECKING:
-    from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 
 
 class CoseKey(dict):
@@ -55,17 +48,6 @@ class CoseKey(dict):
         :param signature: The signature to check.
         """
         _native_verify(self, message, signature)
-
-    @classmethod
-    def from_cryptography_key(
-        cls: type[T_CoseKey], public_key: PublicKeyTypes
-    ) -> T_CoseKey:
-        """Converts a PublicKey object from Cryptography into a COSE key.
-
-        :param public_key: Either an EC or RSA public key.
-        :return: A CoseKey.
-        """
-        raise NotImplementedError("Creation from cryptography not supported.")
 
     @staticmethod
     def for_alg(alg: int) -> type[CoseKey]:
@@ -128,9 +110,6 @@ class CoseKey(dict):
         return [cls.ALGORITHM for cls in algs]
 
 
-T_CoseKey = TypeVar("T_CoseKey", bound=CoseKey)
-
-
 class UnsupportedKey(CoseKey):
     """A COSE key with an unsupported algorithm."""
 
@@ -140,23 +119,6 @@ class UnsupportedKey(CoseKey):
 
 class ES256(CoseKey):
     ALGORITHM = -7
-    _HASH_ALG = hashes.SHA256()
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives.asymmetric import ec
-
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
-        pn = public_key.public_numbers()
-        return cls(
-            {
-                1: 2,
-                3: cls.ALGORITHM,
-                -1: 1,
-                -2: int2bytes(pn.x, 32),
-                -3: int2bytes(pn.y, 32),
-            }
-        )
 
     @classmethod
     def from_ctap1(cls, data):
@@ -175,23 +137,6 @@ class ESP256(ES256):
 
 class ES384(CoseKey):
     ALGORITHM = -35
-    _HASH_ALG = hashes.SHA384()
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives.asymmetric import ec
-
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
-        pn = public_key.public_numbers()
-        return cls(
-            {
-                1: 2,
-                3: cls.ALGORITHM,
-                -1: 2,
-                -2: int2bytes(pn.x, 48),
-                -3: int2bytes(pn.y, 48),
-            }
-        )
 
 
 class ESP384(ES384):
@@ -201,23 +146,6 @@ class ESP384(ES384):
 
 class ES512(CoseKey):
     ALGORITHM = -36
-    _HASH_ALG = hashes.SHA512()
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives.asymmetric import ec
-
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
-        pn = public_key.public_numbers()
-        return cls(
-            {
-                1: 2,
-                3: cls.ALGORITHM,
-                -1: 3,
-                -2: int2bytes(pn.x, 66),
-                -3: int2bytes(pn.y, 66),
-            }
-        )
 
 
 class ESP512(ES512):
@@ -227,49 +155,14 @@ class ESP512(ES512):
 
 class RS256(CoseKey):
     ALGORITHM = -257
-    _HASH_ALG = hashes.SHA256()
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives.asymmetric import rsa
-
-        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
-        pn = public_key.public_numbers()
-        return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
 
 class PS256(CoseKey):
     ALGORITHM = -37
-    _HASH_ALG = hashes.SHA256()
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives.asymmetric import rsa
-
-        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
-        pn = public_key.public_numbers()
-        return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
 
 class EdDSA(CoseKey):
     ALGORITHM = -8
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        assert isinstance(public_key, ed25519.Ed25519PublicKey)  # noqa: S101
-        return cls(
-            {
-                1: 1,
-                3: cls.ALGORITHM,
-                -1: 6,
-                -2: public_key.public_bytes(
-                    serialization.Encoding.Raw, serialization.PublicFormat.Raw
-                ),
-            }
-        )
 
 
 class Ed25519(EdDSA):
@@ -281,53 +174,10 @@ class Ed448(CoseKey):
     # See: https://www.ietf.org/archive/id/draft-ietf-jose-fully-specified-algorithms-12.html#name-edwards-curve-digital-signa  # noqa:E501
     ALGORITHM = -53
 
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import ed448
-
-        assert isinstance(public_key, ed448.Ed448PublicKey)  # noqa: S101
-        return cls(
-            {
-                1: 1,
-                3: cls.ALGORITHM,
-                -1: 7,
-                -2: public_key.public_bytes(
-                    serialization.Encoding.Raw, serialization.PublicFormat.Raw
-                ),
-            }
-        )
-
 
 class RS1(CoseKey):
     ALGORITHM = -65535
-    _HASH_ALG = hashes.SHA1()  # noqa: S303
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives.asymmetric import rsa
-
-        assert isinstance(public_key, rsa.RSAPublicKey)  # noqa: S101
-        pn = public_key.public_numbers()
-        return cls({1: 3, 3: cls.ALGORITHM, -1: int2bytes(pn.n), -2: int2bytes(pn.e)})
 
 
 class ES256K(CoseKey):
     ALGORITHM = -47
-    _HASH_ALG = hashes.SHA256()
-
-    @classmethod
-    def from_cryptography_key(cls, public_key):
-        from cryptography.hazmat.primitives.asymmetric import ec
-
-        assert isinstance(public_key, ec.EllipticCurvePublicKey)  # noqa: S101
-        pn = public_key.public_numbers()
-        return cls(
-            {
-                1: 2,
-                3: cls.ALGORITHM,
-                -1: 8,
-                -2: int2bytes(pn.x, 32),
-                -3: int2bytes(pn.y, 32),
-            }
-        )

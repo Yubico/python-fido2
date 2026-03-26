@@ -34,24 +34,7 @@ use pyo3::prelude::*;
 use crate::py_cbor;
 
 fn cose_err(e: CoseError) -> PyErr {
-    match e {
-        CoseError::VerificationFailed => {
-            // Import InvalidSignature from cryptography.exceptions at runtime
-            Python::with_gil(|py| {
-                match py.import("cryptography.exceptions") {
-                    Ok(m) => match m.getattr("InvalidSignature") {
-                        Ok(exc) => PyErr::from_value(
-                            exc.call1(("Signature verification failed",))
-                                .unwrap_or_else(|_| exc.clone()),
-                        ),
-                        Err(_) => PyValueError::new_err("Signature verification failed"),
-                    },
-                    Err(_) => PyValueError::new_err("Signature verification failed"),
-                }
-            })
-        }
-        other => PyValueError::new_err(other.to_string()),
-    }
+    PyValueError::new_err(e.to_string())
 }
 
 /// Build a CoseKey from a Python dict with integer keys.
