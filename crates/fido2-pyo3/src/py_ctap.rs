@@ -131,6 +131,9 @@ fn ctap_err(e: CtapError) -> PyErr {
         CtapError::StatusError(status) => {
             PyValueError::new_err(format!("CTAP_ERR:{}", status.as_byte()))
         }
+        CtapError::InvalidResponse(ref msg) if msg.starts_with("Invalid PIN:") => {
+            PyValueError::new_err(msg.clone())
+        }
         _ => PyOSError::new_err(e.to_string()),
     }
 }

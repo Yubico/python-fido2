@@ -35,30 +35,13 @@ from threading import Event
 from typing import Any, Callable, ClassVar, Mapping, NoReturn
 
 from _fido2_native.ctap import NativeClientPin
-from _fido2_native.pin import (
-    NativePinProtocol,
-    ecdh_p256,
-    kdf_v1,
-)
+from _fido2_native.pin import NativePinProtocol
 
 from ..cose import CoseKey
 from ..ctap import CtapError
-from ..utils import sha256
 from .base import Ctap2
 
 logger = logging.getLogger(__name__)
-
-
-def _pad_pin(pin: str) -> bytes:
-    if not isinstance(pin, str):
-        raise ValueError(f"PIN of wrong type, expecting {str}")
-    if len(pin) < 4:
-        raise ValueError("PIN must be >= 4 characters")
-    pin_padded = pin.encode().ljust(64, b"\0")
-    pin_padded += b"\0" * (-(len(pin_padded) - 16) % 16)
-    if len(pin_padded) > 255:
-        raise ValueError("PIN must be <= 255 bytes")
-    return pin_padded
 
 
 class PinProtocol(abc.ABC):
@@ -109,25 +92,8 @@ class PinProtocolV1(PinProtocol):
     def __init__(self):
         self._native = NativePinProtocol(self.VERSION)
 
-    def kdf(self, z: bytes) -> bytes:
-        return kdf_v1(z)
-
     def encapsulate(self, peer_cose_key):
-        peer_x = peer_cose_key[-2]
-        peer_y = peer_cose_key[-3]
-
-        our_x, our_y, shared_secret_raw = ecdh_p256(peer_x, peer_y)
-
-        key_agreement = {
-            1: 2,
-            3: -25,
-            -1: 1,
-            -2: our_x,
-            -3: our_y,
-        }
-
-        shared_secret = self.kdf(shared_secret_raw)
-        return key_agreement, shared_secret
+        return self._native.encapsulate(peer_cose_key[-2], peer_cose_key[-3])
 
     def encrypt(self, key, plaintext):
         return self._native.encrypt(key, plaintext)
@@ -218,15 +184,12 @@ class ClientPin:
                 raise ValueError("No compatible PIN/UV protocols supported!")
         else:
             self.protocol = protocol
-        try:
-            self._native: NativeClientPin | None = NativeClientPin(
-                ctap._native.device,
-                ctap._native.strict_cbor,
-                ctap._native.max_msg_size,
-                self.protocol.VERSION,
-            )
-        except (TypeError, AttributeError):
-            self._native = None
+        self._native = NativeClientPin(
+            ctap._native.device,
+            ctap._native.strict_cbor,
+            ctap._native.max_msg_size,
+            self.protocol.VERSION,
+        )
 
     @staticmethod
     def _handle_native_error(e: ValueError) -> NoReturn:
@@ -236,16 +199,10 @@ class ClientPin:
         raise
 
     def _get_shared_secret(self):
-        if self._native is not None:
-            try:
-                return self._native.get_shared_secret()
-            except ValueError as e:
-                self._handle_native_error(e)
-        resp = self.ctap.client_pin(
-            self.protocol.VERSION, ClientPin.CMD.GET_KEY_AGREEMENT
-        )
-        pk = resp[ClientPin.RESULT.KEY_AGREEMENT]
-        return self.protocol.encapsulate(pk)
+        try:
+            return self._native.get_shared_secret()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_pin_token(
         self,
@@ -260,43 +217,14 @@ class ClientPin:
         :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
-        if self._native is not None:
-            try:
-                return self._native.get_pin_token(
-                    pin,
-                    int(permissions) if permissions is not None else None,
-                    permissions_rpid,
-                )
-            except ValueError as e:
-                self._handle_native_error(e)
-
-        if not ClientPin.is_supported(self.ctap.info):
-            raise ValueError("Authenticator does not support get_pin_token")
-
-        key_agreement, shared_secret = self._get_shared_secret()
-
-        pin_hash = sha256(pin.encode())[:16]
-        pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
-
-        if ClientPin.is_token_supported(self.ctap.info) and permissions:
-            cmd = ClientPin.CMD.GET_TOKEN_USING_PIN
-        else:
-            cmd = ClientPin.CMD.GET_TOKEN_USING_PIN_LEGACY
-            permissions = None
-            permissions_rpid = None
-
-        resp = self.ctap.client_pin(
-            self.protocol.VERSION,
-            cmd,
-            key_agreement=key_agreement,
-            pin_hash_enc=pin_hash_enc,
-            permissions=permissions,
-            permissions_rpid=permissions_rpid,
-        )
-        pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
-        return self.protocol.validate_token(
-            self.protocol.decrypt(shared_secret, pin_token_enc)
-        )
+        try:
+            return self._native.get_pin_token(
+                pin,
+                int(permissions) if permissions is not None else None,
+                permissions_rpid,
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_uv_token(
         self,
@@ -316,36 +244,15 @@ class ClientPin:
             consecutive keep-alive messages with the same status.
         :return: A PIN/UV token.
         """
-        if self._native is not None:
-            try:
-                return self._native.get_uv_token(
-                    int(permissions) if permissions is not None else None,
-                    permissions_rpid,
-                    event,
-                    on_keepalive,
-                )
-            except ValueError as e:
-                self._handle_native_error(e)
-
-        if not ClientPin.is_token_supported(self.ctap.info):
-            raise ValueError("Authenticator does not support get_uv_token")
-
-        key_agreement, shared_secret = self._get_shared_secret()
-
-        resp = self.ctap.client_pin(
-            self.protocol.VERSION,
-            ClientPin.CMD.GET_TOKEN_USING_UV,
-            key_agreement=key_agreement,
-            permissions=permissions,
-            permissions_rpid=permissions_rpid,
-            event=event,
-            on_keepalive=on_keepalive,
-        )
-
-        pin_token_enc = resp[ClientPin.RESULT.PIN_UV_TOKEN]
-        return self.protocol.validate_token(
-            self.protocol.decrypt(shared_secret, pin_token_enc)
-        )
+        try:
+            return self._native.get_uv_token(
+                int(permissions) if permissions is not None else None,
+                permissions_rpid,
+                event,
+                on_keepalive,
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_pin_retries(self) -> tuple[int, int | None]:
         """Get the number of PIN retries remaining.
@@ -353,19 +260,10 @@ class ClientPin:
         :return: A tuple of the number of PIN attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
-        if self._native is not None:
-            try:
-                return self._native.get_pin_retries()
-            except ValueError as e:
-                self._handle_native_error(e)
-
-        resp = self.ctap.client_pin(
-            self.protocol.VERSION, ClientPin.CMD.GET_PIN_RETRIES
-        )
-        return (
-            resp[ClientPin.RESULT.PIN_RETRIES],
-            resp.get(ClientPin.RESULT.POWER_CYCLE_STATE),
-        )
+        try:
+            return self._native.get_pin_retries()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_uv_retries(self) -> int:
         """Get the number of UV retries remaining.
@@ -373,14 +271,10 @@ class ClientPin:
         :return: A tuple of the number of UV attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
-        if self._native is not None:
-            try:
-                return self._native.get_uv_retries()
-            except ValueError as e:
-                self._handle_native_error(e)
-
-        resp = self.ctap.client_pin(self.protocol.VERSION, ClientPin.CMD.GET_UV_RETRIES)
-        return resp[ClientPin.RESULT.UV_RETRIES]
+        try:
+            return self._native.get_uv_retries()
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def set_pin(self, pin: str) -> None:
         """Set the PIN of the autenticator.
@@ -390,26 +284,10 @@ class ClientPin:
 
         :param pin: A PIN to set.
         """
-        if self._native is not None:
-            try:
-                return self._native.set_pin(pin)
-            except ValueError as e:
-                self._handle_native_error(e)
-
-        if not ClientPin.is_supported(self.ctap.info):
-            raise ValueError("Authenticator does not support ClientPin")
-
-        key_agreement, shared_secret = self._get_shared_secret()
-
-        pin_enc = self.protocol.encrypt(shared_secret, _pad_pin(pin))
-        pin_uv_param = self.protocol.authenticate(shared_secret, pin_enc)
-        self.ctap.client_pin(
-            self.protocol.VERSION,
-            ClientPin.CMD.SET_PIN,
-            key_agreement=key_agreement,
-            new_pin_enc=pin_enc,
-            pin_uv_param=pin_uv_param,
-        )
+        try:
+            self._native.set_pin(pin)
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def change_pin(self, old_pin: str, new_pin: str) -> None:
         """Change the PIN of the authenticator.
@@ -420,28 +298,7 @@ class ClientPin:
         :param old_pin: The currently set PIN.
         :param new_pin: The new PIN to set.
         """
-        if self._native is not None:
-            try:
-                return self._native.change_pin(old_pin, new_pin)
-            except ValueError as e:
-                self._handle_native_error(e)
-
-        if not ClientPin.is_supported(self.ctap.info):
-            raise ValueError("Authenticator does not support ClientPin")
-
-        key_agreement, shared_secret = self._get_shared_secret()
-
-        pin_hash = sha256(old_pin.encode())[:16]
-        pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
-        new_pin_enc = self.protocol.encrypt(shared_secret, _pad_pin(new_pin))
-        pin_uv_param = self.protocol.authenticate(
-            shared_secret, new_pin_enc + pin_hash_enc
-        )
-        self.ctap.client_pin(
-            self.protocol.VERSION,
-            ClientPin.CMD.CHANGE_PIN,
-            key_agreement=key_agreement,
-            pin_hash_enc=pin_hash_enc,
-            new_pin_enc=new_pin_enc,
-            pin_uv_param=pin_uv_param,
-        )
+        try:
+            self._native.change_pin(old_pin, new_pin)
+        except ValueError as e:
+            self._handle_native_error(e)

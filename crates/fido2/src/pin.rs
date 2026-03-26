@@ -617,9 +617,9 @@ impl<'a> ClientPin<'a> {
 
     /// Set a new PIN (when no PIN is currently set).
     pub fn set_pin(&self, pin: &str) -> Result<(), CtapError> {
-        let (key_agreement, shared_secret) = self._get_shared_secret()?;
-
         let padded = pad_pin(pin)?;
+
+        let (key_agreement, shared_secret) = self._get_shared_secret()?;
         let new_pin_enc = self.protocol.encrypt(&shared_secret, &padded)?;
         let pin_uv_param = self.protocol.authenticate(&shared_secret, &new_pin_enc);
 
@@ -640,12 +640,12 @@ impl<'a> ClientPin<'a> {
 
     /// Change an existing PIN.
     pub fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), CtapError> {
+        let padded = pad_pin(new_pin)?;
+
         let (key_agreement, shared_secret) = self._get_shared_secret()?;
 
         let pin_hash = utils::sha256(old_pin.as_bytes());
         let pin_hash_enc = self.protocol.encrypt(&shared_secret, &pin_hash[..16])?;
-
-        let padded = pad_pin(new_pin)?;
         let new_pin_enc = self.protocol.encrypt(&shared_secret, &padded)?;
 
         let mut auth_data = Vec::with_capacity(new_pin_enc.len() + pin_hash_enc.len());
