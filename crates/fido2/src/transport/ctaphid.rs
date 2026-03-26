@@ -411,6 +411,26 @@ impl CtapHidConnection {
     }
 }
 
+impl crate::ctap::CtapDevice for CtapHidConnection {
+    fn call(
+        &self,
+        cmd: u8,
+        data: &[u8],
+        on_keepalive: &mut dyn FnMut(u8),
+    ) -> Result<Vec<u8>, crate::ctap::CtapError> {
+        self.call_with_keepalive(cmd, data, on_keepalive)
+            .map_err(|e| crate::ctap::CtapError::TransportError(e.to_string()))
+    }
+
+    fn capabilities(&self) -> u8 {
+        self.capabilities.raw()
+    }
+
+    fn close(&mut self) {
+        self.close();
+    }
+}
+
 impl Drop for CtapHidConnection {
     fn drop(&mut self) {
         self.close();
