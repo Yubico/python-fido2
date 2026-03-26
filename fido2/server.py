@@ -31,7 +31,8 @@ import logging
 import os
 from typing import Any, Callable, Mapping, Sequence
 
-from _fido2_native.utils import bytes_eq as _bytes_eq
+from _fido2_native.server import verify_authentication as _verify_authentication
+from _fido2_native.server import verify_registration as _verify_registration
 
 from .cose import CoseKey
 from .rpid import verify_rp_id
@@ -44,7 +45,6 @@ from .webauthn import (
     AuthenticatorAttachment,
     AuthenticatorData,
     AuthenticatorSelectionCriteria,
-    CollectedClientData,
     CredentialCreationOptions,
     CredentialRequestOptions,
     PublicKeyCredentialCreationOptions,
@@ -239,26 +239,16 @@ class Fido2Server:
         client_data = registration.response.client_data
         attestation_object = registration.response.attestation_object
 
-        if client_data.type != CollectedClientData.TYPE.CREATE:
-            raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
-        if not _bytes_eq(websafe_decode(state["challenge"]), client_data.challenge):
-            raise ValueError("Wrong challenge in response.")
-        if not _bytes_eq(
-            self.rp.id_hash or b"", attestation_object.auth_data.rp_id_hash
-        ):
-            raise ValueError("Wrong RP ID hash in response.")
-        if not attestation_object.auth_data.is_user_present():
-            raise ValueError("User Present flag not set.")
 
-        if (
-            state["user_verification"] == UserVerificationRequirement.REQUIRED
-            and not attestation_object.auth_data.is_user_verified()
-        ):
-            raise ValueError(
-                "User verification required, but User Verified flag not set."
-            )
+        _verify_registration(
+            bytes(client_data),
+            bytes(attestation_object),
+            websafe_decode(state["challenge"]),
+            self.rp.id_hash or b"",
+            state["user_verification"] == UserVerificationRequirement.REQUIRED,
+        )
 
         if self.attestation not in (None, AttestationConveyancePreference.NONE):
             logger.debug(f"Verifying attestation of type {attestation_object.fmt}")
@@ -341,24 +331,16 @@ class Fido2Server:
         auth_data = authentication.response.authenticator_data
         signature = authentication.response.signature
 
-        if client_data.type != CollectedClientData.TYPE.GET:
-            raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
-        if websafe_decode(state["challenge"]) != client_data.challenge:
-            raise ValueError("Wrong challenge in response.")
-        if not _bytes_eq(self.rp.id_hash or b"", auth_data.rp_id_hash):
-            raise ValueError("Wrong RP ID hash in response.")
-        if not auth_data.is_user_present():
-            raise ValueError("User Present flag not set.")
 
-        if (
-            state["user_verification"] == UserVerificationRequirement.REQUIRED
-            and not auth_data.is_user_verified()
-        ):
-            raise ValueError(
-                "User verification required, but user verified flag not set."
-            )
+        _verify_authentication(
+            bytes(client_data),
+            bytes(auth_data),
+            websafe_decode(state["challenge"]),
+            self.rp.id_hash or b"",
+            state["user_verification"] == UserVerificationRequirement.REQUIRED,
+        )
 
         for cred in credentials:
             if cred.credential_id == credential_id:

@@ -31,6 +31,7 @@ mod py_hid;
 mod py_logging;
 mod py_pcsc;
 mod py_pin;
+mod py_server;
 mod py_utils;
 mod py_webauthn;
 mod py_x509;
@@ -45,6 +46,7 @@ fn _fido2_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     py_hid::register(m)?;
     py_pcsc::register(m)?;
     py_pin::register(m)?;
+    py_server::register(m)?;
     py_utils::register(m)?;
     py_webauthn::register(m)?;
     py_x509::register(m)?;

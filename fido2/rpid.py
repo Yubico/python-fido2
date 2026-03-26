@@ -26,80 +26,14 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """
+RP ID and origin validation.
+
 These functions validate RP_ID and APP_ID according to simplified TLD+1 rules,
-using a bundled copy of the public suffix list fetched from:
-
-  https://publicsuffix.org/list/public_suffix_list.dat
-
-Advanced APP_ID values pointing to JSON files containing valid facets are not
-supported by this implementation.
+using the public suffix list bundled in the native extension.
 """
 
 from __future__ import annotations
 
-import os
-from urllib.parse import urlparse
+from _fido2_native.server import verify_rp_id
 
-tld_fname = os.path.join(os.path.dirname(__file__), "public_suffix_list.dat")
-with open(tld_fname, "rb") as f:
-    _suffix_set: set[str] = set()
-    _wildcard_set: set[str] = set()
-    _exception_set: set[str] = set()
-    for _line in f:
-        _entry = _line.decode("utf8").strip()
-        if not _entry or _entry.startswith("//"):
-            continue
-        if _entry.startswith("!"):
-            _exception_set.add(_entry[1:])
-        elif _entry.startswith("*."):
-            _wildcard_set.add(_entry[2:])
-        else:
-            _suffix_set.add(_entry)
-
-# Keep `suffixes` as a list for backward compatibility
-suffixes = sorted(
-    _suffix_set | {f"*.{w}" for w in _wildcard_set} | {f"!{e}" for e in _exception_set}
-)
-
-
-def _is_public_suffix(domain: str) -> bool:
-    """Check if a domain is a public suffix per the PSL algorithm.
-
-    https://github.com/publicsuffix/list/wiki/Format
-    """
-    if domain in _exception_set:
-        return False
-    if domain in _suffix_set:
-        return True
-    parts = domain.split(".", 1)
-    if len(parts) == 2 and parts[1] in _wildcard_set:
-        return True
-    return False
-
-
-def verify_rp_id(rp_id: str, origin: str) -> bool:
-    """Checks if a Webauthn RP ID is usable for a given origin.
-
-    :param rp_id: The RP ID to validate.
-    :param origin: The origin of the request.
-    :return: True if the RP ID is usable by the origin, False if not.
-    """
-    if not rp_id:
-        return False
-
-    url = urlparse(origin)
-    host = url.hostname
-    # Note that Webauthn requires a secure context, i.e. an origin with https scheme.
-    # However, most browsers also treat http://localhost as a secure context. See
-    # https://groups.google.com/a/chromium.org/g/blink-dev/c/RC9dSw-O3fE/m/E3_0XaT0BAAJ
-    if (
-        url.scheme != "https"
-        and (url.scheme, host) != ("http", "localhost")
-        and not (url.scheme == "http" and host and host.endswith(".localhost"))
-    ):
-        return False
-    if host == rp_id:
-        return True
-    if host and host.endswith("." + rp_id) and not _is_public_suffix(rp_id):
-        return True
-    return False
+__all__ = ["verify_rp_id"]
