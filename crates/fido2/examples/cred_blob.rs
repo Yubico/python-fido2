@@ -30,51 +30,17 @@
 //! Creates a credential with the credBlob extension to store arbitrary data,
 //! then reads it back during authentication.
 
-use std::io::{self, Write};
+mod common;
 
-use fido2::cbor::Value;
-use fido2::client::{self, UserInteraction};
-use fido2::ctap::keepalive;
-use fido2::ctap2::Ctap2;
-use fido2::pin::ClientPin;
+use fido2::client::Fido2Client;
+use fido2::extensions::default_extensions;
 use fido2::transport::ctaphid;
-
-struct CliInteraction {
-    pin: std::cell::RefCell<Option<String>>,
-}
-
-impl CliInteraction {
-    fn new() -> Self {
-        Self {
-            pin: std::cell::RefCell::new(None),
-        }
-    }
-}
-
-impl UserInteraction for CliInteraction {
-    fn request_pin(&self, _permissions: u32, _rp_id: Option<&str>) -> Option<String> {
-        let mut cached = self.pin.borrow_mut();
-        if cached.is_none() {
-            print!("Enter PIN: ");
-            io::stdout().flush().ok();
-            let mut pin = String::new();
-            io::stdin().read_line(&mut pin).ok()?;
-            *cached = Some(pin.trim().to_string());
-        }
-        cached.clone()
-    }
-
-    fn request_uv(&self, _permissions: u32, _rp_id: Option<&str>) -> bool {
-        println!("User Verification required.");
-        true
-    }
-}
-
-fn on_keepalive(status: u8) {
-    if status == keepalive::UPNEEDED {
-        println!("\nTouch your authenticator device now...\n");
-    }
-}
+use fido2::webauthn::{
+    AuthenticatorSelectionCriteria, PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialParameters, PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity,
+    PublicKeyCredentialType, PublicKeyCredentialUserEntity, ResidentKeyRequirement,
+    UserVerificationRequirement,
+};
 
 fn main() {
     let devices = ctaphid::list_devices().expect("Failed to enumerate HID devices");
@@ -86,122 +52,72 @@ fn main() {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let ctap = match Ctap2::new(&c, false) {
-            Ok(c) => c,
+        let interaction = common::CliInteraction::new();
+        let client = match Fido2Client::new(&c, "https://example.com", &interaction, default_extensions()) {
+            Ok(cl) => cl,
             Err(_) => continue,
         };
-        if ctap.info().extensions.iter().any(|e| e == "credBlob") {
+        if client.info().extensions.iter().any(|e| e == "credBlob") {
             println!(
                 "Using device: {}",
                 dev_info.product_name.as_deref().unwrap_or("Unknown")
             );
-            drop(ctap);
+            drop(client);
             conn = Some(c);
             break;
         }
     }
     let conn = conn.expect("No FIDO device with credBlob support found!");
-    let ctap = Ctap2::new(&conn, false).expect("Failed to initialize CTAP2");
-    let info = ctap.info();
-
-    let uv = if info.options.get("uv") == Some(&true)
-        || info.options.get("bioEnroll") == Some(&true)
-    {
-        println!("Authenticator is configured for User Verification");
-        "preferred"
-    } else {
-        "discouraged"
-    };
-
-    let rp_id = "example.com";
-    let interaction = CliInteraction::new();
-
-    // ---- Registration with credBlob ----
-
-    let use_uv = client::should_use_uv(info, Some(uv), client::permission::MAKE_CREDENTIAL)
-        .expect("UV decision failed");
-
-    let client_data_hash = fido2::utils::sha256(b"cred-blob-example-client-data");
-
-    let (pin_token, internal_uv) = if use_uv {
-        let client_pin = ClientPin::new(&ctap, None).expect("Failed to create ClientPin");
-        let token = client::get_token(
-            info,
-            &client_pin,
-            client::permission::MAKE_CREDENTIAL,
-            Some(rp_id),
-            &mut on_keepalive,
-            true,
-            true,
-            &interaction,
-        )
-        .expect("Failed to get PIN/UV token");
-        let is_internal = token.is_none();
-        (token, is_internal)
-    } else {
-        (None, false)
-    };
-
-    let rp_val = Value::Map(vec![
-        (Value::Text("id".into()), Value::Text(rp_id.into())),
-        (Value::Text("name".into()), Value::Text("Example RP".into())),
-    ]);
-    let user_val = Value::Map(vec![
-        (
-            Value::Text("id".into()),
-            Value::Bytes(b"user_id".to_vec()),
-        ),
-        (Value::Text("name".into()), Value::Text("A. User".into())),
-    ]);
-    let key_params = Value::Array(vec![Value::Map(vec![
-        (Value::Text("type".into()), Value::Text("public-key".into())),
-        (Value::Text("alg".into()), Value::Int(-7)),
-    ])]);
-
-    let mut options_map = vec![(Value::Text("rk".into()), Value::Bool(true))];
-    if internal_uv {
-        options_map.push((Value::Text("uv".into()), Value::Bool(true)));
-    }
+    let interaction = common::CliInteraction::new();
+    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions())
+        .expect("Failed to create client");
 
     // Generate random blob data
     let mut blob = [0u8; 32];
     getrandom::fill(&mut blob).expect("Failed to generate random blob");
 
-    // credBlob extension input: the blob data to store
-    let extensions = Value::Map(vec![(
-        Value::Text("credBlob".into()),
-        Value::Bytes(blob.to_vec()),
-    )]);
-
-    let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
-        let client_pin = ClientPin::new(&ctap, None).unwrap();
-        let param = client_pin.protocol().authenticate(token, &client_data_hash);
-        (Some(param), Some(client_pin.protocol().version()))
-    } else {
-        (None, None)
+    // ---- Registration with credBlob ----
+    let create_options = PublicKeyCredentialCreationOptions {
+        rp: PublicKeyCredentialRpEntity {
+            name: "Example RP".into(),
+            id: Some("example.com".into()),
+        },
+        user: PublicKeyCredentialUserEntity {
+            name: Some("A. User".into()),
+            id: b"user_id".to_vec(),
+            display_name: Some("A. User".into()),
+        },
+        challenge: b"cred-blob-challenge".to_vec(),
+        pub_key_cred_params: vec![PublicKeyCredentialParameters {
+            type_: PublicKeyCredentialType::PublicKey,
+            alg: -7,
+        }],
+        timeout: None,
+        exclude_credentials: None,
+        authenticator_selection: Some(AuthenticatorSelectionCriteria {
+            authenticator_attachment: None,
+            resident_key: Some(ResidentKeyRequirement::Required),
+            user_verification: Some(UserVerificationRequirement::Preferred),
+            require_resident_key: None,
+        }),
+        hints: None,
+        attestation: None,
+        attestation_formats: None,
+        extensions: Some(serde_json::json!({
+            "credBlob": fido2::utils::websafe_encode(&blob),
+        })),
     };
 
     println!("Creating a credential with credBlob...");
     println!("Blob data: {}", fido2::logging::hex_encode(&blob));
 
-    let attestation = ctap
-        .make_credential(
-            &client_data_hash,
-            rp_val,
-            user_val,
-            key_params,
-            None,
-            Some(extensions),
-            Some(Value::Map(options_map)),
-            pin_uv_param.as_deref(),
-            pin_uv_protocol,
-            None,
-            &mut on_keepalive,
-        )
-        .expect("makeCredential failed");
+    let result = client
+        .make_credential(&create_options)
+        .expect("Registration failed");
 
-    // Check that credBlob was stored
-    let cred_blob_stored = attestation
+    // Check credBlob was stored (via authenticator extensions in auth_data)
+    let cred_blob_stored = result
+        .attestation
         .auth_data
         .extensions
         .as_ref()
@@ -217,72 +133,24 @@ fn main() {
     println!("New credential created, with the credBlob extension.");
 
     // ---- Authentication to read back credBlob ----
-
-    let auth_client_data_hash = fido2::utils::sha256(b"cred-blob-example-auth-data");
-
-    let use_uv_get =
-        client::should_use_uv(info, Some(uv), client::permission::GET_ASSERTION)
-            .expect("UV decision failed");
-
-    let (get_pin_token, get_internal_uv) = if use_uv_get {
-        let client_pin = ClientPin::new(&ctap, None).expect("Failed to create ClientPin");
-        let token = client::get_token(
-            info,
-            &client_pin,
-            client::permission::GET_ASSERTION,
-            Some(rp_id),
-            &mut on_keepalive,
-            true,
-            true,
-            &interaction,
-        )
-        .expect("Failed to get PIN/UV token");
-        let is_internal = token.is_none();
-        (token, is_internal)
-    } else {
-        (None, false)
+    let auth_options = PublicKeyCredentialRequestOptions {
+        challenge: b"cred-blob-auth-challenge".to_vec(),
+        timeout: None,
+        rp_id: Some("example.com".into()),
+        allow_credentials: None, // Discoverable
+        user_verification: Some(UserVerificationRequirement::Preferred),
+        hints: None,
+        extensions: Some(serde_json::json!({
+            "getCredBlob": true,
+        })),
     };
-
-    let mut get_options = Vec::new();
-    if get_internal_uv {
-        get_options.push((Value::Text("uv".into()), Value::Bool(true)));
-    }
-
-    let (get_pin_param, get_pin_proto) = if let Some(ref token) = get_pin_token {
-        let client_pin = ClientPin::new(&ctap, None).unwrap();
-        let param = client_pin
-            .protocol()
-            .authenticate(token, &auth_client_data_hash);
-        (Some(param), Some(client_pin.protocol().version()))
-    } else {
-        (None, None)
-    };
-
-    // Request credBlob in getAssertion extensions
-    let get_extensions = Value::Map(vec![(
-        Value::Text("credBlob".into()),
-        Value::Bool(true),
-    )]);
 
     println!("Authenticating to read back credBlob...");
+    let selection = client
+        .get_assertion(&auth_options)
+        .expect("Authentication failed");
 
-    // Discoverable credential, no allowList
-    let assertion = ctap
-        .get_assertion(
-            rp_id,
-            &auth_client_data_hash,
-            None,
-            Some(get_extensions),
-            if get_options.is_empty() {
-                None
-            } else {
-                Some(Value::Map(get_options))
-            },
-            get_pin_param.as_deref(),
-            get_pin_proto,
-            &mut on_keepalive,
-        )
-        .expect("getAssertion failed");
+    let (assertion, _ext_outputs) = selection.get(0);
 
     // Read credBlob from assertion extensions
     let blob_result = assertion
@@ -294,7 +162,10 @@ fn main() {
 
     match blob_result {
         Some(result) if result == blob => {
-            println!("Authenticated, got correct blob: {}", fido2::logging::hex_encode(result));
+            println!(
+                "Authenticated, got correct blob: {}",
+                fido2::logging::hex_encode(result)
+            );
         }
         Some(result) => {
             eprintln!(

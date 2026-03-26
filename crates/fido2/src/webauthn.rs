@@ -675,6 +675,27 @@ impl PublicKeyCredentialRpEntity {
     pub fn id_hash(&self) -> Option<[u8; 32]> {
         self.id.as_ref().map(|id| sha256(id.as_bytes()))
     }
+
+    /// Convert to CBOR Value for CTAP2 commands.
+    pub fn to_cbor_value(&self, rp_id: &str) -> cbor::Value {
+        let mut entries = vec![
+            (
+                cbor::Value::Text("id".into()),
+                cbor::Value::Text(rp_id.into()),
+            ),
+            (
+                cbor::Value::Text("name".into()),
+                cbor::Value::Text(self.name.clone()),
+            ),
+        ];
+        // Ensure id comes first for canonical ordering
+        entries.sort_by(|a, b| {
+            let ka = a.0.as_text().unwrap_or("");
+            let kb = b.0.as_text().unwrap_or("");
+            ka.cmp(kb)
+        });
+        cbor::Value::Map(entries)
+    }
 }
 
 /// User entity.
@@ -691,12 +712,55 @@ pub struct PublicKeyCredentialUserEntity {
     pub display_name: Option<String>,
 }
 
+impl PublicKeyCredentialUserEntity {
+    /// Convert to CBOR Value for CTAP2 commands.
+    pub fn to_cbor_value(&self) -> cbor::Value {
+        let mut entries = vec![(
+            cbor::Value::Text("id".into()),
+            cbor::Value::Bytes(self.id.clone()),
+        )];
+        if let Some(ref name) = self.name {
+            entries.push((
+                cbor::Value::Text("name".into()),
+                cbor::Value::Text(name.clone()),
+            ));
+        }
+        if let Some(ref dn) = self.display_name {
+            entries.push((
+                cbor::Value::Text("displayName".into()),
+                cbor::Value::Text(dn.clone()),
+            ));
+        }
+        cbor::Value::Map(entries)
+    }
+}
+
 /// Public key credential algorithm parameters.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublicKeyCredentialParameters {
     #[serde(rename = "type")]
     pub type_: PublicKeyCredentialType,
     pub alg: i64,
+}
+
+impl PublicKeyCredentialParameters {
+    /// Convert a list of parameters to a CBOR array.
+    pub fn to_cbor_list(params: &[Self]) -> cbor::Value {
+        cbor::Value::Array(
+            params
+                .iter()
+                .map(|p| {
+                    cbor::Value::Map(vec![
+                        (
+                            cbor::Value::Text("type".into()),
+                            cbor::Value::Text("public-key".into()),
+                        ),
+                        (cbor::Value::Text("alg".into()), cbor::Value::Int(p.alg)),
+                    ])
+                })
+                .collect(),
+        )
+    }
 }
 
 /// Credential descriptor.
@@ -708,6 +772,27 @@ pub struct PublicKeyCredentialDescriptor {
     pub id: Vec<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transports: Option<Vec<AuthenticatorTransport>>,
+}
+
+impl PublicKeyCredentialDescriptor {
+    /// Convert to CBOR Value for CTAP2 commands.
+    pub fn to_cbor_value(&self) -> cbor::Value {
+        cbor::Value::Map(vec![
+            (
+                cbor::Value::Text("id".into()),
+                cbor::Value::Bytes(self.id.clone()),
+            ),
+            (
+                cbor::Value::Text("type".into()),
+                cbor::Value::Text("public-key".into()),
+            ),
+        ])
+    }
+
+    /// Convert a list of descriptors to a CBOR array.
+    pub fn to_cbor_list(descs: &[Self]) -> cbor::Value {
+        cbor::Value::Array(descs.iter().map(|d| d.to_cbor_value()).collect())
+    }
 }
 
 /// Authenticator selection criteria.

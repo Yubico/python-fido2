@@ -31,6 +31,7 @@ pub mod cbor;
 pub mod client;
 pub mod config;
 pub mod cose;
+pub mod extensions;
 pub mod credman;
 pub mod ctap;
 pub mod ctap1;

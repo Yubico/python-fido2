@@ -25,58 +25,22 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-//! PRF (hmac-secret) extension example.
+//! Pseudo-Random Function (PRF) extension example.
 //!
-//! Creates a credential with the hmac-secret extension enabled, then uses
-//! it to derive secrets from salts. This demonstrates the CTAP2-level
-//! hmac-secret extension which underlies the WebAuthn PRF extension.
+//! Uses the WebAuthn PRF extension (backed by hmac-secret) to derive
+//! deterministic secrets from a credential.
 
-use std::io::{self, Write};
+mod common;
 
-use fido2::cbor::Value;
-use fido2::client::{self, UserInteraction};
-use fido2::ctap::keepalive;
-use fido2::ctap2::Ctap2;
-use fido2::pin::ClientPin;
+use fido2::client::Fido2Client;
+use fido2::extensions::default_extensions;
 use fido2::transport::ctaphid;
-use fido2::utils::sha256;
-
-struct CliInteraction {
-    pin: std::cell::RefCell<Option<String>>,
-}
-
-impl CliInteraction {
-    fn new() -> Self {
-        Self {
-            pin: std::cell::RefCell::new(None),
-        }
-    }
-}
-
-impl UserInteraction for CliInteraction {
-    fn request_pin(&self, _permissions: u32, _rp_id: Option<&str>) -> Option<String> {
-        let mut cached = self.pin.borrow_mut();
-        if cached.is_none() {
-            print!("Enter PIN: ");
-            io::stdout().flush().ok();
-            let mut pin = String::new();
-            io::stdin().read_line(&mut pin).ok()?;
-            *cached = Some(pin.trim().to_string());
-        }
-        cached.clone()
-    }
-
-    fn request_uv(&self, _permissions: u32, _rp_id: Option<&str>) -> bool {
-        println!("User Verification required.");
-        true
-    }
-}
-
-fn on_keepalive(status: u8) {
-    if status == keepalive::UPNEEDED {
-        println!("\nTouch your authenticator device now...\n");
-    }
-}
+use fido2::webauthn::{
+    AuthenticatorSelectionCriteria, PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialDescriptor, PublicKeyCredentialParameters,
+    PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity, PublicKeyCredentialType,
+    PublicKeyCredentialUserEntity, ResidentKeyRequirement, UserVerificationRequirement,
+};
 
 fn main() {
     let devices = ctaphid::list_devices().expect("Failed to enumerate HID devices");
@@ -88,366 +52,152 @@ fn main() {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let ctap = match Ctap2::new(&c, false) {
-            Ok(c) => c,
+        let interaction = common::CliInteraction::new();
+        let client = match Fido2Client::new(&c, "https://example.com", &interaction, default_extensions()) {
+            Ok(cl) => cl,
             Err(_) => continue,
         };
-        if ctap
-            .info()
-            .extensions
-            .iter()
-            .any(|e| e == "hmac-secret")
-        {
+        if client.info().extensions.iter().any(|e| e == "hmac-secret") {
             println!(
                 "Using device: {}",
                 dev_info.product_name.as_deref().unwrap_or("Unknown")
             );
-            drop(ctap);
+            drop(client);
             conn = Some(c);
             break;
         }
     }
     let conn = conn.expect("No FIDO device with hmac-secret support found!");
-    let ctap = Ctap2::new(&conn, false).expect("Failed to initialize CTAP2");
-    let info = ctap.info();
+    let interaction = common::CliInteraction::new();
+    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions())
+        .expect("Failed to create client");
 
-    let rp_id = "example.com";
-    let interaction = CliInteraction::new();
-    let client_data_hash = sha256(b"prf-example-client-data");
-
-    // ---- Registration with hmac-secret ----
-
-    let uv = "discouraged";
-    let use_uv = client::should_use_uv(info, Some(uv), client::permission::MAKE_CREDENTIAL)
-        .expect("UV decision failed");
-
-    let (pin_token, internal_uv) = if use_uv {
-        let client_pin = ClientPin::new(&ctap, None).expect("Failed to create ClientPin");
-        let token = client::get_token(
-            info,
-            &client_pin,
-            client::permission::MAKE_CREDENTIAL,
-            Some(rp_id),
-            &mut on_keepalive,
-            true,
-            true,
-            &interaction,
-        )
-        .expect("Failed to get PIN/UV token");
-        let is_internal = token.is_none();
-        (token, is_internal)
-    } else {
-        (None, false)
+    // ---- Registration with prf ----
+    let create_options = PublicKeyCredentialCreationOptions {
+        rp: PublicKeyCredentialRpEntity {
+            name: "Example RP".into(),
+            id: Some("example.com".into()),
+        },
+        user: PublicKeyCredentialUserEntity {
+            name: Some("A. User".into()),
+            id: b"user_id".to_vec(),
+            display_name: Some("A. User".into()),
+        },
+        challenge: b"prf-registration-challenge".to_vec(),
+        pub_key_cred_params: vec![PublicKeyCredentialParameters {
+            type_: PublicKeyCredentialType::PublicKey,
+            alg: -7,
+        }],
+        timeout: None,
+        exclude_credentials: None,
+        authenticator_selection: Some(AuthenticatorSelectionCriteria {
+            authenticator_attachment: None,
+            resident_key: Some(ResidentKeyRequirement::Required),
+            user_verification: Some(UserVerificationRequirement::Required),
+            require_resident_key: None,
+        }),
+        hints: None,
+        attestation: None,
+        attestation_formats: None,
+        extensions: Some(serde_json::json!({
+            "prf": {},
+        })),
     };
 
-    let rp_val = Value::Map(vec![
-        (Value::Text("id".into()), Value::Text(rp_id.into())),
-        (Value::Text("name".into()), Value::Text("Example RP".into())),
-    ]);
-    let user_val = Value::Map(vec![
-        (
-            Value::Text("id".into()),
-            Value::Bytes(b"user_id".to_vec()),
-        ),
-        (Value::Text("name".into()), Value::Text("A. User".into())),
-    ]);
-    let key_params = Value::Array(vec![Value::Map(vec![
-        (Value::Text("type".into()), Value::Text("public-key".into())),
-        (Value::Text("alg".into()), Value::Int(-7)),
-    ])]);
+    println!("Creating a credential with PRF support...");
+    let result = client
+        .make_credential(&create_options)
+        .expect("Registration failed");
 
-    let mut options_map = Vec::new();
-    if internal_uv {
-        options_map.push((Value::Text("uv".into()), Value::Bool(true)));
-    }
-
-    // Enable hmac-secret extension
-    let extensions = Value::Map(vec![(
-        Value::Text("hmac-secret".into()),
-        Value::Bool(true),
-    )]);
-
-    let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
-        let client_pin = ClientPin::new(&ctap, None).unwrap();
-        let param = client_pin.protocol().authenticate(token, &client_data_hash);
-        (Some(param), Some(client_pin.protocol().version()))
-    } else {
-        (None, None)
-    };
-
-    println!("Creating a credential with hmac-secret (PRF) support...");
-
-    let attestation = ctap
-        .make_credential(
-            &client_data_hash,
-            rp_val,
-            user_val,
-            key_params,
-            None,
-            Some(extensions),
-            if options_map.is_empty() {
-                None
-            } else {
-                Some(Value::Map(options_map))
-            },
-            pin_uv_param.as_deref(),
-            pin_uv_protocol,
-            None,
-            &mut on_keepalive,
-        )
-        .expect("makeCredential failed");
-
-    // Check hmac-secret was enabled
-    let hmac_enabled = attestation
-        .auth_data
-        .extensions
-        .as_ref()
-        .and_then(|ext| ext.map_get_text("hmac-secret"))
+    // Check prf enabled
+    let prf_enabled = result
+        .extension_outputs
+        .get("prf")
+        .and_then(|v| v.map_get_text("enabled"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    println!("PRF enabled: {}", prf_enabled);
 
-    if hmac_enabled {
-        println!("New credential created, with hmac-secret (PRF) extension.");
-    } else {
-        eprintln!("Warning: hmac-secret not confirmed in response, continuing anyway...");
-    }
-
-    // Extract credential ID for the allowList
-    let cred_id = attestation
+    let cred_data = result
+        .attestation
         .auth_data
         .credential_data
         .as_ref()
-        .expect("No credential data")
-        .credential_id
-        .clone();
+        .expect("No credential data");
 
-    // If UV was used, keep using it
-    let uv = if attestation.auth_data.is_user_verified() {
-        "required"
-    } else {
-        "discouraged"
+    // ---- Evaluate PRF with a single salt ----
+    let salt1 = fido2::utils::websafe_encode(b"example-prf-salt-1______________");
+    let auth_options = PublicKeyCredentialRequestOptions {
+        challenge: b"prf-auth-challenge".to_vec(),
+        timeout: None,
+        rp_id: Some("example.com".into()),
+        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
+            type_: PublicKeyCredentialType::PublicKey,
+            id: cred_data.credential_id.clone(),
+            transports: None,
+        }]),
+        user_verification: Some(UserVerificationRequirement::Required),
+        hints: None,
+        extensions: Some(serde_json::json!({
+            "prf": {
+                "eval": {
+                    "first": salt1,
+                }
+            }
+        })),
     };
 
-    // ---- Authentication with hmac-secret (single salt) ----
+    println!("\nEvaluating PRF with single salt...");
+    let selection = client
+        .get_assertion(&auth_options)
+        .expect("Authentication failed");
+    let (_assertion, ext_outputs) = selection.get(0);
 
-    // Generate a random salt
-    let mut salt1 = [0u8; 32];
-    getrandom::fill(&mut salt1).expect("Failed to generate salt");
-    println!("Authenticate with salt: {}", fido2::logging::hex_encode(&salt1));
-
-    let auth_client_data_hash = sha256(b"prf-example-auth-data");
-
-    let use_uv_get = client::should_use_uv(info, Some(uv), client::permission::GET_ASSERTION)
-        .expect("UV decision failed");
-
-    let (get_pin_token, get_internal_uv) = if use_uv_get {
-        let client_pin = ClientPin::new(&ctap, None).expect("Failed to create ClientPin");
-        let token = client::get_token(
-            info,
-            &client_pin,
-            client::permission::GET_ASSERTION,
-            Some(rp_id),
-            &mut on_keepalive,
-            true,
-            true,
-            &interaction,
-        )
-        .expect("Failed to get PIN/UV token");
-        let is_internal = token.is_none();
-        (token, is_internal)
-    } else {
-        (None, false)
-    };
-
-    // Set up hmac-secret extension input:
-    // The CTAP2 hmac-secret extension requires:
-    //   1: keyAgreement (COSE key)
-    //   2: saltEnc (encrypted salt(s))
-    //   3: saltAuth (HMAC of saltEnc)
-    //   4: pinUvAuthProtocol version
-    let client_pin = ClientPin::new(&ctap, None).expect("Failed to create ClientPin");
-    let (key_agreement, shared_secret) = client_pin
-        ._get_shared_secret()
-        .expect("Failed to get shared secret");
-    let protocol = client_pin.protocol();
-
-    // Encrypt salt1 (32 bytes)
-    let salt_enc = protocol
-        .encrypt(&shared_secret, &salt1)
-        .expect("Failed to encrypt salt");
-    let salt_auth = protocol.authenticate(&shared_secret, &salt_enc);
-
-    let hmac_secret_input = Value::Map(vec![
-        (Value::Int(1), key_agreement.to_value()),
-        (Value::Int(2), Value::Bytes(salt_enc)),
-        (Value::Int(3), Value::Bytes(salt_auth)),
-        (Value::Int(4), Value::Int(protocol.version() as i64)),
-    ]);
-
-    let get_extensions = Value::Map(vec![(
-        Value::Text("hmac-secret".into()),
-        hmac_secret_input,
-    )]);
-
-    let mut get_options = Vec::new();
-    if get_internal_uv {
-        get_options.push((Value::Text("uv".into()), Value::Bool(true)));
+    if let Some(prf) = ext_outputs.get("prf") {
+        if let Some(results) = prf.map_get_text("results") {
+            if let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes()) {
+                println!("PRF output (first): {}", fido2::logging::hex_encode(first));
+            }
+        }
     }
 
-    let (get_pin_param, get_pin_proto) = if let Some(ref token) = get_pin_token {
-        let param = protocol.authenticate(token, &auth_client_data_hash);
-        (Some(param), Some(protocol.version()))
-    } else {
-        (None, None)
+    // ---- Evaluate PRF with two salts ----
+    let salt2 = fido2::utils::websafe_encode(b"example-prf-salt-2______________");
+    let auth_options2 = PublicKeyCredentialRequestOptions {
+        challenge: b"prf-auth-challenge-2".to_vec(),
+        timeout: None,
+        rp_id: Some("example.com".into()),
+        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
+            type_: PublicKeyCredentialType::PublicKey,
+            id: cred_data.credential_id.clone(),
+            transports: None,
+        }]),
+        user_verification: Some(UserVerificationRequirement::Required),
+        hints: None,
+        extensions: Some(serde_json::json!({
+            "prf": {
+                "eval": {
+                    "first": salt1,
+                    "second": salt2,
+                }
+            }
+        })),
     };
 
-    let allow_list = Value::Array(vec![Value::Map(vec![
-        (Value::Text("id".into()), Value::Bytes(cred_id.clone())),
-        (
-            Value::Text("type".into()),
-            Value::Text("public-key".into()),
-        ),
-    ])]);
+    println!("\nEvaluating PRF with two salts...");
+    let selection = client
+        .get_assertion(&auth_options2)
+        .expect("Authentication failed");
+    let (_assertion, ext_outputs) = selection.get(0);
 
-    println!("Authenticating with hmac-secret...");
-
-    let assertion = ctap
-        .get_assertion(
-            rp_id,
-            &auth_client_data_hash,
-            Some(allow_list.clone()),
-            Some(get_extensions),
-            if get_options.is_empty() {
-                None
-            } else {
-                Some(Value::Map(get_options))
-            },
-            get_pin_param.as_deref(),
-            get_pin_proto,
-            &mut on_keepalive,
-        )
-        .expect("getAssertion failed");
-
-    // Decrypt the hmac-secret output
-    let hmac_output_enc = assertion
-        .auth_data
-        .extensions
-        .as_ref()
-        .and_then(|ext| ext.map_get_text("hmac-secret"))
-        .and_then(|v| v.as_bytes())
-        .expect("No hmac-secret output in assertion");
-
-    let hmac_output = protocol
-        .decrypt(&shared_secret, hmac_output_enc)
-        .expect("Failed to decrypt hmac-secret output");
-
-    let secret1 = &hmac_output[..32];
-    println!("Authenticated, secret: {}", fido2::logging::hex_encode(secret1));
-
-    // ---- Second authentication with two salts ----
-
-    let mut salt2 = [0u8; 32];
-    getrandom::fill(&mut salt2).expect("Failed to generate salt2");
-    println!("Authenticate with second salt: {}", fido2::logging::hex_encode(&salt2));
-
-    // Need fresh shared secret for each assertion
-    let (key_agreement2, shared_secret2) = client_pin
-        ._get_shared_secret()
-        .expect("Failed to get shared secret");
-
-    // Encrypt both salts (64 bytes total)
-    let mut both_salts = salt1.to_vec();
-    both_salts.extend_from_slice(&salt2);
-    let salt_enc2 = protocol
-        .encrypt(&shared_secret2, &both_salts)
-        .expect("Failed to encrypt salts");
-    let salt_auth2 = protocol.authenticate(&shared_secret2, &salt_enc2);
-
-    let hmac_secret_input2 = Value::Map(vec![
-        (Value::Int(1), key_agreement2.to_value()),
-        (Value::Int(2), Value::Bytes(salt_enc2)),
-        (Value::Int(3), Value::Bytes(salt_auth2)),
-        (Value::Int(4), Value::Int(protocol.version() as i64)),
-    ]);
-
-    let get_extensions2 = Value::Map(vec![(
-        Value::Text("hmac-secret".into()),
-        hmac_secret_input2,
-    )]);
-
-    // Get fresh PIN/UV token
-    let (get_pin_token2, get_internal_uv2) = if use_uv_get {
-        let token = client::get_token(
-            info,
-            &client_pin,
-            client::permission::GET_ASSERTION,
-            Some(rp_id),
-            &mut on_keepalive,
-            true,
-            true,
-            &interaction,
-        )
-        .expect("Failed to get PIN/UV token");
-        let is_internal = token.is_none();
-        (token, is_internal)
-    } else {
-        (None, false)
-    };
-
-    let auth_client_data_hash2 = sha256(b"prf-example-auth-data-2");
-
-    let mut get_options2 = Vec::new();
-    if get_internal_uv2 {
-        get_options2.push((Value::Text("uv".into()), Value::Bool(true)));
-    }
-
-    let (get_pin_param2, get_pin_proto2) = if let Some(ref token) = get_pin_token2 {
-        let param = protocol.authenticate(token, &auth_client_data_hash2);
-        (Some(param), Some(protocol.version()))
-    } else {
-        (None, None)
-    };
-
-    println!("Authenticating with two salts...");
-
-    let assertion2 = ctap
-        .get_assertion(
-            rp_id,
-            &auth_client_data_hash2,
-            Some(allow_list),
-            Some(get_extensions2),
-            if get_options2.is_empty() {
-                None
-            } else {
-                Some(Value::Map(get_options2))
-            },
-            get_pin_param2.as_deref(),
-            get_pin_proto2,
-            &mut on_keepalive,
-        )
-        .expect("getAssertion failed");
-
-    let hmac_output_enc2 = assertion2
-        .auth_data
-        .extensions
-        .as_ref()
-        .and_then(|ext| ext.map_get_text("hmac-secret"))
-        .and_then(|v| v.as_bytes())
-        .expect("No hmac-secret output in assertion");
-
-    let hmac_output2 = protocol
-        .decrypt(&shared_secret2, hmac_output_enc2)
-        .expect("Failed to decrypt hmac-secret output");
-
-    let old_secret = &hmac_output2[..32];
-    let new_secret = &hmac_output2[32..64];
-
-    println!("Old secret (should match): {}", fido2::logging::hex_encode(old_secret));
-    println!("New secret: {}", fido2::logging::hex_encode(new_secret));
-
-    if old_secret == secret1 {
-        println!("First secret matches across both assertions!");
-    } else {
-        eprintln!("Warning: First secret does not match!");
+    if let Some(prf) = ext_outputs.get("prf") {
+        if let Some(results) = prf.map_get_text("results") {
+            if let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes()) {
+                println!("PRF output (first):  {}", fido2::logging::hex_encode(first));
+            }
+            if let Some(second) = results.map_get_text("second").and_then(|v| v.as_bytes()) {
+                println!("PRF output (second): {}", fido2::logging::hex_encode(second));
+            }
+        }
     }
 }

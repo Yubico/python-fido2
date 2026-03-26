@@ -31,11 +31,18 @@
 //! and validating RP IDs against origins.
 
 use crate::cbor::Value;
-use crate::ctap::{CtapError, CtapStatus};
-use crate::ctap2::{self, Info};
+use crate::ctap::{CtapDevice, CtapError, CtapStatus};
+use crate::ctap2::{self, AttestationResponse, AssertionResponse, Info};
+use crate::extensions::{
+    AuthenticationExtensionProcessor, Ctap2Extension, ExtensionInputs, ExtensionOutputs,
+};
 use crate::pin::{ClientPin, PinProtocol};
 use crate::server::verify_rp_id;
-use crate::webauthn::{client_data_type, CollectedClientData};
+use crate::webauthn::{
+    client_data_type, AttestationConveyancePreference, CollectedClientData,
+    PublicKeyCredentialCreationOptions, PublicKeyCredentialParameters,
+    PublicKeyCredentialRequestOptions, ResidentKeyRequirement, UserVerificationRequirement,
+};
 
 /// Errors returned by client operations.
 #[derive(Debug, thiserror::Error)]
@@ -401,6 +408,478 @@ impl ClientDataCollector {
             false,
         );
         Ok((cd, rp_id))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fido2Client — high-level WebAuthn client
+// ---------------------------------------------------------------------------
+
+/// Result of a make_credential operation.
+pub struct RegistrationResult {
+    /// The CTAP2 attestation response.
+    pub attestation: AttestationResponse,
+    /// The collected client data.
+    pub client_data: CollectedClientData,
+    /// Client extension outputs.
+    pub extension_outputs: ExtensionOutputs,
+}
+
+/// Result of a get_assertion operation, wrapping one or more assertions.
+///
+/// Extension outputs are processed lazily per-assertion via [`get`].
+pub struct AssertionSelection<'a> {
+    ctap: &'a ctap2::Ctap2<'a>,
+    /// The collected client data.
+    pub client_data: CollectedClientData,
+    assertions: Vec<AssertionResponse>,
+    extensions: Vec<Box<dyn AuthenticationExtensionProcessor>>,
+    pin_token: Option<Vec<u8>>,
+}
+
+impl<'a> AssertionSelection<'a> {
+    /// Get the raw assertion responses.
+    pub fn assertions(&self) -> &[AssertionResponse] {
+        &self.assertions
+    }
+
+    /// Get the assertion at `index` with processed extension outputs.
+    pub fn get(&self, index: usize) -> (&AssertionResponse, ExtensionOutputs) {
+        let assertion = &self.assertions[index];
+        let mut outputs = ExtensionOutputs::new();
+        for ext in &self.extensions {
+            if let Some(ext_out) =
+                ext.prepare_outputs(assertion, self.pin_token.as_deref(), self.ctap)
+            {
+                outputs.extend(ext_out);
+            }
+        }
+        (assertion, outputs)
+    }
+}
+
+/// Negotiate the PIN/UV protocol version from authenticator info.
+fn negotiate_pin_protocol(info: &Info) -> Option<PinProtocol> {
+    // Prefer V2 over V1
+    if info.pin_uv_protocols.contains(&2) {
+        Some(PinProtocol::V2)
+    } else if info.pin_uv_protocols.contains(&1) {
+        Some(PinProtocol::V1)
+    } else {
+        None
+    }
+}
+
+/// Merge extension inputs into a single CBOR Value (map of text keys).
+fn merge_extension_inputs(inputs: &ExtensionInputs) -> Value {
+    Value::Map(
+        inputs
+            .iter()
+            .map(|(k, v)| (Value::Text(k.clone()), v.clone()))
+            .collect(),
+    )
+}
+
+/// High-level FIDO2 WebAuthn client.
+///
+/// Orchestrates extension processing, PIN/UV token acquisition, credential
+/// filtering, and CTAP2 calls for registration and authentication.
+pub struct Fido2Client<'a> {
+    ctap: ctap2::Ctap2<'a>,
+    collector: ClientDataCollector,
+    interaction: &'a dyn UserInteraction,
+    extensions: Vec<Box<dyn Ctap2Extension>>,
+}
+
+impl<'a> Fido2Client<'a> {
+    /// Create a new Fido2Client.
+    ///
+    /// Initializes CTAP2 communication with the device and prepares
+    /// client data collection for the given origin.
+    pub fn new(
+        device: &'a dyn CtapDevice,
+        origin: &str,
+        interaction: &'a dyn UserInteraction,
+        extensions: Vec<Box<dyn Ctap2Extension>>,
+    ) -> Result<Self, ClientError> {
+        let ctap = ctap2::Ctap2::new(device, false)?;
+        Ok(Self {
+            ctap,
+            collector: ClientDataCollector::new(origin),
+            interaction,
+            extensions,
+        })
+    }
+
+    /// Get authenticator information.
+    pub fn info(&self) -> &Info {
+        self.ctap.info()
+    }
+
+    /// Create a credential (WebAuthn registration).
+    pub fn make_credential(
+        &self,
+        options: &PublicKeyCredentialCreationOptions,
+    ) -> Result<RegistrationResult, ClientError> {
+        let rp_id = self
+            .collector
+            .get_rp_id(options.rp.id.as_deref())?;
+        self.collector.verify_rp_id(&rp_id)?;
+
+        let (client_data, _) = self.collector.collect_create(&options.challenge, Some(&rp_id))?;
+        let client_data_hash = client_data.hash();
+
+        let info = self.ctap.get_info()?;
+        let pin_protocol = negotiate_pin_protocol(&info);
+
+        // Determine user verification requirement
+        let selection = options.authenticator_selection.as_ref();
+        let uv_requirement = selection.and_then(|s| s.user_verification.as_ref());
+
+        // Enterprise attestation
+        let enterprise_attestation =
+            if options.attestation == Some(AttestationConveyancePreference::Enterprise) {
+                if info.options.get("ep") == Some(&true) {
+                    Some(1u32) // Vendor facilitated
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+        let mut allow_uv = true;
+        let mut user_verification = uv_requirement.cloned();
+
+        loop {
+            // Initialize extensions and accumulate permissions
+            let mut used_extensions: Vec<Box<dyn crate::extensions::RegistrationExtensionProcessor>> = Vec::new();
+            let mut permissions = permission::MAKE_CREDENTIAL;
+
+            if options.exclude_credentials.is_some() {
+                permissions |= permission::GET_ASSERTION;
+            }
+
+            for ext_factory in &self.extensions {
+                if let Some(proc) = ext_factory.make_credential(
+                    &self.ctap,
+                    options.extensions.as_ref(),
+                    pin_protocol,
+                ) {
+                    permissions |= proc.permissions();
+                    used_extensions.push(proc);
+                }
+            }
+
+            // Get auth params
+            let uv_str = user_verification.as_ref().map(|uv| uv.as_str());
+            let (pin_token, internal_uv) = get_auth_params(
+                &self.ctap,
+                &rp_id,
+                uv_str,
+                permissions,
+                allow_uv,
+                &mut |status| {
+                    if status == crate::ctap::keepalive::UPNEEDED {
+                        self.interaction.request_uv(0, None);
+                    }
+                },
+                self.interaction,
+                pin_protocol.map(|p| p.version()),
+            )?;
+
+            // Filter exclude list
+            if let Some(ref exclude_list) = options.exclude_credentials {
+                let exclude_cbor: Vec<Value> =
+                    exclude_list.iter().map(|d| d.to_cbor_value()).collect();
+                let pin_auth_for_filter = pin_token.as_ref().and_then(|token| {
+                    pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
+                });
+                let _excluded = filter_creds(
+                    &self.ctap,
+                    &rp_id,
+                    &exclude_cbor,
+                    pin_auth_for_filter.as_deref(),
+                    pin_protocol.map(|p| p.version()),
+                    &mut |_| {},
+                )?;
+                // Note: even if excluded is Some, we don't fail early — the authenticator
+                // needs to prompt for UP first
+            }
+
+            // Prepare extension inputs
+            let mut extension_inputs = ExtensionInputs::new();
+            for ext in &used_extensions {
+                if let Some(inputs) = ext.prepare_inputs(pin_token.as_deref()) {
+                    extension_inputs.extend(inputs);
+                }
+            }
+
+            // Determine rk
+            let rk_requirement = selection.and_then(|s| s.resident_key.as_ref());
+            let can_rk = info.options.get("rk") == Some(&true);
+            let rk = rk_requirement == Some(&ResidentKeyRequirement::Required)
+                || (rk_requirement == Some(&ResidentKeyRequirement::Preferred) && can_rk);
+
+            if rk && !can_rk {
+                return Err(ClientError::ConfigurationUnsupported(
+                    "Resident key not supported".into(),
+                ));
+            }
+
+            // Build options map
+            let opts = if rk || internal_uv {
+                let mut opts_map = Vec::new();
+                if rk {
+                    opts_map.push((Value::Text("rk".into()), Value::Bool(true)));
+                }
+                if internal_uv {
+                    opts_map.push((Value::Text("uv".into()), Value::Bool(true)));
+                }
+                Some(Value::Map(opts_map))
+            } else {
+                None
+            };
+
+            // Compute pin_auth
+            let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
+                if let Some(proto) = pin_protocol {
+                    (
+                        Some(proto.authenticate(token, &client_data_hash)),
+                        Some(proto.version()),
+                    )
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+
+            // Call makeCredential
+            let extensions_val = if extension_inputs.is_empty() {
+                None
+            } else {
+                Some(merge_extension_inputs(&extension_inputs))
+            };
+
+            match self.ctap.make_credential(
+                &client_data_hash,
+                options.rp.to_cbor_value(&rp_id),
+                options.user.to_cbor_value(),
+                PublicKeyCredentialParameters::to_cbor_list(&options.pub_key_cred_params),
+                None, // exclude_list is handled via filter_creds above
+                extensions_val,
+                opts,
+                pin_uv_param.as_deref(),
+                pin_uv_protocol,
+                enterprise_attestation,
+                &mut |status| {
+                    if status == crate::ctap::keepalive::UPNEEDED {
+                        self.interaction.request_uv(0, None);
+                    }
+                },
+            ) {
+                Ok(att_resp) => {
+                    // Process extension outputs
+                    let mut extension_outputs = ExtensionOutputs::new();
+                    for ext in &used_extensions {
+                        if let Some(output) =
+                            ext.prepare_outputs(&att_resp, pin_token.as_deref(), &self.ctap)
+                        {
+                            extension_outputs.extend(output);
+                        }
+                    }
+
+                    return Ok(RegistrationResult {
+                        attestation: att_resp,
+                        client_data,
+                        extension_outputs,
+                    });
+                }
+                Err(CtapError::StatusError(CtapStatus::PuatRequired))
+                    if user_verification.as_ref().map(|uv| uv.as_str())
+                        == Some(uv_requirement::DISCOURAGED) =>
+                {
+                    user_verification = Some(UserVerificationRequirement::Required);
+                    continue;
+                }
+                Err(CtapError::StatusError(CtapStatus::UvBlocked)) if allow_uv => {
+                    allow_uv = false;
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
+    /// Authenticate with a credential (WebAuthn authentication).
+    pub fn get_assertion(
+        &'a self,
+        options: &PublicKeyCredentialRequestOptions,
+    ) -> Result<AssertionSelection<'a>, ClientError> {
+        let rp_id = self.collector.get_rp_id(options.rp_id.as_deref())?;
+        self.collector.verify_rp_id(&rp_id)?;
+
+        let (client_data, _) = self.collector.collect_get(&options.challenge, Some(&rp_id))?;
+        let client_data_hash = client_data.hash();
+
+        let info = self.ctap.get_info()?;
+        let pin_protocol = negotiate_pin_protocol(&info);
+
+        let uv_requirement = options.user_verification.as_ref();
+        let mut allow_uv = true;
+        let mut user_verification = uv_requirement.cloned();
+
+        loop {
+            // Initialize extensions and accumulate permissions
+            let mut used_extensions: Vec<Box<dyn AuthenticationExtensionProcessor>> = Vec::new();
+            let mut permissions = permission::GET_ASSERTION;
+
+            let allow_cbor: Option<Vec<Value>> = options
+                .allow_credentials
+                .as_ref()
+                .map(|creds| creds.iter().map(|d| d.to_cbor_value()).collect());
+
+            for ext_factory in &self.extensions {
+                if let Some(proc) = ext_factory.get_assertion(
+                    &self.ctap,
+                    options.extensions.as_ref(),
+                    allow_cbor.as_deref(),
+                    pin_protocol,
+                ) {
+                    permissions |= proc.permissions();
+                    used_extensions.push(proc);
+                }
+            }
+
+            // Get auth params
+            let uv_str = user_verification.as_ref().map(|uv| uv.as_str());
+            let (pin_token, internal_uv) = get_auth_params(
+                &self.ctap,
+                &rp_id,
+                uv_str,
+                permissions,
+                allow_uv,
+                &mut |status| {
+                    if status == crate::ctap::keepalive::UPNEEDED {
+                        self.interaction.request_uv(0, None);
+                    }
+                },
+                self.interaction,
+                pin_protocol.map(|p| p.version()),
+            )?;
+
+            // Filter allow list
+            let selected_cred = if let Some(ref allow_list) = options.allow_credentials {
+                let allow_cbor: Vec<Value> =
+                    allow_list.iter().map(|d| d.to_cbor_value()).collect();
+                let pin_auth_for_filter = pin_token.as_ref().and_then(|token| {
+                    pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
+                });
+                filter_creds(
+                    &self.ctap,
+                    &rp_id,
+                    &allow_cbor,
+                    pin_auth_for_filter.as_deref(),
+                    pin_protocol.map(|p| p.version()),
+                    &mut |_| {},
+                )?
+            } else {
+                None
+            };
+
+            // Prepare extension inputs
+            let mut extension_inputs = ExtensionInputs::new();
+            for ext in &used_extensions {
+                if let Some(inputs) =
+                    ext.prepare_inputs(selected_cred.as_ref(), pin_token.as_deref())
+                {
+                    extension_inputs.extend(inputs);
+                }
+            }
+
+            let opts = if internal_uv {
+                Some(Value::Map(vec![(
+                    Value::Text("uv".into()),
+                    Value::Bool(true),
+                )]))
+            } else {
+                None
+            };
+
+            // Compute pin_auth
+            let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
+                if let Some(proto) = pin_protocol {
+                    (
+                        Some(proto.authenticate(token, &client_data_hash)),
+                        Some(proto.version()),
+                    )
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+
+            // Build allow list for CTAP2 call
+            let allow_list_val = if let Some(ref cred) = selected_cred {
+                Some(Value::Array(vec![cred.clone()]))
+            } else if options.allow_credentials.is_some() {
+                // Allow list existed but no match — send dummy
+                Some(Value::Array(vec![Value::Map(vec![
+                    (Value::Text("id".into()), Value::Bytes(vec![0])),
+                    (
+                        Value::Text("type".into()),
+                        Value::Text("public-key".into()),
+                    ),
+                ])]))
+            } else {
+                None
+            };
+
+            let extensions_val = if extension_inputs.is_empty() {
+                None
+            } else {
+                Some(merge_extension_inputs(&extension_inputs))
+            };
+
+            match self.ctap.get_assertions(
+                &rp_id,
+                &client_data_hash,
+                allow_list_val,
+                extensions_val,
+                opts,
+                pin_uv_param.as_deref(),
+                pin_uv_protocol,
+                &mut |status| {
+                    if status == crate::ctap::keepalive::UPNEEDED {
+                        self.interaction.request_uv(0, None);
+                    }
+                },
+            ) {
+                Ok(assertions) => {
+                    return Ok(AssertionSelection {
+                        ctap: &self.ctap,
+                        client_data,
+                        assertions,
+                        extensions: used_extensions,
+                        pin_token,
+                    });
+                }
+                Err(CtapError::StatusError(CtapStatus::PuatRequired))
+                    if user_verification.as_ref().map(|uv| uv.as_str())
+                        == Some(uv_requirement::DISCOURAGED) =>
+                {
+                    user_verification = Some(UserVerificationRequirement::Required);
+                    continue;
+                }
+                Err(CtapError::StatusError(CtapStatus::UvBlocked)) if allow_uv => {
+                    allow_uv = false;
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     }
 }
 

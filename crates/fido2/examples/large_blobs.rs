@@ -25,221 +25,178 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-//! Large Blobs example.
+//! Large Blob Storage (largeBlob) example.
 //!
-//! Connects to the first FIDO device found over USB HID, creates a new
-//! credential with the largeBlobKey extension, then writes and reads back
-//! a large blob using the CTAP2.1 Large Blobs API.
+//! Creates a credential with largeBlobKey support, writes a blob via the
+//! largeBlob extension during authentication, then reads it back.
 
-use std::io::{self, Write};
+mod common;
 
-use fido2::blob::LargeBlobs;
-use fido2::cbor::Value;
-use fido2::client::{self, UserInteraction};
-use fido2::ctap::keepalive;
-use fido2::ctap2::Ctap2;
-use fido2::pin::ClientPin;
+use fido2::client::Fido2Client;
+use fido2::extensions::default_extensions;
 use fido2::transport::ctaphid;
-use fido2::utils::sha256;
-
-struct CliInteraction {
-    pin: std::cell::RefCell<Option<String>>,
-}
-
-impl CliInteraction {
-    fn new() -> Self {
-        Self {
-            pin: std::cell::RefCell::new(None),
-        }
-    }
-}
-
-impl UserInteraction for CliInteraction {
-    fn request_pin(&self, _permissions: u32, _rp_id: Option<&str>) -> Option<String> {
-        let mut cached = self.pin.borrow_mut();
-        if cached.is_none() {
-            print!("Enter PIN: ");
-            io::stdout().flush().ok();
-            let mut pin = String::new();
-            io::stdin().read_line(&mut pin).ok()?;
-            *cached = Some(pin.trim().to_string());
-        }
-        cached.clone()
-    }
-
-    fn request_uv(&self, _permissions: u32, _rp_id: Option<&str>) -> bool {
-        println!("User Verification required.");
-        true
-    }
-}
-
-fn on_keepalive(status: u8) {
-    if status == keepalive::UPNEEDED {
-        println!("\nTouch your authenticator device now...\n");
-    }
-}
+use fido2::webauthn::{
+    AuthenticatorSelectionCriteria, PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialDescriptor, PublicKeyCredentialParameters,
+    PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity, PublicKeyCredentialType,
+    PublicKeyCredentialUserEntity, ResidentKeyRequirement, UserVerificationRequirement,
+};
 
 fn main() {
-    // Locate a FIDO HID device
     let devices = ctaphid::list_devices().expect("Failed to enumerate HID devices");
-    let dev_info = devices
-        .first()
-        .expect("No FIDO HID device found. Is your authenticator connected?");
 
-    println!(
-        "Using device: {}",
-        dev_info.product_name.as_deref().unwrap_or("Unknown")
-    );
-
-    let conn = ctaphid::CtapHidConnection::open(dev_info).expect("Failed to open device");
-    let ctap = Ctap2::new(&conn, false).expect("Failed to initialize CTAP2");
-
-    // Check for largeBlobKey + largeBlobs support
-    let info = ctap.info();
-    if !info.extensions.iter().any(|e| e == "largeBlobKey") {
-        eprintln!("Error: Authenticator does not support largeBlobKey extension");
-        std::process::exit(1);
+    // Find a device that supports largeBlobs
+    let mut conn = None;
+    for dev_info in &devices {
+        let c = match ctaphid::CtapHidConnection::open(dev_info) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let interaction = common::CliInteraction::new();
+        let client = match Fido2Client::new(&c, "https://example.com", &interaction, default_extensions()) {
+            Ok(cl) => cl,
+            Err(_) => continue,
+        };
+        if client.info().options.get("largeBlobs") == Some(&true) {
+            println!(
+                "Using device: {}",
+                dev_info.product_name.as_deref().unwrap_or("Unknown")
+            );
+            drop(client);
+            conn = Some(c);
+            break;
+        }
     }
-    if info.options.get("largeBlobs") != Some(&true) {
-        eprintln!("Error: Authenticator does not support largeBlobs");
-        std::process::exit(1);
-    }
+    let conn = conn.expect("No FIDO device with largeBlob support found!");
+    let interaction = common::CliInteraction::new();
+    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions())
+        .expect("Failed to create client");
 
-    // LargeBlob requires UV if PIN is configured
-    let uv = if info.options.get("clientPin") == Some(&true) {
-        "required"
-    } else {
-        "discouraged"
+    // ---- Registration with largeBlob support ----
+    let create_options = PublicKeyCredentialCreationOptions {
+        rp: PublicKeyCredentialRpEntity {
+            name: "Example RP".into(),
+            id: Some("example.com".into()),
+        },
+        user: PublicKeyCredentialUserEntity {
+            name: Some("A. User".into()),
+            id: b"user_id".to_vec(),
+            display_name: Some("A. User".into()),
+        },
+        challenge: b"large-blob-challenge".to_vec(),
+        pub_key_cred_params: vec![PublicKeyCredentialParameters {
+            type_: PublicKeyCredentialType::PublicKey,
+            alg: -7,
+        }],
+        timeout: None,
+        exclude_credentials: None,
+        authenticator_selection: Some(AuthenticatorSelectionCriteria {
+            authenticator_attachment: None,
+            resident_key: Some(ResidentKeyRequirement::Required),
+            user_verification: Some(UserVerificationRequirement::Required),
+            require_resident_key: None,
+        }),
+        hints: None,
+        attestation: None,
+        attestation_formats: None,
+        extensions: Some(serde_json::json!({
+            "largeBlob": { "support": "required" },
+        })),
     };
 
-    let interaction = CliInteraction::new();
-    let rp_id = "example.com";
-    let client_data_hash = sha256(b"example-client-data");
+    println!("Creating a credential with largeBlob support...");
+    let result = client
+        .make_credential(&create_options)
+        .expect("Registration failed");
 
-    // Determine UV and get PIN/UV token for makeCredential
-    let use_uv = client::should_use_uv(info, Some(uv), client::permission::MAKE_CREDENTIAL)
-        .expect("UV decision failed");
+    // Check largeBlob extension output
+    let supported = result
+        .extension_outputs
+        .get("largeBlob")
+        .and_then(|v| v.map_get_text("supported"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    println!("largeBlob supported: {}", supported);
 
-    let (pin_token, internal_uv) = if use_uv {
-        let client_pin = ClientPin::new(&ctap, None).expect("Failed to create ClientPin");
-        let token = client::get_token(
-            info,
-            &client_pin,
-            client::permission::MAKE_CREDENTIAL,
-            Some(rp_id),
-            &mut on_keepalive,
-            true,
-            true,
-            &interaction,
-        )
-        .expect("Failed to get PIN/UV token");
-        let is_internal = token.is_none();
-        (token, is_internal)
-    } else {
-        (None, false)
-    };
-
-    // Build CTAP2 makeCredential parameters
-    let rp_val = Value::Map(vec![
-        (Value::Text("id".into()), Value::Text(rp_id.into())),
-        (Value::Text("name".into()), Value::Text("Example RP".into())),
-    ]);
-    let user_val = Value::Map(vec![
-        (
-            Value::Text("id".into()),
-            Value::Bytes(b"user_id".to_vec()),
-        ),
-        (Value::Text("name".into()), Value::Text("A. User".into())),
-    ]);
-    let key_params = Value::Array(vec![Value::Map(vec![
-        (Value::Text("type".into()), Value::Text("public-key".into())),
-        (Value::Text("alg".into()), Value::Int(-7)), // ES256
-    ])]);
-
-    let mut options_map = vec![(Value::Text("rk".into()), Value::Bool(true))];
-    if internal_uv {
-        options_map.push((Value::Text("uv".into()), Value::Bool(true)));
-    }
-
-    let extensions = Value::Map(vec![(
-        Value::Text("largeBlobKey".into()),
-        Value::Bool(true),
-    )]);
-
-    // Compute pin_uv_param over client_data_hash
-    let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
-        let client_pin = ClientPin::new(&ctap, None).unwrap();
-        let param = client_pin.protocol().authenticate(token, &client_data_hash);
-        (Some(param), Some(client_pin.protocol().version()))
-    } else {
-        (None, None)
-    };
-
-    println!("Creating a credential with LargeBlob support...");
-
-    let attestation = ctap
-        .make_credential(
-            &client_data_hash,
-            rp_val,
-            user_val,
-            key_params,
-            None,
-            Some(extensions),
-            Some(Value::Map(options_map)),
-            pin_uv_param.as_deref(),
-            pin_uv_protocol,
-            None,
-            &mut on_keepalive,
-        )
-        .expect("makeCredential failed");
-
-    let large_blob_key = attestation
-        .large_blob_key
+    let cred_data = result
+        .attestation
+        .auth_data
+        .credential_data
         .as_ref()
-        .expect("Credential does not have a largeBlobKey!");
+        .expect("No credential data");
 
-    println!("Credential created! Writing a blob...");
+    let cred_id = &cred_data.credential_id;
 
-    // ---- Write blob ----
-    // Need a PIN/UV token with LARGE_BLOB_WRITE permission
-    const LARGE_BLOB_WRITE: u32 = 0x10;
-    let write_token = if use_uv {
-        let client_pin = ClientPin::new(&ctap, None).unwrap();
-        client::get_token(
-            info,
-            &client_pin,
-            LARGE_BLOB_WRITE,
-            Some(rp_id),
-            &mut on_keepalive,
-            false,
-            true,
-            &interaction,
-        )
-        .expect("Failed to get write token")
-    } else {
-        None
+    // ---- Write a blob ----
+    let blob_data = b"Hello from Rust large blob!";
+    let write_options = PublicKeyCredentialRequestOptions {
+        challenge: b"write-blob-challenge".to_vec(),
+        timeout: None,
+        rp_id: Some("example.com".into()),
+        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
+            type_: PublicKeyCredentialType::PublicKey,
+            id: cred_id.clone(),
+            transports: None,
+        }]),
+        user_verification: Some(UserVerificationRequirement::Required),
+        hints: None,
+        extensions: Some(serde_json::json!({
+            "largeBlob": { "write": fido2::utils::websafe_encode(blob_data) },
+        })),
     };
 
-    let client_pin = ClientPin::new(&ctap, None).ok();
-    let protocol = client_pin.as_ref().map(|cp| cp.protocol());
-    let large_blobs = LargeBlobs::new(&ctap, protocol, write_token.as_deref())
-        .expect("Failed to create LargeBlobs");
+    println!("Writing large blob...");
+    let selection = client
+        .get_assertion(&write_options)
+        .expect("Write assertion failed");
+    let (_assertion, ext_outputs) = selection.get(0);
 
-    let blob_data = b"Here is some data to store!";
-    large_blobs
-        .put_blob(large_blob_key, Some(blob_data))
-        .expect("Failed to write blob");
+    let written = ext_outputs
+        .get("largeBlob")
+        .and_then(|v| v.map_get_text("written"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    println!("Blob written: {}", written);
 
-    println!("Blob written! Reading back the blob...");
+    // ---- Read the blob back ----
+    let read_options = PublicKeyCredentialRequestOptions {
+        challenge: b"read-blob-challenge".to_vec(),
+        timeout: None,
+        rp_id: Some("example.com".into()),
+        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
+            type_: PublicKeyCredentialType::PublicKey,
+            id: cred_id.clone(),
+            transports: None,
+        }]),
+        user_verification: Some(UserVerificationRequirement::Required),
+        hints: None,
+        extensions: Some(serde_json::json!({
+            "largeBlob": { "read": true },
+        })),
+    };
 
-    // ---- Read blob ----
-    // Reading doesn't require a PIN/UV token
-    let large_blobs_read =
-        LargeBlobs::new(&ctap, None, None).expect("Failed to create LargeBlobs for reading");
+    println!("Reading large blob...");
+    let selection = client
+        .get_assertion(&read_options)
+        .expect("Read assertion failed");
+    let (_assertion, ext_outputs) = selection.get(0);
 
-    match large_blobs_read.get_blob(large_blob_key) {
-        Ok(Some(data)) => println!("Read blob: {:?}", String::from_utf8_lossy(&data)),
-        Ok(None) => println!("No blob found for this credential."),
-        Err(e) => eprintln!("Failed to read blob: {e}"),
+    let read_blob = ext_outputs
+        .get("largeBlob")
+        .and_then(|v| v.map_get_text("blob"))
+        .and_then(|v| v.as_bytes());
+
+    match read_blob {
+        Some(data) if data == blob_data => {
+            println!("Read back correct blob: {:?}", std::str::from_utf8(data));
+        }
+        Some(data) => {
+            eprintln!("Read back incorrect blob: {:?}", data);
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("No blob data in response!");
+            std::process::exit(1);
+        }
     }
 }

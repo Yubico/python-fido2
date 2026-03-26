@@ -245,6 +245,7 @@ impl CoseKeyAgreement {
 }
 
 /// PIN/UV protocol version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PinProtocol {
     V1,
     V2,
