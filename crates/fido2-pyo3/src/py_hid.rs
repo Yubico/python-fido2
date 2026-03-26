@@ -85,19 +85,6 @@ pub struct CtapHidConnection {
     capabilities: u8,
 }
 
-impl CtapHidConnection {
-    fn with_conn<F, R>(&self, f: F) -> PyResult<R>
-    where
-        F: FnOnce(&ctaphid::CtapHidConnection) -> PyResult<R>,
-    {
-        let guard = self.inner.lock().map_err(|_| PyOSError::new_err("lock poisoned"))?;
-        let conn = guard
-            .as_ref()
-            .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
-        f(conn)
-    }
-}
-
 #[pymethods]
 impl CtapHidConnection {
     #[new]
@@ -137,8 +124,34 @@ impl CtapHidConnection {
     }
 
     /// Send a CTAP HID command and receive the response.
-    fn call<'py>(&self, py: Python<'py>, cmd: u8, data: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
-        let response = self.with_conn(|conn| conn.call(cmd, data).map_err(ctap_err))?;
+    #[pyo3(signature = (cmd, data, on_keepalive=None))]
+    fn call<'py>(
+        &self,
+        py: Python<'py>,
+        cmd: u8,
+        data: &[u8],
+        on_keepalive: Option<PyObject>,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|_| PyOSError::new_err("lock poisoned"))?;
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
+
+        let response = py.allow_threads(|| {
+            match on_keepalive {
+                Some(ref cb) => conn
+                    .call_with_keepalive(cmd, data, &mut |status| {
+                        Python::with_gil(|py| {
+                            let _ = cb.call1(py, (status,));
+                        });
+                    })
+                    .map_err(ctap_err),
+                None => conn.call(cmd, data).map_err(ctap_err),
+            }
+        })?;
         Ok(PyBytes::new(py, &response))
     }
 

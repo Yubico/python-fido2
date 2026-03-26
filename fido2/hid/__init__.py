@@ -129,11 +129,25 @@ class CtapHidDevice(CtapDevice):
     ) -> bytes:
         event = event or Event()
 
+        _ka_cb: Callable[[int], None] | None = None
+        if on_keepalive:
+            last_ka: STATUS | None = None
+
+            def _on_keepalive(status: int) -> None:
+                nonlocal last_ka
+                try:
+                    ka_status = STATUS(status)
+                except ValueError:
+                    return
+                if ka_status != last_ka:
+                    last_ka = ka_status
+                    on_keepalive(ka_status)
+
+            _ka_cb = _on_keepalive
+
         while True:
             try:
-                # The native connection handles framing, keepalive is not yet
-                # forwarded from the Rust layer, but errors are mapped.
-                return self._connection.call(cmd, data)
+                return self._connection.call(cmd, data, _ka_cb)
             except OSError as e:
                 err_msg = str(e)
                 if "ChannelBusy" in err_msg:
