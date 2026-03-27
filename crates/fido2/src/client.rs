@@ -973,7 +973,7 @@ impl ClientBackend for Ctap2Backend<'_> {
                 let pin_auth_for_filter = pin_token.as_ref().and_then(|token| {
                     pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
                 });
-                let _excluded = filter_creds(
+                let excluded = filter_creds(
                     &self.ctap,
                     rp_id,
                     &exclude_cbor,
@@ -981,6 +981,12 @@ impl ClientBackend for Ctap2Backend<'_> {
                     pin_protocol.map(|p| p.version()),
                     &mut |_| {},
                 )?;
+                if excluded.is_some() {
+                    return Err(CtapError::StatusError(
+                        CtapStatus::CredentialExcluded,
+                    )
+                    .into());
+                }
             }
 
             // Prepare extension inputs

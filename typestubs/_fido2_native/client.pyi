@@ -23,6 +23,7 @@ class NativeFido2Client:
         device: Any,
         user_interaction: Any,
         on_keepalive: Callable[[int], None],
+        allow_hmac_secret: bool = False,
     ) -> None: ...
     def selection(self, event: Any | None = None) -> None: ...
     def do_make_credential(

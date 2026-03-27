@@ -54,7 +54,7 @@ fn main() {
 
     let conn = ctaphid::CtapHidConnection::open(dev_info).expect("Failed to open device");
     let interaction = common::CliInteraction::new();
-    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions())
+    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions(false))
         .expect("Failed to create client");
 
     // ---- Registration with rk=required ----

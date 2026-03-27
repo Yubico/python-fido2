@@ -210,6 +210,7 @@ struct NativeFido2Client {
     on_keepalive: PyObject,
     info: Info,
     is_ctap2: bool,
+    allow_hmac_secret: bool,
 }
 
 impl NativeFido2Client {
@@ -242,7 +243,7 @@ impl NativeFido2Client {
                 false,
                 self.info.max_msg_size,
                 ui,
-                default_extensions(),
+                default_extensions(self.allow_hmac_secret),
                 self.info.clone(),
             ))
         } else {
@@ -254,11 +255,13 @@ impl NativeFido2Client {
 #[pymethods]
 impl NativeFido2Client {
     #[new]
+    #[pyo3(signature = (device, user_interaction, on_keepalive, allow_hmac_secret=false))]
     fn new(
         py: Python<'_>,
         device: PyObject,
         user_interaction: PyObject,
         on_keepalive: PyObject,
+        allow_hmac_secret: bool,
     ) -> PyResult<Self> {
         let capabilities: u8 = device.getattr(py, "capabilities")?.extract(py)?;
         let is_ctap2 = capabilities & capability::CBOR != 0;
@@ -283,6 +286,7 @@ impl NativeFido2Client {
             on_keepalive,
             info,
             is_ctap2,
+            allow_hmac_secret,
         })
     }
 

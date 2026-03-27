@@ -123,9 +123,9 @@ pub trait Ctap2Extension {
 }
 
 /// Return the default set of extensions.
-pub fn default_extensions() -> Vec<Box<dyn Ctap2Extension>> {
+pub fn default_extensions(allow_hmac_secret: bool) -> Vec<Box<dyn Ctap2Extension>> {
     vec![
-        Box::new(HmacSecretExtension::new(false)),
+        Box::new(HmacSecretExtension::new(allow_hmac_secret)),
         Box::new(LargeBlobExtension),
         Box::new(CredBlobExtension),
         Box::new(CredProtectExtension),

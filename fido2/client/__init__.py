@@ -41,6 +41,7 @@ from ..ctap import CtapDevice, CtapError
 from ..ctap2 import AssertionResponse, Info
 from ..ctap2.pin import ClientPin
 from ..hid import STATUS
+from ..utils import websafe_encode
 from ..webauthn import (
     AttestationObject,
     AuthenticationExtensionsClientOutputs,
@@ -56,6 +57,13 @@ from ..webauthn import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _BytesEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, bytes):
+            return websafe_encode(o)
+        return super().default(o)
 
 
 class ClientError(Exception):
@@ -367,7 +375,17 @@ class Fido2Client(WebAuthnClient):
     ):
         self._client_data_collector = client_data_collector
         on_keepalive = _user_keepalive(user_interaction)
-        self._native = NativeFido2Client(device, user_interaction, on_keepalive)
+
+        from ..ctap2.extensions import HmacSecretExtension
+
+        allow_hmac_secret = any(
+            isinstance(e, HmacSecretExtension) and e._allow_hmac_secret
+            for e in (extensions or [])
+        )
+
+        self._native = NativeFido2Client(
+            device, user_interaction, on_keepalive, allow_hmac_secret
+        )
         self._info = Info(**self._native.info)
 
     @property
@@ -407,7 +425,7 @@ class Fido2Client(WebAuthnClient):
         try:
             try:
                 att_resp_dict, ext_outputs = self._native.do_make_credential(
-                    json.dumps(dict(options)),
+                    json.dumps(dict(options), cls=_BytesEncoder),
                     client_data.hash,
                     rp_id,
                     event,
@@ -464,7 +482,7 @@ class Fido2Client(WebAuthnClient):
         try:
             try:
                 assertions_dicts, ext_outputs_list = self._native.do_get_assertion(
-                    json.dumps(dict(options)),
+                    json.dumps(dict(options), cls=_BytesEncoder),
                     client_data.hash,
                     rp_id,
                     event,
