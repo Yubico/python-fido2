@@ -40,3 +40,46 @@ class NativeFido2Client:
         rp_id: str,
         event: Any | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]: ...
+
+class NativeExtension:
+    @staticmethod
+    def hmac_secret(allow_hmac_secret: bool) -> NativeExtension: ...
+    @staticmethod
+    def large_blob() -> NativeExtension: ...
+    @staticmethod
+    def cred_blob() -> NativeExtension: ...
+    @staticmethod
+    def cred_protect() -> NativeExtension: ...
+    @staticmethod
+    def min_pin_length() -> NativeExtension: ...
+    @staticmethod
+    def cred_props() -> NativeExtension: ...
+    def is_supported(self, ctap: Any) -> bool: ...
+    def make_credential(
+        self,
+        ctap: Any,
+        options: Any,
+        pin_protocol: Any,
+    ) -> NativeRegistrationProcessor | None: ...
+    def get_assertion(
+        self,
+        ctap: Any,
+        options: Any,
+        pin_protocol: Any,
+    ) -> NativeAuthenticationProcessor | None: ...
+
+class NativeRegistrationProcessor:
+    permissions: int
+    def prepare_inputs(self, pin_token: bytes | None) -> dict[str, Any] | None: ...
+    def prepare_outputs(
+        self, response: Any, pin_token: bytes | None
+    ) -> dict[str, Any] | None: ...
+
+class NativeAuthenticationProcessor:
+    permissions: int
+    def prepare_inputs(
+        self, selected: Any, pin_token: bytes | None
+    ) -> dict[str, Any] | None: ...
+    def prepare_outputs(
+        self, response: Any, pin_token: bytes | None
+    ) -> dict[str, Any] | None: ...

@@ -32,16 +32,19 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Mapping, cast
 
-from ..utils import _JsonDataObject, sha256, websafe_encode
+from _fido2_native.client import (
+    NativeAuthenticationProcessor,
+    NativeExtension,
+    NativeRegistrationProcessor,
+)
+
+from ..utils import _JsonDataObject
 from ..webauthn import (
-    AuthenticatorSelectionCriteria,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialRequestOptions,
-    ResidentKeyRequirement,
 )
 from .base import AssertionResponse, AttestationResponse, Ctap2
-from .blob import LargeBlobs
 from .pin import ClientPin, PinProtocol
 
 
@@ -147,6 +150,55 @@ class Ctap2Extension(abc.ABC):
         return None
 
 
+class _NativeRegistrationProcessorWrapper(RegistrationExtensionProcessor):
+    """Wraps a NativeRegistrationProcessor to match the Python interface."""
+
+    def __init__(self, native: NativeRegistrationProcessor):
+        super().__init__(permissions=ClientPin.PERMISSION(native.permissions))
+        self._native = native
+
+    def prepare_inputs(self, pin_token):
+        return self._native.prepare_inputs(pin_token)
+
+    def prepare_outputs(self, response, pin_token):
+        return self._native.prepare_outputs(response, pin_token)
+
+
+class _NativeAuthenticationProcessorWrapper(AuthenticationExtensionProcessor):
+    """Wraps a NativeAuthenticationProcessor to match the Python interface."""
+
+    def __init__(self, native: NativeAuthenticationProcessor):
+        super().__init__(permissions=ClientPin.PERMISSION(native.permissions))
+        self._native = native
+
+    def prepare_inputs(self, selected, pin_token):
+        return self._native.prepare_inputs(selected, pin_token)
+
+    def prepare_outputs(self, response, pin_token):
+        return self._native.prepare_outputs(response, pin_token)
+
+
+class _NativeCtap2Extension(Ctap2Extension):
+    """Base class for CTAP2 extensions backed by a native Rust implementation."""
+
+    _native: NativeExtension
+
+    def is_supported(self, ctap):
+        return self._native.is_supported(ctap)
+
+    def make_credential(self, ctap, options, pin_protocol):
+        processor = self._native.make_credential(ctap, options, pin_protocol)
+        if processor is not None:
+            return _NativeRegistrationProcessorWrapper(processor)
+        return None
+
+    def get_assertion(self, ctap, options, pin_protocol):
+        processor = self._native.get_assertion(ctap, options, pin_protocol)
+        if processor is not None:
+            return _NativeAuthenticationProcessorWrapper(processor)
+        return None
+
+
 @dataclass(eq=False, frozen=True)
 class HMACGetSecretInput(_JsonDataObject):
     """Client inputs for hmac-secret."""
@@ -161,10 +213,6 @@ class HMACGetSecretOutput(_JsonDataObject):
 
     output1: bytes
     output2: bytes | None = None
-
-
-def _prf_salt(secret):
-    return sha256(b"WebAuthn PRF\0" + secret)
 
 
 @dataclass(eq=False, frozen=True)
@@ -191,66 +239,7 @@ class AuthenticatorExtensionsPRFOutputs(_JsonDataObject):
     results: AuthenticatorExtensionsPRFValues | None = None
 
 
-def _hmac_prepare_salts(allow_list, selected, prf, hmac):
-    if prf:
-        secrets = prf.eval
-        by_creds = prf.eval_by_credential
-        if by_creds:
-            # Make sure all keys are valid IDs from allow_credentials
-            if not allow_list:
-                raise ValueError("evalByCredentials requires allowCredentials")
-            ids = {websafe_encode(c.id) for c in allow_list}
-            if not ids.issuperset(by_creds):
-                raise ValueError("evalByCredentials contains invalid key")
-            if selected:
-                key = websafe_encode(selected.id)
-                if key in by_creds:
-                    secrets = by_creds[key]
-
-        if not secrets:
-            return
-
-        salts = (
-            _prf_salt(secrets.first),
-            (_prf_salt(secrets.second) if secrets.second is not None else b""),
-        )
-    elif hmac:
-        salts = hmac.salt1, hmac.salt2 or b""
-    else:
-        return
-
-    if not (
-        len(salts[0]) == HmacSecretExtension.SALT_LEN
-        and (not salts[1] or len(salts[1]) == HmacSecretExtension.SALT_LEN)
-    ):
-        raise ValueError("Invalid salt length")
-
-    return salts
-
-
-def _hmac_format_outputs(enabled, decrypted, prf):
-    output1 = decrypted[: HmacSecretExtension.SALT_LEN] if decrypted else None
-    output2 = decrypted[HmacSecretExtension.SALT_LEN :] if decrypted else None
-
-    if prf:
-        result = AuthenticatorExtensionsPRFOutputs(
-            enabled=enabled,
-            results=(
-                AuthenticatorExtensionsPRFValues(output1, output2) if output1 else None
-            ),
-        )
-        # If result has no content, don't add an entry for it
-        return {"prf": result} if result else None
-    else:
-        outputs = {}
-        if enabled is not None:
-            outputs["hmacCreateSecret"] = enabled
-        if output1:
-            outputs["hmacGetSecret"] = HMACGetSecretOutput(output1, output2)
-        return outputs or None
-
-
-class HmacSecretExtension(Ctap2Extension):
+class HmacSecretExtension(_NativeCtap2Extension):
     """
     Implements the Pseudo-random function (prf) and the hmac-secret CTAP2 extensions.
 
@@ -271,104 +260,7 @@ class HmacSecretExtension(Ctap2Extension):
 
     def __init__(self, allow_hmac_secret=False):
         self._allow_hmac_secret = allow_hmac_secret
-
-    def is_supported(self, ctap):
-        return self.NAME in ctap.info.extensions
-
-    def make_credential(self, ctap, options, pin_protocol):
-        c_inputs = options.extensions or {}
-        prf = c_inputs.get("prf") is not None
-        hmac = self._allow_hmac_secret and c_inputs.get("hmacCreateSecret") is True
-        if pin_protocol and self.is_supported(ctap) and (prf or hmac):
-            inputs: dict[str, Any] = {HmacSecretExtension.NAME: True}
-            shared_secret = None
-            if self.MC_NAME in ctap.info.extensions:
-                prf_salts = AuthenticatorExtensionsPRFInputs.from_dict(
-                    cast(Mapping | None, c_inputs.get("prf"))
-                )
-                hmac_salts = (
-                    HMACGetSecretInput.from_dict(
-                        cast(Mapping | None, c_inputs.get("hmacGetSecret"))
-                    )
-                    if hmac
-                    else None
-                )
-                salts = _hmac_prepare_salts(None, None, prf_salts, hmac_salts)
-                if salts:
-                    client_pin = ClientPin(ctap, pin_protocol)
-                    key_agreement, shared_secret = client_pin._get_shared_secret()
-                    salt_enc = pin_protocol.encrypt(shared_secret, salts[0] + salts[1])
-                    salt_auth = pin_protocol.authenticate(shared_secret, salt_enc)
-                    inputs[HmacSecretExtension.MC_NAME] = {
-                        1: key_agreement,
-                        2: salt_enc,
-                        3: salt_auth,
-                        4: pin_protocol.VERSION,
-                    }
-
-            class Processor(RegistrationExtensionProcessor):
-                def prepare_inputs(self, pin_token):
-                    return inputs
-
-                def prepare_outputs(self, response, pin_token):
-                    extensions = response.auth_data.extensions or {}
-                    enabled = extensions.get(HmacSecretExtension.NAME, False)
-                    value = extensions.get(HmacSecretExtension.MC_NAME)
-                    decrypted = (
-                        pin_protocol.decrypt(shared_secret, value)
-                        if value and shared_secret
-                        else None
-                    )
-                    return _hmac_format_outputs(enabled, decrypted, prf)
-
-            return Processor()
-
-    def get_assertion(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        prf = AuthenticatorExtensionsPRFInputs.from_dict(
-            cast(Mapping | None, inputs.get("prf"))
-        )
-        hmac = (
-            HMACGetSecretInput.from_dict(
-                cast(Mapping | None, inputs.get("hmacGetSecret"))
-            )
-            if self._allow_hmac_secret
-            else None
-        )
-
-        if pin_protocol and self.is_supported(ctap) and (prf or hmac):
-            client_pin = ClientPin(ctap, pin_protocol)
-            key_agreement, shared_secret = client_pin._get_shared_secret()
-
-            class Processing(AuthenticationExtensionProcessor):
-                def prepare_inputs(self, selected, pin_token):
-                    salts = _hmac_prepare_salts(
-                        options.allow_credentials, selected, prf, hmac
-                    )
-                    if not salts:
-                        return
-
-                    salt_enc = pin_protocol.encrypt(shared_secret, salts[0] + salts[1])
-                    salt_auth = pin_protocol.authenticate(shared_secret, salt_enc)
-
-                    return {
-                        HmacSecretExtension.NAME: {
-                            1: key_agreement,
-                            2: salt_enc,
-                            3: salt_auth,
-                            4: pin_protocol.VERSION,
-                        }
-                    }
-
-                def prepare_outputs(self, response, pin_token):
-                    extensions = response.auth_data.extensions or {}
-                    value = extensions.get(HmacSecretExtension.NAME)
-                    decrypted = (
-                        pin_protocol.decrypt(shared_secret, value) if value else None
-                    )
-                    return _hmac_format_outputs(None, decrypted, prf)
-
-            return Processing()
+        self._native = NativeExtension.hmac_secret(allow_hmac_secret)
 
 
 @dataclass(eq=False, frozen=True)
@@ -389,7 +281,7 @@ class AuthenticatorExtensionsLargeBlobOutputs(_JsonDataObject):
     written: bool | None = None
 
 
-class LargeBlobExtension(Ctap2Extension):
+class LargeBlobExtension(_NativeCtap2Extension):
     """
     Implements the Large Blob storage (largeBlob) WebAuthn extension.
 
@@ -399,79 +291,11 @@ class LargeBlobExtension(Ctap2Extension):
     _native_tag = "large_blob"
     NAME = "largeBlobKey"
 
-    def is_supported(self, ctap):
-        return self.NAME in ctap.info.extensions and ctap.info.options.get(
-            "largeBlobs", False
-        )
-
-    def make_credential(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(
-            cast(Mapping | None, inputs.get("largeBlob"))
-        )
-        if data:
-            if data.read or data.write:
-                raise ValueError("Invalid set of parameters")
-            if data.support == "required" and not self.is_supported(ctap):
-                raise ValueError("Authenticator does not support large blob storage")
-
-            class Processor(RegistrationExtensionProcessor):
-                def prepare_inputs(self, pin_token):
-                    return {LargeBlobExtension.NAME: True}
-
-                def prepare_outputs(self, response, pin_token):
-                    return {
-                        "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(
-                            supported=response.large_blob_key is not None
-                        )
-                    }
-
-            return Processor()
-
-    def get_assertion(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        data = AuthenticatorExtensionsLargeBlobInputs.from_dict(
-            cast(Mapping | None, inputs.get("largeBlob"))
-        )
-        if data:
-            if data.support or (data.read and data.write):
-                raise ValueError("Invalid set of parameters")
-            if not self.is_supported(ctap):
-                raise ValueError("Authenticator does not support large blob storage")
-
-            class Processor(AuthenticationExtensionProcessor):
-                def prepare_outputs(self, response, pin_token):
-                    assert data is not None  # noqa: S101 needed for mypy
-                    blob_key = response.large_blob_key
-                    if blob_key:
-                        if data.read:
-                            large_blobs = LargeBlobs(ctap)
-                            blob = large_blobs.get_blob(blob_key)
-                            return {
-                                "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(
-                                    blob=blob
-                                )
-                            }
-                        elif data.write:
-                            large_blobs = LargeBlobs(ctap, pin_protocol, pin_token)
-                            large_blobs.put_blob(blob_key, data.write)
-                            return {
-                                "largeBlob": AuthenticatorExtensionsLargeBlobOutputs(
-                                    written=True
-                                )
-                            }
-
-            return Processor(
-                (
-                    ClientPin.PERMISSION.LARGE_BLOB_WRITE
-                    if data.write
-                    else ClientPin.PERMISSION(0)
-                ),
-                inputs={LargeBlobExtension.NAME: True},
-            )
+    def __init__(self):
+        self._native = NativeExtension.large_blob()
 
 
-class CredBlobExtension(Ctap2Extension):
+class CredBlobExtension(_NativeCtap2Extension):
     """
     Implements the Credential Blob (credBlob) CTAP2 extension.
 
@@ -481,24 +305,11 @@ class CredBlobExtension(Ctap2Extension):
     _native_tag = "cred_blob"
     NAME = "credBlob"
 
-    def is_supported(self, ctap):
-        return self.NAME in ctap.info.extensions
-
-    def make_credential(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        if self.is_supported(ctap):
-            blob = inputs.get("credBlob")
-            assert ctap.info.max_cred_blob_length is not None  # noqa: S101
-            if blob and len(blob) <= ctap.info.max_cred_blob_length:
-                return RegistrationExtensionProcessor(inputs={self.NAME: blob})
-
-    def get_assertion(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        if self.is_supported(ctap) and inputs.get("getCredBlob") is True:
-            return AuthenticationExtensionProcessor(inputs={self.NAME: True})
+    def __init__(self):
+        self._native = NativeExtension.cred_blob()
 
 
-class CredProtectExtension(Ctap2Extension):
+class CredProtectExtension(_NativeCtap2Extension):
     """
     Implements the Credential Protection CTAP2 extension.
 
@@ -519,22 +330,11 @@ class CredProtectExtension(Ctap2Extension):
 
     NAME = "credProtect"
 
-    def is_supported(self, ctap):
-        return self.NAME in ctap.info.extensions
-
-    def make_credential(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        policy = inputs.get("credentialProtectionPolicy")
-        if policy:
-            index = CredProtectExtension.POLICY.str2int(policy)
-            enforce = inputs.get("enforceCredentialProtectionPolicy", False)
-            if enforce and not self.is_supported(ctap) and index > 1:
-                raise ValueError("Authenticator does not support Credential Protection")
-
-            return RegistrationExtensionProcessor(inputs={self.NAME: index})
+    def __init__(self):
+        self._native = NativeExtension.cred_protect()
 
 
-class MinPinLengthExtension(Ctap2Extension):
+class MinPinLengthExtension(_NativeCtap2Extension):
     """
     Implements the Minimum PIN Length (minPinLength) CTAP2 extension.
 
@@ -544,14 +344,8 @@ class MinPinLengthExtension(Ctap2Extension):
     _native_tag = "min_pin_length"
     NAME = "minPinLength"
 
-    def is_supported(self, ctap):
-        # NB: There is no key in the extensions field.
-        return "setMinPINLength" in ctap.info.options
-
-    def make_credential(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        if self.is_supported(ctap) and inputs.get(self.NAME) is True:
-            return RegistrationExtensionProcessor(inputs={self.NAME: True})
+    def __init__(self):
+        self._native = NativeExtension.min_pin_length()
 
 
 class PinComplexityPolicyExtension(Ctap2Extension):
@@ -579,7 +373,7 @@ class CredentialPropertiesOutput(_JsonDataObject):
     rk: bool | None = None
 
 
-class CredPropsExtension(Ctap2Extension):
+class CredPropsExtension(_NativeCtap2Extension):
     """
     Implements the Credential Properties (credProps) WebAuthn extension.
 
@@ -589,24 +383,8 @@ class CredPropsExtension(Ctap2Extension):
     _native_tag = "cred_props"
     NAME = "credProps"
 
-    def is_supported(self, ctap):
-        # NB: There is no key in the extensions field.
-        return True
-
-    def make_credential(self, ctap, options, pin_protocol):
-        inputs = options.extensions or {}
-        if inputs.get(self.NAME) is True:
-            selection = (
-                options.authenticator_selection or AuthenticatorSelectionCriteria()
-            )
-            rk = selection.resident_key == ResidentKeyRequirement.REQUIRED or (
-                selection.resident_key == ResidentKeyRequirement.PREFERRED
-                and ctap.info.options.get("rk")
-            )
-
-            return RegistrationExtensionProcessor(
-                outputs={self.NAME: CredentialPropertiesOutput(rk=rk)}
-            )
+    def __init__(self):
+        self._native = NativeExtension.cred_props()
 
 
 @dataclass(eq=False, frozen=True)

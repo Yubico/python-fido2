@@ -25,6 +25,8 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeMap;
+
 use fido2::cbor::Value;
 use fido2::client::{self, ClientBackend};
 use fido2::ctap::capability;
@@ -34,7 +36,7 @@ use fido2::extensions::{
     RegistrationExtensionProcessor,
 };
 use fido2::pin::PinProtocol;
-use fido2::webauthn::Aaguid;
+use fido2::webauthn::{Aaguid, AuthenticatorData};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
@@ -763,10 +765,431 @@ fn extension_outputs_to_py(
     Ok(dict.into())
 }
 
+// ---- Python → Rust conversion helpers ----
+
+/// Convert a Python Info object to a Rust Info struct.
+fn py_to_info(py: Python<'_>, info_obj: &PyObject) -> PyResult<Info> {
+    let bound = info_obj.bind(py);
+
+    let versions: Vec<String> = bound
+        .getattr("versions")?
+        .try_iter()?
+        .map(|v| v.and_then(|v| v.extract()))
+        .collect::<PyResult<_>>()?;
+
+    let extensions_list: Vec<String> = bound
+        .getattr("extensions")?
+        .try_iter()?
+        .map(|v| v.and_then(|v| v.extract()))
+        .collect::<PyResult<_>>()?;
+
+    let aaguid_bytes: Vec<u8> = bound.getattr("aaguid")?.extract()?;
+    let aaguid = Aaguid::from_slice(&aaguid_bytes)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    let options_obj = bound.getattr("options")?;
+    let options_dict = options_obj.downcast::<PyDict>()?;
+    let mut options = BTreeMap::new();
+    for (k, v) in options_dict.iter() {
+        options.insert(k.extract::<String>()?, v.extract::<bool>()?);
+    }
+
+    let max_msg_size: usize = bound.getattr("max_msg_size")?.extract()?;
+
+    let pin_uv_protocols: Vec<u32> = bound
+        .getattr("pin_uv_protocols")?
+        .try_iter()?
+        .map(|v| v.and_then(|v| v.extract()))
+        .collect::<PyResult<_>>()?;
+
+    let max_creds_in_list: usize = bound
+        .getattr("max_creds_in_list")?
+        .extract::<Option<usize>>()?
+        .unwrap_or(0);
+
+    let max_cred_id_length: usize = bound
+        .getattr("max_cred_id_length")?
+        .extract::<Option<usize>>()?
+        .unwrap_or(0);
+
+    let max_cred_blob_length: usize = bound
+        .getattr("max_cred_blob_length")?
+        .extract::<Option<usize>>()?
+        .unwrap_or(0);
+
+    Ok(Info {
+        versions,
+        extensions: extensions_list,
+        aaguid,
+        options,
+        max_msg_size,
+        pin_uv_protocols,
+        max_creds_in_list,
+        max_cred_id_length,
+        max_cred_blob_length,
+        ..Info::from_cbor(&[])
+    })
+}
+
+/// Convert a Python AttestationResponse object to a Rust AttestationResponse.
+fn py_to_attestation_response(
+    py: Python<'_>,
+    resp: &PyObject,
+) -> PyResult<AttestationResponse> {
+    let bound = resp.bind(py);
+    let fmt: String = bound.getattr("fmt")?.extract()?;
+    let auth_data_bytes: Vec<u8> = bound.getattr("auth_data")?.extract()?;
+    let auth_data = AuthenticatorData::from_bytes(&auth_data_bytes)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    let att_stmt_py = bound.getattr("att_stmt")?;
+    let att_stmt = crate::py_cbor::py_to_value(&att_stmt_py)?;
+
+    let ep_att: Option<bool> = bound.getattr("ep_att")?.extract()?;
+    let large_blob_key: Option<Vec<u8>> = bound.getattr("large_blob_key")?.extract()?;
+
+    Ok(AttestationResponse {
+        fmt,
+        auth_data,
+        att_stmt,
+        ep_att,
+        large_blob_key,
+        unsigned_extension_outputs: BTreeMap::new(),
+    })
+}
+
+/// Convert a Python AssertionResponse object to a Rust AssertionResponse.
+fn py_to_assertion_response(
+    py: Python<'_>,
+    resp: &PyObject,
+) -> PyResult<AssertionResponse> {
+    let bound = resp.bind(py);
+    let credential_py = bound.getattr("credential")?;
+    let credential = crate::py_cbor::py_to_value(&credential_py)?;
+
+    let auth_data_bytes: Vec<u8> = bound.getattr("auth_data")?.extract()?;
+    let auth_data = AuthenticatorData::from_bytes(&auth_data_bytes)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    let signature: Vec<u8> = bound.getattr("signature")?.extract()?;
+    let user_py = bound.getattr("user")?;
+    let user = if user_py.is_none() {
+        None
+    } else {
+        Some(crate::py_cbor::py_to_value(&user_py)?)
+    };
+
+    let number_of_credentials: Option<u32> = bound.getattr("number_of_credentials")?.extract()?;
+    let user_selected: Option<bool> = bound.getattr("user_selected")?.extract()?;
+    let large_blob_key: Option<Vec<u8>> = bound.getattr("large_blob_key")?.extract()?;
+
+    Ok(AssertionResponse {
+        credential,
+        auth_data,
+        signature,
+        user,
+        number_of_credentials,
+        user_selected,
+        large_blob_key,
+    })
+}
+
+/// Convert a Python PinProtocol version to a Rust PinProtocol.
+fn py_pin_protocol(py: Python<'_>, pp: &PyObject) -> PyResult<Option<PinProtocol>> {
+    if pp.is_none(py) {
+        return Ok(None);
+    }
+    let version: u32 = pp.bind(py).getattr("VERSION")?.extract()?;
+    match version {
+        1 => Ok(Some(PinProtocol::V1)),
+        2 => Ok(Some(PinProtocol::V2)),
+        _ => Err(PyValueError::new_err("Unsupported protocol version")),
+    }
+}
+
+/// Extract device, strict_cbor, and max_msg_size from a Python Ctap2 object,
+/// plus the Info for setting on the Ctap2.
+fn ctap2_from_py_ctap<'a>(
+    py: Python<'_>,
+    ctap_py: &PyObject,
+    dev: &'a PyCtapDevice,
+) -> PyResult<ctap2::Ctap2<'a>> {
+    let native = ctap_py.bind(py).getattr("_native")?;
+    let strict_cbor: bool = native.getattr("strict_cbor")?.extract()?;
+    let max_msg_size: usize = native.getattr("max_msg_size")?.extract()?;
+    let info_obj = ctap_py.bind(py).getattr("info")?;
+    let info = py_to_info(py, &info_obj.unbind())?;
+    let mut ctap = ctap2::Ctap2::from_parts(dev, strict_cbor, max_msg_size);
+    ctap.set_info(info);
+    Ok(ctap)
+}
+
+/// Convert options.extensions to serde_json::Value.
+fn py_options_extensions(py: Python<'_>, options: &PyObject) -> PyResult<Option<serde_json::Value>> {
+    let ext = options.bind(py).getattr("extensions")?;
+    if ext.is_none() {
+        return Ok(None);
+    }
+    let json_str = py
+        .import("json")?
+        .call_method1("dumps", (&ext,))?
+        .extract::<String>()?;
+    serde_json::from_str(&json_str)
+        .map(Some)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
+/// Convert options.allow_credentials to Vec<Value> (CBOR).
+fn py_allow_credentials(py: Python<'_>, options: &PyObject) -> PyResult<Option<Vec<Value>>> {
+    let ac = options.bind(py).getattr("allow_credentials")?;
+    if ac.is_none() {
+        return Ok(None);
+    }
+    let iter = ac.try_iter()?;
+    let mut creds = Vec::new();
+    for item in iter {
+        creds.push(crate::py_cbor::py_to_value(&item?)?);
+    }
+    Ok(Some(creds))
+}
+
+// ---- NativeExtension ----
+
+/// A native CTAP2 extension exposed to Python.
+///
+/// Wraps a Rust Ctap2Extension trait object and exposes its methods to Python.
+/// The Python extension classes delegate to this for their logic.
+#[pyclass(unsendable)]
+struct NativeExtension {
+    inner: Box<dyn Ctap2Extension>,
+}
+
+#[pymethods]
+impl NativeExtension {
+    #[staticmethod]
+    fn hmac_secret(allow_hmac_secret: bool) -> Self {
+        Self {
+            inner: Box::new(extensions::HmacSecretExtension::new(allow_hmac_secret)),
+        }
+    }
+
+    #[staticmethod]
+    fn large_blob() -> Self {
+        Self {
+            inner: Box::new(extensions::LargeBlobExtension),
+        }
+    }
+
+    #[staticmethod]
+    fn cred_blob() -> Self {
+        Self {
+            inner: Box::new(extensions::CredBlobExtension),
+        }
+    }
+
+    #[staticmethod]
+    fn cred_protect() -> Self {
+        Self {
+            inner: Box::new(extensions::CredProtectExtension),
+        }
+    }
+
+    #[staticmethod]
+    fn min_pin_length() -> Self {
+        Self {
+            inner: Box::new(extensions::MinPinLengthExtension),
+        }
+    }
+
+    #[staticmethod]
+    fn cred_props() -> Self {
+        Self {
+            inner: Box::new(extensions::CredPropsExtension),
+        }
+    }
+
+    /// Check if the extension is supported by the authenticator.
+    fn is_supported(&self, py: Python<'_>, ctap: PyObject) -> PyResult<bool> {
+        let info_obj = ctap.bind(py).getattr("info")?.unbind();
+        let info = py_to_info(py, &info_obj)?;
+        Ok(self.inner.is_supported(&info))
+    }
+
+    /// Create a registration processor.
+    fn make_credential(
+        &self,
+        py: Python<'_>,
+        ctap: PyObject,
+        options: PyObject,
+        pin_protocol: PyObject,
+    ) -> PyResult<Option<NativeRegistrationProcessor>> {
+        let native = ctap.bind(py).getattr("_native")?;
+        let device: PyObject = native.getattr("device")?.unbind();
+        let strict_cbor: bool = native.getattr("strict_cbor")?.extract()?;
+        let max_msg_size: usize = native.getattr("max_msg_size")?.extract()?;
+
+        let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
+        let info_obj = ctap.bind(py).getattr("info")?.unbind();
+        let info = py_to_info(py, &info_obj)?;
+        let mut ctap2 = ctap2::Ctap2::from_parts(&dev, strict_cbor, max_msg_size);
+        ctap2.set_info(info);
+
+        let ext_json = py_options_extensions(py, &options)?;
+        let pp = py_pin_protocol(py, &pin_protocol)?;
+
+        let processor = self.inner.make_credential(&ctap2, ext_json.as_ref(), pp);
+        Ok(processor.map(|p| NativeRegistrationProcessor {
+            inner: p,
+            device,
+            strict_cbor,
+            max_msg_size,
+        }))
+    }
+
+    /// Create an authentication processor.
+    fn get_assertion(
+        &self,
+        py: Python<'_>,
+        ctap: PyObject,
+        options: PyObject,
+        pin_protocol: PyObject,
+    ) -> PyResult<Option<NativeAuthenticationProcessor>> {
+        let native = ctap.bind(py).getattr("_native")?;
+        let device: PyObject = native.getattr("device")?.unbind();
+        let strict_cbor: bool = native.getattr("strict_cbor")?.extract()?;
+        let max_msg_size: usize = native.getattr("max_msg_size")?.extract()?;
+
+        let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
+        let info_obj = ctap.bind(py).getattr("info")?.unbind();
+        let info = py_to_info(py, &info_obj)?;
+        let mut ctap2 = ctap2::Ctap2::from_parts(&dev, strict_cbor, max_msg_size);
+        ctap2.set_info(info);
+
+        let ext_json = py_options_extensions(py, &options)?;
+        let allow_creds = py_allow_credentials(py, &options)?;
+        let pp = py_pin_protocol(py, &pin_protocol)?;
+
+        let processor = self.inner.get_assertion(
+            &ctap2,
+            ext_json.as_ref(),
+            allow_creds.as_deref(),
+            pp,
+        );
+        Ok(processor.map(|p| NativeAuthenticationProcessor {
+            inner: p,
+            device,
+            strict_cbor,
+            max_msg_size,
+        }))
+    }
+}
+
+// ---- NativeRegistrationProcessor ----
+
+/// Wraps a Rust RegistrationExtensionProcessor for use from Python.
+#[pyclass(unsendable)]
+struct NativeRegistrationProcessor {
+    inner: Box<dyn RegistrationExtensionProcessor>,
+    device: PyObject,
+    strict_cbor: bool,
+    max_msg_size: usize,
+}
+
+#[pymethods]
+impl NativeRegistrationProcessor {
+    #[getter]
+    fn permissions(&self) -> u32 {
+        self.inner.permissions()
+    }
+
+    fn prepare_inputs(
+        &self,
+        py: Python<'_>,
+        pin_token: Option<&[u8]>,
+    ) -> PyResult<Option<PyObject>> {
+        match self.inner.prepare_inputs(pin_token) {
+            Some(inputs) => Ok(Some(extension_outputs_to_py(py, &inputs)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn prepare_outputs(
+        &self,
+        py: Python<'_>,
+        response: PyObject,
+        pin_token: Option<&[u8]>,
+    ) -> PyResult<Option<PyObject>> {
+        let att_resp = py_to_attestation_response(py, &response)?;
+        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
+        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+
+        match self.inner.prepare_outputs(&att_resp, pin_token, &ctap) {
+            Some(outputs) => Ok(Some(extension_outputs_to_py(py, &outputs)?)),
+            None => Ok(None),
+        }
+    }
+}
+
+// ---- NativeAuthenticationProcessor ----
+
+/// Wraps a Rust AuthenticationExtensionProcessor for use from Python.
+#[pyclass(unsendable)]
+struct NativeAuthenticationProcessor {
+    inner: Box<dyn AuthenticationExtensionProcessor>,
+    device: PyObject,
+    strict_cbor: bool,
+    max_msg_size: usize,
+}
+
+#[pymethods]
+impl NativeAuthenticationProcessor {
+    #[getter]
+    fn permissions(&self) -> u32 {
+        self.inner.permissions()
+    }
+
+    fn prepare_inputs(
+        &self,
+        py: Python<'_>,
+        selected: PyObject,
+        pin_token: Option<&[u8]>,
+    ) -> PyResult<Option<PyObject>> {
+        let sel = if selected.is_none(py) {
+            None
+        } else {
+            Some(crate::py_cbor::py_to_value(selected.bind(py))?)
+        };
+
+        match self.inner.prepare_inputs(sel.as_ref(), pin_token) {
+            Some(inputs) => Ok(Some(extension_outputs_to_py(py, &inputs)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn prepare_outputs(
+        &self,
+        py: Python<'_>,
+        response: PyObject,
+        pin_token: Option<&[u8]>,
+    ) -> PyResult<Option<PyObject>> {
+        let ass_resp = py_to_assertion_response(py, &response)?;
+        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
+        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+
+        match self.inner.prepare_outputs(&ass_resp, pin_token, &ctap) {
+            Some(outputs) => Ok(Some(extension_outputs_to_py(py, &outputs)?)),
+            None => Ok(None),
+        }
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "client")?;
     sub.add_class::<ClientDataCollector>()?;
     sub.add_class::<NativeFido2Client>()?;
+    sub.add_class::<NativeExtension>()?;
+    sub.add_class::<NativeRegistrationProcessor>()?;
+    sub.add_class::<NativeAuthenticationProcessor>()?;
     m.add_submodule(&sub)?;
 
     let sys = m.py().import("sys")?;
