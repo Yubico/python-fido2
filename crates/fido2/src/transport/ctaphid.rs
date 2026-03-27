@@ -199,7 +199,21 @@ impl CtapHidConnection {
         let api = HidApi::new()?;
         let cpath = std::ffi::CString::new(info.path.as_str())
             .map_err(|_| CtapHidTransportError::InvalidPath)?;
-        let device = api.open_path(&cpath)?;
+
+        // Retry on failure: after re-inserting a device, udev rules may not
+        // have applied yet, causing transient "Permission denied" errors.
+        let device = {
+            let retries = 4;
+            let mut result = api.open_path(&cpath);
+            for _ in 1..retries {
+                if result.is_ok() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                result = api.open_path(&cpath);
+            }
+            result?
+        };
 
         let mut conn = Self {
             device: Some(device),
