@@ -573,6 +573,7 @@ struct NativeFido2Client {
     info: Info,
     is_ctap2: bool,
     extensions: Vec<PyObject>,
+    enterprise_rpid_list: Option<Vec<String>>,
 }
 
 impl NativeFido2Client {
@@ -602,14 +603,16 @@ impl NativeFido2Client {
     ) -> Box<dyn ClientBackend + 'a> {
         if self.is_ctap2 {
             let extensions = create_extensions_from_py(py, &self.extensions);
-            Box::new(client::Ctap2Backend::from_parts(
+            let mut backend = client::Ctap2Backend::from_parts(
                 dev,
                 false,
                 self.info.max_msg_size,
                 ui,
                 extensions,
                 self.info.clone(),
-            ))
+            );
+            backend.set_enterprise_rpid_list(self.enterprise_rpid_list.clone());
+            Box::new(backend)
         } else {
             Box::new(client::Ctap1Backend::new(dev, ui))
         }
@@ -662,6 +665,7 @@ impl NativeFido2Client {
             info,
             is_ctap2,
             extensions: ext_list,
+            enterprise_rpid_list: None,
         })
     }
 
@@ -669,6 +673,22 @@ impl NativeFido2Client {
     #[getter]
     fn info(&self, py: Python<'_>) -> PyResult<PyObject> {
         crate::py_ctap::info_to_py(py, &self.info)
+    }
+
+    /// Set the list of RP IDs eligible for platform-managed enterprise attestation.
+    #[setter]
+    fn set_enterprise_rpid_list(&mut self, py: Python<'_>, value: PyObject) -> PyResult<()> {
+        if value.is_none(py) {
+            self.enterprise_rpid_list = None;
+        } else {
+            let bound = value.bind(py);
+            let iter = bound.try_iter()?;
+            let list: Vec<String> = iter
+                .map(|item| item.and_then(|i| i.extract()))
+                .collect::<PyResult<_>>()?;
+            self.enterprise_rpid_list = Some(list);
+        }
+        Ok(())
     }
 
     /// Perform authenticator selection (touch).
@@ -959,9 +979,9 @@ fn py_allow_credentials(py: Python<'_>, options: &PyObject) -> PyResult<Option<V
 ///
 /// Wraps a Rust Ctap2Extension trait object and exposes its methods to Python.
 /// The Python extension classes delegate to this for their logic.
-#[pyclass(unsendable)]
+#[pyclass]
 struct NativeExtension {
-    inner: Box<dyn Ctap2Extension>,
+    inner: std::sync::Mutex<Box<dyn Ctap2Extension + Send>>,
 }
 
 #[pymethods]
@@ -969,42 +989,44 @@ impl NativeExtension {
     #[staticmethod]
     fn hmac_secret(allow_hmac_secret: bool) -> Self {
         Self {
-            inner: Box::new(extensions::HmacSecretExtension::new(allow_hmac_secret)),
+            inner: std::sync::Mutex::new(Box::new(extensions::HmacSecretExtension::new(
+                allow_hmac_secret,
+            ))),
         }
     }
 
     #[staticmethod]
     fn large_blob() -> Self {
         Self {
-            inner: Box::new(extensions::LargeBlobExtension),
+            inner: std::sync::Mutex::new(Box::new(extensions::LargeBlobExtension)),
         }
     }
 
     #[staticmethod]
     fn cred_blob() -> Self {
         Self {
-            inner: Box::new(extensions::CredBlobExtension),
+            inner: std::sync::Mutex::new(Box::new(extensions::CredBlobExtension)),
         }
     }
 
     #[staticmethod]
     fn cred_protect() -> Self {
         Self {
-            inner: Box::new(extensions::CredProtectExtension),
+            inner: std::sync::Mutex::new(Box::new(extensions::CredProtectExtension)),
         }
     }
 
     #[staticmethod]
     fn min_pin_length() -> Self {
         Self {
-            inner: Box::new(extensions::MinPinLengthExtension),
+            inner: std::sync::Mutex::new(Box::new(extensions::MinPinLengthExtension)),
         }
     }
 
     #[staticmethod]
     fn cred_props() -> Self {
         Self {
-            inner: Box::new(extensions::CredPropsExtension),
+            inner: std::sync::Mutex::new(Box::new(extensions::CredPropsExtension)),
         }
     }
 
@@ -1012,7 +1034,8 @@ impl NativeExtension {
     fn is_supported(&self, py: Python<'_>, ctap: PyObject) -> PyResult<bool> {
         let info_obj = ctap.bind(py).getattr("info")?.unbind();
         let info = py_to_info(py, &info_obj)?;
-        Ok(self.inner.is_supported(&info))
+        let inner = self.inner.lock().unwrap();
+        Ok(inner.is_supported(&info))
     }
 
     /// Create a registration processor.
@@ -1037,7 +1060,8 @@ impl NativeExtension {
         let ext_json = py_options_extensions(py, &options)?;
         let pp = py_pin_protocol(py, &pin_protocol)?;
 
-        let processor = self.inner.make_credential(&ctap2, ext_json.as_ref(), pp);
+        let inner = self.inner.lock().unwrap();
+        let processor = inner.make_credential(&ctap2, ext_json.as_ref(), pp);
         Ok(processor.map(|p| NativeRegistrationProcessor {
             inner: p,
             device,
@@ -1069,7 +1093,8 @@ impl NativeExtension {
         let allow_creds = py_allow_credentials(py, &options)?;
         let pp = py_pin_protocol(py, &pin_protocol)?;
 
-        let processor = self.inner.get_assertion(
+        let inner = self.inner.lock().unwrap();
+        let processor = inner.get_assertion(
             &ctap2,
             ext_json.as_ref(),
             allow_creds.as_deref(),

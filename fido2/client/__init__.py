@@ -385,10 +385,20 @@ class Fido2Client(WebAuthnClient):
             device, user_interaction, on_keepalive, list(extensions)
         )
         self._info = Info(**self._native.info)
+        self.__enterprise_rpid_list: list[str] | None = None
 
     @property
     def info(self) -> Info:
         return self._info
+
+    @property
+    def _enterprise_rpid_list(self) -> list[str] | None:
+        return self.__enterprise_rpid_list
+
+    @_enterprise_rpid_list.setter
+    def _enterprise_rpid_list(self, value: list[str] | None) -> None:
+        self.__enterprise_rpid_list = value
+        self._native.enterprise_rpid_list = value
 
     def selection(self, event: Event | None = None) -> None:
         try:

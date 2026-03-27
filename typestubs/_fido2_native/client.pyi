@@ -18,6 +18,7 @@ class ClientDataCollector:
 
 class NativeFido2Client:
     info: dict[str, Any]
+    enterprise_rpid_list: list[str] | None
     def __init__(
         self,
         device: Any,

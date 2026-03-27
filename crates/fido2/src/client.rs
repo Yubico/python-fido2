@@ -661,6 +661,7 @@ pub struct Ctap2Backend<'a> {
     ctap: ctap2::Ctap2<'a>,
     extensions: Vec<Box<dyn Ctap2Extension>>,
     interaction: &'a dyn UserInteraction,
+    enterprise_rpid_list: Option<Vec<String>>,
 }
 
 impl<'a> Ctap2Backend<'a> {
@@ -674,6 +675,7 @@ impl<'a> Ctap2Backend<'a> {
             ctap,
             extensions,
             interaction,
+            enterprise_rpid_list: None,
         })
     }
 
@@ -691,7 +693,12 @@ impl<'a> Ctap2Backend<'a> {
             ctap,
             extensions,
             interaction,
+            enterprise_rpid_list: None,
         }
+    }
+
+    pub fn set_enterprise_rpid_list(&mut self, list: Option<Vec<String>>) {
+        self.enterprise_rpid_list = list;
     }
 
     fn keepalive(&self) -> impl FnMut(u8) + '_ {
@@ -922,7 +929,15 @@ impl ClientBackend for Ctap2Backend<'_> {
         let enterprise_attestation =
             if options.attestation == Some(AttestationConveyancePreference::Enterprise) {
                 if info.options.get("ep") == Some(&true) {
-                    Some(1u32)
+                    if let Some(ref list) = self.enterprise_rpid_list {
+                        if list.iter().any(|id| id == rp_id) {
+                            Some(2u32) // Platform-managed
+                        } else {
+                            Some(1u32) // Vendor-facilitated
+                        }
+                    } else {
+                        Some(1u32) // Vendor-facilitated
+                    }
                 } else {
                     None
                 }
