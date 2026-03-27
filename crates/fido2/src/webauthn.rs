@@ -374,11 +374,7 @@ impl AttestationObject {
     }
 
     /// Create from components.
-    pub fn create(
-        fmt: &str,
-        auth_data: &AuthenticatorData,
-        att_stmt: &cbor::Value,
-    ) -> Self {
+    pub fn create(fmt: &str, auth_data: &AuthenticatorData, att_stmt: &cbor::Value) -> Self {
         let cbor_val = cbor::Value::Map(vec![
             (
                 cbor::Value::Text("fmt".into()),
@@ -388,10 +384,7 @@ impl AttestationObject {
                 cbor::Value::Text("authData".into()),
                 cbor::Value::Bytes(auth_data.as_bytes().to_vec()),
             ),
-            (
-                cbor::Value::Text("attStmt".into()),
-                att_stmt.clone(),
-            ),
+            (cbor::Value::Text("attStmt".into()), att_stmt.clone()),
         ]);
         let raw = cbor_val.encode();
 
@@ -463,12 +456,7 @@ impl CollectedClientData {
     }
 
     /// Create from components.
-    pub fn create(
-        type_: &str,
-        challenge: &[u8],
-        origin: &str,
-        cross_origin: bool,
-    ) -> Self {
+    pub fn create(type_: &str, challenge: &[u8], origin: &str, cross_origin: bool) -> Self {
         let json = serde_json::json!({
             "type": type_,
             "challenge": websafe_encode(challenge),
@@ -623,7 +611,7 @@ mod base64url_bytes {
 
     use crate::utils::{websafe_decode, websafe_encode};
 
-    pub fn serialize<S: Serializer>(data: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(data: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&websafe_encode(data))
     }
 
@@ -705,10 +693,7 @@ pub struct PublicKeyCredentialUserEntity {
     pub name: Option<String>,
     #[serde(with = "base64url_bytes")]
     pub id: Vec<u8>,
-    #[serde(
-        rename = "displayName",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "displayName", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
 }
 
@@ -863,17 +848,11 @@ mod tests {
     fn test_aaguid() {
         let aaguid = Aaguid::NONE;
         assert!(aaguid.is_none());
-        assert_eq!(
-            aaguid.to_string(),
-            "00000000-0000-0000-0000-000000000000"
-        );
+        assert_eq!(aaguid.to_string(), "00000000-0000-0000-0000-000000000000");
 
         let parsed = Aaguid::parse("01020304-0506-0708-090a-0b0c0d0e0f10").unwrap();
         assert!(!parsed.is_none());
-        assert_eq!(
-            parsed.to_string(),
-            "01020304-0506-0708-090a-0b0c0d0e0f10"
-        );
+        assert_eq!(parsed.to_string(), "01020304-0506-0708-090a-0b0c0d0e0f10");
     }
 
     #[test]
@@ -911,10 +890,8 @@ mod tests {
         key_params.insert(-3, cbor::Value::Bytes(vec![0xBB; 32]));
         let cose_key = CoseKey::from_map(key_params);
 
-        let cred_data =
-            AttestedCredentialData::create(&Aaguid::NONE, b"credential-id", &cose_key);
-        let auth_data =
-            AuthenticatorData::create(&rp_id_hash, flags, 0, Some(&cred_data), None);
+        let cred_data = AttestedCredentialData::create(&Aaguid::NONE, b"credential-id", &cose_key);
+        let auth_data = AuthenticatorData::create(&rp_id_hash, flags, 0, Some(&cred_data), None);
 
         let parsed = AuthenticatorData::from_bytes(auth_data.as_bytes()).unwrap();
         assert!(parsed.is_attested());
@@ -971,7 +948,10 @@ mod tests {
         assert_eq!(att.as_str(), "direct");
 
         let unknown = AttestationConveyancePreference::from("future-value");
-        assert!(matches!(unknown, AttestationConveyancePreference::Unknown(_)));
+        assert!(matches!(
+            unknown,
+            AttestationConveyancePreference::Unknown(_)
+        ));
         assert_eq!(unknown.as_str(), "future-value");
     }
 
@@ -1033,8 +1013,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&options).unwrap();
-        let parsed: PublicKeyCredentialCreationOptions =
-            serde_json::from_str(&json).unwrap();
+        let parsed: PublicKeyCredentialCreationOptions = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.challenge, options.challenge);
         assert_eq!(parsed.rp.name, "Example");
     }

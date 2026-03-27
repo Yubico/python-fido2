@@ -243,8 +243,7 @@ pub fn decode_from(data: &[u8]) -> Result<(Value, &[u8]), CborError> {
             if rest.len() < len {
                 return Err(CborError::UnexpectedEof);
             }
-            let s =
-                std::str::from_utf8(&rest[..len]).map_err(|_| CborError::InvalidUtf8)?;
+            let s = std::str::from_utf8(&rest[..len]).map_err(|_| CborError::InvalidUtf8)?;
             Ok((Value::Text(s.to_string()), &rest[len..]))
         }
         4 => {

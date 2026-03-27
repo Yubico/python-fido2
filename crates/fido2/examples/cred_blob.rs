@@ -53,7 +53,12 @@ fn main() {
             Err(_) => continue,
         };
         let interaction = common::CliInteraction::new();
-        let client = match Fido2Client::new(&c, "https://example.com", &interaction, default_extensions(false)) {
+        let client = match Fido2Client::new(
+            &c,
+            "https://example.com",
+            &interaction,
+            default_extensions(false),
+        ) {
             Ok(cl) => cl,
             Err(_) => continue,
         };
@@ -69,8 +74,13 @@ fn main() {
     }
     let conn = conn.expect("No FIDO device with credBlob support found!");
     let interaction = common::CliInteraction::new();
-    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions(false))
-        .expect("Failed to create client");
+    let client = Fido2Client::new(
+        &conn,
+        "https://example.com",
+        &interaction,
+        default_extensions(false),
+    )
+    .expect("Failed to create client");
 
     // Generate random blob data
     let mut blob = [0u8; 32];

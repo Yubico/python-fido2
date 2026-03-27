@@ -140,17 +140,15 @@ impl CtapHidConnection {
             .as_ref()
             .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
 
-        let response = py.allow_threads(|| {
-            match on_keepalive {
-                Some(ref cb) => conn
-                    .call_with_keepalive(cmd, data, &mut |status| {
-                        Python::with_gil(|py| {
-                            let _ = cb.call1(py, (status,));
-                        });
-                    })
-                    .map_err(ctap_err),
-                None => conn.call(cmd, data).map_err(ctap_err),
-            }
+        let response = py.allow_threads(|| match on_keepalive {
+            Some(ref cb) => conn
+                .call_with_keepalive(cmd, data, &mut |status| {
+                    Python::with_gil(|py| {
+                        let _ = cb.call1(py, (status,));
+                    });
+                })
+                .map_err(ctap_err),
+            None => conn.call(cmd, data).map_err(ctap_err),
         })?;
         Ok(PyBytes::new(py, &response))
     }
@@ -171,7 +169,10 @@ impl CtapHidConnection {
     }
 
     fn close(&self) -> PyResult<()> {
-        let mut guard = self.inner.lock().map_err(|_| PyOSError::new_err("lock poisoned"))?;
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| PyOSError::new_err("lock poisoned"))?;
         if let Some(mut conn) = guard.take() {
             conn.close();
         }

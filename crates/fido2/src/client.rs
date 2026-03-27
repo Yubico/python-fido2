@@ -34,9 +34,9 @@ use std::time::Duration;
 
 use crate::cbor::Value;
 use crate::cose::Algorithm;
-use crate::ctap::{apdu, capability, keepalive, ApduError, CtapDevice, CtapError, CtapStatus};
+use crate::ctap::{ApduError, CtapDevice, CtapError, CtapStatus, apdu, capability, keepalive};
 use crate::ctap1;
-use crate::ctap2::{self, AttestationResponse, AssertionResponse, Info};
+use crate::ctap2::{self, AssertionResponse, AttestationResponse, Info};
 use crate::extensions::{
     AuthenticationExtensionProcessor, Ctap2Extension, ExtensionInputs, ExtensionOutputs,
 };
@@ -113,14 +113,10 @@ pub fn should_use_uv(
         || info.options.get("bioEnroll").copied().unwrap_or(false);
 
     let mc = permissions & permission::MAKE_CREDENTIAL != 0;
-    let additional_perms =
-        permissions & !(permission::MAKE_CREDENTIAL | permission::GET_ASSERTION);
+    let additional_perms = permissions & !(permission::MAKE_CREDENTIAL | permission::GET_ASSERTION);
 
     if user_verification == Some(uv_requirement::REQUIRED)
-        || (matches!(
-            user_verification,
-            Some(uv_requirement::PREFERRED) | None
-        ) && uv_supported)
+        || (matches!(user_verification, Some(uv_requirement::PREFERRED) | None) && uv_supported)
         || info.options.get("alwaysUv").copied().unwrap_or(false)
     {
         if !uv_configured {
@@ -129,12 +125,15 @@ pub fn should_use_uv(
             ));
         }
         return Ok(true);
-    } else if mc
-        && uv_configured
-        && !info.options.get("makeCredUvNotRqd").copied().unwrap_or(false)
+    } else if uv_configured
+        && (additional_perms != 0
+            || mc
+                && !info
+                    .options
+                    .get("makeCredUvNotRqd")
+                    .copied()
+                    .unwrap_or(false))
     {
-        return Ok(true);
-    } else if uv_configured && additional_perms != 0 {
         return Ok(true);
     }
     Ok(false)
@@ -158,10 +157,10 @@ pub fn filter_creds(
             .filter(|c| {
                 if let Value::Map(entries) = c {
                     for (k, v) in entries {
-                        if k.as_text() == Some("id") {
-                            if let Some(id_bytes) = v.as_bytes() {
-                                return id_bytes.len() <= max_len;
-                            }
+                        if k.as_text() == Some("id")
+                            && let Some(id_bytes) = v.as_bytes()
+                        {
+                            return id_bytes.len() <= max_len;
                         }
                     }
                 }
@@ -177,10 +176,7 @@ pub fn filter_creds(
     }
 
     let client_data_hash = [0u8; 32];
-    let options = Value::Map(vec![(
-        Value::Text("up".to_string()),
-        Value::Bool(false),
-    )]);
+    let options = Value::Map(vec![(Value::Text("up".to_string()), Value::Bool(false))]);
 
     let mut max_creds = if info.max_creds_in_list > 0 {
         info.max_creds_in_list
@@ -226,6 +222,7 @@ pub fn filter_creds(
 }
 
 /// Get a PIN/UV token from the authenticator.
+#[allow(clippy::too_many_arguments)]
 pub fn get_token(
     info: &Info,
     client_pin: &ClientPin,
@@ -248,11 +245,11 @@ pub fn get_token(
     }
 
     if info.options.get("clientPin").copied().unwrap_or(false) {
-        if let Some(pin) = user_interaction.request_pin(permissions, rp_id) {
-            if !pin.is_empty() {
-                let token = client_pin.get_pin_token(&pin, Some(permissions), rp_id)?;
-                return Ok(Some(token));
-            }
+        if let Some(pin) = user_interaction.request_pin(permissions, rp_id)
+            && !pin.is_empty()
+        {
+            let token = client_pin.get_pin_token(&pin, Some(permissions), rp_id)?;
+            return Ok(Some(token));
         }
         return Err(ClientError::PinRequired);
     }
@@ -263,6 +260,7 @@ pub fn get_token(
 }
 
 /// Get auth parameters (pin_token, internal_uv) for a CTAP2 operation.
+#[allow(clippy::too_many_arguments)]
 pub fn get_auth_params(
     ctap: &ctap2::Ctap2,
     rp_id: &str,
@@ -345,14 +343,9 @@ impl ClientDataCollector {
                         "RP ID required for non-https origin.".into(),
                     ));
                 }
-                parsed
-                    .host_str()
-                    .map(|h| h.to_string())
-                    .ok_or_else(|| {
-                        ClientError::BadRequest(
-                            "RP ID required for non-https origin.".into(),
-                        )
-                    })
+                parsed.host_str().map(|h| h.to_string()).ok_or_else(|| {
+                    ClientError::BadRequest("RP ID required for non-https origin.".into())
+                })
             }
         }
     }
@@ -494,7 +487,7 @@ impl<'a> Ctap1Backend<'a> {
                     return Err(ClientError::BadRequest(format!(
                         "APDU error: 0x{:04X}",
                         e.code
-                    )))
+                    )));
                 }
             }
         }
@@ -560,9 +553,7 @@ impl ClientBackend for Ctap1Backend<'_> {
                 {
                     Err(e) if e.code == apdu::USE_NOT_SATISFIED => {
                         // Credential exists — register with dummy to prompt UP, then fail
-                        self.call_polling(|| {
-                            self.ctap1.register(&dummy_param, &dummy_param)
-                        })?;
+                        self.call_polling(|| self.ctap1.register(&dummy_param, &dummy_param))?;
                         return Err(ClientError::DeviceIneligible);
                     }
                     _ => {}
@@ -570,9 +561,8 @@ impl ClientBackend for Ctap1Backend<'_> {
             }
         }
 
-        let registration = self.call_polling(|| {
-            self.ctap1.register(client_data_hash, &app_param)
-        })?;
+        let registration =
+            self.call_polling(|| self.ctap1.register(client_data_hash, &app_param))?;
 
         let att_resp = AttestationResponse::from_ctap1(&app_param, &registration)
             .map_err(|e| ClientError::BadRequest(e.to_string()))?;
@@ -709,6 +699,7 @@ impl<'a> Ctap2Backend<'a> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn do_get_assertion_inner(
         &self,
         options: &PublicKeyCredentialRequestOptions,
@@ -764,8 +755,7 @@ impl<'a> Ctap2Backend<'a> {
 
             // Filter allow list
             let selected_cred = if let Some(ref allow_list) = options.allow_credentials {
-                let allow_cbor: Vec<Value> =
-                    allow_list.iter().map(|d| d.to_cbor_value()).collect();
+                let allow_cbor: Vec<Value> = allow_list.iter().map(|d| d.to_cbor_value()).collect();
                 let pin_auth_for_filter = pin_token.as_ref().and_then(|token| {
                     pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
                 });
@@ -818,10 +808,7 @@ impl<'a> Ctap2Backend<'a> {
             } else if options.allow_credentials.is_some() {
                 Some(Value::Array(vec![Value::Map(vec![
                     (Value::Text("id".into()), Value::Bytes(vec![0])),
-                    (
-                        Value::Text("type".into()),
-                        Value::Text("public-key".into()),
-                    ),
+                    (Value::Text("type".into()), Value::Text("public-key".into())),
                 ])]))
             } else {
                 None
@@ -889,10 +876,7 @@ impl ClientBackend for Ctap2Backend<'_> {
                     (Value::Text("name".into()), Value::Text("dummy".into())),
                 ]),
                 Value::Array(vec![Value::Map(vec![
-                    (
-                        Value::Text("type".into()),
-                        Value::Text("public-key".into()),
-                    ),
+                    (Value::Text("type".into()), Value::Text("public-key".into())),
                     (Value::Text("alg".into()), Value::Int(-7)),
                 ])]),
                 None,
@@ -905,9 +889,7 @@ impl ClientBackend for Ctap2Backend<'_> {
             ) {
                 Ok(_) => Ok(()),
                 Err(CtapError::StatusError(
-                    CtapStatus::PinNotSet
-                    | CtapStatus::PinInvalid
-                    | CtapStatus::PinAuthInvalid,
+                    CtapStatus::PinNotSet | CtapStatus::PinInvalid | CtapStatus::PinAuthInvalid,
                 )) => Ok(()),
                 Err(e) => Err(e.into()),
             }
@@ -997,10 +979,7 @@ impl ClientBackend for Ctap2Backend<'_> {
                     &mut |_| {},
                 )?;
                 if excluded.is_some() {
-                    return Err(CtapError::StatusError(
-                        CtapStatus::CredentialExcluded,
-                    )
-                    .into());
+                    return Err(CtapError::StatusError(CtapStatus::CredentialExcluded).into());
                 }
             }
 
@@ -1148,15 +1127,15 @@ impl<'a> Fido2Client<'a> {
         interaction: &'a dyn UserInteraction,
         extensions: Vec<Box<dyn Ctap2Extension>>,
     ) -> Result<Self, ClientError> {
-        let backend: Box<dyn ClientBackend + 'a> =
-            if device.capabilities() & capability::CBOR != 0 {
-                match Ctap2Backend::new(device, interaction, extensions) {
-                    Ok(b) => Box::new(b),
-                    Err(_) => Box::new(Ctap1Backend::new(device, interaction)),
-                }
-            } else {
-                Box::new(Ctap1Backend::new(device, interaction))
-            };
+        let backend: Box<dyn ClientBackend + 'a> = if device.capabilities() & capability::CBOR != 0
+        {
+            match Ctap2Backend::new(device, interaction, extensions) {
+                Ok(b) => Box::new(b),
+                Err(_) => Box::new(Ctap1Backend::new(device, interaction)),
+            }
+        } else {
+            Box::new(Ctap1Backend::new(device, interaction))
+        };
 
         Ok(Self {
             backend,
@@ -1182,8 +1161,9 @@ impl<'a> Fido2Client<'a> {
         let rp_id = self.collector.get_rp_id(options.rp.id.as_deref())?;
         self.collector.verify_rp_id(&rp_id)?;
 
-        let (client_data, _) =
-            self.collector.collect_create(&options.challenge, Some(&rp_id))?;
+        let (client_data, _) = self
+            .collector
+            .collect_create(&options.challenge, Some(&rp_id))?;
         let client_data_hash = client_data.hash();
 
         let (attestation, extension_outputs) =
@@ -1205,8 +1185,9 @@ impl<'a> Fido2Client<'a> {
         let rp_id = self.collector.get_rp_id(options.rp_id.as_deref())?;
         self.collector.verify_rp_id(&rp_id)?;
 
-        let (client_data, _) =
-            self.collector.collect_get(&options.challenge, Some(&rp_id))?;
+        let (client_data, _) = self
+            .collector
+            .collect_get(&options.challenge, Some(&rp_id))?;
         let client_data_hash = client_data.hash();
 
         let (assertions, extension_outputs) =
@@ -1278,8 +1259,9 @@ mod tests {
     #[test]
     fn test_collect_bad_rp_id() {
         let c = ClientDataCollector::new("https://example.com");
-        assert!(c
-            .collect_create(b"challenge_here__", Some("evil.com"))
-            .is_err());
+        assert!(
+            c.collect_create(b"challenge_here__", Some("evil.com"))
+                .is_err()
+        );
     }
 }

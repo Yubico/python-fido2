@@ -27,8 +27,8 @@
 
 //! Utility functions for cryptography and encoding.
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
@@ -41,8 +41,7 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 
 /// Compute HMAC-SHA256.
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
-    let mut mac =
-        Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
     mac.update(data);
     mac.finalize().into_bytes().into()
 }
@@ -84,6 +83,7 @@ pub fn bytes_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// AES-256-GCM encrypt.
 /// Returns nonce (12 bytes) + ciphertext + tag.
+#[allow(deprecated)]
 pub fn aes_gcm_encrypt(
     key: &[u8],
     nonce: &[u8],
@@ -102,12 +102,18 @@ pub fn aes_gcm_encrypt(
 
     let cipher = Aes256Gcm::new(key.into());
     let nonce = Nonce::from_slice(nonce);
-    let payload = aes_gcm::aead::Payload { msg: plaintext, aad };
+    let payload = aes_gcm::aead::Payload {
+        msg: plaintext,
+        aad,
+    };
 
-    cipher.encrypt(nonce, payload).map_err(|_| "Encryption failed")
+    cipher
+        .encrypt(nonce, payload)
+        .map_err(|_| "Encryption failed")
 }
 
 /// AES-256-GCM decrypt.
+#[allow(deprecated)]
 pub fn aes_gcm_decrypt(
     key: &[u8],
     nonce: &[u8],
@@ -131,7 +137,9 @@ pub fn aes_gcm_decrypt(
         aad,
     };
 
-    cipher.decrypt(nonce, payload).map_err(|_| "Decryption failed")
+    cipher
+        .decrypt(nonce, payload)
+        .map_err(|_| "Decryption failed")
 }
 
 #[cfg(test)]
@@ -141,11 +149,7 @@ mod tests {
     #[test]
     fn test_sha256() {
         let hash = sha256(b"hello");
-        assert_eq!(
-            &hash[..4],
-            &[0x2c, 0xf2, 0x4d, 0xba],
-            "SHA-256 of 'hello'"
-        );
+        assert_eq!(&hash[..4], &[0x2c, 0xf2, 0x4d, 0xba], "SHA-256 of 'hello'");
     }
 
     #[test]

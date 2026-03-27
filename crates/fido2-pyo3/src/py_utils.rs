@@ -48,10 +48,7 @@ fn websafe_encode(data: &[u8]) -> String {
 }
 
 #[pyfunction]
-fn websafe_decode<'py>(
-    py: Python<'py>,
-    data: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyBytes>> {
+fn websafe_decode<'py>(py: Python<'py>, data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyBytes>> {
     let s: String = if data.is_instance_of::<PyString>() {
         data.extract()?
     } else {
@@ -60,8 +57,7 @@ fn websafe_decode<'py>(
         String::from_utf8(bytes)
             .map_err(|e| PyValueError::new_err(format!("Invalid ASCII: {e}")))?
     };
-    let decoded =
-        utils::websafe_decode(&s).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let decoded = utils::websafe_decode(&s).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(PyBytes::new(py, &decoded))
 }
 
@@ -78,8 +74,8 @@ fn aes_gcm_encrypt<'py>(
     plaintext: &[u8],
     aad: &[u8],
 ) -> PyResult<Bound<'py, PyBytes>> {
-    let result = utils::aes_gcm_encrypt(key, nonce, plaintext, aad)
-        .map_err(|e| PyValueError::new_err(e))?;
+    let result =
+        utils::aes_gcm_encrypt(key, nonce, plaintext, aad).map_err(PyValueError::new_err)?;
     Ok(PyBytes::new(py, &result))
 }
 
@@ -91,8 +87,8 @@ fn aes_gcm_decrypt<'py>(
     ciphertext: &[u8],
     aad: &[u8],
 ) -> PyResult<Bound<'py, PyBytes>> {
-    let result = utils::aes_gcm_decrypt(key, nonce, ciphertext, aad)
-        .map_err(|e| PyValueError::new_err(e))?;
+    let result =
+        utils::aes_gcm_decrypt(key, nonce, ciphertext, aad).map_err(PyValueError::new_err)?;
     Ok(PyBytes::new(py, &result))
 }
 

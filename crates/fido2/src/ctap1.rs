@@ -27,7 +27,7 @@
 
 //! CTAP1/U2F protocol implementation.
 
-use crate::ctap::{apdu, cmd, ApduError, CtapDevice};
+use crate::ctap::{ApduError, CtapDevice, apdu, cmd};
 
 /// CTAP1 instruction codes.
 pub mod ins {

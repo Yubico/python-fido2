@@ -220,21 +220,18 @@ fn prepare_salts(
         let mut secrets = prf.get("eval");
 
         // Handle evalByCredential
-        if let Some(by_creds) = prf.get("evalByCredential") {
-            if let Some(by_creds_obj) = by_creds.as_object() {
-                if allow_list.is_none() && !by_creds_obj.is_empty() {
-                    return None; // evalByCredentials requires allowCredentials
-                }
-                if let Some(selected_val) = selected {
-                    // Get the credential ID from selected and look up in evalByCredential
-                    if let Some(cred_id) = selected_val
-                        .map_get_text("id")
-                        .and_then(|v| v.as_bytes())
-                    {
-                        let key = crate::utils::websafe_encode(cred_id);
-                        if let Some(per_cred) = by_creds_obj.get(&key) {
-                            secrets = Some(per_cred);
-                        }
+        if let Some(by_creds) = prf.get("evalByCredential")
+            && let Some(by_creds_obj) = by_creds.as_object()
+        {
+            if allow_list.is_none() && !by_creds_obj.is_empty() {
+                return None; // evalByCredentials requires allowCredentials
+            }
+            if let Some(selected_val) = selected {
+                // Get the credential ID from selected and look up in evalByCredential
+                if let Some(cred_id) = selected_val.map_get_text("id").and_then(|v| v.as_bytes()) {
+                    let key = crate::utils::websafe_encode(cred_id);
+                    if let Some(per_cred) = by_creds_obj.get(&key) {
+                        secrets = Some(per_cred);
                     }
                 }
             }
@@ -286,26 +283,14 @@ fn format_hmac_outputs(
     if is_prf {
         let mut result = Vec::new();
         if enabled == Some(true) {
-            result.push((
-                Value::Text("enabled".into()),
-                Value::Bool(true),
-            ));
+            result.push((Value::Text("enabled".into()), Value::Bool(true)));
         }
         if let Some(o1) = output1 {
-            let mut results_map = vec![(
-                Value::Text("first".into()),
-                Value::Bytes(o1.to_vec()),
-            )];
+            let mut results_map = vec![(Value::Text("first".into()), Value::Bytes(o1.to_vec()))];
             if let Some(o2) = output2 {
-                results_map.push((
-                    Value::Text("second".into()),
-                    Value::Bytes(o2.to_vec()),
-                ));
+                results_map.push((Value::Text("second".into()), Value::Bytes(o2.to_vec())));
             }
-            result.push((
-                Value::Text("results".into()),
-                Value::Map(results_map),
-            ));
+            result.push((Value::Text("results".into()), Value::Map(results_map)));
         }
         if !result.is_empty() {
             outputs.insert("prf".into(), Value::Map(result));
@@ -315,15 +300,9 @@ fn format_hmac_outputs(
             outputs.insert("hmacCreateSecret".into(), Value::Bool(en));
         }
         if let Some(o1) = output1 {
-            let mut secret_map = vec![(
-                Value::Text("output1".into()),
-                Value::Bytes(o1.to_vec()),
-            )];
+            let mut secret_map = vec![(Value::Text("output1".into()), Value::Bytes(o1.to_vec()))];
             if let Some(o2) = output2 {
-                secret_map.push((
-                    Value::Text("output2".into()),
-                    Value::Bytes(o2.to_vec()),
-                ));
+                secret_map.push((Value::Text("output2".into()), Value::Bytes(o2.to_vec())));
             }
             outputs.insert("hmacGetSecret".into(), Value::Map(secret_map));
         }
@@ -360,11 +339,12 @@ impl Ctap2Extension for HmacSecretExtension {
     ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
         let ext = extensions?;
         let is_prf = ext.get("prf").is_some();
-        let is_hmac = self.allow_hmac_secret && ext.get("hmacCreateSecret") == Some(&serde_json::Value::Bool(true));
+        let is_hmac = self.allow_hmac_secret
+            && ext.get("hmacCreateSecret") == Some(&serde_json::Value::Bool(true));
         let pin_protocol = pin_protocol?;
         let info = ctap.info();
 
-        if !self.is_supported(&info) || (!is_prf && !is_hmac) {
+        if !self.is_supported(info) || (!is_prf && !is_hmac) {
             return None;
         }
 
@@ -383,8 +363,7 @@ impl Ctap2Extension for HmacSecretExtension {
             };
 
             if let Some(salts) = prepare_salts(prf_input, hmac_input, None, None, is_prf) {
-                let client_pin =
-                    ClientPin::new(ctap, Some(pin_protocol)).ok()?;
+                let client_pin = ClientPin::new(ctap, Some(pin_protocol)).ok()?;
                 let (key_agreement, ss) = client_pin._get_shared_secret().ok()?;
 
                 let mut salt_data = salts.0;
@@ -434,9 +413,7 @@ impl Ctap2Extension for HmacSecretExtension {
                     .and_then(|e| e.map_get_text(HMAC_SECRET_MC_NAME))
                     .and_then(|v| v.as_bytes());
                 let decrypted = match (mc_value, &self.shared_secret) {
-                    (Some(value), Some(ss)) => {
-                        self.pin_protocol.decrypt(ss, value).ok()
-                    }
+                    (Some(value), Some(ss)) => self.pin_protocol.decrypt(ss, value).ok(),
                     _ => None,
                 };
                 format_hmac_outputs(enabled, decrypted, self.is_prf)
@@ -502,7 +479,10 @@ impl Ctap2Extension for HmacSecretExtension {
 
                 let mut salt_data = salts.0;
                 salt_data.extend_from_slice(&salts.1);
-                let salt_enc = self.pin_protocol.encrypt(&self.shared_secret, &salt_data).ok()?;
+                let salt_enc = self
+                    .pin_protocol
+                    .encrypt(&self.shared_secret, &salt_data)
+                    .ok()?;
                 let salt_auth = self
                     .pin_protocol
                     .authenticate(&self.shared_secret, &salt_enc);
@@ -514,7 +494,10 @@ impl Ctap2Extension for HmacSecretExtension {
                         (Value::Int(1), self.key_agreement.to_value()),
                         (Value::Int(2), Value::Bytes(salt_enc)),
                         (Value::Int(3), Value::Bytes(salt_auth)),
-                        (Value::Int(4), Value::Int(self.pin_protocol.version() as i64)),
+                        (
+                            Value::Int(4),
+                            Value::Int(self.pin_protocol.version() as i64),
+                        ),
                     ]),
                 );
                 Some(inputs)
@@ -531,10 +514,7 @@ impl Ctap2Extension for HmacSecretExtension {
                     .as_ref()
                     .and_then(|e| e.map_get_text(HMAC_SECRET_NAME))
                     .and_then(|v| v.as_bytes())?;
-                let decrypted = self
-                    .pin_protocol
-                    .decrypt(&self.shared_secret, value)
-                    .ok()?;
+                let decrypted = self.pin_protocol.decrypt(&self.shared_secret, value).ok()?;
                 format_hmac_outputs(None, Some(decrypted), self.is_prf)
             }
         }
@@ -680,10 +660,7 @@ impl Ctap2Extension for LargeBlobExtension {
                     let blob = large_blobs.get_blob(blob_key).ok()?;
                     outputs.insert(
                         "largeBlob".into(),
-                        Value::Map(vec![(
-                            Value::Text("blob".into()),
-                            Value::Bytes(blob?),
-                        )]),
+                        Value::Map(vec![(Value::Text("blob".into()), Value::Bytes(blob?))]),
                     );
                 } else if let Some(ref data) = self.write_data {
                     // Need pin_token for writing
@@ -700,15 +677,11 @@ impl Ctap2Extension for LargeBlobExtension {
                     } else {
                         None
                     };
-                    let large_blobs =
-                        LargeBlobs::new(ctap, protocol.as_ref(), pin_token).ok()?;
+                    let large_blobs = LargeBlobs::new(ctap, protocol.as_ref(), pin_token).ok()?;
                     large_blobs.put_blob(blob_key, Some(data)).ok()?;
                     outputs.insert(
                         "largeBlob".into(),
-                        Value::Map(vec![(
-                            Value::Text("written".into()),
-                            Value::Bool(true),
-                        )]),
+                        Value::Map(vec![(Value::Text("written".into()), Value::Bool(true))]),
                     );
                 }
 
@@ -780,7 +753,10 @@ impl Ctap2Extension for CredBlobExtension {
 
         let mut inputs = ExtensionInputs::new();
         inputs.insert("credBlob".into(), Value::Bool(true));
-        Some(Box::new(SimpleAuthenticationProcessor { perms: 0, inputs: Some(inputs) }))
+        Some(Box::new(SimpleAuthenticationProcessor {
+            perms: 0,
+            inputs: Some(inputs),
+        }))
     }
 }
 

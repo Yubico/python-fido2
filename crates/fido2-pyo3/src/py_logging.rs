@@ -50,11 +50,11 @@ thread_local! {
 static PYTHON_THREAD_ID: AtomicU64 = AtomicU64::new(0);
 
 fn current_thread_id() -> u64 {
-    thread_local! { static ID: Cell<u64> = Cell::new(0); }
+    thread_local! { static ID: Cell<u64> = const { Cell::new(0) }; }
     ID.with(|id| {
         let v = id.get();
         if v == 0 {
-            let new_id = &*id as *const _ as u64;
+            let new_id = id as *const _ as u64;
             id.set(new_id);
             new_id
         } else {
@@ -85,8 +85,8 @@ impl Log for PyLogger {
             return;
         }
 
-        let is_traffic = record.level() == Level::Trace
-            && record.target().starts_with(TRAFFIC_TARGET_PREFIX);
+        let is_traffic =
+            record.level() == Level::Trace && record.target().starts_with(TRAFFIC_TARGET_PREFIX);
 
         let py_level = if is_traffic {
             PY_LOG_TRAFFIC

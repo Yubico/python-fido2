@@ -53,7 +53,12 @@ fn main() {
             Err(_) => continue,
         };
         let interaction = common::CliInteraction::new();
-        let client = match Fido2Client::new(&c, "https://example.com", &interaction, default_extensions(false)) {
+        let client = match Fido2Client::new(
+            &c,
+            "https://example.com",
+            &interaction,
+            default_extensions(false),
+        ) {
             Ok(cl) => cl,
             Err(_) => continue,
         };
@@ -69,8 +74,13 @@ fn main() {
     }
     let conn = conn.expect("No FIDO device with hmac-secret support found!");
     let interaction = common::CliInteraction::new();
-    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions(false))
-        .expect("Failed to create client");
+    let client = Fido2Client::new(
+        &conn,
+        "https://example.com",
+        &interaction,
+        default_extensions(false),
+    )
+    .expect("Failed to create client");
 
     // ---- Registration with prf ----
     let create_options = PublicKeyCredentialCreationOptions {
@@ -153,12 +163,11 @@ fn main() {
         .expect("Authentication failed");
     let ext_outputs = &result.extension_outputs[0];
 
-    if let Some(prf) = ext_outputs.get("prf") {
-        if let Some(results) = prf.map_get_text("results") {
-            if let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes()) {
-                println!("PRF output (first): {}", fido2::logging::hex_encode(first));
-            }
-        }
+    if let Some(prf) = ext_outputs.get("prf")
+        && let Some(results) = prf.map_get_text("results")
+        && let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes())
+    {
+        println!("PRF output (first): {}", fido2::logging::hex_encode(first));
     }
 
     // ---- Evaluate PRF with two salts ----
@@ -190,14 +199,17 @@ fn main() {
         .expect("Authentication failed");
     let ext_outputs = &result.extension_outputs[0];
 
-    if let Some(prf) = ext_outputs.get("prf") {
-        if let Some(results) = prf.map_get_text("results") {
-            if let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes()) {
-                println!("PRF output (first):  {}", fido2::logging::hex_encode(first));
-            }
-            if let Some(second) = results.map_get_text("second").and_then(|v| v.as_bytes()) {
-                println!("PRF output (second): {}", fido2::logging::hex_encode(second));
-            }
+    if let Some(prf) = ext_outputs.get("prf")
+        && let Some(results) = prf.map_get_text("results")
+    {
+        if let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes()) {
+            println!("PRF output (first):  {}", fido2::logging::hex_encode(first));
+        }
+        if let Some(second) = results.map_get_text("second").and_then(|v| v.as_bytes()) {
+            println!(
+                "PRF output (second): {}",
+                fido2::logging::hex_encode(second)
+            );
         }
     }
 }

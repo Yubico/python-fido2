@@ -235,8 +235,7 @@ impl CtapHidConnection {
             return Err(CtapHidTransportError::WrongNonce);
         }
 
-        let channel_id =
-            u32::from_be_bytes([response[8], response[9], response[10], response[11]]);
+        let channel_id = u32::from_be_bytes([response[8], response[9], response[10], response[11]]);
         let _u2fhid_version = response[12];
         let v1 = response[13];
         let v2 = response[14];

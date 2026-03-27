@@ -37,16 +37,12 @@ fn pin_err(e: pin::PinError) -> PyErr {
 /// Perform ECDH P-256 key agreement with a peer's public key.
 /// Returns (public_key_x, public_key_y, shared_secret) as bytes.
 #[pyfunction]
-fn ecdh_p256<'py>(
-    py: Python<'py>,
-    peer_x: &[u8],
-    peer_y: &[u8],
-) -> PyResult<Bound<'py, PyTuple>> {
+fn ecdh_p256<'py>(py: Python<'py>, peer_x: &[u8], peer_y: &[u8]) -> PyResult<Bound<'py, PyTuple>> {
     let result = pin::ecdh_p256(peer_x, peer_y).map_err(pin_err)?;
     let x = PyBytes::new(py, &result.public_key_x);
     let y = PyBytes::new(py, &result.public_key_y);
     let secret = PyBytes::new(py, &result.shared_secret);
-    Ok(PyTuple::new(py, [x.into_any(), y.into_any(), secret.into_any()])?)
+    PyTuple::new(py, [x.into_any(), y.into_any(), secret.into_any()])
 }
 
 /// General AES-CBC decrypt with a provided IV.
@@ -175,7 +171,7 @@ impl NativePinProtocol {
         ka_dict.set_item(-3i32, PyBytes::new(py, &ka.y))?;
 
         let shared_bytes = PyBytes::new(py, &shared);
-        Ok(PyTuple::new(py, [ka_dict.into_any(), shared_bytes.into_any()])?)
+        PyTuple::new(py, [ka_dict.into_any(), shared_bytes.into_any()])
     }
 
     fn encrypt<'py>(
@@ -208,11 +204,7 @@ impl NativePinProtocol {
         PyBytes::new(py, &result)
     }
 
-    fn validate_token<'py>(
-        &self,
-        py: Python<'py>,
-        token: &[u8],
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    fn validate_token<'py>(&self, py: Python<'py>, token: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
         let result = self.protocol.validate_token(token).map_err(pin_err)?;
         Ok(PyBytes::new(py, &result))
     }

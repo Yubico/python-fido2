@@ -78,13 +78,9 @@ pub fn ecdh_p256(peer_x: &[u8], peer_y: &[u8]) -> Result<EcdhResult, PinError> {
     use p256::{EncodedPoint, PublicKey};
 
     // Build peer's public key from x,y coordinates
-    let peer_point = EncodedPoint::from_affine_coordinates(
-        peer_x.into(),
-        peer_y.into(),
-        false,
-    );
-    let peer_pk = PublicKey::from_sec1_bytes(peer_point.as_bytes())
-        .map_err(|_| PinError::InvalidKeyData)?;
+    let peer_point = EncodedPoint::from_affine_coordinates(peer_x.into(), peer_y.into(), false);
+    let peer_pk =
+        PublicKey::from_sec1_bytes(peer_point.as_bytes()).map_err(|_| PinError::InvalidKeyData)?;
 
     // Generate ephemeral keypair and compute shared secret
     let secret = EphemeralSecret::random(&mut p256::elliptic_curve::rand_core::OsRng);
@@ -127,13 +123,11 @@ pub fn aes_cbc_encrypt_v1(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, PinEr
     match key.len() {
         16 => {
             let enc = Aes128CbcEnc::new(key.into(), &iv.into());
-            Ok(enc
-                .encrypt_padded_vec_mut::<cbc::cipher::block_padding::NoPadding>(plaintext))
+            Ok(enc.encrypt_padded_vec_mut::<cbc::cipher::block_padding::NoPadding>(plaintext))
         }
         32 => {
             let enc = Aes256CbcEnc::new(key.into(), &iv.into());
-            Ok(enc
-                .encrypt_padded_vec_mut::<cbc::cipher::block_padding::NoPadding>(plaintext))
+            Ok(enc.encrypt_padded_vec_mut::<cbc::cipher::block_padding::NoPadding>(plaintext))
         }
         _ => Err(PinError::EncryptionError),
     }
@@ -167,8 +161,7 @@ pub fn aes_cbc_encrypt_v2(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, PinEr
     getrandom::fill(&mut iv).map_err(|_| PinError::EncryptionError)?;
 
     let enc = Aes256CbcEnc::new(key.into(), &iv.into());
-    let ciphertext =
-        enc.encrypt_padded_vec_mut::<cbc::cipher::block_padding::NoPadding>(plaintext);
+    let ciphertext = enc.encrypt_padded_vec_mut::<cbc::cipher::block_padding::NoPadding>(plaintext);
 
     let mut result = Vec::with_capacity(16 + ciphertext.len());
     result.extend_from_slice(&iv);
@@ -374,9 +367,7 @@ fn pad_pin(pin: &str) -> Result<Vec<u8>, PinError> {
         padded.resize(padded.len() + 16 - remainder, 0);
     }
     if padded.len() > 255 {
-        return Err(PinError::InvalidPin(
-            "PIN must be <= 255 bytes".to_string(),
-        ));
+        return Err(PinError::InvalidPin("PIN must be <= 255 bytes".to_string()));
     }
     Ok(padded)
 }
@@ -435,20 +426,19 @@ impl<'a> ClientPin<'a> {
             _ => {
                 return Err(CtapError::InvalidResponse(
                     "Expected map response".to_string(),
-                ))
+                ));
             }
         };
 
-        let ka = cbor_map_get(map, client_pin_result::KEY_AGREEMENT).ok_or_else(|| {
-            CtapError::InvalidResponse("Missing key agreement".to_string())
-        })?;
+        let ka = cbor_map_get(map, client_pin_result::KEY_AGREEMENT)
+            .ok_or_else(|| CtapError::InvalidResponse("Missing key agreement".to_string()))?;
 
         let ka_map = match ka {
             Value::Map(m) => m,
             _ => {
                 return Err(CtapError::InvalidResponse(
                     "Key agreement is not a map".to_string(),
-                ))
+                ));
             }
         };
 
@@ -498,7 +488,7 @@ impl<'a> ClientPin<'a> {
             _ => {
                 return Err(CtapError::InvalidResponse(
                     "Expected map response".to_string(),
-                ))
+                ));
             }
         };
 
@@ -537,7 +527,7 @@ impl<'a> ClientPin<'a> {
             _ => {
                 return Err(CtapError::InvalidResponse(
                     "Expected map response".to_string(),
-                ))
+                ));
             }
         };
 
@@ -569,7 +559,7 @@ impl<'a> ClientPin<'a> {
             _ => {
                 return Err(CtapError::InvalidResponse(
                     "Expected map response".to_string(),
-                ))
+                ));
             }
         };
 
@@ -604,7 +594,7 @@ impl<'a> ClientPin<'a> {
             _ => {
                 return Err(CtapError::InvalidResponse(
                     "Expected map response".to_string(),
-                ))
+                ));
             }
         };
 
@@ -746,11 +736,7 @@ mod tests {
         let peer_pk = peer_secret.public_key();
         let peer_point = peer_pk.to_encoded_point(false);
 
-        let result = ecdh_p256(
-            peer_point.x().unwrap(),
-            peer_point.y().unwrap(),
-        )
-        .unwrap();
+        let result = ecdh_p256(peer_point.x().unwrap(), peer_point.y().unwrap()).unwrap();
 
         assert_eq!(result.public_key_x.len(), 32);
         assert_eq!(result.public_key_y.len(), 32);

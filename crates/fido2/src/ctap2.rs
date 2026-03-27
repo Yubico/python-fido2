@@ -33,7 +33,7 @@
 use std::collections::BTreeMap;
 
 use crate::cbor::{self, Value};
-use crate::ctap::{capability, cmd, CtapDevice, CtapError, CtapStatus};
+use crate::ctap::{CtapDevice, CtapError, CtapStatus, capability, cmd};
 use crate::webauthn::{Aaguid, AuthenticatorData, WebauthnError};
 
 /// CTAP2 command codes.
@@ -113,7 +113,10 @@ impl Info {
         };
 
         let get_uint = |key: i64, default: u64| -> u64 {
-            get(key).and_then(|v| v.as_int()).map(|n| n as u64).unwrap_or(default)
+            get(key)
+                .and_then(|v| v.as_int())
+                .map(|n| n as u64)
+                .unwrap_or(default)
         };
 
         let get_bool = |key: i64, default: bool| -> bool {
@@ -451,11 +454,7 @@ impl<'a> Ctap2<'a> {
 
     /// Create from parts without calling GET_INFO.
     /// Used when info is already cached (e.g., from PyO3 wrapper).
-    pub fn from_parts(
-        device: &'a dyn CtapDevice,
-        strict_cbor: bool,
-        max_msg_size: usize,
-    ) -> Self {
+    pub fn from_parts(device: &'a dyn CtapDevice, strict_cbor: bool, max_msg_size: usize) -> Self {
         Self {
             device,
             strict_cbor,
@@ -536,6 +535,7 @@ impl<'a> Ctap2<'a> {
     }
 
     /// clientPin command.
+    #[allow(clippy::too_many_arguments)]
     pub fn client_pin(
         &self,
         pin_uv_protocol: u32,
@@ -698,12 +698,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
     ) -> Result<Value, CtapError> {
-        let data = args_map(&[
-            Some(sub_cmd),
-            sub_cmd_params,
-            pin_uv_protocol,
-            pin_uv_param,
-        ]);
+        let data = args_map(&[Some(sub_cmd), sub_cmd_params, pin_uv_protocol, pin_uv_param]);
         self.send_cbor(cmd_byte, Some(&data), on_keepalive)
     }
 
@@ -766,12 +761,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
     ) -> Result<Value, CtapError> {
-        let data = args_map(&[
-            Some(sub_cmd),
-            sub_cmd_params,
-            pin_uv_protocol,
-            pin_uv_param,
-        ]);
+        let data = args_map(&[Some(sub_cmd), sub_cmd_params, pin_uv_protocol, pin_uv_param]);
         self.send_cbor(ctap2_cmd::CONFIG, Some(&data), on_keepalive)
     }
 }

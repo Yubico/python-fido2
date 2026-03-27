@@ -36,12 +36,12 @@ use std::sync::LazyLock;
 use crate::cose::{Algorithm, CoseKey};
 use crate::utils::{bytes_eq, sha256, websafe_encode};
 use crate::webauthn::{
-    AttestationConveyancePreference, AttestationObject, AuthenticatorAttachment,
-    AuthenticatorData, AuthenticatorDataFlags, AuthenticatorSelectionCriteria,
-    CollectedClientData, PublicKeyCredentialCreationOptions, PublicKeyCredentialDescriptor,
-    PublicKeyCredentialParameters, PublicKeyCredentialRequestOptions,
-    PublicKeyCredentialRpEntity, PublicKeyCredentialType, PublicKeyCredentialUserEntity,
-    ResidentKeyRequirement, UserVerificationRequirement,
+    AttestationConveyancePreference, AttestationObject, AuthenticatorAttachment, AuthenticatorData,
+    AuthenticatorDataFlags, AuthenticatorSelectionCriteria, CollectedClientData,
+    PublicKeyCredentialCreationOptions, PublicKeyCredentialDescriptor,
+    PublicKeyCredentialParameters, PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity,
+    PublicKeyCredentialType, PublicKeyCredentialUserEntity, ResidentKeyRequirement,
+    UserVerificationRequirement,
 };
 
 // --- Error type ---
@@ -107,10 +107,10 @@ fn is_public_suffix(domain: &str) -> bool {
     if psl.suffixes.contains(domain) {
         return true;
     }
-    if let Some((_label, parent)) = domain.split_once('.') {
-        if psl.wildcards.contains(parent) {
-            return true;
-        }
+    if let Some((_label, parent)) = domain.split_once('.')
+        && psl.wildcards.contains(parent)
+    {
+        return true;
     }
     false
 }
@@ -350,6 +350,7 @@ impl Fido2Server {
     ///
     /// Returns the options to send to the client and the server state to
     /// pass to [`register_complete`](Self::register_complete).
+    #[allow(clippy::too_many_arguments)]
     pub fn register_begin(
         &self,
         user: PublicKeyCredentialUserEntity,
@@ -372,20 +373,19 @@ impl Fido2Server {
             user_verification: user_verification.clone(),
         };
 
-        let authenticator_selection =
-            if authenticator_attachment.is_some()
-                || resident_key.is_some()
-                || user_verification.is_some()
-            {
-                Some(AuthenticatorSelectionCriteria {
-                    authenticator_attachment,
-                    resident_key,
-                    user_verification: user_verification.clone(),
-                    require_resident_key: None,
-                })
-            } else {
-                None
-            };
+        let authenticator_selection = if authenticator_attachment.is_some()
+            || resident_key.is_some()
+            || user_verification.is_some()
+        {
+            Some(AuthenticatorSelectionCriteria {
+                authenticator_attachment,
+                resident_key,
+                user_verification: user_verification.clone(),
+                require_resident_key: None,
+            })
+        } else {
+            None
+        };
 
         let options = PublicKeyCredentialCreationOptions {
             rp: self.rp.clone(),
@@ -498,9 +498,9 @@ impl Fido2Server {
             if cred_id == credential_id {
                 let mut signed_data = auth_data.as_bytes().to_vec();
                 signed_data.extend_from_slice(&client_data.hash());
-                public_key.verify(&signed_data, signature).map_err(|_| {
-                    ServerError::Verification("Invalid signature.".into())
-                })?;
+                public_key
+                    .verify(&signed_data, signature)
+                    .map_err(|_| ServerError::Verification("Invalid signature.".into()))?;
                 return Ok(i);
             }
         }

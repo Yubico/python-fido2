@@ -152,8 +152,7 @@ impl CoseKey {
 
     /// Get the algorithm identifier.
     pub fn algorithm(&self) -> Result<i64, CoseError> {
-        self.get_int(params::ALG)
-            .ok_or(CoseError::MissingAlgorithm)
+        self.get_int(params::ALG).ok_or(CoseError::MissingAlgorithm)
     }
 
     /// Get a parameter value.
@@ -185,15 +184,9 @@ impl CoseKey {
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), CoseError> {
         let alg = self.algorithm()?;
         match Algorithm::from_i64(alg) {
-            Some(Algorithm::ES256 | Algorithm::ESP256) => {
-                self.verify_p256(signature, message)
-            }
-            Some(Algorithm::ES384 | Algorithm::ESP384) => {
-                self.verify_p384(signature, message)
-            }
-            Some(Algorithm::ES512 | Algorithm::ESP512) => {
-                self.verify_p521(signature, message)
-            }
+            Some(Algorithm::ES256 | Algorithm::ESP256) => self.verify_p256(signature, message),
+            Some(Algorithm::ES384 | Algorithm::ESP384) => self.verify_p384(signature, message),
+            Some(Algorithm::ES512 | Algorithm::ESP512) => self.verify_p521(signature, message),
             Some(Algorithm::ES256K) => self.verify_k256(signature, message),
             Some(Algorithm::EdDSA | Algorithm::Ed25519Alg) => {
                 self.verify_ed25519(signature, message)
@@ -245,12 +238,11 @@ impl CoseKey {
     }
 
     fn verify_p256(&self, signature: &[u8], message: &[u8]) -> Result<(), CoseError> {
-        use p256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+        use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 
         self.require_curve(Curve::P256 as i64)?;
         let sec1 = self.ec_sec1_uncompressed()?;
-        let vk =
-            VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
+        let vk = VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
         let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
@@ -259,12 +251,11 @@ impl CoseKey {
     }
 
     fn verify_p384(&self, signature: &[u8], message: &[u8]) -> Result<(), CoseError> {
-        use p384::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+        use p384::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 
         self.require_curve(Curve::P384 as i64)?;
         let sec1 = self.ec_sec1_uncompressed()?;
-        let vk =
-            VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
+        let vk = VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
         let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
@@ -273,12 +264,11 @@ impl CoseKey {
     }
 
     fn verify_p521(&self, signature: &[u8], message: &[u8]) -> Result<(), CoseError> {
-        use p521::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+        use p521::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 
         self.require_curve(Curve::P521 as i64)?;
         let sec1 = self.ec_sec1_uncompressed()?;
-        let vk =
-            VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
+        let vk = VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
         let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
@@ -287,12 +277,11 @@ impl CoseKey {
     }
 
     fn verify_k256(&self, signature: &[u8], message: &[u8]) -> Result<(), CoseError> {
-        use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+        use k256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 
         self.require_curve(Curve::Secp256k1 as i64)?;
         let sec1 = self.ec_sec1_uncompressed()?;
-        let vk =
-            VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
+        let vk = VerifyingKey::from_sec1_bytes(&sec1).map_err(|_| CoseError::InvalidKeyData)?;
         let sig = Signature::from_slice(signature)
             .or_else(|_| Signature::from_der(signature))
             .map_err(|_| CoseError::VerificationFailed)?;
@@ -300,11 +289,7 @@ impl CoseKey {
             .map_err(|_| CoseError::VerificationFailed)
     }
 
-    fn verify_ed25519(
-        &self,
-        signature: &[u8],
-        message: &[u8],
-    ) -> Result<(), CoseError> {
+    fn verify_ed25519(&self, signature: &[u8], message: &[u8]) -> Result<(), CoseError> {
         use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
         self.require_curve(Curve::Ed25519 as i64)?;
@@ -313,8 +298,7 @@ impl CoseKey {
         let key_bytes: [u8; 32] = pub_bytes
             .try_into()
             .map_err(|_| CoseError::InvalidKeyData)?;
-        let vk = VerifyingKey::from_bytes(&key_bytes)
-            .map_err(|_| CoseError::InvalidKeyData)?;
+        let vk = VerifyingKey::from_bytes(&key_bytes).map_err(|_| CoseError::InvalidKeyData)?;
 
         let sig_bytes: [u8; 64] = signature
             .try_into()
@@ -325,11 +309,7 @@ impl CoseKey {
             .map_err(|_| CoseError::VerificationFailed)
     }
 
-    fn verify_rsa_pkcs1v15<D>(
-        &self,
-        signature: &[u8],
-        message: &[u8],
-    ) -> Result<(), CoseError>
+    fn verify_rsa_pkcs1v15<D>(&self, signature: &[u8], message: &[u8]) -> Result<(), CoseError>
     where
         D: digest::Digest + digest::const_oid::AssociatedOid,
         rsa::pkcs1v15::VerifyingKey<D>: rsa::signature::Verifier<rsa::pkcs1v15::Signature>,
@@ -344,11 +324,7 @@ impl CoseKey {
             .map_err(|_| CoseError::VerificationFailed)
     }
 
-    fn verify_rsa_pss<D>(
-        &self,
-        signature: &[u8],
-        message: &[u8],
-    ) -> Result<(), CoseError>
+    fn verify_rsa_pss<D>(&self, signature: &[u8], message: &[u8]) -> Result<(), CoseError>
     where
         D: digest::Digest + digest::FixedOutputReset,
         rsa::pss::VerifyingKey<D>: rsa::signature::Verifier<rsa::pss::Signature>,
@@ -357,8 +333,8 @@ impl CoseKey {
 
         let key = self.build_rsa_public_key()?;
         let vk = rsa::pss::VerifyingKey::<D>::new(key);
-        let sig = rsa::pss::Signature::try_from(signature)
-            .map_err(|_| CoseError::VerificationFailed)?;
+        let sig =
+            rsa::pss::Signature::try_from(signature).map_err(|_| CoseError::VerificationFailed)?;
         vk.verify(message, &sig)
             .map_err(|_| CoseError::VerificationFailed)
     }
@@ -390,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_es256_sign_verify() {
-        use p256::ecdsa::{signature::Signer, SigningKey};
+        use p256::ecdsa::{SigningKey, signature::Signer};
 
         let signing_key = SigningKey::random(&mut rand_core::OsRng);
         let verifying_key = signing_key.verifying_key();
@@ -429,7 +405,7 @@ mod tests {
 
     #[test]
     fn test_es384_sign_verify() {
-        use p384::ecdsa::{signature::Signer, SigningKey};
+        use p384::ecdsa::{SigningKey, signature::Signer};
 
         let signing_key = SigningKey::random(&mut rand_core::OsRng);
         let verifying_key = signing_key.verifying_key();
@@ -449,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_es512_sign_verify() {
-        use p521::ecdsa::{signature::Signer, SigningKey, VerifyingKey};
+        use p521::ecdsa::{SigningKey, VerifyingKey, signature::Signer};
 
         let signing_key = SigningKey::random(&mut rand_core::OsRng);
         let verifying_key = VerifyingKey::from(&signing_key);
@@ -469,7 +445,7 @@ mod tests {
 
     #[test]
     fn test_es256k_sign_verify() {
-        use k256::ecdsa::{signature::Signer, SigningKey};
+        use k256::ecdsa::{SigningKey, signature::Signer};
 
         let signing_key = SigningKey::random(&mut rand_core::OsRng);
         let verifying_key = signing_key.verifying_key();
@@ -511,7 +487,7 @@ mod tests {
 
     #[test]
     fn test_from_ctap1() {
-        use p256::ecdsa::{signature::Signer, SigningKey};
+        use p256::ecdsa::{SigningKey, signature::Signer};
 
         let signing_key = SigningKey::random(&mut rand_core::OsRng);
         let verifying_key = signing_key.verifying_key();
@@ -550,7 +526,10 @@ mod tests {
         params.insert(params::ALG, cbor::Value::Int(-9999));
         let key = CoseKey::from_map(params);
         let result = key.verify(b"test", b"sig");
-        assert!(matches!(result, Err(CoseError::UnsupportedAlgorithm(-9999))));
+        assert!(matches!(
+            result,
+            Err(CoseError::UnsupportedAlgorithm(-9999))
+        ));
     }
 
     #[test]

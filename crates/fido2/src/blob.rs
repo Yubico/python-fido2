@@ -70,7 +70,12 @@ impl<'a> LargeBlobs<'a> {
         protocol: Option<&'a PinProtocol>,
         pin_uv_token: Option<&'a [u8]>,
     ) -> Self {
-        Self { ctap, max_fragment_length, protocol, pin_uv_token }
+        Self {
+            ctap,
+            max_fragment_length,
+            protocol,
+            pin_uv_token,
+        }
     }
 
     /// Read the entire large blob array.
@@ -158,23 +163,18 @@ impl<'a> LargeBlobs<'a> {
     pub fn get_blob(&self, large_blob_key: &[u8]) -> Result<Option<Vec<u8>>, CtapError> {
         let entries = self.read_blob_array()?;
         for entry in &entries {
-            if let Ok(data) = lb_unpack(large_blob_key, entry) {
-                if let Ok(decompressed) = decompress(&data.0) {
-                    if decompressed.len() == data.1 {
-                        return Ok(Some(decompressed));
-                    }
-                }
+            if let Ok(data) = lb_unpack(large_blob_key, entry)
+                && let Ok(decompressed) = decompress(&data.0)
+                && decompressed.len() == data.1
+            {
+                return Ok(Some(decompressed));
             }
         }
         Ok(None)
     }
 
     /// Store a blob (or delete if data is None).
-    pub fn put_blob(
-        &self,
-        large_blob_key: &[u8],
-        data: Option<&[u8]>,
-    ) -> Result<(), CtapError> {
+    pub fn put_blob(&self, large_blob_key: &[u8], data: Option<&[u8]>) -> Result<(), CtapError> {
         let mut modified = data.is_some();
         let mut entries = Vec::new();
 
@@ -212,12 +212,11 @@ fn lb_ad(orig_size: usize) -> Vec<u8> {
 fn lb_pack(key: &[u8], data: &[u8]) -> Result<Value, CtapError> {
     let orig_size = data.len();
     let mut nonce = [0u8; 12];
-    getrandom::fill(&mut nonce).map_err(|_| {
-        CtapError::InvalidResponse("Failed to generate random nonce".to_string())
-    })?;
+    getrandom::fill(&mut nonce)
+        .map_err(|_| CtapError::InvalidResponse("Failed to generate random nonce".to_string()))?;
 
-    let compressed = compress(data)
-        .map_err(|_| CtapError::InvalidResponse("Compression failed".to_string()))?;
+    let compressed =
+        compress(data).map_err(|_| CtapError::InvalidResponse("Compression failed".to_string()))?;
     let ciphertext = utils::aes_gcm_encrypt(key, &nonce, &compressed, &lb_ad(orig_size))
         .map_err(|e| CtapError::InvalidResponse(e.to_string()))?;
 
@@ -240,19 +239,12 @@ fn lb_unpack(key: &[u8], entry: &Value) -> Result<(Vec<u8>, usize), String> {
             .map(|(_, v)| v)
     };
 
-    let ciphertext = get(1)
-        .and_then(|v| v.as_bytes())
-        .ok_or("Invalid entry")?;
-    let nonce = get(2)
-        .and_then(|v| v.as_bytes())
-        .ok_or("Invalid entry")?;
-    let orig_size = get(3)
-        .and_then(|v| v.as_int())
-        .ok_or("Invalid entry")? as usize;
+    let ciphertext = get(1).and_then(|v| v.as_bytes()).ok_or("Invalid entry")?;
+    let nonce = get(2).and_then(|v| v.as_bytes()).ok_or("Invalid entry")?;
+    let orig_size = get(3).and_then(|v| v.as_int()).ok_or("Invalid entry")? as usize;
 
-    let compressed =
-        utils::aes_gcm_decrypt(key, nonce, ciphertext, &lb_ad(orig_size))
-            .map_err(|_| "Wrong key".to_string())?;
+    let compressed = utils::aes_gcm_decrypt(key, nonce, ciphertext, &lb_ad(orig_size))
+        .map_err(|_| "Wrong key".to_string())?;
 
     Ok((compressed, orig_size))
 }

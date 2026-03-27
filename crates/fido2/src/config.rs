@@ -81,14 +81,14 @@ impl<'a> Config<'a> {
         protocol: Option<&'a PinProtocol>,
         pin_uv_token: Option<&'a [u8]>,
     ) -> Self {
-        Self { ctap, protocol, pin_uv_token }
+        Self {
+            ctap,
+            protocol,
+            pin_uv_token,
+        }
     }
 
-    fn _call(
-        &self,
-        sub_cmd: u32,
-        params: Option<Value>,
-    ) -> Result<Value, CtapError> {
+    fn _call(&self, sub_cmd: u32, params: Option<Value>) -> Result<Value, CtapError> {
         let (pin_uv_protocol, pin_uv_param) =
             if let (Some(protocol), Some(token)) = (self.protocol, self.pin_uv_token) {
                 let mut msg = vec![0xFFu8; 32];

@@ -30,12 +30,12 @@
 use std::collections::BTreeMap;
 
 use rsa::traits::PublicKeyParts;
+use x509_cert::Certificate as X509Cert;
 use x509_cert::der::asn1::ObjectIdentifier;
 use x509_cert::der::{self, Decode, Encode};
-use x509_cert::Certificate as X509Cert;
 
 use crate::cbor;
-use crate::cose::{params, CoseKey};
+use crate::cose::{CoseKey, params};
 
 #[derive(Debug, thiserror::Error)]
 pub enum X509Error {
@@ -129,9 +129,7 @@ impl Certificate {
 
         let point = spki.subject_public_key.raw_bytes();
         if point.is_empty() || point[0] != 0x04 {
-            return Err(X509Error::Invalid(
-                "Expected uncompressed EC point".into(),
-            ));
+            return Err(X509Error::Invalid("Expected uncompressed EC point".into()));
         }
         let coord_len = (point.len() - 1) / 2;
 
@@ -161,14 +159,8 @@ impl Certificate {
         let mut map = BTreeMap::new();
         map.insert(params::KTY, cbor::Value::Int(3));
         map.insert(params::ALG, cbor::Value::Int(alg));
-        map.insert(
-            params::PARAM_1,
-            cbor::Value::Bytes(pk.n().to_bytes_be()),
-        );
-        map.insert(
-            params::PARAM_2,
-            cbor::Value::Bytes(pk.e().to_bytes_be()),
-        );
+        map.insert(params::PARAM_1, cbor::Value::Bytes(pk.n().to_bytes_be()));
+        map.insert(params::PARAM_2, cbor::Value::Bytes(pk.e().to_bytes_be()));
         Ok(CoseKey::from_map(map))
     }
 
@@ -216,8 +208,7 @@ impl Certificate {
     /// Check BasicConstraints CA flag. Returns None if extension missing.
     pub fn basic_constraints_ca(&self) -> Option<bool> {
         let (_, value) = self.extension_value("2.5.29.19")?;
-        let bc =
-            x509_cert::ext::pkix::BasicConstraints::from_der(&value).ok()?;
+        let bc = x509_cert::ext::pkix::BasicConstraints::from_der(&value).ok()?;
         Some(bc.ca)
     }
 
@@ -277,19 +268,16 @@ fn name_get_string(name: &x509_cert::name::Name, oid_str: &str) -> Option<String
     for rdn in name.0.iter() {
         for atv in rdn.0.iter() {
             if atv.oid == target_oid {
-                if let Ok(s) =
-                    atv.value.decode_as::<x509_cert::der::asn1::Utf8StringRef>()
+                if let Ok(s) = atv.value.decode_as::<x509_cert::der::asn1::Utf8StringRef>() {
+                    return Some(s.to_string());
+                }
+                if let Ok(s) = atv
+                    .value
+                    .decode_as::<x509_cert::der::asn1::PrintableStringRef>()
                 {
                     return Some(s.to_string());
                 }
-                if let Ok(s) =
-                    atv.value.decode_as::<x509_cert::der::asn1::PrintableStringRef>()
-                {
-                    return Some(s.to_string());
-                }
-                if let Ok(s) =
-                    atv.value.decode_as::<x509_cert::der::asn1::Ia5StringRef>()
-                {
+                if let Ok(s) = atv.value.decode_as::<x509_cert::der::asn1::Ia5StringRef>() {
                     return Some(s.to_string());
                 }
             }
@@ -367,19 +355,15 @@ fn verify_cert_signature(child: &Certificate, parent: &Certificate) -> Result<()
     )))
 }
 
-fn verify_rsa<D>(
-    pk: &rsa::RsaPublicKey,
-    message: &[u8],
-    signature: &[u8],
-) -> Result<(), X509Error>
+fn verify_rsa<D>(pk: &rsa::RsaPublicKey, message: &[u8], signature: &[u8]) -> Result<(), X509Error>
 where
     D: digest::Digest + digest::const_oid::AssociatedOid,
     rsa::pkcs1v15::VerifyingKey<D>: rsa::signature::Verifier<rsa::pkcs1v15::Signature>,
 {
     use rsa::signature::Verifier;
     let vk = rsa::pkcs1v15::VerifyingKey::<D>::new(pk.clone());
-    let sig = rsa::pkcs1v15::Signature::try_from(signature)
-        .map_err(|_| X509Error::VerificationFailed)?;
+    let sig =
+        rsa::pkcs1v15::Signature::try_from(signature).map_err(|_| X509Error::VerificationFailed)?;
     vk.verify(message, &sig)
         .map_err(|_| X509Error::VerificationFailed)
 }
@@ -461,7 +445,7 @@ mod tests {
 
     fn self_signed_ec_cert() -> Vec<u8> {
         // Generate a self-signed P-256 certificate for testing
-        use p256::ecdsa::{signature::Signer, SigningKey};
+        use p256::ecdsa::SigningKey;
 
         let signing_key = SigningKey::random(&mut rand_core::OsRng);
         let verifying_key = signing_key.verifying_key();
@@ -472,10 +456,7 @@ mod tests {
         build_test_cert(&signing_key, point.as_bytes())
     }
 
-    fn build_test_cert(
-        signing_key: &p256::ecdsa::SigningKey,
-        public_key: &[u8],
-    ) -> Vec<u8> {
+    fn build_test_cert(signing_key: &p256::ecdsa::SigningKey, public_key: &[u8]) -> Vec<u8> {
         use p256::ecdsa::signature::Signer;
 
         // Build TBS certificate
@@ -533,8 +514,7 @@ mod tests {
         let spki_alg = [
             0x30, 0x13, // SEQUENCE (AlgorithmIdentifier)
             0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, // OID id-ecPublicKey
-            0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01,
-            0x07, // OID secp256r1
+            0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, // OID secp256r1
         ];
         let spki_len = spki_alg.len() + 2 + 1 + public_key.len(); // alg + BIT STRING header + unused bits + key
         tbs.push(0x30); // SEQUENCE

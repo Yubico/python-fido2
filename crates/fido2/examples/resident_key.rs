@@ -54,8 +54,13 @@ fn main() {
 
     let conn = ctaphid::CtapHidConnection::open(dev_info).expect("Failed to open device");
     let interaction = common::CliInteraction::new();
-    let client = Fido2Client::new(&conn, "https://example.com", &interaction, default_extensions(false))
-        .expect("Failed to create client");
+    let client = Fido2Client::new(
+        &conn,
+        "https://example.com",
+        &interaction,
+        default_extensions(false),
+    )
+    .expect("Failed to create client");
 
     // ---- Registration with rk=required ----
     let create_options = PublicKeyCredentialCreationOptions {
@@ -128,9 +133,9 @@ fn main() {
     println!("UV: {}", assertion.auth_data.is_user_verified());
     println!("Sign count: {}", assertion.auth_data.counter);
 
-    if let Some(ref user) = assertion.user {
-        if let Some(user_id) = user.map_get_text("id").and_then(|v| v.as_bytes()) {
-            println!("User ID: {}", fido2::logging::hex_encode(user_id));
-        }
+    if let Some(ref user) = assertion.user
+        && let Some(user_id) = user.map_get_text("id").and_then(|v| v.as_bytes())
+    {
+        println!("User ID: {}", fido2::logging::hex_encode(user_id));
     }
 }

@@ -41,8 +41,7 @@ struct PyCertificate {
 impl PyCertificate {
     #[new]
     fn new(der: &[u8]) -> PyResult<Self> {
-        let inner =
-            Certificate::from_der(der).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let inner = Certificate::from_der(der).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Self { inner })
     }
 

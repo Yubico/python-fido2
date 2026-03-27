@@ -29,7 +29,7 @@
 
 use crate::cbor::{self, Value};
 use crate::ctap::{CtapError, CtapStatus};
-use crate::ctap2::{ctap2_cmd, Ctap2};
+use crate::ctap2::{Ctap2, ctap2_cmd};
 use crate::pin::PinProtocol;
 
 /// Sub-command identifiers for credential management.
@@ -108,15 +108,15 @@ impl<'a> CredentialManagement<'a> {
         pin_uv_token: &'a [u8],
         cmd_byte: u8,
     ) -> Self {
-        Self { ctap, protocol, pin_uv_token, cmd_byte }
+        Self {
+            ctap,
+            protocol,
+            pin_uv_token,
+            cmd_byte,
+        }
     }
 
-    fn _call(
-        &self,
-        sub_cmd: u32,
-        params: Option<Value>,
-        auth: bool,
-    ) -> Result<Value, CtapError> {
+    fn _call(&self, sub_cmd: u32, params: Option<Value>, auth: bool) -> Result<Value, CtapError> {
         let (pin_uv_protocol, pin_uv_param) = if auth {
             let mut msg = vec![(sub_cmd & 0xFF) as u8];
             if let Some(ref p) = params {

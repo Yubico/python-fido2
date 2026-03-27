@@ -25,7 +25,9 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-use fido2::webauthn::{AttestedCredentialData, AttestationObject, AuthenticatorData, CollectedClientData};
+use fido2::webauthn::{
+    AttestationObject, AttestedCredentialData, AuthenticatorData, CollectedClientData,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -36,6 +38,7 @@ use crate::py_cbor::value_to_py;
 ///
 /// Returns (aaguid, credential_id, public_key_dict, remaining_bytes).
 #[pyfunction]
+#[allow(clippy::type_complexity)]
 fn parse_credential_data<'py>(
     py: Python<'py>,
     data: &[u8],
@@ -45,8 +48,8 @@ fn parse_credential_data<'py>(
     PyObject,
     Bound<'py, PyBytes>,
 )> {
-    let (cred_data, rest) =
-        AttestedCredentialData::from_bytes(data).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let (cred_data, rest) = AttestedCredentialData::from_bytes(data)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
     let aaguid = PyBytes::new(py, cred_data.aaguid.as_bytes());
     let credential_id = PyBytes::new(py, &cred_data.credential_id);
@@ -81,8 +84,8 @@ fn parse_collected_client_data<'py>(
     py: Python<'py>,
     data: &[u8],
 ) -> PyResult<(String, Bound<'py, PyBytes>, String, bool)> {
-    let cd = CollectedClientData::from_bytes(data)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let cd =
+        CollectedClientData::from_bytes(data).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
     let challenge = PyBytes::new(py, &cd.challenge);
     Ok((cd.type_, challenge, cd.origin, cd.cross_origin))
@@ -92,6 +95,7 @@ fn parse_collected_client_data<'py>(
 ///
 /// Returns (rp_id_hash, flags, counter, credential_data_bytes, extensions).
 #[pyfunction]
+#[allow(clippy::type_complexity)]
 fn parse_authenticator_data<'py>(
     py: Python<'py>,
     data: &[u8],

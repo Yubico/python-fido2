@@ -19,6 +19,18 @@ repos:
   - id: pyright
 - repo: local
   hooks:
+  - id: cargo-fmt
+    name: cargo fmt
+    language: system
+    entry: cargo fmt --all -- --check
+    pass_filenames: false
+    types: [rust]
+  - id: cargo-clippy
+    name: cargo clippy
+    language: system
+    entry: cargo clippy --all-targets -- -D warnings
+    pass_filenames: false
+    types: [rust]
   - id: ty-check
     name: ty-check
     language: python

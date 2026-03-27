@@ -29,7 +29,7 @@
 
 use crate::cbor::{self, Value};
 use crate::ctap::CtapError;
-use crate::ctap2::{ctap2_cmd, Ctap2};
+use crate::ctap2::{Ctap2, ctap2_cmd};
 use crate::pin::PinProtocol;
 
 /// BioEnrollment result keys.
@@ -137,7 +137,13 @@ impl<'a> FPBioEnrollment<'a> {
         cmd_byte: u8,
         modality: u32,
     ) -> Self {
-        Self { ctap, protocol, pin_uv_token, cmd_byte, modality }
+        Self {
+            ctap,
+            protocol,
+            pin_uv_token,
+            cmd_byte,
+            modality,
+        }
     }
 
     fn _call(
@@ -222,7 +228,12 @@ impl<'a> FPBioEnrollment<'a> {
             entries.push((Value::Int(fp_param::TIMEOUT_MS), Value::Int(t as i64)));
         }
         let params = Value::Map(entries);
-        let resp = self._call(fp_cmd::ENROLL_CAPTURE_NEXT, Some(params), true, on_keepalive)?;
+        let resp = self._call(
+            fp_cmd::ENROLL_CAPTURE_NEXT,
+            Some(params),
+            true,
+            on_keepalive,
+        )?;
         let status = cbor_map_get_int(&resp, bio_result::LAST_SAMPLE_STATUS)
             .ok_or_else(|| CtapError::InvalidResponse("Missing sample status".to_string()))?
             as u32;

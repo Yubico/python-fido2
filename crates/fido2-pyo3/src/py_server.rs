@@ -57,8 +57,14 @@ fn verify_registration(
     let att_obj = AttestationObject::from_bytes(attestation_object)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-    server::verify_registration(&cd, &att_obj, challenge, rp_id_hash, user_verification_required)
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+    server::verify_registration(
+        &cd,
+        &att_obj,
+        challenge,
+        rp_id_hash,
+        user_verification_required,
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 /// Verify an authentication (webauthn.get) response.
@@ -153,8 +159,8 @@ impl Fido2Server {
             name: rp_name.into(),
             id: Some(rp_id.into()),
         };
-        let inner = server::Fido2Server::new(rp, None)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let inner =
+            server::Fido2Server::new(rp, None).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Self {
             inner,
             verify_origin,
@@ -237,6 +243,7 @@ impl Fido2Server {
     /// Verifies origin, client data, authenticator data, and signature.
     /// `credentials` is a list of (credential_id: bytes, public_key_cbor: bytes) tuples.
     /// Returns the index of the matched credential.
+    #[allow(clippy::too_many_arguments)]
     fn authenticate_complete(
         &self,
         py: Python<'_>,
@@ -258,10 +265,9 @@ impl Fido2Server {
         let creds: Vec<(Vec<u8>, CoseKey)> = credentials
             .into_iter()
             .map(|(id, pk)| {
-                let value =
-                    cbor::decode(&pk).map_err(|e| PyValueError::new_err(e.to_string()))?;
-                let key = CoseKey::from_cbor(&value)
-                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                let value = cbor::decode(&pk).map_err(|e| PyValueError::new_err(e.to_string()))?;
+                let key =
+                    CoseKey::from_cbor(&value).map_err(|e| PyValueError::new_err(e.to_string()))?;
                 Ok((id, key))
             })
             .collect::<PyResult<_>>()?;

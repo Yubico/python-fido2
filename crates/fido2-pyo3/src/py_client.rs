@@ -151,9 +151,7 @@ fn client_err(e: client::ClientError) -> PyErr {
         client::ClientError::DeviceIneligible => {
             PyValueError::new_err("CLIENT_DEVICE_INELIGIBLE".to_string())
         }
-        client::ClientError::Timeout => {
-            PyValueError::new_err("CLIENT_TIMEOUT".to_string())
-        }
+        client::ClientError::Timeout => PyValueError::new_err("CLIENT_TIMEOUT".to_string()),
         client::ClientError::Ctap(e) => crate::py_ctap::ctap_err(e),
     }
 }
@@ -214,11 +212,7 @@ fn json_to_py(py: Python<'_>, val: &serde_json::Value) -> PyResult<PyObject> {
             if let Some(i) = n.as_i64() {
                 Ok(i.into_pyobject(py)?.into_any().unbind())
             } else {
-                Ok(n.as_f64()
-                    .unwrap()
-                    .into_pyobject(py)?
-                    .into_any()
-                    .unbind())
+                Ok(n.as_f64().unwrap().into_pyobject(py)?.into_any().unbind())
             }
         }
         serde_json::Value::String(s) => Ok(s.into_pyobject(py)?.into_any().unbind()),
@@ -348,10 +342,8 @@ impl Ctap2Extension for PyExtensionBridge {
                 return None;
             }
 
-            Some(
-                Box::new(PyRegistrationProcessorBridge { py_obj: result })
-                    as Box<dyn RegistrationExtensionProcessor>,
-            )
+            Some(Box::new(PyRegistrationProcessorBridge { py_obj: result })
+                as Box<dyn RegistrationExtensionProcessor>)
         })
     }
 
@@ -364,8 +356,7 @@ impl Ctap2Extension for PyExtensionBridge {
     ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
         Python::with_gil(|py| {
             let ctap_proxy = create_ctap_proxy(py, ctap.info()).ok()?;
-            let options_proxy =
-                create_options_proxy(py, extensions, allow_credentials).ok()?;
+            let options_proxy = create_options_proxy(py, extensions, allow_credentials).ok()?;
             let pp_py = py.None();
 
             let result = self
@@ -377,10 +368,8 @@ impl Ctap2Extension for PyExtensionBridge {
                 return None;
             }
 
-            Some(
-                Box::new(PyAuthenticationProcessorBridge { py_obj: result })
-                    as Box<dyn AuthenticationExtensionProcessor>,
-            )
+            Some(Box::new(PyAuthenticationProcessorBridge { py_obj: result })
+                as Box<dyn AuthenticationExtensionProcessor>)
         })
     }
 }
@@ -405,10 +394,8 @@ impl RegistrationExtensionProcessor for PyRegistrationProcessorBridge {
 
     fn prepare_inputs(&self, pin_token: Option<&[u8]>) -> Option<ExtensionInputs> {
         Python::with_gil(|py| {
-            let pt_py = pin_token.map_or_else(
-                || py.None(),
-                |t| PyBytes::new(py, t).into_any().unbind(),
-            );
+            let pt_py =
+                pin_token.map_or_else(|| py.None(), |t| PyBytes::new(py, t).into_any().unbind());
             let result = self
                 .py_obj
                 .call_method1(py, "prepare_inputs", (pt_py,))
@@ -425,10 +412,8 @@ impl RegistrationExtensionProcessor for PyRegistrationProcessorBridge {
     ) -> Option<ExtensionOutputs> {
         Python::with_gil(|py| {
             let resp_py = crate::py_ctap::attestation_response_to_py(py, response).ok()?;
-            let pt_py = pin_token.map_or_else(
-                || py.None(),
-                |t| PyBytes::new(py, t).into_any().unbind(),
-            );
+            let pt_py =
+                pin_token.map_or_else(|| py.None(), |t| PyBytes::new(py, t).into_any().unbind());
             let result = self
                 .py_obj
                 .call_method1(py, "prepare_outputs", (resp_py, pt_py))
@@ -466,10 +451,8 @@ impl AuthenticationExtensionProcessor for PyAuthenticationProcessorBridge {
                     |v| crate::py_cbor::value_to_py(py, v).map(|b| b.unbind()),
                 )
                 .ok()?;
-            let pt_py = pin_token.map_or_else(
-                || py.None(),
-                |t| PyBytes::new(py, t).into_any().unbind(),
-            );
+            let pt_py =
+                pin_token.map_or_else(|| py.None(), |t| PyBytes::new(py, t).into_any().unbind());
             let result = self
                 .py_obj
                 .call_method1(py, "prepare_inputs", (selected_py, pt_py))
@@ -486,10 +469,8 @@ impl AuthenticationExtensionProcessor for PyAuthenticationProcessorBridge {
     ) -> Option<ExtensionOutputs> {
         Python::with_gil(|py| {
             let resp_py = crate::py_ctap::assertion_response_to_py(py, response).ok()?;
-            let pt_py = pin_token.map_or_else(
-                || py.None(),
-                |t| PyBytes::new(py, t).into_any().unbind(),
-            );
+            let pt_py =
+                pin_token.map_or_else(|| py.None(), |t| PyBytes::new(py, t).into_any().unbind());
             let result = self
                 .py_obj
                 .call_method1(py, "prepare_outputs", (resp_py, pt_py))
@@ -514,40 +495,40 @@ fn create_extensions_from_py(
     let mut extensions: Vec<Box<dyn Ctap2Extension>> = Vec::new();
 
     for ext_obj in py_extensions {
-        if let Ok(tag) = ext_obj.getattr(py, "_native_tag") {
-            if let Ok(tag_str) = tag.extract::<String>(py) {
-                match tag_str.as_str() {
-                    "hmac_secret" => {
-                        let allow = ext_obj
-                            .getattr(py, "_allow_hmac_secret")
-                            .and_then(|v| v.extract::<bool>(py))
-                            .unwrap_or(false);
-                        extensions.push(Box::new(extensions::HmacSecretExtension::new(allow)));
-                    }
-                    "large_blob" => {
-                        extensions.push(Box::new(extensions::LargeBlobExtension));
-                    }
-                    "cred_blob" => {
-                        extensions.push(Box::new(extensions::CredBlobExtension));
-                    }
-                    "cred_protect" => {
-                        extensions.push(Box::new(extensions::CredProtectExtension));
-                    }
-                    "min_pin_length" => {
-                        extensions.push(Box::new(extensions::MinPinLengthExtension));
-                    }
-                    "cred_props" => {
-                        extensions.push(Box::new(extensions::CredPropsExtension));
-                    }
-                    _ => {
-                        // Unknown native tag, fall through to Python bridge
-                        extensions.push(Box::new(PyExtensionBridge {
-                            py_obj: ext_obj.clone_ref(py),
-                        }));
-                    }
+        if let Ok(tag) = ext_obj.getattr(py, "_native_tag")
+            && let Ok(tag_str) = tag.extract::<String>(py)
+        {
+            match tag_str.as_str() {
+                "hmac_secret" => {
+                    let allow = ext_obj
+                        .getattr(py, "_allow_hmac_secret")
+                        .and_then(|v| v.extract::<bool>(py))
+                        .unwrap_or(false);
+                    extensions.push(Box::new(extensions::HmacSecretExtension::new(allow)));
                 }
-                continue;
+                "large_blob" => {
+                    extensions.push(Box::new(extensions::LargeBlobExtension));
+                }
+                "cred_blob" => {
+                    extensions.push(Box::new(extensions::CredBlobExtension));
+                }
+                "cred_protect" => {
+                    extensions.push(Box::new(extensions::CredProtectExtension));
+                }
+                "min_pin_length" => {
+                    extensions.push(Box::new(extensions::MinPinLengthExtension));
+                }
+                "cred_props" => {
+                    extensions.push(Box::new(extensions::CredPropsExtension));
+                }
+                _ => {
+                    // Unknown native tag, fall through to Python bridge
+                    extensions.push(Box::new(PyExtensionBridge {
+                        py_obj: ext_obj.clone_ref(py),
+                    }));
+                }
             }
+            continue;
         }
         // No _native_tag or not a string: wrap as Python extension
         extensions.push(Box::new(PyExtensionBridge {
@@ -804,8 +785,8 @@ fn py_to_info(py: Python<'_>, info_obj: &PyObject) -> PyResult<Info> {
         .collect::<PyResult<_>>()?;
 
     let aaguid_bytes: Vec<u8> = bound.getattr("aaguid")?.extract()?;
-    let aaguid = Aaguid::from_slice(&aaguid_bytes)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let aaguid =
+        Aaguid::from_slice(&aaguid_bytes).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
     let options_obj = bound.getattr("options")?;
     let options_dict = options_obj.downcast::<PyDict>()?;
@@ -852,10 +833,7 @@ fn py_to_info(py: Python<'_>, info_obj: &PyObject) -> PyResult<Info> {
 }
 
 /// Convert a Python AttestationResponse object to a Rust AttestationResponse.
-fn py_to_attestation_response(
-    py: Python<'_>,
-    resp: &PyObject,
-) -> PyResult<AttestationResponse> {
+fn py_to_attestation_response(py: Python<'_>, resp: &PyObject) -> PyResult<AttestationResponse> {
     let bound = resp.bind(py);
     let fmt: String = bound.getattr("fmt")?.extract()?;
     let auth_data_bytes: Vec<u8> = bound.getattr("auth_data")?.extract()?;
@@ -879,10 +857,7 @@ fn py_to_attestation_response(
 }
 
 /// Convert a Python AssertionResponse object to a Rust AssertionResponse.
-fn py_to_assertion_response(
-    py: Python<'_>,
-    resp: &PyObject,
-) -> PyResult<AssertionResponse> {
+fn py_to_assertion_response(py: Python<'_>, resp: &PyObject) -> PyResult<AssertionResponse> {
     let bound = resp.bind(py);
     let credential_py = bound.getattr("credential")?;
     let credential = crate::py_cbor::py_to_value(&credential_py)?;
@@ -927,25 +902,11 @@ fn py_pin_protocol(py: Python<'_>, pp: &PyObject) -> PyResult<Option<PinProtocol
     }
 }
 
-/// Extract device, strict_cbor, and max_msg_size from a Python Ctap2 object,
-/// plus the Info for setting on the Ctap2.
-fn ctap2_from_py_ctap<'a>(
-    py: Python<'_>,
-    ctap_py: &PyObject,
-    dev: &'a PyCtapDevice,
-) -> PyResult<ctap2::Ctap2<'a>> {
-    let native = ctap_py.bind(py).getattr("_native")?;
-    let strict_cbor: bool = native.getattr("strict_cbor")?.extract()?;
-    let max_msg_size: usize = native.getattr("max_msg_size")?.extract()?;
-    let info_obj = ctap_py.bind(py).getattr("info")?;
-    let info = py_to_info(py, &info_obj.unbind())?;
-    let mut ctap = ctap2::Ctap2::from_parts(dev, strict_cbor, max_msg_size);
-    ctap.set_info(info);
-    Ok(ctap)
-}
-
 /// Convert options.extensions to serde_json::Value.
-fn py_options_extensions(py: Python<'_>, options: &PyObject) -> PyResult<Option<serde_json::Value>> {
+fn py_options_extensions(
+    py: Python<'_>,
+    options: &PyObject,
+) -> PyResult<Option<serde_json::Value>> {
     let ext = options.bind(py).getattr("extensions")?;
     if ext.is_none() {
         return Ok(None);
@@ -1094,12 +1055,7 @@ impl NativeExtension {
         let pp = py_pin_protocol(py, &pin_protocol)?;
 
         let inner = self.inner.lock().unwrap();
-        let processor = inner.get_assertion(
-            &ctap2,
-            ext_json.as_ref(),
-            allow_creds.as_deref(),
-            pp,
-        );
+        let processor = inner.get_assertion(&ctap2, ext_json.as_ref(), allow_creds.as_deref(), pp);
         Ok(processor.map(|p| NativeAuthenticationProcessor {
             inner: p,
             device,
