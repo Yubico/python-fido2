@@ -25,10 +25,15 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+use fido2::cbor::Value;
 use fido2::client::{self, ClientBackend};
 use fido2::ctap::capability;
-use fido2::ctap2::{self, Info};
-use fido2::extensions::default_extensions;
+use fido2::ctap2::{self, AssertionResponse, AttestationResponse, Info};
+use fido2::extensions::{
+    self, AuthenticationExtensionProcessor, Ctap2Extension, ExtensionInputs, ExtensionOutputs,
+    RegistrationExtensionProcessor,
+};
+use fido2::pin::PinProtocol;
 use fido2::webauthn::Aaguid;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -196,6 +201,361 @@ impl client::UserInteraction for PyUserInteraction {
     }
 }
 
+// ---- Python extension bridge helpers ----
+
+/// Convert a serde_json::Value to a Python object.
+fn json_to_py(py: Python<'_>, val: &serde_json::Value) -> PyResult<PyObject> {
+    match val {
+        serde_json::Value::Null => Ok(py.None()),
+        serde_json::Value::Bool(b) => Ok(b.into_pyobject(py)?.to_owned().into_any().unbind()),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Ok(i.into_pyobject(py)?.into_any().unbind())
+            } else {
+                Ok(n.as_f64()
+                    .unwrap()
+                    .into_pyobject(py)?
+                    .into_any()
+                    .unbind())
+            }
+        }
+        serde_json::Value::String(s) => Ok(s.into_pyobject(py)?.into_any().unbind()),
+        serde_json::Value::Array(arr) => {
+            let list = PyList::empty(py);
+            for item in arr {
+                list.append(json_to_py(py, item)?)?;
+            }
+            Ok(list.into_any().unbind())
+        }
+        serde_json::Value::Object(map) => {
+            let dict = PyDict::new(py);
+            for (k, v) in map {
+                dict.set_item(k, json_to_py(py, v)?)?;
+            }
+            Ok(dict.into_any().unbind())
+        }
+    }
+}
+
+/// Create a Python Ctap2-like proxy with an `info` attribute set from Rust Info.
+///
+/// Uses `types.SimpleNamespace(info=Info(**info_dict))` so Python extensions
+/// can access `ctap.info.extensions`, `ctap.info.options`, etc.
+fn create_ctap_proxy(py: Python<'_>, info: &Info) -> PyResult<PyObject> {
+    let info_dict = crate::py_ctap::info_to_py(py, info)?;
+    let info_mod = py.import("fido2.ctap2")?.getattr("Info")?;
+    let info_dict_bound = info_dict.downcast_bound::<PyDict>(py)?;
+    let info_obj = info_mod.call((), Some(info_dict_bound))?;
+
+    let types = py.import("types")?;
+    let ns_cls = types.getattr("SimpleNamespace")?;
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("info", info_obj)?;
+    let proxy = ns_cls.call((), Some(&kwargs))?;
+    Ok(proxy.unbind())
+}
+
+/// Create a Python options-like proxy with `extensions` and optionally
+/// `allow_credentials` attributes.
+fn create_options_proxy(
+    py: Python<'_>,
+    extensions: Option<&serde_json::Value>,
+    allow_credentials: Option<&[Value]>,
+) -> PyResult<PyObject> {
+    let ext_py = match extensions {
+        Some(val) => json_to_py(py, val)?,
+        None => py.None(),
+    };
+
+    let allow_py = match allow_credentials {
+        Some(creds) => {
+            let list = PyList::empty(py);
+            for c in creds {
+                list.append(crate::py_cbor::value_to_py(py, c)?)?;
+            }
+            list.into_any().unbind()
+        }
+        None => py.None(),
+    };
+
+    let types = py.import("types")?;
+    let ns_cls = types.getattr("SimpleNamespace")?;
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("extensions", ext_py)?;
+    kwargs.set_item("allow_credentials", allow_py)?;
+    let proxy = ns_cls.call((), Some(&kwargs))?;
+    Ok(proxy.unbind())
+}
+
+/// Convert a Python dict (str -> any) to ExtensionInputs (BTreeMap<String, cbor::Value>).
+fn py_dict_to_extension_map(py: Python<'_>, obj: &PyObject) -> Option<ExtensionInputs> {
+    if obj.is_none(py) {
+        return None;
+    }
+    let bound = obj.bind(py);
+    let dict = bound.downcast::<PyDict>().ok()?;
+    let mut inputs = ExtensionInputs::new();
+    for (key, value) in dict.iter() {
+        let k: String = key.extract().ok()?;
+        let v = crate::py_cbor::py_to_value(&value).ok()?;
+        inputs.insert(k, v);
+    }
+    Some(inputs)
+}
+
+// ---- Python extension bridge (Ctap2Extension) ----
+
+/// Bridges a Python Ctap2Extension to the Rust Ctap2Extension trait.
+///
+/// Used for pure-Python extensions that don't have a native Rust counterpart.
+/// Creates proxy objects for `ctap` and `options` so Python code can access
+/// `.info`, `.extensions`, etc.
+struct PyExtensionBridge {
+    py_obj: PyObject,
+}
+
+impl Ctap2Extension for PyExtensionBridge {
+    fn is_supported(&self, info: &Info) -> bool {
+        Python::with_gil(|py| {
+            let proxy = create_ctap_proxy(py, info).ok()?;
+            self.py_obj
+                .call_method1(py, "is_supported", (proxy,))
+                .ok()
+                .and_then(|r| r.extract::<bool>(py).ok())
+        })
+        .unwrap_or(false)
+    }
+
+    fn make_credential(
+        &self,
+        ctap: &ctap2::Ctap2,
+        extensions: Option<&serde_json::Value>,
+        _pin_protocol: Option<PinProtocol>,
+    ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
+        Python::with_gil(|py| {
+            let ctap_proxy = create_ctap_proxy(py, ctap.info()).ok()?;
+            let options_proxy = create_options_proxy(py, extensions, None).ok()?;
+            let pp_py = py.None();
+
+            let result = self
+                .py_obj
+                .call_method1(py, "make_credential", (ctap_proxy, options_proxy, pp_py))
+                .ok()?;
+
+            if result.is_none(py) {
+                return None;
+            }
+
+            Some(
+                Box::new(PyRegistrationProcessorBridge { py_obj: result })
+                    as Box<dyn RegistrationExtensionProcessor>,
+            )
+        })
+    }
+
+    fn get_assertion(
+        &self,
+        ctap: &ctap2::Ctap2,
+        extensions: Option<&serde_json::Value>,
+        allow_credentials: Option<&[Value]>,
+        _pin_protocol: Option<PinProtocol>,
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
+        Python::with_gil(|py| {
+            let ctap_proxy = create_ctap_proxy(py, ctap.info()).ok()?;
+            let options_proxy =
+                create_options_proxy(py, extensions, allow_credentials).ok()?;
+            let pp_py = py.None();
+
+            let result = self
+                .py_obj
+                .call_method1(py, "get_assertion", (ctap_proxy, options_proxy, pp_py))
+                .ok()?;
+
+            if result.is_none(py) {
+                return None;
+            }
+
+            Some(
+                Box::new(PyAuthenticationProcessorBridge { py_obj: result })
+                    as Box<dyn AuthenticationExtensionProcessor>,
+            )
+        })
+    }
+}
+
+// ---- Python processor bridges ----
+
+/// Bridges a Python RegistrationExtensionProcessor to the Rust trait.
+struct PyRegistrationProcessorBridge {
+    py_obj: PyObject,
+}
+
+impl RegistrationExtensionProcessor for PyRegistrationProcessorBridge {
+    fn permissions(&self) -> u32 {
+        Python::with_gil(|py| {
+            self.py_obj
+                .getattr(py, "permissions")
+                .ok()
+                .and_then(|p| p.extract::<u32>(py).ok())
+        })
+        .unwrap_or(0)
+    }
+
+    fn prepare_inputs(&self, pin_token: Option<&[u8]>) -> Option<ExtensionInputs> {
+        Python::with_gil(|py| {
+            let pt_py = pin_token.map_or_else(
+                || py.None(),
+                |t| PyBytes::new(py, t).into_any().unbind(),
+            );
+            let result = self
+                .py_obj
+                .call_method1(py, "prepare_inputs", (pt_py,))
+                .ok()?;
+            py_dict_to_extension_map(py, &result)
+        })
+    }
+
+    fn prepare_outputs(
+        &self,
+        response: &AttestationResponse,
+        pin_token: Option<&[u8]>,
+        _ctap: &ctap2::Ctap2,
+    ) -> Option<ExtensionOutputs> {
+        Python::with_gil(|py| {
+            let resp_py = crate::py_ctap::attestation_response_to_py(py, response).ok()?;
+            let pt_py = pin_token.map_or_else(
+                || py.None(),
+                |t| PyBytes::new(py, t).into_any().unbind(),
+            );
+            let result = self
+                .py_obj
+                .call_method1(py, "prepare_outputs", (resp_py, pt_py))
+                .ok()?;
+            py_dict_to_extension_map(py, &result)
+        })
+    }
+}
+
+/// Bridges a Python AuthenticationExtensionProcessor to the Rust trait.
+struct PyAuthenticationProcessorBridge {
+    py_obj: PyObject,
+}
+
+impl AuthenticationExtensionProcessor for PyAuthenticationProcessorBridge {
+    fn permissions(&self) -> u32 {
+        Python::with_gil(|py| {
+            self.py_obj
+                .getattr(py, "permissions")
+                .ok()
+                .and_then(|p| p.extract::<u32>(py).ok())
+        })
+        .unwrap_or(0)
+    }
+
+    fn prepare_inputs(
+        &self,
+        selected: Option<&Value>,
+        pin_token: Option<&[u8]>,
+    ) -> Option<ExtensionInputs> {
+        Python::with_gil(|py| {
+            let selected_py = selected
+                .map_or_else(
+                    || Ok(py.None()),
+                    |v| crate::py_cbor::value_to_py(py, v).map(|b| b.unbind()),
+                )
+                .ok()?;
+            let pt_py = pin_token.map_or_else(
+                || py.None(),
+                |t| PyBytes::new(py, t).into_any().unbind(),
+            );
+            let result = self
+                .py_obj
+                .call_method1(py, "prepare_inputs", (selected_py, pt_py))
+                .ok()?;
+            py_dict_to_extension_map(py, &result)
+        })
+    }
+
+    fn prepare_outputs(
+        &self,
+        response: &AssertionResponse,
+        pin_token: Option<&[u8]>,
+        _ctap: &ctap2::Ctap2,
+    ) -> Option<ExtensionOutputs> {
+        Python::with_gil(|py| {
+            let resp_py = crate::py_ctap::assertion_response_to_py(py, response).ok()?;
+            let pt_py = pin_token.map_or_else(
+                || py.None(),
+                |t| PyBytes::new(py, t).into_any().unbind(),
+            );
+            let result = self
+                .py_obj
+                .call_method1(py, "prepare_outputs", (resp_py, pt_py))
+                .ok()?;
+            py_dict_to_extension_map(py, &result)
+        })
+    }
+}
+
+// ---- Extension creation from Python objects ----
+
+/// Create Rust extensions from a list of Python extension objects.
+///
+/// Extensions with a `_native_tag` attribute are recognized as wrappers around
+/// Rust implementations and the appropriate native extension is constructed.
+/// Extensions without `_native_tag` are wrapped in a `PyExtensionBridge` that
+/// calls back into Python.
+fn create_extensions_from_py(
+    py: Python<'_>,
+    py_extensions: &[PyObject],
+) -> Vec<Box<dyn Ctap2Extension>> {
+    let mut extensions: Vec<Box<dyn Ctap2Extension>> = Vec::new();
+
+    for ext_obj in py_extensions {
+        if let Ok(tag) = ext_obj.getattr(py, "_native_tag") {
+            if let Ok(tag_str) = tag.extract::<String>(py) {
+                match tag_str.as_str() {
+                    "hmac_secret" => {
+                        let allow = ext_obj
+                            .getattr(py, "_allow_hmac_secret")
+                            .and_then(|v| v.extract::<bool>(py))
+                            .unwrap_or(false);
+                        extensions.push(Box::new(extensions::HmacSecretExtension::new(allow)));
+                    }
+                    "large_blob" => {
+                        extensions.push(Box::new(extensions::LargeBlobExtension));
+                    }
+                    "cred_blob" => {
+                        extensions.push(Box::new(extensions::CredBlobExtension));
+                    }
+                    "cred_protect" => {
+                        extensions.push(Box::new(extensions::CredProtectExtension));
+                    }
+                    "min_pin_length" => {
+                        extensions.push(Box::new(extensions::MinPinLengthExtension));
+                    }
+                    "cred_props" => {
+                        extensions.push(Box::new(extensions::CredPropsExtension));
+                    }
+                    _ => {
+                        // Unknown native tag, fall through to Python bridge
+                        extensions.push(Box::new(PyExtensionBridge {
+                            py_obj: ext_obj.clone_ref(py),
+                        }));
+                    }
+                }
+                continue;
+            }
+        }
+        // No _native_tag or not a string: wrap as Python extension
+        extensions.push(Box::new(PyExtensionBridge {
+            py_obj: ext_obj.clone_ref(py),
+        }));
+    }
+
+    extensions
+}
+
 // ---- NativeFido2Client ----
 
 /// Native FIDO2 client handling both CTAP1 and CTAP2 backends.
@@ -210,7 +570,7 @@ struct NativeFido2Client {
     on_keepalive: PyObject,
     info: Info,
     is_ctap2: bool,
-    allow_hmac_secret: bool,
+    extensions: Vec<PyObject>,
 }
 
 impl NativeFido2Client {
@@ -234,16 +594,18 @@ impl NativeFido2Client {
     /// Create the appropriate backend based on cached capabilities.
     fn make_backend<'a>(
         &self,
+        py: Python<'_>,
         dev: &'a PyCtapDevice,
         ui: &'a PyUserInteraction,
     ) -> Box<dyn ClientBackend + 'a> {
         if self.is_ctap2 {
+            let extensions = create_extensions_from_py(py, &self.extensions);
             Box::new(client::Ctap2Backend::from_parts(
                 dev,
                 false,
                 self.info.max_msg_size,
                 ui,
-                default_extensions(self.allow_hmac_secret),
+                extensions,
                 self.info.clone(),
             ))
         } else {
@@ -255,13 +617,13 @@ impl NativeFido2Client {
 #[pymethods]
 impl NativeFido2Client {
     #[new]
-    #[pyo3(signature = (device, user_interaction, on_keepalive, allow_hmac_secret=false))]
+    #[pyo3(signature = (device, user_interaction, on_keepalive, extensions=None))]
     fn new(
         py: Python<'_>,
         device: PyObject,
         user_interaction: PyObject,
         on_keepalive: PyObject,
-        allow_hmac_secret: bool,
+        extensions: Option<PyObject>,
     ) -> PyResult<Self> {
         let capabilities: u8 = device.getattr(py, "capabilities")?.extract(py)?;
         let is_ctap2 = capabilities & capability::CBOR != 0;
@@ -280,13 +642,24 @@ impl NativeFido2Client {
             }
         };
 
+        // Extract extension objects from the Python list
+        let ext_list: Vec<PyObject> = match extensions {
+            Some(ref list_obj) => {
+                let bound = list_obj.bind(py);
+                let iter = bound.try_iter()?;
+                iter.map(|item| item.map(|i| i.unbind()))
+                    .collect::<PyResult<Vec<_>>>()?
+            }
+            None => Vec::new(),
+        };
+
         Ok(Self {
             device,
             user_interaction,
             on_keepalive,
             info,
             is_ctap2,
-            allow_hmac_secret,
+            extensions: ext_list,
         })
     }
 
@@ -301,7 +674,7 @@ impl NativeFido2Client {
     fn selection(&self, py: Python<'_>, event: Option<PyObject>) -> PyResult<()> {
         let dev = self.make_device(py, event)?;
         let ui = self.make_interaction();
-        let backend = self.make_backend(&dev, &ui);
+        let backend = self.make_backend(py, &dev, &ui);
         backend.selection().map_err(client_err)
     }
 
@@ -324,7 +697,7 @@ impl NativeFido2Client {
 
         let dev = self.make_device(py, event)?;
         let ui = self.make_interaction();
-        let backend = self.make_backend(&dev, &ui);
+        let backend = self.make_backend(py, &dev, &ui);
 
         let (att_resp, ext_outputs) = backend
             .do_make_credential(&options, client_data_hash, rp_id)
@@ -355,7 +728,7 @@ impl NativeFido2Client {
 
         let dev = self.make_device(py, event)?;
         let ui = self.make_interaction();
-        let backend = self.make_backend(&dev, &ui);
+        let backend = self.make_backend(py, &dev, &ui);
 
         let (assertions, ext_outputs_list) = backend
             .do_get_assertion(&options, client_data_hash, rp_id)

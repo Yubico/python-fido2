@@ -264,6 +264,7 @@ class HmacSecretExtension(Ctap2Extension):
     :param allow_hmac_secret: Set to True to allow hmac-secret, in addition to prf.
     """
 
+    _native_tag = "hmac_secret"
     NAME = "hmac-secret"
     MC_NAME = "hmac-secret-mc"
     SALT_LEN = 32
@@ -395,6 +396,7 @@ class LargeBlobExtension(Ctap2Extension):
     https://www.w3.org/TR/webauthn-3/#sctn-large-blob-extension
     """
 
+    _native_tag = "large_blob"
     NAME = "largeBlobKey"
 
     def is_supported(self, ctap):
@@ -476,6 +478,7 @@ class CredBlobExtension(Ctap2Extension):
     https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-credBlob-extension
     """
 
+    _native_tag = "cred_blob"
     NAME = "credBlob"
 
     def is_supported(self, ctap):
@@ -501,6 +504,8 @@ class CredProtectExtension(Ctap2Extension):
 
     https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-credProtect-extension
     """
+
+    _native_tag = "cred_protect"
 
     @unique
     class POLICY(Enum):
@@ -536,6 +541,7 @@ class MinPinLengthExtension(Ctap2Extension):
     https://fidoalliance.org/specs/fido-v2.1-rd-20201208/fido-client-to-authenticator-protocol-v2.1-rd-20201208.html#sctn-minpinlength-extension
     """
 
+    _native_tag = "min_pin_length"
     NAME = "minPinLength"
 
     def is_supported(self, ctap):
@@ -580,6 +586,7 @@ class CredPropsExtension(Ctap2Extension):
     https://www.w3.org/TR/webauthn-3/#sctn-authenticator-credential-properties-extension
     """
 
+    _native_tag = "cred_props"
     NAME = "credProps"
 
     def is_supported(self, ctap):

@@ -376,15 +376,13 @@ class Fido2Client(WebAuthnClient):
         self._client_data_collector = client_data_collector
         on_keepalive = _user_keepalive(user_interaction)
 
-        from ..ctap2.extensions import HmacSecretExtension
+        if extensions is None:
+            from ..ctap2.extensions import _DEFAULT_EXTENSIONS
 
-        allow_hmac_secret = any(
-            isinstance(e, HmacSecretExtension) and e._allow_hmac_secret
-            for e in (extensions or [])
-        )
+            extensions = _DEFAULT_EXTENSIONS
 
         self._native = NativeFido2Client(
-            device, user_interaction, on_keepalive, allow_hmac_secret
+            device, user_interaction, on_keepalive, list(extensions)
         )
         self._info = Info(**self._native.info)
 
