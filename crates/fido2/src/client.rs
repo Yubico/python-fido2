@@ -25,24 +25,33 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-//! FIDO2 client helpers.
+//! FIDO2 client with CTAP1 and CTAP2 backend support.
 //!
-//! Provides [`ClientDataCollector`] for constructing `CollectedClientData`
-//! and validating RP IDs against origins.
+//! Provides [`Fido2Client`] — a high-level WebAuthn client that automatically
+//! selects between CTAP1 (U2F) and CTAP2 backends based on device capabilities.
+
+use std::time::Duration;
 
 use crate::cbor::Value;
-use crate::ctap::{CtapDevice, CtapError, CtapStatus};
+use crate::cose::Algorithm;
+use crate::ctap::{apdu, capability, keepalive, ApduError, CtapDevice, CtapError, CtapStatus};
+use crate::ctap1;
 use crate::ctap2::{self, AttestationResponse, AssertionResponse, Info};
 use crate::extensions::{
     AuthenticationExtensionProcessor, Ctap2Extension, ExtensionInputs, ExtensionOutputs,
 };
 use crate::pin::{ClientPin, PinProtocol};
 use crate::server::verify_rp_id;
+use crate::utils::sha256;
 use crate::webauthn::{
-    client_data_type, AttestationConveyancePreference, CollectedClientData,
+    self, Aaguid, AttestationConveyancePreference, CollectedClientData,
     PublicKeyCredentialCreationOptions, PublicKeyCredentialParameters,
     PublicKeyCredentialRequestOptions, ResidentKeyRequirement, UserVerificationRequirement,
 };
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
 
 /// Errors returned by client operations.
 #[derive(Debug, thiserror::Error)]
@@ -53,9 +62,28 @@ pub enum ClientError {
     ConfigurationUnsupported(String),
     #[error("PIN required but not provided")]
     PinRequired,
+    #[error("Device ineligible")]
+    DeviceIneligible,
+    #[error("Operation timed out")]
+    Timeout,
     #[error("CTAP error: {0}")]
     Ctap(#[from] CtapError),
 }
+
+// ---------------------------------------------------------------------------
+// User interaction
+// ---------------------------------------------------------------------------
+
+/// User interaction trait for PIN/UV prompts.
+pub trait UserInteraction {
+    fn request_pin(&self, permissions: u32, rp_id: Option<&str>) -> Option<String>;
+    fn request_uv(&self, permissions: u32, rp_id: Option<&str>) -> bool;
+    fn prompt_up(&self) {}
+}
+
+// ---------------------------------------------------------------------------
+// UV / PIN helpers
+// ---------------------------------------------------------------------------
 
 /// User verification requirement values.
 pub mod uv_requirement {
@@ -64,17 +92,13 @@ pub mod uv_requirement {
     pub const DISCOURAGED: &str = "discouraged";
 }
 
-/// ClientPin permission flags (mirrors Python ClientPin.PERMISSION).
+/// ClientPin permission flags.
 pub mod permission {
     pub const MAKE_CREDENTIAL: u32 = 0x01;
     pub const GET_ASSERTION: u32 = 0x02;
 }
 
 /// Determine whether user verification should be performed.
-///
-/// This implements the UV decision logic from the FIDO2 client spec.
-/// Returns `Ok(true)` if UV is needed, `Ok(false)` if not, or
-/// `Err(ConfigurationUnsupported)` if UV is required but not configured.
 pub fn should_use_uv(
     info: &Info,
     user_verification: Option<&str>,
@@ -117,9 +141,6 @@ pub fn should_use_uv(
 }
 
 /// Filter a credential list against the authenticator.
-///
-/// Sends getAssertion with `up: false` to find which credentials exist.
-/// Returns the matching credential (as a CBOR Value), or None if no match.
 pub fn filter_creds(
     ctap: &ctap2::Ctap2,
     rp_id: &str,
@@ -128,16 +149,13 @@ pub fn filter_creds(
     pin_version: Option<u32>,
     on_keepalive: &mut dyn FnMut(u8),
 ) -> Result<Option<Value>, CtapError> {
-    // Get fresh info
     let info = ctap.get_info()?;
 
-    // Filter out credential IDs which are too long
     let max_len = info.max_cred_id_length;
     let filtered: Vec<&Value> = if max_len > 0 {
         cred_list
             .iter()
             .filter(|c| {
-                // Extract "id" from credential descriptor map
                 if let Value::Map(entries) = c {
                     for (k, v) in entries {
                         if k.as_text() == Some("id") {
@@ -159,8 +177,6 @@ pub fn filter_creds(
     }
 
     let client_data_hash = [0u8; 32];
-
-    // Options: {up: false}
     let options = Value::Map(vec![(
         Value::Text("up".to_string()),
         Value::Bool(false),
@@ -191,7 +207,6 @@ pub fn filter_creds(
         ) {
             Ok(assertion) => {
                 if chunk.len() == 1 {
-                    // Credential ID might be omitted from assertions
                     return Ok(Some(chunk[0].clone()));
                 } else {
                     return Ok(Some(assertion.credential));
@@ -210,16 +225,7 @@ pub fn filter_creds(
     Ok(None)
 }
 
-/// User interaction trait for PIN/UV token acquisition.
-pub trait UserInteraction {
-    fn request_pin(&self, permissions: u32, rp_id: Option<&str>) -> Option<String>;
-    fn request_uv(&self, permissions: u32, rp_id: Option<&str>) -> bool;
-}
-
 /// Get a PIN/UV token from the authenticator.
-///
-/// Tries UV first (if allowed), then falls back to PIN.
-/// Returns the token, or None if internal UV should be used (uv=True option).
 pub fn get_token(
     info: &Info,
     client_pin: &ClientPin,
@@ -230,20 +236,17 @@ pub fn get_token(
     allow_uv: bool,
     user_interaction: &dyn UserInteraction,
 ) -> Result<Option<Vec<u8>>, ClientError> {
-    // Prefer UV
     if allow_uv && info.options.get("uv").copied().unwrap_or(false) {
-        // Check if pinUvAuthToken is supported
         if info.options.get("pinUvAuthToken").copied() == Some(true) {
             if user_interaction.request_uv(permissions, rp_id) {
                 let token = client_pin.get_uv_token(permissions, rp_id, on_keepalive)?;
                 return Ok(Some(token));
             }
         } else if allow_internal_uv && user_interaction.request_uv(permissions, rp_id) {
-            return Ok(None); // No token, use uv=True
+            return Ok(None);
         }
     }
 
-    // PIN if UV not supported/allowed
     if info.options.get("clientPin").copied().unwrap_or(false) {
         if let Some(pin) = user_interaction.request_pin(permissions, rp_id) {
             if !pin.is_empty() {
@@ -260,9 +263,6 @@ pub fn get_token(
 }
 
 /// Get auth parameters (pin_token, internal_uv) for a CTAP2 operation.
-///
-/// Combines `should_use_uv` and `get_token` logic.
-/// Returns `(pin_token, internal_uv)`.
 pub fn get_auth_params(
     ctap: &ctap2::Ctap2,
     rp_id: &str,
@@ -313,30 +313,26 @@ pub fn get_auth_params(
     Ok((pin_token, internal_uv))
 }
 
+// ---------------------------------------------------------------------------
+// ClientDataCollector
+// ---------------------------------------------------------------------------
+
 /// Collects client data and validates RP IDs for WebAuthn operations.
-///
-/// This is the Rust counterpart of `DefaultClientDataCollector` in Python.
 pub struct ClientDataCollector {
     origin: String,
 }
 
 impl ClientDataCollector {
-    /// Create a new collector for the given origin.
     pub fn new(origin: &str) -> Self {
         Self {
             origin: origin.to_string(),
         }
     }
 
-    /// Get the origin.
     pub fn origin(&self) -> &str {
         &self.origin
     }
 
-    /// Extract the effective RP ID from request parameters.
-    ///
-    /// If `rp_id` is `None`, falls back to the host component of the origin.
-    /// Returns an error if the origin is not HTTPS or has no host.
     pub fn get_rp_id(&self, rp_id: Option<&str>) -> Result<String, ClientError> {
         match rp_id {
             Some(id) => Ok(id.to_string()),
@@ -361,7 +357,6 @@ impl ClientDataCollector {
         }
     }
 
-    /// Verify that an RP ID is valid for this collector's origin.
     pub fn verify_rp_id(&self, rp_id: &str) -> Result<(), ClientError> {
         if verify_rp_id(rp_id, &self.origin) {
             Ok(())
@@ -372,9 +367,6 @@ impl ClientDataCollector {
         }
     }
 
-    /// Collect client data for a registration (webauthn.create) request.
-    ///
-    /// Returns `(CollectedClientData, rp_id)`.
     pub fn collect_create(
         &self,
         challenge: &[u8],
@@ -383,7 +375,7 @@ impl ClientDataCollector {
         let rp_id = self.get_rp_id(rp_id)?;
         self.verify_rp_id(&rp_id)?;
         let cd = CollectedClientData::create(
-            client_data_type::CREATE,
+            webauthn::client_data_type::CREATE,
             challenge,
             &self.origin,
             false,
@@ -391,9 +383,6 @@ impl ClientDataCollector {
         Ok((cd, rp_id))
     }
 
-    /// Collect client data for an authentication (webauthn.get) request.
-    ///
-    /// Returns `(CollectedClientData, rp_id)`.
     pub fn collect_get(
         &self,
         challenge: &[u8],
@@ -402,7 +391,7 @@ impl ClientDataCollector {
         let rp_id = self.get_rp_id(rp_id)?;
         self.verify_rp_id(&rp_id)?;
         let cd = CollectedClientData::create(
-            client_data_type::GET,
+            webauthn::client_data_type::GET,
             challenge,
             &self.origin,
             false,
@@ -412,55 +401,242 @@ impl ClientDataCollector {
 }
 
 // ---------------------------------------------------------------------------
-// Fido2Client — high-level WebAuthn client
+// Backend trait
 // ---------------------------------------------------------------------------
 
 /// Result of a make_credential operation.
 pub struct RegistrationResult {
-    /// The CTAP2 attestation response.
     pub attestation: AttestationResponse,
-    /// The collected client data.
     pub client_data: CollectedClientData,
-    /// Client extension outputs.
     pub extension_outputs: ExtensionOutputs,
 }
 
-/// Result of a get_assertion operation, wrapping one or more assertions.
-///
-/// Extension outputs are processed lazily per-assertion via [`get`].
-pub struct AssertionSelection<'a> {
-    ctap: &'a ctap2::Ctap2<'a>,
-    /// The collected client data.
+/// Result of a get_assertion operation.
+pub struct AssertionResult {
     pub client_data: CollectedClientData,
-    assertions: Vec<AssertionResponse>,
-    extensions: Vec<Box<dyn AuthenticationExtensionProcessor>>,
-    pin_token: Option<Vec<u8>>,
+    pub assertions: Vec<AssertionResponse>,
+    pub extension_outputs: Vec<ExtensionOutputs>,
 }
 
-impl<'a> AssertionSelection<'a> {
-    /// Get the raw assertion responses.
-    pub fn assertions(&self) -> &[AssertionResponse] {
-        &self.assertions
+/// Backend abstraction for FIDO client operations.
+///
+/// Implemented by [`Ctap1Backend`] (U2F) and [`Ctap2Backend`] (CTAP2).
+pub trait ClientBackend {
+    /// Get authenticator information.
+    fn info(&self) -> &Info;
+
+    /// Perform authenticator selection (touch).
+    fn selection(&self) -> Result<(), ClientError>;
+
+    /// Create a credential with pre-computed client data hash and RP ID.
+    fn do_make_credential(
+        &self,
+        options: &PublicKeyCredentialCreationOptions,
+        client_data_hash: &[u8],
+        rp_id: &str,
+    ) -> Result<(AttestationResponse, ExtensionOutputs), ClientError>;
+
+    /// Get assertions with pre-computed client data hash and RP ID.
+    fn do_get_assertion(
+        &self,
+        options: &PublicKeyCredentialRequestOptions,
+        client_data_hash: &[u8],
+        rp_id: &str,
+    ) -> Result<(Vec<AssertionResponse>, Vec<ExtensionOutputs>), ClientError>;
+}
+
+// ---------------------------------------------------------------------------
+// CTAP1 backend
+// ---------------------------------------------------------------------------
+
+/// Default poll delay for CTAP1 operations.
+const CTAP1_POLL_DELAY: Duration = Duration::from_millis(250);
+
+/// CTAP1/U2F backend.
+pub struct Ctap1Backend<'a> {
+    ctap1: ctap1::Ctap1<'a>,
+    info: Info,
+    interaction: &'a dyn UserInteraction,
+}
+
+impl<'a> Ctap1Backend<'a> {
+    pub fn new(device: &'a dyn CtapDevice, interaction: &'a dyn UserInteraction) -> Self {
+        let ctap1 = ctap1::Ctap1::new(device);
+        let info = Info {
+            versions: vec!["U2F_V2".into()],
+            aaguid: Aaguid::NONE,
+            ..Info::from_cbor(&[])
+        };
+        Self {
+            ctap1,
+            info,
+            interaction,
+        }
     }
 
-    /// Get the assertion at `index` with processed extension outputs.
-    pub fn get(&self, index: usize) -> (&AssertionResponse, ExtensionOutputs) {
-        let assertion = &self.assertions[index];
-        let mut outputs = ExtensionOutputs::new();
-        for ext in &self.extensions {
-            if let Some(ext_out) =
-                ext.prepare_outputs(assertion, self.pin_token.as_deref(), self.ctap)
-            {
-                outputs.extend(ext_out);
+    /// Poll a CTAP1 operation until it succeeds or fails.
+    fn call_polling<F, T>(&self, mut func: F) -> Result<T, ClientError>
+    where
+        F: FnMut() -> Result<T, ApduError>,
+    {
+        let mut prompted = false;
+        loop {
+            match func() {
+                Ok(result) => return Ok(result),
+                Err(e) if e.code == apdu::USE_NOT_SATISFIED => {
+                    if !prompted {
+                        self.interaction.prompt_up();
+                        prompted = true;
+                    }
+                    std::thread::sleep(CTAP1_POLL_DELAY);
+                }
+                Err(e) => {
+                    return Err(ClientError::BadRequest(format!(
+                        "APDU error: 0x{:04X}",
+                        e.code
+                    )))
+                }
             }
         }
-        (assertion, outputs)
     }
 }
+
+impl ClientBackend for Ctap1Backend<'_> {
+    fn info(&self) -> &Info {
+        &self.info
+    }
+
+    fn selection(&self) -> Result<(), ClientError> {
+        let dummy = [0u8; 32];
+        self.call_polling(|| self.ctap1.register(&dummy, &dummy))?;
+        Ok(())
+    }
+
+    fn do_make_credential(
+        &self,
+        options: &PublicKeyCredentialCreationOptions,
+        client_data_hash: &[u8],
+        rp_id: &str,
+    ) -> Result<(AttestationResponse, ExtensionOutputs), ClientError> {
+        let selection = options.authenticator_selection.as_ref();
+        let uv_requirement = selection.and_then(|s| s.user_verification.as_ref());
+        let rk_requirement = selection.and_then(|s| s.resident_key.as_ref());
+
+        if rk_requirement == Some(&ResidentKeyRequirement::Required) {
+            return Err(ClientError::ConfigurationUnsupported(
+                "Resident key not supported by U2F".into(),
+            ));
+        }
+        if uv_requirement == Some(&UserVerificationRequirement::Required) {
+            return Err(ClientError::ConfigurationUnsupported(
+                "User verification not supported by U2F".into(),
+            ));
+        }
+        if options.attestation == Some(AttestationConveyancePreference::Enterprise) {
+            return Err(ClientError::ConfigurationUnsupported(
+                "Enterprise attestation not supported by U2F".into(),
+            ));
+        }
+
+        let has_es256 = options
+            .pub_key_cred_params
+            .iter()
+            .any(|p| p.alg == Algorithm::ES256 as i64);
+        if !has_es256 {
+            return Err(ClientError::ConfigurationUnsupported(
+                "ES256 algorithm required for U2F".into(),
+            ));
+        }
+
+        let app_param = sha256(rp_id.as_bytes());
+
+        // Check exclude list
+        if let Some(ref exclude_list) = options.exclude_credentials {
+            let dummy_param = [0u8; 32];
+            for cred in exclude_list {
+                match self
+                    .ctap1
+                    .authenticate(&dummy_param, &app_param, &cred.id, true)
+                {
+                    Err(e) if e.code == apdu::USE_NOT_SATISFIED => {
+                        // Credential exists — register with dummy to prompt UP, then fail
+                        self.call_polling(|| {
+                            self.ctap1.register(&dummy_param, &dummy_param)
+                        })?;
+                        return Err(ClientError::DeviceIneligible);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let registration = self.call_polling(|| {
+            self.ctap1.register(client_data_hash, &app_param)
+        })?;
+
+        let att_resp = AttestationResponse::from_ctap1(&app_param, &registration)
+            .map_err(|e| ClientError::BadRequest(e.to_string()))?;
+
+        Ok((att_resp, ExtensionOutputs::new()))
+    }
+
+    fn do_get_assertion(
+        &self,
+        options: &PublicKeyCredentialRequestOptions,
+        client_data_hash: &[u8],
+        rp_id: &str,
+    ) -> Result<(Vec<AssertionResponse>, Vec<ExtensionOutputs>), ClientError> {
+        let uv_requirement = options.user_verification.as_ref();
+
+        if uv_requirement == Some(&UserVerificationRequirement::Required) {
+            return Err(ClientError::ConfigurationUnsupported(
+                "User verification not supported by U2F".into(),
+            ));
+        }
+
+        let allow_list = options.allow_credentials.as_ref().ok_or_else(|| {
+            ClientError::ConfigurationUnsupported(
+                "allow_credentials required for U2F authentication".into(),
+            )
+        })?;
+
+        if allow_list.is_empty() {
+            return Err(ClientError::DeviceIneligible);
+        }
+
+        let app_param = sha256(rp_id.as_bytes());
+
+        for cred in allow_list {
+            match self.call_polling(|| {
+                self.ctap1
+                    .authenticate(client_data_hash, &app_param, &cred.id, false)
+            }) {
+                Ok(sig_data) => {
+                    let cred_cbor = cred.to_cbor_value();
+                    let assertion = AssertionResponse::from_ctap1(
+                        &app_param,
+                        cred_cbor,
+                        sig_data.user_presence,
+                        sig_data.counter,
+                        &sig_data.signature,
+                    );
+                    return Ok((vec![assertion], vec![ExtensionOutputs::new()]));
+                }
+                Err(ClientError::Timeout) => return Err(ClientError::Timeout),
+                Err(_) => continue,
+            }
+        }
+
+        Err(ClientError::DeviceIneligible)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CTAP2 backend
+// ---------------------------------------------------------------------------
 
 /// Negotiate the PIN/UV protocol version from authenticator info.
 fn negotiate_pin_protocol(info: &Info) -> Option<PinProtocol> {
-    // Prefer V2 over V1
     if info.pin_uv_protocols.contains(&2) {
         Some(PinProtocol::V2)
     } else if info.pin_uv_protocols.contains(&1) {
@@ -470,7 +646,7 @@ fn negotiate_pin_protocol(info: &Info) -> Option<PinProtocol> {
     }
 }
 
-/// Merge extension inputs into a single CBOR Value (map of text keys).
+/// Merge extension inputs into a single CBOR Value.
 fn merge_extension_inputs(inputs: &ExtensionInputs) -> Value {
     Value::Map(
         inputs
@@ -480,249 +656,65 @@ fn merge_extension_inputs(inputs: &ExtensionInputs) -> Value {
     )
 }
 
-/// High-level FIDO2 WebAuthn client.
-///
-/// Orchestrates extension processing, PIN/UV token acquisition, credential
-/// filtering, and CTAP2 calls for registration and authentication.
-pub struct Fido2Client<'a> {
+/// CTAP2 backend.
+pub struct Ctap2Backend<'a> {
     ctap: ctap2::Ctap2<'a>,
-    collector: ClientDataCollector,
-    interaction: &'a dyn UserInteraction,
     extensions: Vec<Box<dyn Ctap2Extension>>,
+    interaction: &'a dyn UserInteraction,
 }
 
-impl<'a> Fido2Client<'a> {
-    /// Create a new Fido2Client.
-    ///
-    /// Initializes CTAP2 communication with the device and prepares
-    /// client data collection for the given origin.
+impl<'a> Ctap2Backend<'a> {
     pub fn new(
         device: &'a dyn CtapDevice,
-        origin: &str,
         interaction: &'a dyn UserInteraction,
         extensions: Vec<Box<dyn Ctap2Extension>>,
-    ) -> Result<Self, ClientError> {
+    ) -> Result<Self, CtapError> {
         let ctap = ctap2::Ctap2::new(device, false)?;
         Ok(Self {
             ctap,
-            collector: ClientDataCollector::new(origin),
-            interaction,
             extensions,
+            interaction,
         })
     }
 
-    /// Get authenticator information.
-    pub fn info(&self) -> &Info {
-        self.ctap.info()
+    pub fn from_parts(
+        device: &'a dyn CtapDevice,
+        strict_cbor: bool,
+        max_msg_size: usize,
+        interaction: &'a dyn UserInteraction,
+        extensions: Vec<Box<dyn Ctap2Extension>>,
+        info: Info,
+    ) -> Self {
+        let mut ctap = ctap2::Ctap2::from_parts(device, strict_cbor, max_msg_size);
+        ctap.set_info(info);
+        Self {
+            ctap,
+            extensions,
+            interaction,
+        }
     }
 
-    /// Create a credential (WebAuthn registration).
-    pub fn make_credential(
-        &self,
-        options: &PublicKeyCredentialCreationOptions,
-    ) -> Result<RegistrationResult, ClientError> {
-        let rp_id = self
-            .collector
-            .get_rp_id(options.rp.id.as_deref())?;
-        self.collector.verify_rp_id(&rp_id)?;
-
-        let (client_data, _) = self.collector.collect_create(&options.challenge, Some(&rp_id))?;
-        let client_data_hash = client_data.hash();
-
-        let info = self.ctap.get_info()?;
-        let pin_protocol = negotiate_pin_protocol(&info);
-
-        // Determine user verification requirement
-        let selection = options.authenticator_selection.as_ref();
-        let uv_requirement = selection.and_then(|s| s.user_verification.as_ref());
-
-        // Enterprise attestation
-        let enterprise_attestation =
-            if options.attestation == Some(AttestationConveyancePreference::Enterprise) {
-                if info.options.get("ep") == Some(&true) {
-                    Some(1u32) // Vendor facilitated
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-        let mut allow_uv = true;
-        let mut user_verification = uv_requirement.cloned();
-
-        loop {
-            // Initialize extensions and accumulate permissions
-            let mut used_extensions: Vec<Box<dyn crate::extensions::RegistrationExtensionProcessor>> = Vec::new();
-            let mut permissions = permission::MAKE_CREDENTIAL;
-
-            if options.exclude_credentials.is_some() {
-                permissions |= permission::GET_ASSERTION;
-            }
-
-            for ext_factory in &self.extensions {
-                if let Some(proc) = ext_factory.make_credential(
-                    &self.ctap,
-                    options.extensions.as_ref(),
-                    pin_protocol,
-                ) {
-                    permissions |= proc.permissions();
-                    used_extensions.push(proc);
-                }
-            }
-
-            // Get auth params
-            let uv_str = user_verification.as_ref().map(|uv| uv.as_str());
-            let (pin_token, internal_uv) = get_auth_params(
-                &self.ctap,
-                &rp_id,
-                uv_str,
-                permissions,
-                allow_uv,
-                &mut |status| {
-                    if status == crate::ctap::keepalive::UPNEEDED {
-                        self.interaction.request_uv(0, None);
-                    }
-                },
-                self.interaction,
-                pin_protocol.map(|p| p.version()),
-            )?;
-
-            // Filter exclude list
-            if let Some(ref exclude_list) = options.exclude_credentials {
-                let exclude_cbor: Vec<Value> =
-                    exclude_list.iter().map(|d| d.to_cbor_value()).collect();
-                let pin_auth_for_filter = pin_token.as_ref().and_then(|token| {
-                    pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
-                });
-                let _excluded = filter_creds(
-                    &self.ctap,
-                    &rp_id,
-                    &exclude_cbor,
-                    pin_auth_for_filter.as_deref(),
-                    pin_protocol.map(|p| p.version()),
-                    &mut |_| {},
-                )?;
-                // Note: even if excluded is Some, we don't fail early — the authenticator
-                // needs to prompt for UP first
-            }
-
-            // Prepare extension inputs
-            let mut extension_inputs = ExtensionInputs::new();
-            for ext in &used_extensions {
-                if let Some(inputs) = ext.prepare_inputs(pin_token.as_deref()) {
-                    extension_inputs.extend(inputs);
-                }
-            }
-
-            // Determine rk
-            let rk_requirement = selection.and_then(|s| s.resident_key.as_ref());
-            let can_rk = info.options.get("rk") == Some(&true);
-            let rk = rk_requirement == Some(&ResidentKeyRequirement::Required)
-                || (rk_requirement == Some(&ResidentKeyRequirement::Preferred) && can_rk);
-
-            if rk && !can_rk {
-                return Err(ClientError::ConfigurationUnsupported(
-                    "Resident key not supported".into(),
-                ));
-            }
-
-            // Build options map
-            let opts = if rk || internal_uv {
-                let mut opts_map = Vec::new();
-                if rk {
-                    opts_map.push((Value::Text("rk".into()), Value::Bool(true)));
-                }
-                if internal_uv {
-                    opts_map.push((Value::Text("uv".into()), Value::Bool(true)));
-                }
-                Some(Value::Map(opts_map))
-            } else {
-                None
-            };
-
-            // Compute pin_auth
-            let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
-                if let Some(proto) = pin_protocol {
-                    (
-                        Some(proto.authenticate(token, &client_data_hash)),
-                        Some(proto.version()),
-                    )
-                } else {
-                    (None, None)
-                }
-            } else {
-                (None, None)
-            };
-
-            // Call makeCredential
-            let extensions_val = if extension_inputs.is_empty() {
-                None
-            } else {
-                Some(merge_extension_inputs(&extension_inputs))
-            };
-
-            match self.ctap.make_credential(
-                &client_data_hash,
-                options.rp.to_cbor_value(&rp_id),
-                options.user.to_cbor_value(),
-                PublicKeyCredentialParameters::to_cbor_list(&options.pub_key_cred_params),
-                None, // exclude_list is handled via filter_creds above
-                extensions_val,
-                opts,
-                pin_uv_param.as_deref(),
-                pin_uv_protocol,
-                enterprise_attestation,
-                &mut |status| {
-                    if status == crate::ctap::keepalive::UPNEEDED {
-                        self.interaction.request_uv(0, None);
-                    }
-                },
-            ) {
-                Ok(att_resp) => {
-                    // Process extension outputs
-                    let mut extension_outputs = ExtensionOutputs::new();
-                    for ext in &used_extensions {
-                        if let Some(output) =
-                            ext.prepare_outputs(&att_resp, pin_token.as_deref(), &self.ctap)
-                        {
-                            extension_outputs.extend(output);
-                        }
-                    }
-
-                    return Ok(RegistrationResult {
-                        attestation: att_resp,
-                        client_data,
-                        extension_outputs,
-                    });
-                }
-                Err(CtapError::StatusError(CtapStatus::PuatRequired))
-                    if user_verification.as_ref().map(|uv| uv.as_str())
-                        == Some(uv_requirement::DISCOURAGED) =>
-                {
-                    user_verification = Some(UserVerificationRequirement::Required);
-                    continue;
-                }
-                Err(CtapError::StatusError(CtapStatus::UvBlocked)) if allow_uv => {
-                    allow_uv = false;
-                    continue;
-                }
-                Err(e) => return Err(e.into()),
+    fn keepalive(&self) -> impl FnMut(u8) + '_ {
+        |status| {
+            if status == keepalive::UPNEEDED {
+                self.interaction.prompt_up();
             }
         }
     }
 
-    /// Authenticate with a credential (WebAuthn authentication).
-    pub fn get_assertion(
-        &'a self,
+    fn do_get_assertion_inner(
+        &self,
         options: &PublicKeyCredentialRequestOptions,
-    ) -> Result<AssertionSelection<'a>, ClientError> {
-        let rp_id = self.collector.get_rp_id(options.rp_id.as_deref())?;
-        self.collector.verify_rp_id(&rp_id)?;
-
-        let (client_data, _) = self.collector.collect_get(&options.challenge, Some(&rp_id))?;
-        let client_data_hash = client_data.hash();
-
+        client_data_hash: &[u8],
+        rp_id: &str,
+    ) -> Result<
+        (
+            Vec<AssertionResponse>,
+            Vec<Box<dyn AuthenticationExtensionProcessor>>,
+            Option<Vec<u8>>,
+        ),
+        ClientError,
+    > {
         let info = self.ctap.get_info()?;
         let pin_protocol = negotiate_pin_protocol(&info);
 
@@ -731,7 +723,6 @@ impl<'a> Fido2Client<'a> {
         let mut user_verification = uv_requirement.cloned();
 
         loop {
-            // Initialize extensions and accumulate permissions
             let mut used_extensions: Vec<Box<dyn AuthenticationExtensionProcessor>> = Vec::new();
             let mut permissions = permission::GET_ASSERTION;
 
@@ -752,19 +743,14 @@ impl<'a> Fido2Client<'a> {
                 }
             }
 
-            // Get auth params
             let uv_str = user_verification.as_ref().map(|uv| uv.as_str());
             let (pin_token, internal_uv) = get_auth_params(
                 &self.ctap,
-                &rp_id,
+                rp_id,
                 uv_str,
                 permissions,
                 allow_uv,
-                &mut |status| {
-                    if status == crate::ctap::keepalive::UPNEEDED {
-                        self.interaction.request_uv(0, None);
-                    }
-                },
+                &mut self.keepalive(),
                 self.interaction,
                 pin_protocol.map(|p| p.version()),
             )?;
@@ -778,7 +764,7 @@ impl<'a> Fido2Client<'a> {
                 });
                 filter_creds(
                     &self.ctap,
-                    &rp_id,
+                    rp_id,
                     &allow_cbor,
                     pin_auth_for_filter.as_deref(),
                     pin_protocol.map(|p| p.version()),
@@ -807,11 +793,10 @@ impl<'a> Fido2Client<'a> {
                 None
             };
 
-            // Compute pin_auth
             let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
                 if let Some(proto) = pin_protocol {
                     (
-                        Some(proto.authenticate(token, &client_data_hash)),
+                        Some(proto.authenticate(token, client_data_hash)),
                         Some(proto.version()),
                     )
                 } else {
@@ -821,11 +806,9 @@ impl<'a> Fido2Client<'a> {
                 (None, None)
             };
 
-            // Build allow list for CTAP2 call
             let allow_list_val = if let Some(ref cred) = selected_cred {
                 Some(Value::Array(vec![cred.clone()]))
             } else if options.allow_credentials.is_some() {
-                // Allow list existed but no match — send dummy
                 Some(Value::Array(vec![Value::Map(vec![
                     (Value::Text("id".into()), Value::Bytes(vec![0])),
                     (
@@ -844,27 +827,17 @@ impl<'a> Fido2Client<'a> {
             };
 
             match self.ctap.get_assertions(
-                &rp_id,
-                &client_data_hash,
+                rp_id,
+                client_data_hash,
                 allow_list_val,
                 extensions_val,
                 opts,
                 pin_uv_param.as_deref(),
                 pin_uv_protocol,
-                &mut |status| {
-                    if status == crate::ctap::keepalive::UPNEEDED {
-                        self.interaction.request_uv(0, None);
-                    }
-                },
+                &mut self.keepalive(),
             ) {
                 Ok(assertions) => {
-                    return Ok(AssertionSelection {
-                        ctap: &self.ctap,
-                        client_data,
-                        assertions,
-                        extensions: used_extensions,
-                        pin_token,
-                    });
+                    return Ok((assertions, used_extensions, pin_token));
                 }
                 Err(CtapError::StatusError(CtapStatus::PuatRequired))
                     if user_verification.as_ref().map(|uv| uv.as_str())
@@ -880,6 +853,350 @@ impl<'a> Fido2Client<'a> {
                 Err(e) => return Err(e.into()),
             }
         }
+    }
+}
+
+impl ClientBackend for Ctap2Backend<'_> {
+    fn info(&self) -> &Info {
+        self.ctap.info()
+    }
+
+    fn selection(&self) -> Result<(), ClientError> {
+        let info = self.ctap.get_info()?;
+        if info.versions.iter().any(|v| v == "FIDO_2_1") {
+            self.ctap
+                .selection(&mut self.keepalive())
+                .map_err(ClientError::from)
+        } else {
+            match self.ctap.make_credential(
+                &[0u8; 32],
+                Value::Map(vec![
+                    (Value::Text("id".into()), Value::Text("example.com".into())),
+                    (
+                        Value::Text("name".into()),
+                        Value::Text("example.com".into()),
+                    ),
+                ]),
+                Value::Map(vec![
+                    (Value::Text("id".into()), Value::Bytes(b"dummy".to_vec())),
+                    (Value::Text("name".into()), Value::Text("dummy".into())),
+                ]),
+                Value::Array(vec![Value::Map(vec![
+                    (
+                        Value::Text("type".into()),
+                        Value::Text("public-key".into()),
+                    ),
+                    (Value::Text("alg".into()), Value::Int(-7)),
+                ])]),
+                None,
+                None,
+                None,
+                Some(b""),
+                None,
+                None,
+                &mut self.keepalive(),
+            ) {
+                Ok(_) => Ok(()),
+                Err(CtapError::StatusError(
+                    CtapStatus::PinNotSet
+                    | CtapStatus::PinInvalid
+                    | CtapStatus::PinAuthInvalid,
+                )) => Ok(()),
+                Err(e) => Err(e.into()),
+            }
+        }
+    }
+
+    fn do_make_credential(
+        &self,
+        options: &PublicKeyCredentialCreationOptions,
+        client_data_hash: &[u8],
+        rp_id: &str,
+    ) -> Result<(AttestationResponse, ExtensionOutputs), ClientError> {
+        let info = self.ctap.get_info()?;
+        let pin_protocol = negotiate_pin_protocol(&info);
+
+        let selection = options.authenticator_selection.as_ref();
+        let uv_requirement = selection.and_then(|s| s.user_verification.as_ref());
+
+        let enterprise_attestation =
+            if options.attestation == Some(AttestationConveyancePreference::Enterprise) {
+                if info.options.get("ep") == Some(&true) {
+                    Some(1u32)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+        let mut allow_uv = true;
+        let mut user_verification = uv_requirement.cloned();
+
+        loop {
+            let mut used_extensions: Vec<
+                Box<dyn crate::extensions::RegistrationExtensionProcessor>,
+            > = Vec::new();
+            let mut permissions = permission::MAKE_CREDENTIAL;
+
+            if options.exclude_credentials.is_some() {
+                permissions |= permission::GET_ASSERTION;
+            }
+
+            for ext_factory in &self.extensions {
+                if let Some(proc) = ext_factory.make_credential(
+                    &self.ctap,
+                    options.extensions.as_ref(),
+                    pin_protocol,
+                ) {
+                    permissions |= proc.permissions();
+                    used_extensions.push(proc);
+                }
+            }
+
+            let uv_str = user_verification.as_ref().map(|uv| uv.as_str());
+            let (pin_token, internal_uv) = get_auth_params(
+                &self.ctap,
+                rp_id,
+                uv_str,
+                permissions,
+                allow_uv,
+                &mut self.keepalive(),
+                self.interaction,
+                pin_protocol.map(|p| p.version()),
+            )?;
+
+            // Filter exclude list
+            if let Some(ref exclude_list) = options.exclude_credentials {
+                let exclude_cbor: Vec<Value> =
+                    exclude_list.iter().map(|d| d.to_cbor_value()).collect();
+                let pin_auth_for_filter = pin_token.as_ref().and_then(|token| {
+                    pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
+                });
+                let _excluded = filter_creds(
+                    &self.ctap,
+                    rp_id,
+                    &exclude_cbor,
+                    pin_auth_for_filter.as_deref(),
+                    pin_protocol.map(|p| p.version()),
+                    &mut |_| {},
+                )?;
+            }
+
+            // Prepare extension inputs
+            let mut extension_inputs = ExtensionInputs::new();
+            for ext in &used_extensions {
+                if let Some(inputs) = ext.prepare_inputs(pin_token.as_deref()) {
+                    extension_inputs.extend(inputs);
+                }
+            }
+
+            // Determine rk
+            let rk_requirement = selection.and_then(|s| s.resident_key.as_ref());
+            let can_rk = info.options.get("rk") == Some(&true);
+            let rk = rk_requirement == Some(&ResidentKeyRequirement::Required)
+                || (rk_requirement == Some(&ResidentKeyRequirement::Preferred) && can_rk);
+
+            if rk && !can_rk {
+                return Err(ClientError::ConfigurationUnsupported(
+                    "Resident key not supported".into(),
+                ));
+            }
+
+            let opts = if rk || internal_uv {
+                let mut opts_map = Vec::new();
+                if rk {
+                    opts_map.push((Value::Text("rk".into()), Value::Bool(true)));
+                }
+                if internal_uv {
+                    opts_map.push((Value::Text("uv".into()), Value::Bool(true)));
+                }
+                Some(Value::Map(opts_map))
+            } else {
+                None
+            };
+
+            let (pin_uv_param, pin_uv_protocol) = if let Some(ref token) = pin_token {
+                if let Some(proto) = pin_protocol {
+                    (
+                        Some(proto.authenticate(token, client_data_hash)),
+                        Some(proto.version()),
+                    )
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+
+            let extensions_val = if extension_inputs.is_empty() {
+                None
+            } else {
+                Some(merge_extension_inputs(&extension_inputs))
+            };
+
+            match self.ctap.make_credential(
+                client_data_hash,
+                options.rp.to_cbor_value(rp_id),
+                options.user.to_cbor_value(),
+                PublicKeyCredentialParameters::to_cbor_list(&options.pub_key_cred_params),
+                None,
+                extensions_val,
+                opts,
+                pin_uv_param.as_deref(),
+                pin_uv_protocol,
+                enterprise_attestation,
+                &mut self.keepalive(),
+            ) {
+                Ok(att_resp) => {
+                    let mut extension_outputs = ExtensionOutputs::new();
+                    for ext in &used_extensions {
+                        if let Some(output) =
+                            ext.prepare_outputs(&att_resp, pin_token.as_deref(), &self.ctap)
+                        {
+                            extension_outputs.extend(output);
+                        }
+                    }
+                    return Ok((att_resp, extension_outputs));
+                }
+                Err(CtapError::StatusError(CtapStatus::PuatRequired))
+                    if user_verification.as_ref().map(|uv| uv.as_str())
+                        == Some(uv_requirement::DISCOURAGED) =>
+                {
+                    user_verification = Some(UserVerificationRequirement::Required);
+                    continue;
+                }
+                Err(CtapError::StatusError(CtapStatus::UvBlocked)) if allow_uv => {
+                    allow_uv = false;
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
+    fn do_get_assertion(
+        &self,
+        options: &PublicKeyCredentialRequestOptions,
+        client_data_hash: &[u8],
+        rp_id: &str,
+    ) -> Result<(Vec<AssertionResponse>, Vec<ExtensionOutputs>), ClientError> {
+        let (assertions, extensions, pin_token) =
+            self.do_get_assertion_inner(options, client_data_hash, rp_id)?;
+
+        let ext_outputs: Vec<ExtensionOutputs> = assertions
+            .iter()
+            .map(|assertion| {
+                let mut outputs = ExtensionOutputs::new();
+                for ext in &extensions {
+                    if let Some(ext_out) =
+                        ext.prepare_outputs(assertion, pin_token.as_deref(), &self.ctap)
+                    {
+                        outputs.extend(ext_out);
+                    }
+                }
+                outputs
+            })
+            .collect();
+
+        Ok((assertions, ext_outputs))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fido2Client
+// ---------------------------------------------------------------------------
+
+/// High-level FIDO2 WebAuthn client.
+///
+/// Automatically selects between CTAP1 (U2F) and CTAP2 backends based on
+/// device capabilities. Falls back to CTAP1 if CTAP2 initialization fails.
+pub struct Fido2Client<'a> {
+    backend: Box<dyn ClientBackend + 'a>,
+    collector: ClientDataCollector,
+}
+
+impl<'a> Fido2Client<'a> {
+    /// Create a new Fido2Client.
+    ///
+    /// Tries CTAP2 first, then falls back to CTAP1 if the device doesn't
+    /// support CBOR or if CTAP2 initialization fails.
+    pub fn new(
+        device: &'a dyn CtapDevice,
+        origin: &str,
+        interaction: &'a dyn UserInteraction,
+        extensions: Vec<Box<dyn Ctap2Extension>>,
+    ) -> Result<Self, ClientError> {
+        let backend: Box<dyn ClientBackend + 'a> =
+            if device.capabilities() & capability::CBOR != 0 {
+                match Ctap2Backend::new(device, interaction, extensions) {
+                    Ok(b) => Box::new(b),
+                    Err(_) => Box::new(Ctap1Backend::new(device, interaction)),
+                }
+            } else {
+                Box::new(Ctap1Backend::new(device, interaction))
+            };
+
+        Ok(Self {
+            backend,
+            collector: ClientDataCollector::new(origin),
+        })
+    }
+
+    /// Get authenticator information.
+    pub fn info(&self) -> &Info {
+        self.backend.info()
+    }
+
+    /// Perform authenticator selection (touch).
+    pub fn selection(&self) -> Result<(), ClientError> {
+        self.backend.selection()
+    }
+
+    /// Create a credential (WebAuthn registration).
+    pub fn make_credential(
+        &self,
+        options: &PublicKeyCredentialCreationOptions,
+    ) -> Result<RegistrationResult, ClientError> {
+        let rp_id = self.collector.get_rp_id(options.rp.id.as_deref())?;
+        self.collector.verify_rp_id(&rp_id)?;
+
+        let (client_data, _) =
+            self.collector.collect_create(&options.challenge, Some(&rp_id))?;
+        let client_data_hash = client_data.hash();
+
+        let (attestation, extension_outputs) =
+            self.backend
+                .do_make_credential(options, &client_data_hash, &rp_id)?;
+
+        Ok(RegistrationResult {
+            attestation,
+            client_data,
+            extension_outputs,
+        })
+    }
+
+    /// Authenticate with a credential (WebAuthn authentication).
+    pub fn get_assertion(
+        &self,
+        options: &PublicKeyCredentialRequestOptions,
+    ) -> Result<AssertionResult, ClientError> {
+        let rp_id = self.collector.get_rp_id(options.rp_id.as_deref())?;
+        self.collector.verify_rp_id(&rp_id)?;
+
+        let (client_data, _) =
+            self.collector.collect_get(&options.challenge, Some(&rp_id))?;
+        let client_data_hash = client_data.hash();
+
+        let (assertions, extension_outputs) =
+            self.backend
+                .do_get_assertion(options, &client_data_hash, &rp_id)?;
+
+        Ok(AssertionResult {
+            client_data,
+            assertions,
+            extension_outputs,
+        })
     }
 }
 
@@ -920,7 +1237,9 @@ mod tests {
     #[test]
     fn test_collect_create() {
         let c = ClientDataCollector::new("https://example.com");
-        let (cd, rp_id) = c.collect_create(b"challenge_here__", Some("example.com")).unwrap();
+        let (cd, rp_id) = c
+            .collect_create(b"challenge_here__", Some("example.com"))
+            .unwrap();
         assert_eq!(rp_id, "example.com");
         assert_eq!(cd.type_, "webauthn.create");
         assert_eq!(cd.origin, "https://example.com");
@@ -938,6 +1257,8 @@ mod tests {
     #[test]
     fn test_collect_bad_rp_id() {
         let c = ClientDataCollector::new("https://example.com");
-        assert!(c.collect_create(b"challenge_here__", Some("evil.com")).is_err());
+        assert!(c
+            .collect_create(b"challenge_here__", Some("evil.com"))
+            .is_err());
     }
 }

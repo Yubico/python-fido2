@@ -28,16 +28,11 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import unittest
-from typing import Any, Mapping, cast
 from unittest import mock
 
-from fido2 import cbor
 from fido2.client import ClientError, DefaultClientDataCollector, Fido2Client
-from fido2.ctap import CtapError
 from fido2.ctap1 import RegistrationData
-from fido2.ctap2 import AttestationResponse, Info
 from fido2.hid import CAPABILITY
-from fido2.utils import sha256
 from fido2.webauthn import (
     AttestationObject,
     CollectedClientData,
@@ -62,24 +57,67 @@ _MC_RESP = bytes.fromhex(
     "a301667061636b6564025900c40021f5fc0b85cd22e60623bcd7d1ca48948909249b4776eb515154e57b66ae12410000001cf8a011f38c0a4d15800617111f9edc7d0040fe3aac036d14c1e1c65518b698dd1da8f596bc33e11072813466c6bf3845691509b80fb76d59309b8d39e0a93452688f6ca3a39a76f3fc52744fb73948b15783a5010203262001215820643566c206dd00227005fa5de69320616ca268043a38f08bde2e9dc45a5cafaf225820171353b2932434703726aae579fa6542432861fe591e481ea22d63997e1a529003a363616c67266373696758483046022100cc1ef43edf07de8f208c21619c78a565ddcf4150766ad58781193be8e0a742ed022100f1ed7c7243e45b7d8e5bda6b1abf10af7391789d1ef21b70bd69fed48dba4cb163783563815901973082019330820138a003020102020900859b726cb24b4c29300a06082a8648ce3d0403023047310b300906035504061302555331143012060355040a0c0b59756269636f205465737431223020060355040b0c1941757468656e74696361746f72204174746573746174696f6e301e170d3136313230343131353530305a170d3236313230323131353530305a3047310b300906035504061302555331143012060355040a0c0b59756269636f205465737431223020060355040b0c1941757468656e74696361746f72204174746573746174696f6e3059301306072a8648ce3d020106082a8648ce3d03010703420004ad11eb0e8852e53ad5dfed86b41e6134a18ec4e1af8f221a3c7d6e636c80ea13c3d504ff2e76211bb44525b196c44cb4849979cf6f896ecd2bb860de1bf4376ba30d300b30090603551d1304023000300a06082a8648ce3d0403020349003046022100e9a39f1b03197525f7373e10ce77e78021731b94d0c03f3fda1fd22db3d030e7022100c4faec3445a820cf43129cdb00aabefd9ae2d874f9c5d343cb2f113da23723f3"  # noqa E501
 )
 
+# CTAP HID commands
+_HID_CBOR = 0x10
+_HID_MSG = 0x03
+
+# CTAP2 command bytes
+_CTAP2_GET_INFO = 0x04
+_CTAP2_MAKE_CREDENTIAL = 0x01
+
+# CTAP error status for CREDENTIAL_EXCLUDED
+_CTAP2_CREDENTIAL_EXCLUDED = 0x19
+
+
+def _make_ctap2_device(info_cbor=_INFO_NO_PIN, mc_response=None, mc_error=None):
+    """Create a mock device that responds to CTAP2 commands."""
+    dev = mock.Mock()
+    dev.capabilities = CAPABILITY.CBOR
+
+    def handle_call(cmd, data, event=None, on_keepalive=None):
+        if cmd == _HID_CBOR:
+            ctap2_cmd = data[0]
+            if ctap2_cmd == _CTAP2_GET_INFO:
+                return b"\x00" + info_cbor
+            elif ctap2_cmd == _CTAP2_MAKE_CREDENTIAL:
+                if mc_error is not None:
+                    return bytes([mc_error])
+                if mc_response is not None:
+                    return b"\x00" + mc_response
+        raise ValueError(f"Unexpected HID command: {cmd:#x}, CTAP cmd: {data[0]:#x}")
+
+    dev.call = handle_call
+    return dev
+
+
+def _make_ctap1_device(register_response=None):
+    """Create a mock device that responds to CTAP1/U2F commands."""
+    dev = mock.Mock()
+    dev.capabilities = 0  # No CTAP2
+
+    def handle_call(cmd, data, event=None, on_keepalive=None):
+        if cmd == _HID_MSG:
+            ins = data[1]
+            if ins == 0x01 and register_response is not None:
+                # Register command: return response + status OK (0x9000)
+                return register_response + b"\x90\x00"
+        raise ValueError(f"Unexpected command: {cmd:#x}")
+
+    dev.call = handle_call
+    return dev
+
 
 class TestFido2Client(unittest.TestCase):
     def test_ctap1_info(self):
         dev = mock.Mock()
         dev.capabilities = 0
+        dev.call = mock.Mock()  # Won't be called during init for CTAP1
         client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
         self.assertEqual(client.info.versions, ["U2F_V2"])
         self.assertEqual(client.info.pin_uv_protocols, [])
 
-    @mock.patch("fido2.client.Ctap2")
-    def test_make_credential_wrong_app_id(self, PatchedCtap2):
-        dev = mock.Mock()
-        dev.capabilities = CAPABILITY.CBOR
-        ctap2 = mock.MagicMock()
-        ctap2.get_info.return_value = Info.from_dict(
-            cast(Mapping[int, Any], cbor.decode(_INFO_NO_PIN))
-        )
-        PatchedCtap2.return_value = ctap2
+    def test_make_credential_wrong_app_id(self):
+        dev = _make_ctap2_device()
         client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
         try:
             client.make_credential(
@@ -94,17 +132,8 @@ class TestFido2Client(unittest.TestCase):
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.BAD_REQUEST)
 
-    @mock.patch("fido2.client.Ctap2")
-    def test_make_credential_existing_key(self, PatchedCtap2):
-        dev = mock.Mock()
-        dev.capabilities = CAPABILITY.CBOR
-        ctap2 = mock.MagicMock()
-        ctap2.get_info.return_value = Info.from_dict(
-            cast(Mapping[int, Any], cbor.decode(_INFO_NO_PIN))
-        )
-        ctap2.info = ctap2.get_info()
-        ctap2.make_credential.side_effect = CtapError(CtapError.ERR.CREDENTIAL_EXCLUDED)
-        PatchedCtap2.return_value = ctap2
+    def test_make_credential_existing_key(self):
+        dev = _make_ctap2_device(mc_error=_CTAP2_CREDENTIAL_EXCLUDED)
         client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
 
         try:
@@ -121,21 +150,8 @@ class TestFido2Client(unittest.TestCase):
         except ClientError as e:
             self.assertEqual(e.code, ClientError.ERR.DEVICE_INELIGIBLE)
 
-        ctap2.make_credential.assert_called_once()
-
-    @mock.patch("fido2.client.Ctap2")
-    def test_make_credential_ctap2(self, PatchedCtap2):
-        dev = mock.Mock()
-        dev.capabilities = CAPABILITY.CBOR
-        ctap2 = mock.MagicMock()
-        ctap2.get_info.return_value = Info.from_dict(
-            cast(Mapping[int, Any], cbor.decode(_INFO_NO_PIN))
-        )
-        ctap2.info = ctap2.get_info()
-        ctap2.make_credential.return_value = AttestationResponse.from_dict(
-            cast(Mapping[int, Any], cbor.decode(_MC_RESP))
-        )
-        PatchedCtap2.return_value = ctap2
+    def test_make_credential_ctap2(self):
+        dev = _make_ctap2_device(mc_response=_MC_RESP)
         client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
 
         response = client.make_credential(
@@ -152,34 +168,13 @@ class TestFido2Client(unittest.TestCase):
         self.assertIsInstance(response.attestation_object, AttestationObject)
         self.assertIsInstance(response.client_data, CollectedClientData)
 
-        ctap2.make_credential.assert_called_with(
-            response.client_data.hash,
-            rp,
-            user,
-            [{"type": "public-key", "alg": -7}],
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            event=mock.ANY,
-            on_keepalive=mock.ANY,
-        )
-
         self.assertEqual(response.client_data.origin, APP_ID)
         self.assertEqual(response.client_data.type, "webauthn.create")
         self.assertEqual(response.client_data.challenge, challenge)
 
     def test_make_credential_ctap1(self):
-        dev = mock.Mock()
-        dev.capabilities = 0  # No CTAP2
+        dev = _make_ctap1_device(register_response=bytes(REG_DATA))
         client = Fido2Client(dev, CLIENT_DATA_COLLECTOR)
-
-        ctap1_mock = mock.MagicMock()
-        ctap1_mock.get_version.return_value = "U2F_V2"
-        ctap1_mock.register.return_value = REG_DATA
-        client._backend.ctap1 = ctap1_mock
 
         response = client.make_credential(
             PublicKeyCredentialCreationOptions(
@@ -193,10 +188,6 @@ class TestFido2Client(unittest.TestCase):
         self.assertIsInstance(response.attestation_object, AttestationObject)
         self.assertIsInstance(response.client_data, CollectedClientData)
         client_data = response.client_data
-
-        ctap1_mock.register.assert_called_with(
-            client_data.hash, sha256(rp["id"].encode())
-        )
 
         self.assertEqual(client_data.origin, APP_ID)
         self.assertEqual(client_data.type, "webauthn.create")

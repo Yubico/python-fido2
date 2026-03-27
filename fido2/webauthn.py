@@ -605,14 +605,44 @@ class AuthenticationExtensionsClientOutputs(Mapping[str, Any]):
         value = self._members[key]
         if isinstance(value, bytes):
             return websafe_encode(value)
-        elif isinstance(value, Mapping) and not isinstance(value, dict):
+        elif isinstance(value, Mapping):
+            if isinstance(value, dict):
+                output_types = self._get_output_types()
+                if key in output_types:
+                    value = output_types[key].from_dict(value)
+                    return dict(value)
             return dict(value)
         return value
+
+    _output_types: dict[str, type[_JsonDataObject]] | None = None
+
+    @classmethod
+    def _get_output_types(cls) -> dict[str, type[_JsonDataObject]]:
+        if cls._output_types is None:
+            from .ctap2.extensions import (
+                AuthenticatorExtensionsLargeBlobOutputs,
+                AuthenticatorExtensionsPRFOutputs,
+                CredentialPropertiesOutput,
+                HMACGetSecretOutput,
+            )
+
+            cls._output_types = {
+                "largeBlob": AuthenticatorExtensionsLargeBlobOutputs,
+                "prf": AuthenticatorExtensionsPRFOutputs,
+                "hmacGetSecret": HMACGetSecretOutput,
+                "credProps": CredentialPropertiesOutput,
+            }
+        return cls._output_types
 
     def __getattr__(self, key):
         parts = key.split("_")
         name = parts[0] + "".join(p.title() for p in parts[1:])
-        return self._members.get(name)
+        value = self._members.get(name)
+        if isinstance(value, dict):
+            output_types = self._get_output_types()
+            if name in output_types:
+                return output_types[name].from_dict(value)
+        return value
 
     def __repr__(self):
         return repr(dict(self))

@@ -374,6 +374,7 @@ dependencies = [
  "fido2",
  "log",
  "pyo3",
+ "serde_json",
 ]
 
 [[package]]

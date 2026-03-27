@@ -15,6 +15,10 @@ impl CliInteraction {
 }
 
 impl UserInteraction for CliInteraction {
+    fn prompt_up(&self) {
+        println!("Touch your authenticator device now...");
+    }
+
     fn request_pin(&self, _permissions: u32, _rp_id: Option<&str>) -> Option<String> {
         let mut cached = self.pin.borrow_mut();
         if cached.is_none() {

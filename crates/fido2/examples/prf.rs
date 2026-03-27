@@ -148,10 +148,10 @@ fn main() {
     };
 
     println!("\nEvaluating PRF with single salt...");
-    let selection = client
+    let result = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
-    let (_assertion, ext_outputs) = selection.get(0);
+    let ext_outputs = &result.extension_outputs[0];
 
     if let Some(prf) = ext_outputs.get("prf") {
         if let Some(results) = prf.map_get_text("results") {
@@ -185,10 +185,10 @@ fn main() {
     };
 
     println!("\nEvaluating PRF with two salts...");
-    let selection = client
+    let result = client
         .get_assertion(&auth_options2)
         .expect("Authentication failed");
-    let (_assertion, ext_outputs) = selection.get(0);
+    let ext_outputs = &result.extension_outputs[0];
 
     if let Some(prf) = ext_outputs.get("prf") {
         if let Some(results) = prf.map_get_text("results") {

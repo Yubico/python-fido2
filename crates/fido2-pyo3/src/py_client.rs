@@ -25,13 +25,14 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-use fido2::cbor::Value;
-use fido2::client;
-use fido2::ctap2;
-use fido2::pin::PinProtocol;
+use fido2::client::{self, ClientBackend};
+use fido2::ctap::capability;
+use fido2::ctap2::{self, Info};
+use fido2::extensions::default_extensions;
+use fido2::webauthn::Aaguid;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 use crate::py_ctap::PyCtapDevice;
 
@@ -140,6 +141,12 @@ fn client_err(e: client::ClientError) -> PyErr {
         client::ClientError::PinRequired => {
             PyValueError::new_err("CLIENT_PIN_REQUIRED".to_string())
         }
+        client::ClientError::DeviceIneligible => {
+            PyValueError::new_err("CLIENT_DEVICE_INELIGIBLE".to_string())
+        }
+        client::ClientError::Timeout => {
+            PyValueError::new_err("CLIENT_TIMEOUT".to_string())
+        }
         client::ClientError::Ctap(e) => crate::py_ctap::ctap_err(e),
     }
 }
@@ -147,34 +154,41 @@ fn client_err(e: client::ClientError) -> PyErr {
 // ---- UserInteraction bridge ----
 
 /// Bridges a Python UserInteraction object to the Rust UserInteraction trait.
+///
+/// Forwards the trait's `permissions` and `rp_id` parameters directly to the
+/// Python object's methods.
 struct PyUserInteraction {
     py_obj: PyObject,
-    permissions: u32,
-    rp_id: Option<String>,
 }
 
 impl client::UserInteraction for PyUserInteraction {
-    fn request_pin(&self, _permissions: u32, _rp_id: Option<&str>) -> Option<String> {
+    fn prompt_up(&self) {
         Python::with_gil(|py| {
-            let rp_id = self
-                .rp_id
-                .as_ref()
-                .map_or_else(|| py.None(), |s| s.clone().into_pyobject(py).unwrap().into_any().unbind());
+            let _ = self.py_obj.call_method0(py, "prompt_up");
+        });
+    }
+
+    fn request_pin(&self, permissions: u32, rp_id: Option<&str>) -> Option<String> {
+        Python::with_gil(|py| {
+            let rp_id_py = rp_id.map_or_else(
+                || py.None(),
+                |s| s.into_pyobject(py).unwrap().into_any().unbind(),
+            );
             self.py_obj
-                .call_method1(py, "request_pin", (self.permissions, rp_id))
+                .call_method1(py, "request_pin", (permissions, rp_id_py))
                 .ok()
                 .and_then(|result| result.extract::<Option<String>>(py).ok().flatten())
         })
     }
 
-    fn request_uv(&self, _permissions: u32, _rp_id: Option<&str>) -> bool {
+    fn request_uv(&self, permissions: u32, rp_id: Option<&str>) -> bool {
         Python::with_gil(|py| {
-            let rp_id = self
-                .rp_id
-                .as_ref()
-                .map_or_else(|| py.None(), |s| s.clone().into_pyobject(py).unwrap().into_any().unbind());
+            let rp_id_py = rp_id.map_or_else(
+                || py.None(),
+                |s| s.into_pyobject(py).unwrap().into_any().unbind(),
+            );
             self.py_obj
-                .call_method1(py, "request_uv", (self.permissions, rp_id))
+                .call_method1(py, "request_uv", (permissions, rp_id_py))
                 .ok()
                 .and_then(|result| result.extract::<bool>(py).ok())
                 .unwrap_or(false)
@@ -182,138 +196,200 @@ impl client::UserInteraction for PyUserInteraction {
     }
 }
 
-// ---- NativeCtap2ClientBackend ----
+// ---- NativeFido2Client ----
 
+/// Native FIDO2 client handling both CTAP1 and CTAP2 backends.
+///
+/// At construction, probes the device to determine capabilities and caches
+/// authenticator info. Per-call, creates temporary backend objects to perform
+/// operations.
 #[pyclass]
-struct NativeCtap2ClientBackend {
+struct NativeFido2Client {
     device: PyObject,
-    strict_cbor: bool,
-    max_msg_size: usize,
+    user_interaction: PyObject,
+    on_keepalive: PyObject,
+    info: Info,
+    is_ctap2: bool,
+}
+
+impl NativeFido2Client {
+    /// Create a PyCtapDevice for a call, using the stored device and on_keepalive.
+    fn make_device(&self, py: Python<'_>, event: Option<PyObject>) -> PyResult<PyCtapDevice> {
+        PyCtapDevice::with_event(
+            py,
+            self.device.clone_ref(py),
+            event,
+            Some(self.on_keepalive.clone_ref(py)),
+        )
+    }
+
+    /// Create a PyUserInteraction from the stored user_interaction.
+    fn make_interaction(&self) -> PyUserInteraction {
+        PyUserInteraction {
+            py_obj: Python::with_gil(|py| self.user_interaction.clone_ref(py)),
+        }
+    }
+
+    /// Create the appropriate backend based on cached capabilities.
+    fn make_backend<'a>(
+        &self,
+        dev: &'a PyCtapDevice,
+        ui: &'a PyUserInteraction,
+    ) -> Box<dyn ClientBackend + 'a> {
+        if self.is_ctap2 {
+            Box::new(client::Ctap2Backend::from_parts(
+                dev,
+                false,
+                self.info.max_msg_size,
+                ui,
+                default_extensions(),
+                self.info.clone(),
+            ))
+        } else {
+            Box::new(client::Ctap1Backend::new(dev, ui))
+        }
+    }
 }
 
 #[pymethods]
-impl NativeCtap2ClientBackend {
+impl NativeFido2Client {
     #[new]
-    fn new(device: PyObject, strict_cbor: bool, max_msg_size: usize) -> Self {
-        Self {
+    fn new(
+        py: Python<'_>,
+        device: PyObject,
+        user_interaction: PyObject,
+        on_keepalive: PyObject,
+    ) -> PyResult<Self> {
+        let capabilities: u8 = device.getattr(py, "capabilities")?.extract(py)?;
+        let is_ctap2 = capabilities & capability::CBOR != 0;
+
+        let info = if is_ctap2 {
+            let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
+            match ctap2::Ctap2::new(&dev, false) {
+                Ok(ctap) => ctap.info().clone(),
+                Err(e) => return Err(crate::py_ctap::ctap_err(e)),
+            }
+        } else {
+            Info {
+                versions: vec!["U2F_V2".into()],
+                aaguid: Aaguid::NONE,
+                ..Info::from_cbor(&[])
+            }
+        };
+
+        Ok(Self {
             device,
-            strict_cbor,
-            max_msg_size,
-        }
+            user_interaction,
+            on_keepalive,
+            info,
+            is_ctap2,
+        })
     }
 
-    /// Filter credential list against the authenticator.
+    /// Get cached authenticator info as a Python dict.
+    #[getter]
+    fn info(&self, py: Python<'_>) -> PyResult<PyObject> {
+        crate::py_ctap::info_to_py(py, &self.info)
+    }
+
+    /// Perform authenticator selection (touch).
+    #[pyo3(signature = (event=None))]
+    fn selection(&self, py: Python<'_>, event: Option<PyObject>) -> PyResult<()> {
+        let dev = self.make_device(py, event)?;
+        let ui = self.make_interaction();
+        let backend = self.make_backend(&dev, &ui);
+        backend.selection().map_err(client_err)
+    }
+
+    /// Perform the full make_credential operation.
     ///
-    /// Returns the matching credential descriptor (as a Python dict), or None.
-    #[pyo3(signature = (rp_id, cred_list, pin_version, pin_token, event=None, on_keepalive=None))]
-    fn filter_creds(
+    /// Takes JSON-serialized options, pre-computed client_data_hash and rp_id.
+    /// Returns (attestation_response_dict, extension_outputs_dict).
+    #[pyo3(signature = (options_json, client_data_hash, rp_id, event=None))]
+    fn do_make_credential(
         &self,
         py: Python<'_>,
+        options_json: &str,
+        client_data_hash: &[u8],
         rp_id: &str,
-        cred_list: Vec<PyObject>,
-        pin_version: Option<u32>,
-        pin_token: Option<&[u8]>,
         event: Option<PyObject>,
-        on_keepalive: Option<PyObject>,
-    ) -> PyResult<Option<PyObject>> {
-        // Convert Python credential descriptors to CBOR Values
-        let values: Vec<Value> = cred_list
-            .into_iter()
-            .map(|obj| crate::py_ctap::py_to_val(py, obj))
-            .collect::<PyResult<Vec<_>>>()?;
+    ) -> PyResult<PyObject> {
+        let options: fido2::webauthn::PublicKeyCredentialCreationOptions =
+            serde_json::from_str(options_json)
+                .map_err(|e| PyValueError::new_err(format!("Invalid options JSON: {}", e)))?;
 
-        // Compute pin_auth if we have a token
-        let pin_auth = match (pin_token, pin_version) {
-            (Some(token), Some(version)) => {
-                let protocol = match version {
-                    1 => PinProtocol::V1,
-                    2 => PinProtocol::V2,
-                    _ => return Err(PyValueError::new_err("Unsupported protocol version")),
-                };
-                let client_data_hash = [0u8; 32];
-                Some(protocol.authenticate(token, &client_data_hash))
-            }
-            _ => None,
-        };
+        let dev = self.make_device(py, event)?;
+        let ui = self.make_interaction();
+        let backend = self.make_backend(&dev, &ui);
 
-        let dev = PyCtapDevice::with_event(
-            py,
-            self.device.clone_ref(py),
-            event,
-            on_keepalive,
-        )?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        let (att_resp, ext_outputs) = backend
+            .do_make_credential(&options, client_data_hash, rp_id)
+            .map_err(client_err)?;
 
-        let result = client::filter_creds(
-            &ctap,
-            rp_id,
-            &values,
-            pin_auth.as_deref(),
-            pin_version,
-            &mut |_| {},
-        )
-        .map_err(crate::py_ctap::ctap_err)?;
+        let att_dict = crate::py_ctap::attestation_response_to_py(py, &att_resp)?;
+        let ext_dict = extension_outputs_to_py(py, &ext_outputs)?;
 
-        match result {
-            Some(val) => Ok(Some(crate::py_ctap::val_to_pyobj(py, &val)?)),
-            None => Ok(None),
-        }
+        Ok(pyo3::types::PyTuple::new(py, [att_dict, ext_dict])?.into())
     }
 
-    /// Get auth parameters (pin_token, internal_uv) for a CTAP2 operation.
+    /// Perform the full get_assertion operation.
     ///
-    /// Returns (pin_token: Optional[bytes], internal_uv: bool).
-    #[pyo3(signature = (rp_id, user_verification, permissions, pin_version, allow_uv, event=None, on_keepalive=None, user_interaction=None))]
-    fn get_auth_params<'py>(
+    /// Takes JSON-serialized options, pre-computed client_data_hash and rp_id.
+    /// Returns (assertions_list, extension_outputs_list).
+    #[pyo3(signature = (options_json, client_data_hash, rp_id, event=None))]
+    fn do_get_assertion(
         &self,
-        py: Python<'py>,
+        py: Python<'_>,
+        options_json: &str,
+        client_data_hash: &[u8],
         rp_id: &str,
-        user_verification: Option<&str>,
-        permissions: u32,
-        pin_version: Option<u32>,
-        allow_uv: bool,
         event: Option<PyObject>,
-        on_keepalive: Option<PyObject>,
-        user_interaction: Option<PyObject>,
-    ) -> PyResult<(Option<Bound<'py, PyBytes>>, bool)> {
-        let dev = PyCtapDevice::with_event(
-            py,
-            self.device.clone_ref(py),
-            event,
-            on_keepalive,
-        )?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+    ) -> PyResult<PyObject> {
+        let options: fido2::webauthn::PublicKeyCredentialRequestOptions =
+            serde_json::from_str(options_json)
+                .map_err(|e| PyValueError::new_err(format!("Invalid options JSON: {}", e)))?;
 
-        let ui = user_interaction
-            .ok_or_else(|| PyValueError::new_err("user_interaction is required"))?;
+        let dev = self.make_device(py, event)?;
+        let ui = self.make_interaction();
+        let backend = self.make_backend(&dev, &ui);
 
-        let py_ui = PyUserInteraction {
-            py_obj: ui,
-            permissions,
-            rp_id: Some(rp_id.to_string()),
-        };
+        let (assertions, ext_outputs_list) = backend
+            .do_get_assertion(&options, client_data_hash, rp_id)
+            .map_err(client_err)?;
 
-        let (pin_token, internal_uv) = client::get_auth_params(
-            &ctap,
-            rp_id,
-            user_verification,
-            permissions,
-            allow_uv,
-            &mut |_| {},
-            &py_ui,
-            pin_version,
+        let assertions_py = PyList::empty(py);
+        for resp in &assertions {
+            assertions_py.append(crate::py_ctap::assertion_response_to_py(py, resp)?)?;
+        }
+
+        let ext_list_py = PyList::empty(py);
+        for ext_out in &ext_outputs_list {
+            ext_list_py.append(extension_outputs_to_py(py, ext_out)?)?;
+        }
+
+        Ok(
+            pyo3::types::PyTuple::new(py, [assertions_py.into_any(), ext_list_py.into_any()])?
+                .into(),
         )
-        .map_err(client_err)?;
-
-        let py_token = pin_token.map(|t| PyBytes::new(py, &t));
-        Ok((py_token, internal_uv))
     }
+}
+
+/// Convert extension outputs (BTreeMap<String, Value>) to a Python dict.
+fn extension_outputs_to_py(
+    py: Python<'_>,
+    outputs: &fido2::extensions::ExtensionOutputs,
+) -> PyResult<PyObject> {
+    let dict = PyDict::new(py);
+    for (key, value) in outputs {
+        dict.set_item(key, crate::py_cbor::value_to_py(py, value)?)?;
+    }
+    Ok(dict.into())
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "client")?;
     sub.add_class::<ClientDataCollector>()?;
-    sub.add_class::<NativeCtap2ClientBackend>()?;
+    sub.add_class::<NativeFido2Client>()?;
     m.add_submodule(&sub)?;
 
     let sys = m.py().import("sys")?;

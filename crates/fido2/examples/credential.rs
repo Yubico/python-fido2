@@ -115,11 +115,11 @@ fn main() {
         .expect("Failed to create authentication options");
 
     println!("Authenticating...");
-    let selection = client
+    let result = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
 
-    let (assertion, _ext_outputs) = selection.get(0);
+    let assertion = &result.assertions[0];
 
     let credentials = vec![(
         cred_data.credential_id.clone(),
@@ -130,7 +130,7 @@ fn main() {
             &auth_state,
             &credentials,
             &cred_data.credential_id,
-            &selection.client_data,
+            &result.client_data,
             &assertion.auth_data,
             &assertion.signature,
         )

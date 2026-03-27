@@ -10,4 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 fido2 = { path = "../fido2" }
 pyo3 = { version = "0.25", features = ["extension-module"] }
+serde_json = "1"
 log = "0.4"

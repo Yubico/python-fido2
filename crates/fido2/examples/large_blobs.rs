@@ -146,10 +146,10 @@ fn main() {
     };
 
     println!("Writing large blob...");
-    let selection = client
+    let result = client
         .get_assertion(&write_options)
         .expect("Write assertion failed");
-    let (_assertion, ext_outputs) = selection.get(0);
+    let ext_outputs = &result.extension_outputs[0];
 
     let written = ext_outputs
         .get("largeBlob")
@@ -176,10 +176,10 @@ fn main() {
     };
 
     println!("Reading large blob...");
-    let selection = client
+    let result = client
         .get_assertion(&read_options)
         .expect("Read assertion failed");
-    let (_assertion, ext_outputs) = selection.get(0);
+    let ext_outputs = &result.extension_outputs[0];
 
     let read_blob = ext_outputs
         .get("largeBlob")

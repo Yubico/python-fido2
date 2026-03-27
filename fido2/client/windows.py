@@ -64,7 +64,6 @@ from . import (
     ClientDataCollector,
     ClientError,
     WebAuthnClient,
-    _cbor_list,
 )
 from .win_api import (
     BOOL,
@@ -96,6 +95,15 @@ from .win_api import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _cbor_list(
+    values: Sequence[_JsonDataObject] | None,
+) -> list[Mapping[str, Any]] | None:
+    if not values:
+        return None
+    return [_as_cbor(v) for v in values]
+
 
 _extension_output_types: dict[str, type[_JsonDataObject]] = {
     "hmacGetSecret": HMACGetSecretOutput,
@@ -262,7 +270,7 @@ class WindowsClient(WebAuthnClient):
                 ctypes.byref(WebAuthNUserEntityInformation(_as_cbor(options.user))),
                 ctypes.byref(
                     WebAuthNCoseCredentialParameters(
-                        _cbor_list(options.pub_key_cred_params)
+                        _cbor_list(options.pub_key_cred_params) or []
                     )
                 ),
                 ctypes.byref(WebAuthNClientData(client_data)),
@@ -508,5 +516,5 @@ class WindowsClient(WebAuthnClient):
                     user={"id": obj.user_id} if obj.user_id else None,
                 )
             ],
-            {k: _wrap_ext(k, v) for k, v in extension_outputs.items()},
+            [{k: _wrap_ext(k, v) for k, v in extension_outputs.items()}],
         )

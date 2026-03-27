@@ -243,6 +243,44 @@ pub struct AttestationResponse {
 }
 
 impl AttestationResponse {
+    /// Create from CTAP1/U2F registration data.
+    pub fn from_ctap1(
+        app_param: &[u8],
+        registration: &crate::ctap1::RegistrationData,
+    ) -> Result<Self, WebauthnError> {
+        let credential_data = crate::webauthn::AttestedCredentialData::from_ctap1(
+            &registration.key_handle,
+            &registration.public_key,
+        )?;
+
+        let flags = crate::webauthn::AuthenticatorDataFlags::AT
+            | crate::webauthn::AuthenticatorDataFlags::UP;
+        let mut rp_id_hash = [0u8; 32];
+        rp_id_hash.copy_from_slice(app_param);
+        let auth_data =
+            AuthenticatorData::create(&rp_id_hash, flags, 0, Some(&credential_data), None);
+
+        let att_stmt = Value::Map(vec![
+            (
+                Value::Text("x5c".into()),
+                Value::Array(vec![Value::Bytes(registration.certificate.clone())]),
+            ),
+            (
+                Value::Text("sig".into()),
+                Value::Bytes(registration.signature.clone()),
+            ),
+        ]);
+
+        Ok(Self {
+            fmt: "fido-u2f".into(),
+            auth_data,
+            att_stmt,
+            ep_att: None,
+            large_blob_key: None,
+            unsigned_extension_outputs: BTreeMap::new(),
+        })
+    }
+
     /// Parse from a CBOR response map (integer-keyed).
     pub fn from_cbor(map: &[(Value, Value)]) -> Result<Self, WebauthnError> {
         let get = |key: i64| -> Option<&Value> {
@@ -424,6 +462,11 @@ impl<'a> Ctap2<'a> {
             max_msg_size,
             info: Info::from_cbor(&[]),
         }
+    }
+
+    /// Update cached authenticator info.
+    pub fn set_info(&mut self, info: Info) {
+        self.info = info;
     }
 
     /// Get cached authenticator info.

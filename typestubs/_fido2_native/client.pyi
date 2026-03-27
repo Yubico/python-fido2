@@ -16,25 +16,26 @@ class ClientDataCollector:
         rp_id: str | None = None,
     ) -> tuple[bytes, str]: ...
 
-class NativeCtap2ClientBackend:
-    def __init__(self, device: Any, strict_cbor: bool, max_msg_size: int) -> None: ...
-    def filter_creds(
+class NativeFido2Client:
+    info: dict[str, Any]
+    def __init__(
         self,
-        rp_id: str,
-        cred_list: list[Any],
-        pin_version: int | None,
-        pin_token: bytes | None,
-        event: Any | None = None,
-        on_keepalive: Callable[[int], None] | None = None,
-    ) -> dict[str, Any] | None: ...
-    def get_auth_params(
+        device: Any,
+        user_interaction: Any,
+        on_keepalive: Callable[[int], None],
+    ) -> None: ...
+    def selection(self, event: Any | None = None) -> None: ...
+    def do_make_credential(
         self,
+        options_json: str,
+        client_data_hash: bytes,
         rp_id: str,
-        user_verification: str | None,
-        permissions: int,
-        pin_version: int | None,
-        allow_uv: bool,
         event: Any | None = None,
-        on_keepalive: Callable[[int], None] | None = None,
-        user_interaction: Any | None = None,
-    ) -> tuple[bytes | None, bool]: ...
+    ) -> tuple[dict[str, Any], dict[str, Any]]: ...
+    def do_get_assertion(
+        self,
+        options_json: str,
+        client_data_hash: bytes,
+        rp_id: str,
+        event: Any | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]: ...

@@ -117,11 +117,11 @@ fn main() {
     };
 
     println!("Authenticating with discoverable credential...");
-    let selection = client
+    let result = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
 
-    let (assertion, _ext_outputs) = selection.get(0);
+    let assertion = &result.assertions[0];
 
     println!("Authenticated!");
     println!("UP: {}", assertion.auth_data.is_user_present());

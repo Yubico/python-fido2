@@ -157,7 +157,7 @@ pub fn val_to_pyobj(py: Python<'_>, val: &fido2::cbor::Value) -> PyResult<PyObje
     Ok(py_cbor::value_to_py(py, val)?.unbind())
 }
 
-fn info_to_py(py: Python<'_>, info: &Info) -> PyResult<PyObject> {
+pub fn info_to_py(py: Python<'_>, info: &Info) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     dict.set_item("versions", PyList::new(py, info.versions.iter().map(|s| s.as_str()))?)?;
     dict.set_item("extensions", PyList::new(py, info.extensions.iter().map(|s| s.as_str()))?)?;
@@ -194,7 +194,7 @@ fn info_to_py(py: Python<'_>, info: &Info) -> PyResult<PyObject> {
     Ok(dict.into())
 }
 
-fn attestation_response_to_py(py: Python<'_>, resp: &AttestationResponse) -> PyResult<PyObject> {
+pub fn attestation_response_to_py(py: Python<'_>, resp: &AttestationResponse) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     dict.set_item("fmt", &resp.fmt)?;
     dict.set_item("auth_data", PyBytes::new(py, resp.auth_data.as_bytes()))?;
@@ -209,7 +209,7 @@ fn attestation_response_to_py(py: Python<'_>, resp: &AttestationResponse) -> PyR
     Ok(dict.into())
 }
 
-fn assertion_response_to_py(py: Python<'_>, resp: &AssertionResponse) -> PyResult<PyObject> {
+pub fn assertion_response_to_py(py: Python<'_>, resp: &AssertionResponse) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     dict.set_item("credential", py_cbor::value_to_py(py, &resp.credential)?)?;
     dict.set_item("auth_data", PyBytes::new(py, resp.auth_data.as_bytes()))?;
