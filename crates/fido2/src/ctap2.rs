@@ -92,6 +92,9 @@ pub struct Info {
     pub remaining_disc_creds: Option<u32>,
     pub vendor_prototype_config_commands: Vec<u32>,
     pub attestation_formats: Vec<String>,
+    pub uv_count_since_pin: Option<u32>,
+    pub long_touch_for_reset: bool,
+    pub transports_for_reset: Vec<String>,
 }
 
 impl Info {
@@ -209,6 +212,10 @@ impl Info {
             }
         };
 
+        let uv_count_since_pin = get(23).and_then(|v| v.as_int().map(|n| n as u32));
+        let long_touch_for_reset = get_bool(24, false);
+        let transports_for_reset = get_strings(26);
+
         Info {
             versions: get_strings(1),
             extensions: get_strings(2),
@@ -232,6 +239,9 @@ impl Info {
             remaining_disc_creds,
             vendor_prototype_config_commands,
             attestation_formats,
+            uv_count_since_pin,
+            long_touch_for_reset,
+            transports_for_reset,
         }
     }
 }

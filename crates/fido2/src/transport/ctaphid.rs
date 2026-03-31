@@ -357,6 +357,7 @@ impl CtapHidConnection {
         let mut r_len: usize = 0;
         let mut seq: u8 = 0;
         let mut first = true;
+        let mut last_ka: Option<u8> = None;
 
         loop {
             let mut buf = vec![0u8; self.packet_size];
@@ -392,7 +393,10 @@ impl CtapHidConnection {
                     if !data.is_empty() {
                         let status = data[0];
                         log::debug!("CTAP keepalive status: {:#04X}", status);
-                        on_keepalive(status);
+                        if last_ka != Some(status) {
+                            last_ka = Some(status);
+                            on_keepalive(status);
+                        }
                     }
                     if let Some(flag) = cancel
                         && flag.load(std::sync::atomic::Ordering::Relaxed)
