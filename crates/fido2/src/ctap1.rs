@@ -149,7 +149,7 @@ impl<'a> Ctap1<'a> {
 
         let response = self
             .device
-            .call(cmd::MSG, &apdu_buf, &mut |_| {})
+            .call(cmd::MSG, &apdu_buf, &mut |_| {}, None)
             .map_err(|e| ApduError::new(0, e.to_string().into_bytes()))?;
 
         if response.len() < 2 {

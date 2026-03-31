@@ -32,6 +32,8 @@
 
 use hidapi::HidApi;
 
+use std::sync::atomic::AtomicBool;
+
 use crate::log_traffic;
 
 const USAGE_PAGE_FIDO: u16 = 0xF1D0;
@@ -270,7 +272,7 @@ impl CtapHidConnection {
 
     /// Send a CTAP HID command and receive the response.
     pub fn call(&self, cmd: u8, data: &[u8]) -> Result<Vec<u8>, CtapHidTransportError> {
-        self.call_with_keepalive(cmd, data, &mut |_| {})
+        self.call_with_keepalive(cmd, data, &mut |_| {}, None)
     }
 
     /// Send a CTAP HID command with a keepalive callback.
@@ -279,9 +281,10 @@ impl CtapHidConnection {
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Vec<u8>, CtapHidTransportError> {
         self.send_request(cmd, data)?;
-        self.recv_response(cmd, on_keepalive)
+        self.recv_response(cmd, on_keepalive, cancel)
     }
 
     /// Close the connection.
@@ -300,7 +303,7 @@ impl CtapHidConnection {
 
     fn call_raw(&self, cmd: u8, data: &[u8]) -> Result<Vec<u8>, CtapHidTransportError> {
         self.send_request(cmd, data)?;
-        self.recv_response(cmd, &mut |_| {})
+        self.recv_response(cmd, &mut |_| {}, None)
     }
 
     fn send_request(&self, cmd: u8, data: &[u8]) -> Result<(), CtapHidTransportError> {
@@ -347,6 +350,7 @@ impl CtapHidConnection {
         &self,
         expected_cmd: u8,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Vec<u8>, CtapHidTransportError> {
         let dev = self.device()?;
         let mut response = Vec::new();
@@ -390,6 +394,12 @@ impl CtapHidConnection {
                         log::debug!("CTAP keepalive status: {:#04X}", status);
                         on_keepalive(status);
                     }
+                    if let Some(flag) = cancel
+                        && flag.load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        let _ = self.send_request(CtapHidCommand::Cancel as u8, &[]);
+                        return Err(CtapHidTransportError::CtapHidError(CtapHidError::Other));
+                    }
                     continue;
                 } else if r_cmd == TYPE_INIT | CtapHidCommand::Error as u8 {
                     let err_code = if !data.is_empty() { data[0] } else { 0x7F };
@@ -430,8 +440,9 @@ impl crate::ctap::CtapDevice for CtapHidConnection {
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Vec<u8>, crate::ctap::CtapError> {
-        self.call_with_keepalive(cmd, data, on_keepalive)
+        self.call_with_keepalive(cmd, data, on_keepalive, cancel)
             .map_err(|e| crate::ctap::CtapError::TransportError(e.to_string()))
     }
 

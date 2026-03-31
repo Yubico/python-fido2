@@ -36,6 +36,8 @@ use cbc::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use hkdf::Hkdf;
 use sha2::Sha256;
 
+use std::sync::atomic::AtomicBool;
+
 use crate::cbor::Value;
 use crate::ctap::CtapError;
 use crate::ctap2::Ctap2;
@@ -419,6 +421,7 @@ impl<'a> ClientPin<'a> {
             None,
             None,
             &mut |_| {},
+            None,
         )?;
 
         let map = match &resp {
@@ -481,6 +484,7 @@ impl<'a> ClientPin<'a> {
             permissions,
             permissions_rpid,
             &mut |_| {},
+            None,
         )?;
 
         let map = match &resp {
@@ -507,6 +511,7 @@ impl<'a> ClientPin<'a> {
         permissions: u32,
         permissions_rpid: Option<&str>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Vec<u8>, CtapError> {
         let (key_agreement, shared_secret) = self._get_shared_secret()?;
 
@@ -520,6 +525,7 @@ impl<'a> ClientPin<'a> {
             Some(permissions),
             permissions_rpid,
             on_keepalive,
+            cancel,
         )?;
 
         let map = match &resp {
@@ -552,6 +558,7 @@ impl<'a> ClientPin<'a> {
             None,
             None,
             &mut |_| {},
+            None,
         )?;
 
         let map = match &resp {
@@ -587,6 +594,7 @@ impl<'a> ClientPin<'a> {
             None,
             None,
             &mut |_| {},
+            None,
         )?;
 
         let map = match &resp {
@@ -624,6 +632,7 @@ impl<'a> ClientPin<'a> {
             None,
             None,
             &mut |_| {},
+            None,
         )?;
 
         Ok(())
@@ -654,6 +663,7 @@ impl<'a> ClientPin<'a> {
             None,
             None,
             &mut |_| {},
+            None,
         )?;
 
         Ok(())

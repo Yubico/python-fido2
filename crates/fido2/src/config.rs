@@ -110,6 +110,7 @@ impl<'a> Config<'a> {
             pin_uv_protocol,
             pin_uv_param,
             &mut |_| {},
+            None,
         )
     }
 

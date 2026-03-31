@@ -32,6 +32,8 @@
 
 use std::collections::BTreeMap;
 
+use std::sync::atomic::AtomicBool;
+
 use crate::cbor::{self, Value};
 use crate::ctap::{CtapDevice, CtapError, CtapStatus, capability, cmd};
 use crate::webauthn::{Aaguid, AuthenticatorData, WebauthnError};
@@ -484,6 +486,7 @@ impl<'a> Ctap2<'a> {
         cmd_byte: u8,
         data: Option<&Value>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
         let mut request = vec![cmd_byte];
         if let Some(val) = data {
@@ -495,7 +498,9 @@ impl<'a> Ctap2<'a> {
             return Err(CtapError::StatusError(CtapStatus::RequestTooLarge));
         }
 
-        let response = self.device.call(cmd::CBOR, &request, on_keepalive)?;
+        let response = self
+            .device
+            .call(cmd::CBOR, &request, on_keepalive, cancel)?;
 
         if response.is_empty() {
             return Err(CtapError::InvalidResponse("Empty response".into()));
@@ -527,7 +532,7 @@ impl<'a> Ctap2<'a> {
 
     /// GET_INFO command.
     pub fn get_info(&self) -> Result<Info, CtapError> {
-        let resp = self.send_cbor(ctap2_cmd::GET_INFO, None, &mut |_| {})?;
+        let resp = self.send_cbor(ctap2_cmd::GET_INFO, None, &mut |_| {}, None)?;
         match resp {
             Value::Map(entries) => Ok(Info::from_cbor(&entries)),
             _ => Err(CtapError::InvalidResponse("Expected map".into())),
@@ -547,6 +552,7 @@ impl<'a> Ctap2<'a> {
         permissions: Option<u32>,
         permissions_rpid: Option<&str>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
         let data = args_map(&[
             Some(Value::Int(pin_uv_protocol as i64)),
@@ -560,7 +566,7 @@ impl<'a> Ctap2<'a> {
             permissions.map(|p| Value::Int(p as i64)),
             permissions_rpid.map(|s| Value::Text(s.to_string())),
         ]);
-        self.send_cbor(ctap2_cmd::CLIENT_PIN, Some(&data), on_keepalive)
+        self.send_cbor(ctap2_cmd::CLIENT_PIN, Some(&data), on_keepalive, cancel)
     }
 
     /// makeCredential command.
@@ -578,6 +584,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_protocol: Option<u32>,
         enterprise_attestation: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<AttestationResponse, CtapError> {
         let data = args_map(&[
             Some(Value::Bytes(client_data_hash.to_vec())),
@@ -592,7 +599,12 @@ impl<'a> Ctap2<'a> {
             enterprise_attestation.map(|e| Value::Int(e as i64)),
         ]);
 
-        let resp = self.send_cbor(ctap2_cmd::MAKE_CREDENTIAL, Some(&data), on_keepalive)?;
+        let resp = self.send_cbor(
+            ctap2_cmd::MAKE_CREDENTIAL,
+            Some(&data),
+            on_keepalive,
+            cancel,
+        )?;
         match resp {
             Value::Map(entries) => AttestationResponse::from_cbor(&entries)
                 .map_err(|e| CtapError::InvalidResponse(e.to_string())),
@@ -612,6 +624,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<&[u8]>,
         pin_uv_protocol: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<AssertionResponse, CtapError> {
         let data = args_map(&[
             Some(Value::Text(rp_id.to_string())),
@@ -623,7 +636,7 @@ impl<'a> Ctap2<'a> {
             pin_uv_protocol.map(|p| Value::Int(p as i64)),
         ]);
 
-        let resp = self.send_cbor(ctap2_cmd::GET_ASSERTION, Some(&data), on_keepalive)?;
+        let resp = self.send_cbor(ctap2_cmd::GET_ASSERTION, Some(&data), on_keepalive, cancel)?;
         match resp {
             Value::Map(entries) => AssertionResponse::from_cbor(&entries)
                 .map_err(|e| CtapError::InvalidResponse(e.to_string())),
@@ -633,7 +646,7 @@ impl<'a> Ctap2<'a> {
 
     /// getNextAssertion command.
     pub fn get_next_assertion(&self) -> Result<AssertionResponse, CtapError> {
-        let resp = self.send_cbor(ctap2_cmd::GET_NEXT_ASSERTION, None, &mut |_| {})?;
+        let resp = self.send_cbor(ctap2_cmd::GET_NEXT_ASSERTION, None, &mut |_| {}, None)?;
         match resp {
             Value::Map(entries) => AssertionResponse::from_cbor(&entries)
                 .map_err(|e| CtapError::InvalidResponse(e.to_string())),
@@ -653,6 +666,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<&[u8]>,
         pin_uv_protocol: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Vec<AssertionResponse>, CtapError> {
         let first = self.get_assertion(
             rp_id,
@@ -663,6 +677,7 @@ impl<'a> Ctap2<'a> {
             pin_uv_param,
             pin_uv_protocol,
             on_keepalive,
+            cancel,
         )?;
 
         let count = first.number_of_credentials.unwrap_or(1) as usize;
@@ -674,14 +689,22 @@ impl<'a> Ctap2<'a> {
     }
 
     /// selection command.
-    pub fn selection(&self, on_keepalive: &mut dyn FnMut(u8)) -> Result<(), CtapError> {
-        self.send_cbor(ctap2_cmd::SELECTION, None, on_keepalive)?;
+    pub fn selection(
+        &self,
+        on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
+    ) -> Result<(), CtapError> {
+        self.send_cbor(ctap2_cmd::SELECTION, None, on_keepalive, cancel)?;
         Ok(())
     }
 
     /// reset command.
-    pub fn reset(&self, on_keepalive: &mut dyn FnMut(u8)) -> Result<(), CtapError> {
-        self.send_cbor(ctap2_cmd::RESET, None, on_keepalive)?;
+    pub fn reset(
+        &self,
+        on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
+    ) -> Result<(), CtapError> {
+        self.send_cbor(ctap2_cmd::RESET, None, on_keepalive, cancel)?;
         Ok(())
     }
 
@@ -695,6 +718,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_protocol: Option<Value>,
         pin_uv_param: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
         let cmd_byte = if self.info.options.get("credMgmt") == Some(&true) {
             ctap2_cmd::CREDENTIAL_MGMT
@@ -708,7 +732,7 @@ impl<'a> Ctap2<'a> {
             ));
         };
         let data = args_map(&[Some(sub_cmd), sub_cmd_params, pin_uv_protocol, pin_uv_param]);
-        self.send_cbor(cmd_byte, Some(&data), on_keepalive)
+        self.send_cbor(cmd_byte, Some(&data), on_keepalive, cancel)
     }
 
     /// bioEnrollment command.
@@ -724,6 +748,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<Value>,
         get_modality: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
         let cmd_byte = if self.info.options.contains_key("bioEnroll") {
             ctap2_cmd::BIO_ENROLLMENT
@@ -747,7 +772,7 @@ impl<'a> Ctap2<'a> {
             pin_uv_param,
             get_modality,
         ]);
-        self.send_cbor(cmd_byte, Some(&data), on_keepalive)
+        self.send_cbor(cmd_byte, Some(&data), on_keepalive, cancel)
     }
 
     /// largeBlobs command.
@@ -761,6 +786,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<&[u8]>,
         pin_uv_protocol: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
         let data = args_map(&[
             get.map(|g| Value::Int(g as i64)),
@@ -770,7 +796,7 @@ impl<'a> Ctap2<'a> {
             pin_uv_param.map(|b| Value::Bytes(b.to_vec())),
             pin_uv_protocol.map(|p| Value::Int(p as i64)),
         ]);
-        self.send_cbor(ctap2_cmd::LARGE_BLOBS, Some(&data), on_keepalive)
+        self.send_cbor(ctap2_cmd::LARGE_BLOBS, Some(&data), on_keepalive, cancel)
     }
 
     /// authenticatorConfig command.
@@ -781,8 +807,9 @@ impl<'a> Ctap2<'a> {
         pin_uv_protocol: Option<Value>,
         pin_uv_param: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
         let data = args_map(&[Some(sub_cmd), sub_cmd_params, pin_uv_protocol, pin_uv_param]);
-        self.send_cbor(ctap2_cmd::CONFIG, Some(&data), on_keepalive)
+        self.send_cbor(ctap2_cmd::CONFIG, Some(&data), on_keepalive, cancel)
     }
 }

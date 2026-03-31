@@ -39,6 +39,7 @@ use fido2::pin::{ClientPin, PinProtocol};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
+use std::sync::atomic::AtomicBool;
 
 use crate::py_cbor;
 
@@ -91,6 +92,7 @@ impl CtapDevice for PyCtapDevice {
         cmd: u8,
         data: &[u8],
         _on_keepalive: &mut dyn FnMut(u8),
+        _cancel: Option<&AtomicBool>,
     ) -> Result<Vec<u8>, CtapError> {
         Python::with_gil(|py| {
             let result = if self.pass_event_args {
@@ -400,7 +402,7 @@ impl NativeCtap2 {
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
         let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
         let result = ctap
-            .send_cbor(cmd, cbor_data.as_ref(), &mut |_| {})
+            .send_cbor(cmd, cbor_data.as_ref(), &mut |_| {}, None)
             .map_err(ctap_err)?;
 
         // Cache info when GET_INFO is called
@@ -471,6 +473,7 @@ impl NativeCtap2 {
                 pin_uv_protocol,
                 enterprise_attestation,
                 &mut |_| {},
+                None,
             )
             .map_err(ctap_err)?;
 
@@ -513,6 +516,7 @@ impl NativeCtap2 {
                 pin_uv_param,
                 pin_uv_protocol,
                 &mut |_| {},
+                None,
             )
             .map_err(ctap_err)?;
 
@@ -562,6 +566,7 @@ impl NativeCtap2 {
                 pin_uv_param,
                 pin_uv_protocol,
                 &mut |_| {},
+                None,
             )
             .map_err(ctap_err)?;
 
@@ -609,6 +614,7 @@ impl NativeCtap2 {
                 permissions,
                 permissions_rpid,
                 &mut |_| {},
+                None,
             )
             .map_err(ctap_err)?;
 
@@ -624,7 +630,7 @@ impl NativeCtap2 {
     ) -> PyResult<()> {
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
         let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        ctap.selection(&mut |_| {}).map_err(ctap_err)
+        ctap.selection(&mut |_| {}, None).map_err(ctap_err)
     }
 
     #[pyo3(signature = (event=None, on_keepalive=None))]
@@ -636,7 +642,7 @@ impl NativeCtap2 {
     ) -> PyResult<()> {
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
         let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        ctap.reset(&mut |_| {}).map_err(ctap_err)
+        ctap.reset(&mut |_| {}, None).map_err(ctap_err)
     }
 
     #[pyo3(signature = (
@@ -666,7 +672,14 @@ impl NativeCtap2 {
             ctap.set_info(info.clone());
         }
         let result = ctap
-            .credential_mgmt(sub_cmd_val, params_val, proto_val, param_val, &mut |_| {})
+            .credential_mgmt(
+                sub_cmd_val,
+                params_val,
+                proto_val,
+                param_val,
+                &mut |_| {},
+                None,
+            )
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -710,6 +723,7 @@ impl NativeCtap2 {
                 param_val,
                 gm_val,
                 &mut |_| {},
+                None,
             )
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
@@ -744,6 +758,7 @@ impl NativeCtap2 {
                 pin_uv_param,
                 pin_uv_protocol,
                 &mut |_| {},
+                None,
             )
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
@@ -773,7 +788,7 @@ impl NativeCtap2 {
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
         let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
         let result = ctap
-            .config(cmd_val, params_val, proto_val, param_val, &mut |_| {})
+            .config(cmd_val, params_val, proto_val, param_val, &mut |_| {}, None)
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -882,7 +897,12 @@ impl NativeClientPin {
         let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
         let client_pin = ClientPin::new(&ctap, Some(protocol)).map_err(ctap_err)?;
         let token = client_pin
-            .get_uv_token(permissions.unwrap_or(0), permissions_rpid, &mut |_| {})
+            .get_uv_token(
+                permissions.unwrap_or(0),
+                permissions_rpid,
+                &mut |_| {},
+                None,
+            )
             .map_err(ctap_err)?;
         Ok(PyBytes::new(py, &token))
     }
@@ -1110,7 +1130,7 @@ impl NativeFPBioEnrollment {
         }
         let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         let result = bio
-            .get_fingerprint_sensor_info(&mut |_| {})
+            .get_fingerprint_sensor_info(&mut |_| {}, None)
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -1130,8 +1150,9 @@ impl NativeFPBioEnrollment {
             ctap.set_info(info.clone());
         }
         let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
-        let (template_id, status, remaining) =
-            bio.enroll_begin(timeout, &mut |_| {}).map_err(ctap_err)?;
+        let (template_id, status, remaining) = bio
+            .enroll_begin(timeout, &mut |_| {}, None)
+            .map_err(ctap_err)?;
         Ok(PyTuple::new(
             py,
             [
@@ -1160,7 +1181,7 @@ impl NativeFPBioEnrollment {
         }
         let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         let (status, remaining) = bio
-            .enroll_capture_next(template_id, timeout, &mut |_| {})
+            .enroll_capture_next(template_id, timeout, &mut |_| {}, None)
             .map_err(ctap_err)?;
         Ok(PyTuple::new(
             py,

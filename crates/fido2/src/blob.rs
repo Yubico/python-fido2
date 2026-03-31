@@ -91,6 +91,7 @@ impl<'a> LargeBlobs<'a> {
                 None,
                 None,
                 &mut |_| {},
+                None,
             )?;
             let fragment = cbor_map_get_bytes(&resp, 1).unwrap_or_default();
             let frag_len = fragment.len();
@@ -151,6 +152,7 @@ impl<'a> LargeBlobs<'a> {
                 pin_uv_param.as_deref(),
                 pin_uv_protocol,
                 &mut |_| {},
+                None,
             )?;
 
             offset += (end - offset as usize) as u64;

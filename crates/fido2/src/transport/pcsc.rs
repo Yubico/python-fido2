@@ -32,6 +32,7 @@ use std::ffi::CString;
 
 use crate::ctap::{self, CtapDevice, CtapError};
 use crate::log_traffic;
+use std::sync::atomic::AtomicBool;
 
 const AID_FIDO: &[u8] = b"\xa0\x00\x00\x06\x47\x2f\x00\x01";
 const SW_SUCCESS: (u8, u8) = (0x90, 0x00);
@@ -176,7 +177,7 @@ impl CtapPcscDevice {
         dev.select()?;
 
         // Probe for CTAP2 by calling GET_INFO (0x04)
-        match dev.call_cbor(b"\x04", &mut |_| {}) {
+        match dev.call_cbor(b"\x04", &mut |_| {}, None) {
             Ok(_) => dev.capabilities |= ctap::capability::CBOR,
             Err(_) => {
                 if dev.capabilities == 0 {
@@ -299,6 +300,7 @@ impl CtapPcscDevice {
         &self,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Vec<u8>, CtapError> {
         // NFCCTAP_MSG: CLA=0x80, INS=0x10, P1=0x80 (use NFCCTAP_GETRESPONSE), P2=0x00
         let (mut resp, mut sw1, mut sw2) = self.chain_apdus(0x80, 0x10, 0x80, 0x00, data)?;
@@ -309,7 +311,12 @@ impl CtapPcscDevice {
                 on_keepalive(resp[0]);
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
-            let result = self.chain_apdus(0x80, 0x11, 0x00, 0x00, &[])?;
+            let p1 = if cancel.is_some_and(|f| f.load(std::sync::atomic::Ordering::Relaxed)) {
+                0x11 // Cancel
+            } else {
+                0x00
+            };
+            let result = self.chain_apdus(0x80, 0x11, p1, 0x00, &[])?;
             resp = result.0;
             sw1 = result.1;
             sw2 = result.2;
@@ -331,9 +338,10 @@ impl CtapDevice for CtapPcscDevice {
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Vec<u8>, CtapError> {
         match cmd {
-            ctap::cmd::CBOR => self.call_cbor(data, on_keepalive),
+            ctap::cmd::CBOR => self.call_cbor(data, on_keepalive, cancel),
             ctap::cmd::MSG => self.call_apdu(data),
             _ => Err(CtapError::StatusError(ctap::CtapStatus::InvalidCommand)),
         }

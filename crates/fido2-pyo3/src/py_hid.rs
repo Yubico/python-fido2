@@ -142,11 +142,16 @@ impl CtapHidConnection {
 
         let response = py.allow_threads(|| match on_keepalive {
             Some(ref cb) => conn
-                .call_with_keepalive(cmd, data, &mut |status| {
-                    Python::with_gil(|py| {
-                        let _ = cb.call1(py, (status,));
-                    });
-                })
+                .call_with_keepalive(
+                    cmd,
+                    data,
+                    &mut |status| {
+                        Python::with_gil(|py| {
+                            let _ = cb.call1(py, (status,));
+                        });
+                    },
+                    None,
+                )
                 .map_err(ctap_err),
             None => conn.call(cmd, data).map_err(ctap_err),
         })?;

@@ -31,6 +31,7 @@ use crate::cbor::{self, Value};
 use crate::ctap::CtapError;
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
+use std::sync::atomic::AtomicBool;
 
 /// BioEnrollment result keys.
 pub mod bio_result {
@@ -95,6 +96,7 @@ impl<'a> FPBioEnrollment<'a> {
             None,
             Some(Value::Bool(true)),
             &mut |_| {},
+            None,
         )?;
         let modality = cbor_map_get_int(&modality_resp, bio_result::MODALITY)
             .ok_or_else(|| CtapError::InvalidResponse("Missing modality".to_string()))?
@@ -134,6 +136,7 @@ impl<'a> FPBioEnrollment<'a> {
         params: Option<Value>,
         auth: bool,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
         let (pin_uv_protocol, pin_uv_param) = if auth {
             let mut msg = vec![self.modality as u8, sub_cmd as u8];
@@ -157,6 +160,7 @@ impl<'a> FPBioEnrollment<'a> {
             pin_uv_param,
             None,
             on_keepalive,
+            cancel,
         )
     }
 
@@ -164,8 +168,9 @@ impl<'a> FPBioEnrollment<'a> {
     pub fn get_fingerprint_sensor_info(
         &self,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<Value, CtapError> {
-        self._call(fp_cmd::GET_SENSOR_INFO, None, false, on_keepalive)
+        self._call(fp_cmd::GET_SENSOR_INFO, None, false, on_keepalive, cancel)
     }
 
     /// Begin fingerprint enrollment.
@@ -174,6 +179,7 @@ impl<'a> FPBioEnrollment<'a> {
         &self,
         timeout: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<(Vec<u8>, u32, u32), CtapError> {
         let params = timeout.map(|t| {
             Value::Map(vec![(
@@ -181,7 +187,7 @@ impl<'a> FPBioEnrollment<'a> {
                 Value::Int(t as i64),
             )])
         });
-        let resp = self._call(fp_cmd::ENROLL_BEGIN, params, true, on_keepalive)?;
+        let resp = self._call(fp_cmd::ENROLL_BEGIN, params, true, on_keepalive, cancel)?;
         let template_id = cbor_map_get_bytes(&resp, bio_result::TEMPLATE_ID)
             .ok_or_else(|| CtapError::InvalidResponse("Missing template ID".to_string()))?;
         let status = cbor_map_get_int(&resp, bio_result::LAST_SAMPLE_STATUS)
@@ -200,6 +206,7 @@ impl<'a> FPBioEnrollment<'a> {
         template_id: &[u8],
         timeout: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&AtomicBool>,
     ) -> Result<(u32, u32), CtapError> {
         let mut entries = vec![(
             Value::Int(fp_param::TEMPLATE_ID),
@@ -214,6 +221,7 @@ impl<'a> FPBioEnrollment<'a> {
             Some(params),
             true,
             on_keepalive,
+            cancel,
         )?;
         let status = cbor_map_get_int(&resp, bio_result::LAST_SAMPLE_STATUS)
             .ok_or_else(|| CtapError::InvalidResponse("Missing sample status".to_string()))?
@@ -226,14 +234,14 @@ impl<'a> FPBioEnrollment<'a> {
 
     /// Cancel ongoing enrollment.
     pub fn enroll_cancel(&self) -> Result<(), CtapError> {
-        self._call(fp_cmd::ENROLL_CANCEL, None, false, &mut |_| {})?;
+        self._call(fp_cmd::ENROLL_CANCEL, None, false, &mut |_| {}, None)?;
         Ok(())
     }
 
     /// Enumerate enrolled fingerprints.
     /// Returns the raw response Value containing template infos.
     pub fn enumerate_enrollments(&self) -> Result<Value, CtapError> {
-        self._call(fp_cmd::ENUMERATE_ENROLLMENTS, None, true, &mut |_| {})
+        self._call(fp_cmd::ENUMERATE_ENROLLMENTS, None, true, &mut |_| {}, None)
     }
 
     /// Set name for a template.
@@ -248,7 +256,7 @@ impl<'a> FPBioEnrollment<'a> {
                 Value::Text(name.to_string()),
             ),
         ]);
-        self._call(fp_cmd::SET_NAME, Some(params), true, &mut |_| {})?;
+        self._call(fp_cmd::SET_NAME, Some(params), true, &mut |_| {}, None)?;
         Ok(())
     }
 
@@ -258,7 +266,13 @@ impl<'a> FPBioEnrollment<'a> {
             Value::Int(template_info::ID),
             Value::Bytes(template_id.to_vec()),
         )]);
-        self._call(fp_cmd::REMOVE_ENROLLMENT, Some(params), true, &mut |_| {})?;
+        self._call(
+            fp_cmd::REMOVE_ENROLLMENT,
+            Some(params),
+            true,
+            &mut |_| {},
+            None,
+        )?;
         Ok(())
     }
 }

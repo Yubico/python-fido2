@@ -200,6 +200,7 @@ pub fn filter_creds(
             pin_auth,
             pin_version,
             on_keepalive,
+            None,
         ) {
             Ok(assertion) => {
                 if chunk.len() == 1 {
@@ -236,7 +237,7 @@ pub fn get_token(
     if allow_uv && info.options.get("uv").copied().unwrap_or(false) {
         if info.options.get("pinUvAuthToken").copied() == Some(true) {
             if user_interaction.request_uv(permissions, rp_id) {
-                let token = client_pin.get_uv_token(permissions, rp_id, on_keepalive)?;
+                let token = client_pin.get_uv_token(permissions, rp_id, on_keepalive, None)?;
                 return Ok(Some(token));
             }
         } else if allow_internal_uv && user_interaction.request_uv(permissions, rp_id) {
@@ -829,6 +830,7 @@ impl<'a> Ctap2Backend<'a> {
                 pin_uv_param.as_deref(),
                 pin_uv_protocol,
                 &mut self.keepalive(),
+                None,
             ) {
                 Ok(assertions) => {
                     return Ok((assertions, used_extensions, pin_token));
@@ -859,7 +861,7 @@ impl ClientBackend for Ctap2Backend<'_> {
         let info = self.ctap.get_info()?;
         if info.versions.iter().any(|v| v == "FIDO_2_1") {
             self.ctap
-                .selection(&mut self.keepalive())
+                .selection(&mut self.keepalive(), None)
                 .map_err(ClientError::from)
         } else {
             match self.ctap.make_credential(
@@ -886,6 +888,7 @@ impl ClientBackend for Ctap2Backend<'_> {
                 None,
                 None,
                 &mut self.keepalive(),
+                None,
             ) {
                 Ok(_) => Ok(()),
                 Err(CtapError::StatusError(
@@ -1047,6 +1050,7 @@ impl ClientBackend for Ctap2Backend<'_> {
                 pin_uv_protocol,
                 enterprise_attestation,
                 &mut self.keepalive(),
+                None,
             ) {
                 Ok(att_resp) => {
                     let mut extension_outputs = ExtensionOutputs::new();
