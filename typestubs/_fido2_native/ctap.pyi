@@ -4,16 +4,14 @@ class NativeCtap1:
     def __init__(self, device: Any) -> None: ...
     def send_apdu(self, cla: int, ins: int, p1: int, p2: int, data: bytes) -> bytes: ...
     def get_version(self) -> str: ...
-    def register(
-        self, client_param: bytes, app_param: bytes
-    ) -> tuple[bytes, bytes, bytes, bytes]: ...
+    def register(self, client_param: bytes, app_param: bytes) -> bytes: ...
     def authenticate(
         self,
         client_param: bytes,
         app_param: bytes,
         key_handle: bytes,
         check_only: bool = False,
-    ) -> tuple[int, int, bytes]: ...
+    ) -> bytes: ...
 
 class NativeCtap2:
     info: dict[str, Any]
@@ -96,7 +94,6 @@ class NativeCtap2:
     ) -> None: ...
     def credential_mgmt(
         self,
-        cmd_byte: int,
         sub_cmd: int,
         sub_cmd_params: Mapping[int, Any] | None = None,
         pin_uv_protocol: int | None = None,
@@ -106,7 +103,6 @@ class NativeCtap2:
     ) -> Mapping[int, Any]: ...
     def bio_enrollment(
         self,
-        cmd_byte: int,
         modality: int | None = None,
         sub_cmd: int | None = None,
         sub_cmd_params: Mapping[int, Any] | None = None,
@@ -136,6 +132,17 @@ class NativeCtap2:
         event: Any | None = None,
         on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]: ...
+    def create_credential_management(
+        self,
+        protocol_version: int,
+        pin_uv_token: bytes,
+    ) -> NativeCredentialManagement: ...
+    def create_bio_enrollment(
+        self,
+        protocol_version: int,
+        pin_uv_token: bytes,
+        modality: int,
+    ) -> NativeFPBioEnrollment: ...
 
 class NativeClientPin:
     def __init__(
@@ -165,15 +172,6 @@ class NativeClientPin:
     def get_shared_secret(self) -> tuple[dict[int, Any], bytes]: ...
 
 class NativeCredentialManagement:
-    def __init__(
-        self,
-        device: Any,
-        strict_cbor: bool,
-        max_msg_size: int,
-        protocol_version: int,
-        pin_uv_token: bytes,
-        cmd_byte: int,
-    ) -> None: ...
     def get_metadata(self) -> Mapping[int, Any]: ...
     def enumerate_rps_begin(self) -> Mapping[int, Any]: ...
     def enumerate_rps_next(self) -> Mapping[int, Any]: ...
@@ -185,16 +183,6 @@ class NativeCredentialManagement:
     def update_user_info(self, cred_id: Any, user: Any) -> None: ...
 
 class NativeFPBioEnrollment:
-    def __init__(
-        self,
-        device: Any,
-        strict_cbor: bool,
-        max_msg_size: int,
-        protocol_version: int,
-        pin_uv_token: bytes,
-        cmd_byte: int,
-        modality: int,
-    ) -> None: ...
     def get_fingerprint_sensor_info(
         self,
         event: Any | None = None,

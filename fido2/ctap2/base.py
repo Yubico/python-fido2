@@ -490,17 +490,9 @@ class Ctap2:
         :param pin_uv_protocol: PIN/UV auth protocol version used.
         :param pin_uv_param: PIN/UV Auth parameter.
         """
-        if "credMgmt" in self.info.options:
-            cmd = Ctap2.CMD.CREDENTIAL_MGMT
-        elif "credentialMgmtPreview" in self.info.options:
-            cmd = Ctap2.CMD.CREDENTIAL_MGMT_PRE
-        else:
-            raise ValueError(
-                "Credential Management not supported by this Authenticator"
-            )
         try:
             return self._native.credential_mgmt(
-                cmd, sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param
+                sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param
             )
         except ValueError as e:
             self._handle_native_error(e)
@@ -533,15 +525,8 @@ class Ctap2:
         :param pin_uv_param: PIN/UV auth param.
         :param get_modality: Get the user verification type modality.
         """
-        if "bioEnroll" in self.info.options:
-            cmd = Ctap2.CMD.BIO_ENROLLMENT
-        elif "userVerificationMgmtPreview" in self.info.options:
-            cmd = Ctap2.CMD.BIO_ENROLLMENT_PRE
-        else:
-            raise ValueError("Authenticator does not support Bio Enroll")
         try:
             return self._native.bio_enrollment(
-                cmd,
                 modality,
                 sub_cmd,
                 sub_cmd_params,

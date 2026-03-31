@@ -687,29 +687,36 @@ impl<'a> Ctap2<'a> {
 
     /// credentialMgmt command.
     ///
-    /// The `cmd_byte` should be `ctap2_cmd::CREDENTIAL_MGMT` or
-    /// `ctap2_cmd::CREDENTIAL_MGMT_PRE` depending on authenticator support.
+    /// Automatically determines the command byte from cached device info.
     pub fn credential_mgmt(
         &self,
-        cmd_byte: u8,
         sub_cmd: Value,
         sub_cmd_params: Option<Value>,
         pin_uv_protocol: Option<Value>,
         pin_uv_param: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
     ) -> Result<Value, CtapError> {
+        let cmd_byte = if self.info.options.get("credMgmt") == Some(&true) {
+            ctap2_cmd::CREDENTIAL_MGMT
+        } else if self.info.versions.contains(&"FIDO_2_1_PRE".to_string())
+            && self.info.options.get("credentialMgmtPreview") == Some(&true)
+        {
+            ctap2_cmd::CREDENTIAL_MGMT_PRE
+        } else {
+            return Err(CtapError::InvalidResponse(
+                "Authenticator does not support Credential Management".to_string(),
+            ));
+        };
         let data = args_map(&[Some(sub_cmd), sub_cmd_params, pin_uv_protocol, pin_uv_param]);
         self.send_cbor(cmd_byte, Some(&data), on_keepalive)
     }
 
     /// bioEnrollment command.
     ///
-    /// The `cmd_byte` should be `ctap2_cmd::BIO_ENROLLMENT` or
-    /// `ctap2_cmd::BIO_ENROLLMENT_PRE` depending on authenticator support.
+    /// Automatically determines the command byte from cached device info.
     #[allow(clippy::too_many_arguments)]
     pub fn bio_enrollment(
         &self,
-        cmd_byte: u8,
         modality: Option<Value>,
         sub_cmd: Option<Value>,
         sub_cmd_params: Option<Value>,
@@ -718,6 +725,20 @@ impl<'a> Ctap2<'a> {
         get_modality: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
     ) -> Result<Value, CtapError> {
+        let cmd_byte = if self.info.options.contains_key("bioEnroll") {
+            ctap2_cmd::BIO_ENROLLMENT
+        } else if self.info.versions.contains(&"FIDO_2_1_PRE".to_string())
+            && self
+                .info
+                .options
+                .contains_key("userVerificationMgmtPreview")
+        {
+            ctap2_cmd::BIO_ENROLLMENT_PRE
+        } else {
+            return Err(CtapError::InvalidResponse(
+                "Authenticator does not support Bio Enroll".to_string(),
+            ));
+        };
         let data = args_map(&[
             modality,
             sub_cmd,

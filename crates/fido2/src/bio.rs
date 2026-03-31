@@ -29,7 +29,7 @@
 
 use crate::cbor::{self, Value};
 use crate::ctap::CtapError;
-use crate::ctap2::{Ctap2, ctap2_cmd};
+use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
 
 /// BioEnrollment result keys.
@@ -76,7 +76,6 @@ pub struct FPBioEnrollment<'a> {
     ctap: &'a Ctap2<'a>,
     protocol: &'a PinProtocol,
     pin_uv_token: &'a [u8],
-    cmd_byte: u8,
     modality: u32,
 }
 
@@ -87,22 +86,8 @@ impl<'a> FPBioEnrollment<'a> {
         protocol: &'a PinProtocol,
         pin_uv_token: &'a [u8],
     ) -> Result<Self, CtapError> {
-        let info = ctap.info();
-        let cmd_byte = if info.options.contains_key("bioEnroll") {
-            ctap2_cmd::BIO_ENROLLMENT
-        } else if info.versions.contains(&"FIDO_2_1_PRE".to_string())
-            && info.options.contains_key("userVerificationMgmtPreview")
-        {
-            ctap2_cmd::BIO_ENROLLMENT_PRE
-        } else {
-            return Err(CtapError::InvalidResponse(
-                "Authenticator does not support BioEnroll".to_string(),
-            ));
-        };
-
         // Verify modality
         let modality_resp = ctap.bio_enrollment(
-            cmd_byte,
             None,
             None,
             None,
@@ -124,7 +109,6 @@ impl<'a> FPBioEnrollment<'a> {
             ctap,
             protocol,
             pin_uv_token,
-            cmd_byte,
             modality,
         })
     }
@@ -134,14 +118,12 @@ impl<'a> FPBioEnrollment<'a> {
         ctap: &'a Ctap2<'a>,
         protocol: &'a PinProtocol,
         pin_uv_token: &'a [u8],
-        cmd_byte: u8,
         modality: u32,
     ) -> Self {
         Self {
             ctap,
             protocol,
             pin_uv_token,
-            cmd_byte,
             modality,
         }
     }
@@ -168,7 +150,6 @@ impl<'a> FPBioEnrollment<'a> {
             (None, None)
         };
         self.ctap.bio_enrollment(
-            self.cmd_byte,
             Some(Value::Int(self.modality as i64)),
             Some(Value::Int(sub_cmd as i64)),
             params,

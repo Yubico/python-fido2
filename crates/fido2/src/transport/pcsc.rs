@@ -30,7 +30,13 @@
 use pcsc::{Card, Context, Protocols, Scope, ShareMode};
 use std::ffi::CString;
 
+use crate::ctap::{self, CtapDevice, CtapError};
 use crate::log_traffic;
+
+const AID_FIDO: &[u8] = b"\xa0\x00\x00\x06\x47\x2f\x00\x01";
+const SW_SUCCESS: (u8, u8) = (0x90, 0x00);
+const SW_UPDATE: (u8, u8) = (0x91, 0x00);
+const SW1_MORE_DATA: u8 = 0x61;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PcscError {
@@ -142,5 +148,202 @@ impl PcscConnection {
 impl Drop for PcscConnection {
     fn drop(&mut self) {
         let _ = self.disconnect();
+    }
+}
+
+/// CTAP device over NFC using PC/SC transport.
+///
+/// Implements the NFCCTAP protocol: FIDO commands are framed as ISO 7816 APDUs
+/// with short APDU chaining for large payloads, and keepalive polling via
+/// NFCCTAP_GETRESPONSE.
+pub struct CtapPcscDevice {
+    conn: PcscConnection,
+    capabilities: u8,
+}
+
+impl CtapPcscDevice {
+    /// Open a CTAP device on the given PC/SC reader.
+    ///
+    /// Selects the FIDO applet and probes for CTAP2 support.
+    pub fn open(mut conn: PcscConnection) -> Result<Self, CtapError> {
+        conn.connect(false)
+            .map_err(|e| CtapError::TransportError(e.to_string()))?;
+
+        let mut dev = Self {
+            conn,
+            capabilities: 0,
+        };
+        dev.select()?;
+
+        // Probe for CTAP2 by calling GET_INFO (0x04)
+        match dev.call_cbor(b"\x04", &mut |_| {}) {
+            Ok(_) => dev.capabilities |= ctap::capability::CBOR,
+            Err(_) => {
+                if dev.capabilities == 0 {
+                    return Err(CtapError::TransportError("Unsupported device".to_string()));
+                }
+            }
+        }
+
+        Ok(dev)
+    }
+
+    /// Get a reference to the underlying PC/SC connection.
+    pub fn connection(&self) -> &PcscConnection {
+        &self.conn
+    }
+
+    /// Get a mutable reference to the underlying PC/SC connection.
+    pub fn connection_mut(&mut self) -> &mut PcscConnection {
+        &mut self.conn
+    }
+
+    /// Consume the device and return the underlying connection.
+    pub fn into_connection(self) -> PcscConnection {
+        self.conn
+    }
+
+    fn transmit(&self, apdu: &[u8]) -> Result<(Vec<u8>, u8, u8), CtapError> {
+        let resp = self
+            .conn
+            .transmit(apdu)
+            .map_err(|e| CtapError::TransportError(e.to_string()))?;
+        if resp.len() < 2 {
+            return Err(CtapError::InvalidResponse("Response too short".to_string()));
+        }
+        let sw1 = resp[resp.len() - 2];
+        let sw2 = resp[resp.len() - 1];
+        let data = resp[..resp.len() - 2].to_vec();
+        Ok((data, sw1, sw2))
+    }
+
+    fn select(&mut self) -> Result<(), CtapError> {
+        let mut apdu = vec![0x00, 0xA4, 0x04, 0x00, AID_FIDO.len() as u8];
+        apdu.extend_from_slice(AID_FIDO);
+        let (resp, sw1, sw2) = self.chain_apdus(0x00, 0xA4, 0x04, 0x00, AID_FIDO)?;
+        if (sw1, sw2) != SW_SUCCESS {
+            return Err(CtapError::TransportError(format!(
+                "FIDO applet selection failed: SW={sw1:02X}{sw2:02X}"
+            )));
+        }
+        if resp == b"U2F_V2" {
+            self.capabilities |= ctap::capability::NMSG;
+        }
+        Ok(())
+    }
+
+    /// Send a chained short APDU and collect the full response.
+    fn chain_apdus(
+        &self,
+        cla: u8,
+        ins: u8,
+        p1: u8,
+        p2: u8,
+        data: &[u8],
+    ) -> Result<(Vec<u8>, u8, u8), CtapError> {
+        let mut remaining = data;
+
+        // Chain long data in 250-byte chunks
+        while remaining.len() > 250 {
+            let (chunk, rest) = remaining.split_at(250);
+            remaining = rest;
+            let mut apdu = vec![0x10 | cla, ins, p1, p2, chunk.len() as u8];
+            apdu.extend_from_slice(chunk);
+            let (_resp, sw1, sw2) = self.transmit(&apdu)?;
+            if (sw1, sw2) != SW_SUCCESS {
+                return Ok((_resp, sw1, sw2));
+            }
+        }
+
+        // Final (or only) chunk
+        let mut apdu = vec![cla, ins, p1, p2];
+        if !remaining.is_empty() {
+            apdu.push(remaining.len() as u8);
+            apdu.extend_from_slice(remaining);
+        }
+        apdu.push(0x00); // Le
+        let (mut resp, mut sw1, mut sw2) = self.transmit(&apdu)?;
+
+        // Collect chained response (SW1=0x61 means more data)
+        while sw1 == SW1_MORE_DATA {
+            let get_resp = vec![0x00, 0xC0, 0x00, 0x00, sw2];
+            let (more, s1, s2) = self.transmit(&get_resp)?;
+            resp.extend_from_slice(&more);
+            sw1 = s1;
+            sw2 = s2;
+        }
+
+        Ok((resp, sw1, sw2))
+    }
+
+    fn call_apdu(&self, apdu: &[u8]) -> Result<Vec<u8>, CtapError> {
+        // Parse the APDU header
+        if apdu.len() < 4 {
+            return Err(CtapError::InvalidResponse("APDU too short".to_string()));
+        }
+        let (cla, ins, p1, p2) = (apdu[0], apdu[1], apdu[2], apdu[3]);
+        let data = if apdu.len() > 5 {
+            &apdu[5..5 + apdu[4] as usize]
+        } else {
+            &[]
+        };
+
+        let (resp, sw1, sw2) = self.chain_apdus(cla, ins, p1, p2, data)?;
+        let mut result = resp;
+        result.push(sw1);
+        result.push(sw2);
+        Ok(result)
+    }
+
+    fn call_cbor(
+        &self,
+        data: &[u8],
+        on_keepalive: &mut dyn FnMut(u8),
+    ) -> Result<Vec<u8>, CtapError> {
+        // NFCCTAP_MSG: CLA=0x80, INS=0x10, P1=0x80 (use NFCCTAP_GETRESPONSE), P2=0x00
+        let (mut resp, mut sw1, mut sw2) = self.chain_apdus(0x80, 0x10, 0x80, 0x00, data)?;
+
+        // NFCCTAP_GETRESPONSE loop for keepalive
+        while (sw1, sw2) == SW_UPDATE {
+            if !resp.is_empty() {
+                on_keepalive(resp[0]);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let result = self.chain_apdus(0x80, 0x11, 0x00, 0x00, &[])?;
+            resp = result.0;
+            sw1 = result.1;
+            sw2 = result.2;
+        }
+
+        if (sw1, sw2) != SW_SUCCESS {
+            return Err(CtapError::TransportError(format!(
+                "NFCCTAP error: SW={sw1:02X}{sw2:02X}"
+            )));
+        }
+
+        Ok(resp)
+    }
+}
+
+impl CtapDevice for CtapPcscDevice {
+    fn call(
+        &self,
+        cmd: u8,
+        data: &[u8],
+        on_keepalive: &mut dyn FnMut(u8),
+    ) -> Result<Vec<u8>, CtapError> {
+        match cmd {
+            ctap::cmd::CBOR => self.call_cbor(data, on_keepalive),
+            ctap::cmd::MSG => self.call_apdu(data),
+            _ => Err(CtapError::StatusError(ctap::CtapStatus::InvalidCommand)),
+        }
+    }
+
+    fn capabilities(&self) -> u8 {
+        self.capabilities
+    }
+
+    fn close(&mut self) {
+        let _ = self.conn.disconnect();
     }
 }

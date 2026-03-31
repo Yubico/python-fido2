@@ -300,19 +300,16 @@ impl NativeCtap1 {
         py: Python<'py>,
         client_param: &[u8],
         app_param: &[u8],
-    ) -> PyResult<Bound<'py, PyTuple>> {
+    ) -> PyResult<Bound<'py, PyBytes>> {
         let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
         let ctap = ctap1::Ctap1::new(&dev);
-        let reg = ctap.register(client_param, app_param).map_err(apdu_err)?;
-        PyTuple::new(
-            py,
-            &[
-                PyBytes::new(py, &reg.public_key).into_any(),
-                PyBytes::new(py, &reg.key_handle).into_any(),
-                PyBytes::new(py, &reg.certificate).into_any(),
-                PyBytes::new(py, &reg.signature).into_any(),
-            ],
-        )
+        let mut data = Vec::with_capacity(64);
+        data.extend_from_slice(client_param);
+        data.extend_from_slice(app_param);
+        let response = ctap
+            .send_apdu(0, ctap1::ins::REGISTER, 0, 0, &data)
+            .map_err(apdu_err)?;
+        Ok(PyBytes::new(py, &response))
     }
 
     #[pyo3(signature = (client_param, app_param, key_handle, check_only=false))]
@@ -323,20 +320,19 @@ impl NativeCtap1 {
         app_param: &[u8],
         key_handle: &[u8],
         check_only: bool,
-    ) -> PyResult<Bound<'py, PyTuple>> {
+    ) -> PyResult<Bound<'py, PyBytes>> {
         let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
         let ctap = ctap1::Ctap1::new(&dev);
-        let sig = ctap
-            .authenticate(client_param, app_param, key_handle, check_only)
+        let mut data = Vec::with_capacity(65 + key_handle.len());
+        data.extend_from_slice(client_param);
+        data.extend_from_slice(app_param);
+        data.push(key_handle.len() as u8);
+        data.extend_from_slice(key_handle);
+        let p1 = if check_only { 0x07 } else { 0x03 };
+        let response = ctap
+            .send_apdu(0, ctap1::ins::AUTHENTICATE, p1, 0, &data)
             .map_err(apdu_err)?;
-        PyTuple::new(
-            py,
-            &[
-                sig.user_presence.into_pyobject(py)?.into_any(),
-                sig.counter.into_pyobject(py)?.into_any(),
-                PyBytes::new(py, &sig.signature).into_any(),
-            ],
-        )
+        Ok(PyBytes::new(py, &response))
     }
 }
 
@@ -393,7 +389,7 @@ impl NativeCtap2 {
 
     #[pyo3(signature = (cmd, data=None, event=None, on_keepalive=None))]
     fn send_cbor(
-        &self,
+        &mut self,
         py: Python<'_>,
         cmd: u8,
         data: Option<PyObject>,
@@ -406,6 +402,16 @@ impl NativeCtap2 {
         let result = ctap
             .send_cbor(cmd, cbor_data.as_ref(), &mut |_| {})
             .map_err(ctap_err)?;
+
+        // Cache info when GET_INFO is called
+        if cmd == ctap2::ctap2_cmd::GET_INFO
+            && let Value::Map(ref entries) = result
+        {
+            let info = Info::from_cbor(entries);
+            self.max_msg_size = info.max_msg_size;
+            self.info_cache = Some(info);
+        }
+
         val_to_pyobj(py, &result)
     }
 
@@ -634,7 +640,7 @@ impl NativeCtap2 {
     }
 
     #[pyo3(signature = (
-        cmd_byte, sub_cmd,
+        sub_cmd,
         sub_cmd_params=None, pin_uv_protocol=None, pin_uv_param=None,
         event=None, on_keepalive=None
     ))]
@@ -642,7 +648,6 @@ impl NativeCtap2 {
     fn credential_mgmt(
         &self,
         py: Python<'_>,
-        cmd_byte: u8,
         sub_cmd: PyObject,
         sub_cmd_params: Option<PyObject>,
         pin_uv_protocol: Option<PyObject>,
@@ -656,22 +661,17 @@ impl NativeCtap2 {
         let param_val = py_opt_to_val(py, pin_uv_param)?;
 
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
         let result = ctap
-            .credential_mgmt(
-                cmd_byte,
-                sub_cmd_val,
-                params_val,
-                proto_val,
-                param_val,
-                &mut |_| {},
-            )
+            .credential_mgmt(sub_cmd_val, params_val, proto_val, param_val, &mut |_| {})
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
     #[pyo3(signature = (
-        cmd_byte,
         modality=None, sub_cmd=None, sub_cmd_params=None,
         pin_uv_protocol=None, pin_uv_param=None, get_modality=None,
         event=None, on_keepalive=None
@@ -680,7 +680,6 @@ impl NativeCtap2 {
     fn bio_enrollment(
         &self,
         py: Python<'_>,
-        cmd_byte: u8,
         modality: Option<PyObject>,
         sub_cmd: Option<PyObject>,
         sub_cmd_params: Option<PyObject>,
@@ -698,10 +697,12 @@ impl NativeCtap2 {
         let gm_val = py_opt_to_val(py, get_modality)?;
 
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
         let result = ctap
             .bio_enrollment(
-                cmd_byte,
                 mod_val,
                 cmd_val,
                 params_val,
@@ -775,6 +776,40 @@ impl NativeCtap2 {
             .config(cmd_val, params_val, proto_val, param_val, &mut |_| {})
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
+    }
+
+    fn create_credential_management(
+        &self,
+        py: Python<'_>,
+        protocol_version: u32,
+        pin_uv_token: Vec<u8>,
+    ) -> NativeCredentialManagement {
+        NativeCredentialManagement {
+            device: self.device.clone_ref(py),
+            strict_cbor: self.strict_cbor,
+            max_msg_size: self.max_msg_size,
+            protocol_version,
+            pin_uv_token,
+            info_cache: self.info_cache.clone(),
+        }
+    }
+
+    fn create_bio_enrollment(
+        &self,
+        py: Python<'_>,
+        protocol_version: u32,
+        pin_uv_token: Vec<u8>,
+        modality: u32,
+    ) -> NativeFPBioEnrollment {
+        NativeFPBioEnrollment {
+            device: self.device.clone_ref(py),
+            strict_cbor: self.strict_cbor,
+            max_msg_size: self.max_msg_size,
+            protocol_version,
+            pin_uv_token,
+            modality,
+            info_cache: self.info_cache.clone(),
+        }
     }
 }
 
@@ -923,36 +958,19 @@ struct NativeCredentialManagement {
     max_msg_size: usize,
     protocol_version: u32,
     pin_uv_token: Vec<u8>,
-    cmd_byte: u8,
+    info_cache: Option<Info>,
 }
 
 #[pymethods]
 impl NativeCredentialManagement {
-    #[new]
-    fn new(
-        device: PyObject,
-        strict_cbor: bool,
-        max_msg_size: usize,
-        protocol_version: u32,
-        pin_uv_token: Vec<u8>,
-        cmd_byte: u8,
-    ) -> Self {
-        Self {
-            device,
-            strict_cbor,
-            max_msg_size,
-            protocol_version,
-            pin_uv_token,
-            cmd_byte,
-        }
-    }
-
     fn get_metadata(&self, py: Python<'_>) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         let result = cm.get_metadata().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -960,9 +978,11 @@ impl NativeCredentialManagement {
     fn enumerate_rps_begin(&self, py: Python<'_>) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         let result = cm.enumerate_rps_begin().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -970,9 +990,11 @@ impl NativeCredentialManagement {
     fn enumerate_rps_next(&self, py: Python<'_>) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         let result = cm.enumerate_rps_next().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -980,9 +1002,11 @@ impl NativeCredentialManagement {
     fn enumerate_rps(&self, py: Python<'_>) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         let results = cm.enumerate_rps().map_err(ctap_err)?;
         let list = PyList::empty(py);
         for v in &results {
@@ -994,9 +1018,11 @@ impl NativeCredentialManagement {
     fn enumerate_creds_begin<'py>(&self, py: Python<'py>, rp_id_hash: &[u8]) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         let result = cm.enumerate_creds_begin(rp_id_hash).map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -1004,9 +1030,11 @@ impl NativeCredentialManagement {
     fn enumerate_creds_next(&self, py: Python<'_>) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         let result = cm.enumerate_creds_next().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -1014,9 +1042,11 @@ impl NativeCredentialManagement {
     fn enumerate_creds(&self, py: Python<'_>, rp_id_hash: &[u8]) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         let results = cm.enumerate_creds(rp_id_hash).map_err(ctap_err)?;
         let list = PyList::empty(py);
         for v in &results {
@@ -1029,9 +1059,11 @@ impl NativeCredentialManagement {
         let protocol = make_protocol(self.protocol_version)?;
         let cred_val = py_to_val(py, cred_id)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         cm.delete_cred(cred_val).map_err(ctap_err)
     }
 
@@ -1040,9 +1072,11 @@ impl NativeCredentialManagement {
         let cred_val = py_to_val(py, cred_id)?;
         let user_val = py_to_val(py, user)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let cm =
-            CredentialManagement::from_parts(&ctap, &protocol, &self.pin_uv_token, self.cmd_byte);
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let cm = CredentialManagement::new(&ctap, &protocol, &self.pin_uv_token);
         cm.update_user_info(cred_val, user_val).map_err(ctap_err)
     }
 }
@@ -1056,33 +1090,12 @@ struct NativeFPBioEnrollment {
     max_msg_size: usize,
     protocol_version: u32,
     pin_uv_token: Vec<u8>,
-    cmd_byte: u8,
     modality: u32,
+    info_cache: Option<Info>,
 }
 
 #[pymethods]
 impl NativeFPBioEnrollment {
-    #[new]
-    fn new(
-        device: PyObject,
-        strict_cbor: bool,
-        max_msg_size: usize,
-        protocol_version: u32,
-        pin_uv_token: Vec<u8>,
-        cmd_byte: u8,
-        modality: u32,
-    ) -> Self {
-        Self {
-            device,
-            strict_cbor,
-            max_msg_size,
-            protocol_version,
-            pin_uv_token,
-            cmd_byte,
-            modality,
-        }
-    }
-
     fn get_fingerprint_sensor_info(
         &self,
         py: Python<'_>,
@@ -1091,14 +1104,11 @@ impl NativeFPBioEnrollment {
     ) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let bio = FPBioEnrollment::from_parts(
-            &ctap,
-            &protocol,
-            &self.pin_uv_token,
-            self.cmd_byte,
-            self.modality,
-        );
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         let result = bio
             .get_fingerprint_sensor_info(&mut |_| {})
             .map_err(ctap_err)?;
@@ -1115,14 +1125,11 @@ impl NativeFPBioEnrollment {
     ) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let bio = FPBioEnrollment::from_parts(
-            &ctap,
-            &protocol,
-            &self.pin_uv_token,
-            self.cmd_byte,
-            self.modality,
-        );
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         let (template_id, status, remaining) =
             bio.enroll_begin(timeout, &mut |_| {}).map_err(ctap_err)?;
         Ok(PyTuple::new(
@@ -1147,14 +1154,11 @@ impl NativeFPBioEnrollment {
     ) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), event, on_keepalive)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let bio = FPBioEnrollment::from_parts(
-            &ctap,
-            &protocol,
-            &self.pin_uv_token,
-            self.cmd_byte,
-            self.modality,
-        );
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         let (status, remaining) = bio
             .enroll_capture_next(template_id, timeout, &mut |_| {})
             .map_err(ctap_err)?;
@@ -1171,28 +1175,22 @@ impl NativeFPBioEnrollment {
     fn enroll_cancel(&self, py: Python<'_>) -> PyResult<()> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let bio = FPBioEnrollment::from_parts(
-            &ctap,
-            &protocol,
-            &self.pin_uv_token,
-            self.cmd_byte,
-            self.modality,
-        );
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         bio.enroll_cancel().map_err(ctap_err)
     }
 
     fn enumerate_enrollments(&self, py: Python<'_>) -> PyResult<PyObject> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let bio = FPBioEnrollment::from_parts(
-            &ctap,
-            &protocol,
-            &self.pin_uv_token,
-            self.cmd_byte,
-            self.modality,
-        );
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         let result = bio.enumerate_enrollments().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
@@ -1200,28 +1198,22 @@ impl NativeFPBioEnrollment {
     fn set_name(&self, py: Python<'_>, template_id: &[u8], name: &str) -> PyResult<()> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let bio = FPBioEnrollment::from_parts(
-            &ctap,
-            &protocol,
-            &self.pin_uv_token,
-            self.cmd_byte,
-            self.modality,
-        );
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         bio.set_name(template_id, name).map_err(ctap_err)
     }
 
     fn remove_enrollment(&self, py: Python<'_>, template_id: &[u8]) -> PyResult<()> {
         let protocol = make_protocol(self.protocol_version)?;
         let dev = PyCtapDevice::with_event(py, self.device.clone_ref(py), None, None)?;
-        let ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
-        let bio = FPBioEnrollment::from_parts(
-            &ctap,
-            &protocol,
-            &self.pin_uv_token,
-            self.cmd_byte,
-            self.modality,
-        );
+        let mut ctap = ctap2::Ctap2::from_parts(&dev, self.strict_cbor, self.max_msg_size);
+        if let Some(ref info) = self.info_cache {
+            ctap.set_info(info.clone());
+        }
+        let bio = FPBioEnrollment::from_parts(&ctap, &protocol, &self.pin_uv_token, self.modality);
         bio.remove_enrollment(template_id).map_err(ctap_err)
     }
 }

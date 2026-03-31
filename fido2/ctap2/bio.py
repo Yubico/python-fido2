@@ -32,8 +32,6 @@ from enum import IntEnum, unique
 from threading import Event
 from typing import Any, Callable, Mapping, NoReturn
 
-from _fido2_native.ctap import NativeFPBioEnrollment
-
 from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol
@@ -200,18 +198,9 @@ class FPBioEnrollment(BioEnrollment):
     def __init__(self, ctap: Ctap2, pin_uv_protocol: PinProtocol, pin_uv_token: bytes):
         super().__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)
 
-        if "bioEnroll" in ctap.info.options:
-            cmd_byte = 0x09
-        else:
-            cmd_byte = 0x40
-
-        self._native = NativeFPBioEnrollment(
-            ctap._native.device,
-            ctap._native.strict_cbor,
-            ctap._native.max_msg_size,
+        self._native = ctap._native.create_bio_enrollment(
             pin_uv_protocol.VERSION,
             pin_uv_token,
-            cmd_byte,
             self.modality,
         )
 

@@ -29,7 +29,7 @@
 
 use crate::cbor::{self, Value};
 use crate::ctap::{CtapError, CtapStatus};
-use crate::ctap2::{Ctap2, ctap2_cmd};
+use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
 
 /// Sub-command identifiers for credential management.
@@ -71,48 +71,15 @@ pub struct CredentialManagement<'a> {
     ctap: &'a Ctap2<'a>,
     protocol: &'a PinProtocol,
     pin_uv_token: &'a [u8],
-    cmd_byte: u8,
 }
 
 impl<'a> CredentialManagement<'a> {
     /// Create a new CredentialManagement instance.
-    pub fn new(
-        ctap: &'a Ctap2<'a>,
-        protocol: &'a PinProtocol,
-        pin_uv_token: &'a [u8],
-    ) -> Result<Self, CtapError> {
-        let info = ctap.info();
-        let cmd_byte = if info.options.get("credMgmt") == Some(&true) {
-            ctap2_cmd::CREDENTIAL_MGMT
-        } else if info.versions.contains(&"FIDO_2_1_PRE".to_string())
-            && info.options.get("credentialMgmtPreview") == Some(&true)
-        {
-            ctap2_cmd::CREDENTIAL_MGMT_PRE
-        } else {
-            return Err(CtapError::InvalidResponse(
-                "Authenticator does not support Credential Management".to_string(),
-            ));
-        };
-        Ok(Self {
-            ctap,
-            protocol,
-            pin_uv_token,
-            cmd_byte,
-        })
-    }
-
-    /// Create without validation (for PyO3 wrappers).
-    pub fn from_parts(
-        ctap: &'a Ctap2<'a>,
-        protocol: &'a PinProtocol,
-        pin_uv_token: &'a [u8],
-        cmd_byte: u8,
-    ) -> Self {
+    pub fn new(ctap: &'a Ctap2<'a>, protocol: &'a PinProtocol, pin_uv_token: &'a [u8]) -> Self {
         Self {
             ctap,
             protocol,
             pin_uv_token,
-            cmd_byte,
         }
     }
 
@@ -132,7 +99,6 @@ impl<'a> CredentialManagement<'a> {
             (None, None)
         };
         self.ctap.credential_mgmt(
-            self.cmd_byte,
             Value::Int(sub_cmd as i64),
             params,
             pin_uv_protocol,

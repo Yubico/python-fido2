@@ -244,8 +244,16 @@ class Ctap1:
         :param app_param: SHA256 hash of the app ID used for the request.
         :return: The registration response from the authenticator.
         """
-        data = client_param + app_param
-        response = self.send_apdu(ins=Ctap1.INS.REGISTER, data=data)
+        try:
+            response = bytes(self._native.register(client_param, app_param))
+        except ValueError as e:
+            msg = str(e)
+            if msg.startswith("APDU_ERR:"):
+                parts = msg.split(":", 2)
+                code = int(parts[1])
+                err_data = bytes.fromhex(parts[2]) if len(parts) > 2 else b""
+                raise ApduError(code, err_data) from None
+            raise
         return RegistrationData(response)
 
     def authenticate(
@@ -264,9 +272,18 @@ class Ctap1:
             determine if a key handle is known.
         :return: The authentication response from the authenticator.
         """
-        data = (
-            client_param + app_param + struct.pack(">B", len(key_handle)) + key_handle
-        )
-        p1 = 0x07 if check_only else 0x03
-        response = self.send_apdu(ins=Ctap1.INS.AUTHENTICATE, p1=p1, data=data)
+        try:
+            response = bytes(
+                self._native.authenticate(
+                    client_param, app_param, key_handle, check_only
+                )
+            )
+        except ValueError as e:
+            msg = str(e)
+            if msg.startswith("APDU_ERR:"):
+                parts = msg.split(":", 2)
+                code = int(parts[1])
+                err_data = bytes.fromhex(parts[2]) if len(parts) > 2 else b""
+                raise ApduError(code, err_data) from None
+            raise
         return SignatureData(response)

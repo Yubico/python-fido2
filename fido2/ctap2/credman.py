@@ -114,18 +114,11 @@ class CredentialManagement:
 
         self.ctap = ctap
 
-        if "credMgmt" in ctap.info.options:
-            cmd_byte = 0x0A
-        else:
-            cmd_byte = 0x41
-
-        self._native: NativeCredentialManagement = NativeCredentialManagement(
-            ctap._native.device,
-            ctap._native.strict_cbor,
-            ctap._native.max_msg_size,
-            pin_uv_protocol.VERSION,
-            pin_uv_token,
-            cmd_byte,
+        self._native: NativeCredentialManagement = (
+            ctap._native.create_credential_management(
+                pin_uv_protocol.VERSION,
+                pin_uv_token,
+            )
         )
 
     @staticmethod
