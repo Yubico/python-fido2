@@ -306,7 +306,7 @@ class WindowsClient(WebAuthnClient):
             if obj.dwVersion >= 4 and options.extensions.get("credProps"):
                 extension_outputs["credProps"] = {"rk": bool(obj.bResidentKey)}
             if "hmac-secret" in extensions_out:
-                if obj.dwVersion >= 7:
+                if obj.dwVersion >= 7 and obj.pHmacSecret:
                     secret = obj.pHmacSecret.contents
                     secrets = (secret.first, secret.second)
                 else:
@@ -474,7 +474,7 @@ class WindowsClient(WebAuthnClient):
             extension_outputs["appid"] = bool(u2f_appid_used.value)
 
         if options.extensions:
-            if obj.dwVersion >= 3 and hmac_secret_salts:
+            if obj.dwVersion >= 3 and obj.pHmacSecret:
                 secret = obj.pHmacSecret.contents
                 if "prf" in options.extensions:
                     result = {"first": secret.first}
