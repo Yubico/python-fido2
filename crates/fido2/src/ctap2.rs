@@ -172,7 +172,7 @@ impl Info {
             })
             .unwrap_or_default();
 
-        let certifications = get(18)
+        let certifications = get(19)
             .and_then(|v| match v {
                 Value::Map(entries) => {
                     let mut map = BTreeMap::new();
@@ -187,9 +187,9 @@ impl Info {
             })
             .unwrap_or_default();
 
-        let remaining_disc_creds = get(19).and_then(|v| v.as_int().map(|n| n as u32));
+        let remaining_disc_creds = get(20).and_then(|v| v.as_int().map(|n| n as u32));
 
-        let vendor_prototype_config_commands = get(20)
+        let vendor_prototype_config_commands = get(21)
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
@@ -199,7 +199,7 @@ impl Info {
             .unwrap_or_default();
 
         let attestation_formats = {
-            let fmts = get_strings(21);
+            let fmts = get_strings(22);
             if fmts.is_empty() {
                 vec!["packed".to_string()]
             } else {
