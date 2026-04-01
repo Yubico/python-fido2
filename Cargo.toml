@@ -1,3 +1,7 @@
 [workspace]
 members = ["crates/fido2-server", "crates/fido2-client", "crates/fido2-pyo3"]
 resolver = "3"
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"

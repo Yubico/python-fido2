@@ -25,3 +25,6 @@ hidapi = { version = "2", default-features = false, features = ["linux-static-hi
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 hidapi = { version = "2" }
+
+[lints]
+workspace = true

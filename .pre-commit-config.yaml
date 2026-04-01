@@ -19,22 +19,22 @@ repos:
   - id: pyright
 - repo: local
   hooks:
-  - id: cargo-fmt
-    name: cargo fmt
-    language: system
-    entry: cargo fmt --all -- --check
-    pass_filenames: false
-    types: [rust]
-  - id: cargo-clippy
-    name: cargo clippy
-    language: system
-    entry: cargo clippy --all-targets -- -D warnings
-    pass_filenames: false
-    types: [rust]
-  - id: ty-check
-    name: ty-check
-    language: python
-    entry: ty check fido2 tests
-    pass_filenames: false
-    args: [--python=.venv/]
-    additional_dependencies: [ty]
+    - id: cargo-fmt
+      name: cargo fmt
+      language: system
+      entry: cargo fmt --all -- --check
+      pass_filenames: false
+      types: [rust]
+    - id: cargo-clippy
+      name: cargo clippy
+      language: system
+      entry: cargo clippy --workspace --all-targets -- -D warnings
+      pass_filenames: false
+      types: [rust]
+    - id: ty-check
+      name: ty-check
+      language: python
+      entry: ty check fido2 tests
+      pass_filenames: false
+      args: [--python=.venv/]
+      additional_dependencies: [ty]

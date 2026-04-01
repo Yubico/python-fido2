@@ -58,19 +58,28 @@ testpaths = ["tests"]
 [tool.ruff.lint]
 extend-select = ["E", "I", "S"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["_fido2_native"]
+
 [tool.mypy]
-mypy_path = "typestubs"
+mypy_path = "typings"
 
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-stubsPath = "typestubs"
-extraPaths = ["typestubs"]
+stubsPath = "typings"
+extraPaths = ["typings"]
 exclude = ["tests/", "docs/", "examples/"]
 reportPrivateImportUsage = false
 
+[tool.ty.environment]
+extra-paths = ["typings"]
+
 [tool.ty.src]
 exclude = ["docs"]
+
+[tool.ty.rules]
+unused-type-ignore-comment = "ignore"
 
 [tool.ty.analysis]
 allowed-unresolved-imports = ["_fido2_native.**", "smartcard.**"]
