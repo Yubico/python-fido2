@@ -350,6 +350,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "url",
+ "zeroize",
 ]
 
 [[package]]

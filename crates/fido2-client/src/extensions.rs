@@ -38,6 +38,7 @@ use crate::ctap2::{AssertionResponse, AttestationResponse, Ctap2, Info};
 use crate::pin::{ClientPin, CoseKeyAgreement, PinProtocol};
 use fido2_server::cbor::Value;
 use fido2_server::utils::sha256;
+use zeroize::Zeroizing;
 
 /// Authenticator extension inputs: maps extension name to CBOR value.
 pub type ExtensionInputs = BTreeMap<String, Value>;
@@ -387,7 +388,7 @@ impl Ctap2Extension for HmacSecretExtension {
 
         struct Processor {
             inputs: ExtensionInputs,
-            shared_secret: Option<Vec<u8>>,
+            shared_secret: Option<Zeroizing<Vec<u8>>>,
             pin_protocol: PinProtocol,
             is_prf: bool,
         }
@@ -455,7 +456,7 @@ impl Ctap2Extension for HmacSecretExtension {
 
         struct Processor {
             key_agreement: CoseKeyAgreement,
-            shared_secret: Vec<u8>,
+            shared_secret: Zeroizing<Vec<u8>>,
             pin_protocol: PinProtocol,
             is_prf: bool,
             prf_input: Option<serde_json::Value>,

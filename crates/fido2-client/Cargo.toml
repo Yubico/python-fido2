@@ -19,6 +19,7 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
 url = "2"
+zeroize = { version = "1", features = ["derive"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "2", default-features = false, features = ["linux-static-hidraw"] }

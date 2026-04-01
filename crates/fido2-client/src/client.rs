@@ -48,6 +48,7 @@ use fido2_server::webauthn::{
     PublicKeyCredentialCreationOptions, PublicKeyCredentialParameters,
     PublicKeyCredentialRequestOptions, ResidentKeyRequirement, UserVerificationRequirement,
 };
+use zeroize::Zeroizing;
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -233,7 +234,7 @@ pub fn get_token(
     allow_internal_uv: bool,
     allow_uv: bool,
     user_interaction: &dyn UserInteraction,
-) -> Result<Option<Vec<u8>>, ClientError> {
+) -> Result<Option<Zeroizing<Vec<u8>>>, ClientError> {
     if allow_uv && info.options.get("uv").copied().unwrap_or(false) {
         if info.options.get("pinUvAuthToken").copied() == Some(true) {
             if user_interaction.request_uv(permissions, rp_id) {
@@ -271,7 +272,7 @@ pub fn get_auth_params(
     on_keepalive: &mut dyn FnMut(u8),
     user_interaction: &dyn UserInteraction,
     pin_protocol_version: Option<u32>,
-) -> Result<(Option<Vec<u8>>, bool), ClientError> {
+) -> Result<(Option<Zeroizing<Vec<u8>>>, bool), ClientError> {
     let info = ctap.get_info()?;
 
     let mut pin_token = None;
@@ -710,7 +711,7 @@ impl<'a> Ctap2Backend<'a> {
         (
             Vec<AssertionResponse>,
             Vec<Box<dyn AuthenticationExtensionProcessor>>,
-            Option<Vec<u8>>,
+            Option<Zeroizing<Vec<u8>>>,
         ),
         ClientError,
     > {
@@ -775,9 +776,10 @@ impl<'a> Ctap2Backend<'a> {
             // Prepare extension inputs
             let mut extension_inputs = ExtensionInputs::new();
             for ext in &used_extensions {
-                if let Some(inputs) =
-                    ext.prepare_inputs(selected_cred.as_ref(), pin_token.as_deref())
-                {
+                if let Some(inputs) = ext.prepare_inputs(
+                    selected_cred.as_ref(),
+                    pin_token.as_deref().map(Vec::as_slice),
+                ) {
                     extension_inputs.extend(inputs);
                 }
             }
@@ -989,7 +991,7 @@ impl ClientBackend for Ctap2Backend<'_> {
             // Prepare extension inputs
             let mut extension_inputs = ExtensionInputs::new();
             for ext in &used_extensions {
-                if let Some(inputs) = ext.prepare_inputs(pin_token.as_deref()) {
+                if let Some(inputs) = ext.prepare_inputs(pin_token.as_deref().map(Vec::as_slice)) {
                     extension_inputs.extend(inputs);
                 }
             }
@@ -1055,9 +1057,11 @@ impl ClientBackend for Ctap2Backend<'_> {
                 Ok(att_resp) => {
                     let mut extension_outputs = ExtensionOutputs::new();
                     for ext in &used_extensions {
-                        if let Some(output) =
-                            ext.prepare_outputs(&att_resp, pin_token.as_deref(), &self.ctap)
-                        {
+                        if let Some(output) = ext.prepare_outputs(
+                            &att_resp,
+                            pin_token.as_deref().map(Vec::as_slice),
+                            &self.ctap,
+                        ) {
                             extension_outputs.extend(output);
                         }
                     }
@@ -1093,9 +1097,11 @@ impl ClientBackend for Ctap2Backend<'_> {
             .map(|assertion| {
                 let mut outputs = ExtensionOutputs::new();
                 for ext in &extensions {
-                    if let Some(ext_out) =
-                        ext.prepare_outputs(assertion, pin_token.as_deref(), &self.ctap)
-                    {
+                    if let Some(ext_out) = ext.prepare_outputs(
+                        assertion,
+                        pin_token.as_deref().map(Vec::as_slice),
+                        &self.ctap,
+                    ) {
                         outputs.extend(ext_out);
                     }
                 }
