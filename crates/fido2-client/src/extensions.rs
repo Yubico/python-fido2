@@ -382,7 +382,7 @@ impl Ctap2Extension for HmacSecretExtension {
                     ]),
                 );
 
-                shared_secret = Some(ss);
+                shared_secret = Some(Zeroizing::new(ss));
             }
         }
 
@@ -452,7 +452,8 @@ impl Ctap2Extension for HmacSecretExtension {
 
         // Perform ECDH key agreement now; processor owns the result
         let client_pin = ClientPin::new(ctap, Some(pin_protocol)).ok()?;
-        let (key_agreement, shared_secret) = client_pin._get_shared_secret().ok()?;
+        let (key_agreement, ss) = client_pin._get_shared_secret().ok()?;
+        let shared_secret = Zeroizing::new(ss);
 
         struct Processor {
             key_agreement: CoseKeyAgreement,

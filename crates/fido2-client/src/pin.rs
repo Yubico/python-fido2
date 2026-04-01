@@ -35,7 +35,7 @@ use aes::Aes256;
 use cbc::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use hkdf::Hkdf;
 use sha2::Sha256;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use std::sync::atomic::AtomicBool;
 
@@ -62,13 +62,16 @@ pub enum PinError {
 }
 
 /// Result of ECDH P-256 key agreement.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct EcdhResult {
     /// The public key to send (x coordinate, 32 bytes).
-    pub public_key_x: Vec<u8>,
+    #[zeroize(skip)]
+    pub public_key_x: [u8; 32],
     /// The public key to send (y coordinate, 32 bytes).
-    pub public_key_y: Vec<u8>,
+    #[zeroize(skip)]
+    pub public_key_y: [u8; 32],
     /// The raw shared secret (x coordinate of ECDH result, 32 bytes).
-    pub shared_secret: Zeroizing<Vec<u8>>,
+    pub shared_secret: [u8; 32],
 }
 
 /// Perform ECDH P-256 key agreement with a peer's public key.
@@ -93,9 +96,9 @@ pub fn ecdh_p256(peer_x: &[u8], peer_y: &[u8]) -> Result<EcdhResult, PinError> {
     let shared = secret.diffie_hellman(&peer_pk);
 
     Ok(EcdhResult {
-        public_key_x: our_point.x().unwrap().to_vec(),
-        public_key_y: our_point.y().unwrap().to_vec(),
-        shared_secret: Zeroizing::new(shared.raw_secret_bytes().to_vec()),
+        public_key_x: (*our_point.x().unwrap()).into(),
+        public_key_y: (*our_point.y().unwrap()).into(),
+        shared_secret: (*shared.raw_secret_bytes()).into(),
     })
 }
 
@@ -186,22 +189,22 @@ pub fn aes_cbc_decrypt_v2(key: &[u8], data: &[u8]) -> Result<Vec<u8>, PinError> 
 }
 
 /// HKDF-SHA256 key derivation.
-pub fn hkdf_sha256(salt: &[u8], ikm: &[u8], info: &[u8], length: usize) -> Zeroizing<Vec<u8>> {
+pub fn hkdf_sha256(salt: &[u8], ikm: &[u8], info: &[u8], length: usize) -> Vec<u8> {
     let hk = Hkdf::<Sha256>::new(Some(salt), ikm);
     let mut okm = vec![0u8; length];
     hk.expand(info, &mut okm)
         .expect("HKDF output length should be valid");
-    Zeroizing::new(okm)
+    okm
 }
 
 /// PIN protocol V1 KDF: SHA-256 of the shared secret.
-pub fn kdf_v1(z: &[u8]) -> Zeroizing<Vec<u8>> {
-    Zeroizing::new(utils::sha256(z).to_vec())
+pub fn kdf_v1(z: &[u8]) -> Vec<u8> {
+    utils::sha256(z).to_vec()
 }
 
 /// PIN protocol V2 KDF: HKDF-SHA256 to derive HMAC key (32 bytes) + AES key (32 bytes).
 /// Returns 64 bytes: hmac_key || aes_key.
-pub fn kdf_v2(z: &[u8]) -> Zeroizing<Vec<u8>> {
+pub fn kdf_v2(z: &[u8]) -> Vec<u8> {
     let salt = [0u8; 32];
     let hmac_key = hkdf_sha256(&salt, z, b"CTAP2 HMAC key", 32);
     let aes_key = hkdf_sha256(&salt, z, b"CTAP2 AES key", 32);
@@ -209,7 +212,7 @@ pub fn kdf_v2(z: &[u8]) -> Zeroizing<Vec<u8>> {
     let mut result = Vec::with_capacity(64);
     result.extend_from_slice(&hmac_key);
     result.extend_from_slice(&aes_key);
-    Zeroizing::new(result)
+    result
 }
 
 // --- Higher-level protocol abstractions ---
@@ -222,8 +225,8 @@ impl From<PinError> for CtapError {
 
 /// COSE key agreement public key (EC2 P-256).
 pub struct CoseKeyAgreement {
-    pub x: Vec<u8>,
-    pub y: Vec<u8>,
+    pub x: [u8; 32],
+    pub y: [u8; 32],
 }
 
 impl CoseKeyAgreement {
@@ -234,8 +237,8 @@ impl CoseKeyAgreement {
             (Value::Int(1), Value::Int(2)),
             (Value::Int(3), Value::Int(-25)),
             (Value::Int(-1), Value::Int(1)),
-            (Value::Int(-2), Value::Bytes(self.x.clone())),
-            (Value::Int(-3), Value::Bytes(self.y.clone())),
+            (Value::Int(-2), Value::Bytes(self.x.to_vec())),
+            (Value::Int(-3), Value::Bytes(self.y.to_vec())),
         ])
     }
 }
@@ -257,7 +260,7 @@ impl PinProtocol {
     }
 
     /// Derive shared secret from raw ECDH output.
-    pub fn kdf(&self, z: &[u8]) -> Zeroizing<Vec<u8>> {
+    pub fn kdf(&self, z: &[u8]) -> Vec<u8> {
         match self {
             PinProtocol::V1 => kdf_v1(z),
             PinProtocol::V2 => kdf_v2(z),
@@ -269,7 +272,7 @@ impl PinProtocol {
         &self,
         peer_x: &[u8],
         peer_y: &[u8],
-    ) -> Result<(CoseKeyAgreement, Zeroizing<Vec<u8>>), PinError> {
+    ) -> Result<(CoseKeyAgreement, Vec<u8>), PinError> {
         let ecdh = ecdh_p256(peer_x, peer_y)?;
         let shared_secret = self.kdf(&ecdh.shared_secret);
         let key_agreement = CoseKeyAgreement {
@@ -304,7 +307,7 @@ impl PinProtocol {
     }
 
     /// Validate a PIN/UV token length for this protocol version.
-    pub fn validate_token(&self, token: &[u8]) -> Result<Zeroizing<Vec<u8>>, PinError> {
+    pub fn validate_token(&self, token: &[u8]) -> Result<Vec<u8>, PinError> {
         match self {
             PinProtocol::V1 => {
                 if token.len() != 16 && token.len() != 32 {
@@ -312,7 +315,7 @@ impl PinProtocol {
                         "V1 token must be 16 or 32 bytes".to_string(),
                     ));
                 }
-                Ok(Zeroizing::new(token.to_vec()))
+                Ok(token.to_vec())
             }
             PinProtocol::V2 => {
                 if token.len() != 32 {
@@ -320,7 +323,7 @@ impl PinProtocol {
                         "V2 token must be 32 bytes".to_string(),
                     ));
                 }
-                Ok(Zeroizing::new(token.to_vec()))
+                Ok(token.to_vec())
             }
         }
     }
@@ -411,7 +414,7 @@ impl<'a> ClientPin<'a> {
     }
 
     /// Get the key agreement and shared secret from the authenticator.
-    pub fn _get_shared_secret(&self) -> Result<(CoseKeyAgreement, Zeroizing<Vec<u8>>), CtapError> {
+    pub fn _get_shared_secret(&self) -> Result<(CoseKeyAgreement, Vec<u8>), CtapError> {
         let resp = self.ctap.client_pin(
             self.protocol.version(),
             client_pin_cmd::GET_KEY_AGREEMENT,
@@ -463,7 +466,7 @@ impl<'a> ClientPin<'a> {
         pin: &str,
         permissions: Option<u32>,
         permissions_rpid: Option<&str>,
-    ) -> Result<Zeroizing<Vec<u8>>, CtapError> {
+    ) -> Result<Vec<u8>, CtapError> {
         let (key_agreement, shared_secret) = self._get_shared_secret()?;
 
         let pin_hash = utils::sha256(pin.as_bytes());
@@ -513,7 +516,7 @@ impl<'a> ClientPin<'a> {
         permissions_rpid: Option<&str>,
         on_keepalive: &mut dyn FnMut(u8),
         cancel: Option<&AtomicBool>,
-    ) -> Result<Zeroizing<Vec<u8>>, CtapError> {
+    ) -> Result<Vec<u8>, CtapError> {
         let (key_agreement, shared_secret) = self._get_shared_secret()?;
 
         let resp = self.ctap.client_pin(
