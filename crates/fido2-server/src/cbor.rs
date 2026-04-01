@@ -79,7 +79,17 @@ pub enum CborError {
     ExtraneousData,
     #[error("Integer overflow")]
     IntegerOverflow,
+    #[error("Input exceeds maximum CBOR message size")]
+    InputTooLarge,
+    #[error("Nesting depth exceeds maximum of {MAX_DEPTH}")]
+    MaxDepthExceeded,
 }
+
+/// Maximum allowed input size for CBOR decoding (1 MB).
+const MAX_CBOR_SIZE: usize = 1_048_576;
+
+/// Maximum nesting depth for arrays and maps.
+const MAX_DEPTH: usize = 32;
 
 // --- Encoding ---
 
@@ -217,6 +227,13 @@ fn decode_int(ai: u8, data: &[u8]) -> Result<(u64, &[u8]), CborError> {
 /// Decode a CBOR value from the start of a byte slice, returning the value
 /// and any remaining bytes.
 pub fn decode_from(data: &[u8]) -> Result<(Value, &[u8]), CborError> {
+    if data.len() > MAX_CBOR_SIZE {
+        return Err(CborError::InputTooLarge);
+    }
+    decode_from_depth(data, 0)
+}
+
+fn decode_from_depth(data: &[u8], depth: usize) -> Result<(Value, &[u8]), CborError> {
     let (mt, val, rest) = decode_head(data)?;
     match mt {
         0 => {
@@ -248,11 +265,14 @@ pub fn decode_from(data: &[u8]) -> Result<(Value, &[u8]), CborError> {
         }
         4 => {
             // Array
+            if depth >= MAX_DEPTH {
+                return Err(CborError::MaxDepthExceeded);
+            }
             let count = val as usize;
-            let mut items = Vec::with_capacity(count);
+            let mut items = Vec::with_capacity(count.min(rest.len()));
             let mut remaining = rest;
             for _ in 0..count {
-                let (item, r) = decode_from(remaining)?;
+                let (item, r) = decode_from_depth(remaining, depth + 1)?;
                 items.push(item);
                 remaining = r;
             }
@@ -260,12 +280,15 @@ pub fn decode_from(data: &[u8]) -> Result<(Value, &[u8]), CborError> {
         }
         5 => {
             // Map
+            if depth >= MAX_DEPTH {
+                return Err(CborError::MaxDepthExceeded);
+            }
             let count = val as usize;
-            let mut entries = Vec::with_capacity(count);
+            let mut entries = Vec::with_capacity(count.min(rest.len()));
             let mut remaining = rest;
             for _ in 0..count {
-                let (k, r) = decode_from(remaining)?;
-                let (v, r) = decode_from(r)?;
+                let (k, r) = decode_from_depth(remaining, depth + 1)?;
+                let (v, r) = decode_from_depth(r, depth + 1)?;
                 entries.push((k, v));
                 remaining = r;
             }
@@ -287,7 +310,10 @@ pub fn decode_from(data: &[u8]) -> Result<(Value, &[u8]), CborError> {
 ///
 /// Returns an error if there is extra data after the value.
 pub fn decode(data: &[u8]) -> Result<Value, CborError> {
-    let (value, rest) = decode_from(data)?;
+    if data.len() > MAX_CBOR_SIZE {
+        return Err(CborError::InputTooLarge);
+    }
+    let (value, rest) = decode_from_depth(data, 0)?;
     if !rest.is_empty() {
         return Err(CborError::ExtraneousData);
     }
