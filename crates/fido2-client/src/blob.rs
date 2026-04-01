@@ -166,7 +166,7 @@ impl<'a> LargeBlobs<'a> {
         let entries = self.read_blob_array()?;
         for entry in &entries {
             if let Ok(data) = lb_unpack(large_blob_key, entry)
-                && let Ok(decompressed) = decompress(&data.0)
+                && let Ok(decompressed) = decompress(&data.0, data.1)
                 && decompressed.len() == data.1
             {
                 return Ok(Some(decompressed));
@@ -259,11 +259,18 @@ fn compress(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     encoder.finish()
 }
 
-fn decompress(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+fn decompress(data: &[u8], max_size: usize) -> Result<Vec<u8>, std::io::Error> {
     use std::io::Read;
-    let mut decoder = flate2::read::DeflateDecoder::new(data);
+    let decoder = flate2::read::DeflateDecoder::new(data);
+    let mut limited = decoder.take(max_size as u64 + 1);
     let mut result = Vec::new();
-    decoder.read_to_end(&mut result)?;
+    limited.read_to_end(&mut result)?;
+    if result.len() > max_size {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Decompressed data exceeds maximum size",
+        ));
+    }
     Ok(result)
 }
 
