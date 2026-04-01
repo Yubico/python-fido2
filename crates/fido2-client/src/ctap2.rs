@@ -34,9 +34,9 @@ use std::collections::BTreeMap;
 
 use std::sync::atomic::AtomicBool;
 
-use crate::cbor::{self, Value};
 use crate::ctap::{CtapDevice, CtapError, CtapStatus, capability, cmd};
-use crate::webauthn::{Aaguid, AuthenticatorData, WebauthnError};
+use fido2_server::cbor::{self, Value};
+use fido2_server::webauthn::{Aaguid, AuthenticatorData, WebauthnError};
 
 /// CTAP2 command codes.
 pub mod ctap2_cmd {
@@ -263,13 +263,13 @@ impl AttestationResponse {
         app_param: &[u8],
         registration: &crate::ctap1::RegistrationData,
     ) -> Result<Self, WebauthnError> {
-        let credential_data = crate::webauthn::AttestedCredentialData::from_ctap1(
+        let credential_data = fido2_server::webauthn::AttestedCredentialData::from_ctap1(
             &registration.key_handle,
             &registration.public_key,
         )?;
 
-        let flags = crate::webauthn::AuthenticatorDataFlags::AT
-            | crate::webauthn::AuthenticatorDataFlags::UP;
+        let flags = fido2_server::webauthn::AuthenticatorDataFlags::AT
+            | fido2_server::webauthn::AuthenticatorDataFlags::UP;
         let mut rp_id_hash = [0u8; 32];
         rp_id_hash.copy_from_slice(app_param);
         let auth_data =
@@ -408,7 +408,7 @@ impl AssertionResponse {
         counter: u32,
         signature: &[u8],
     ) -> Self {
-        use crate::webauthn::AuthenticatorDataFlags;
+        use fido2_server::webauthn::AuthenticatorDataFlags;
 
         let mut rp_id_hash = [0u8; 32];
         rp_id_hash.copy_from_slice(app_param);

@@ -25,27 +25,27 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-//! Credential Blob (credBlob) example.
+//! Pseudo-Random Function (PRF) extension example.
 //!
-//! Creates a credential with the credBlob extension to store arbitrary data,
-//! then reads it back during authentication.
+//! Uses the WebAuthn PRF extension (backed by hmac-secret) to derive
+//! deterministic secrets from a credential.
 
 mod common;
 
-use fido2::client::Fido2Client;
-use fido2::extensions::default_extensions;
-use fido2::transport::ctaphid;
-use fido2::webauthn::{
+use fido2_client::client::Fido2Client;
+use fido2_client::extensions::default_extensions;
+use fido2_client::transport::ctaphid;
+use fido2_server::webauthn::{
     AuthenticatorSelectionCriteria, PublicKeyCredentialCreationOptions,
-    PublicKeyCredentialParameters, PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity,
-    PublicKeyCredentialType, PublicKeyCredentialUserEntity, ResidentKeyRequirement,
-    UserVerificationRequirement,
+    PublicKeyCredentialDescriptor, PublicKeyCredentialParameters,
+    PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity, PublicKeyCredentialType,
+    PublicKeyCredentialUserEntity, ResidentKeyRequirement, UserVerificationRequirement,
 };
 
 fn main() {
     let devices = ctaphid::list_devices().expect("Failed to enumerate HID devices");
 
-    // Find a device that supports credBlob
+    // Find a device that supports hmac-secret
     let mut conn = None;
     for dev_info in &devices {
         let c = match ctaphid::CtapHidConnection::open(dev_info) {
@@ -62,7 +62,7 @@ fn main() {
             Ok(cl) => cl,
             Err(_) => continue,
         };
-        if client.info().extensions.iter().any(|e| e == "credBlob") {
+        if client.info().extensions.iter().any(|e| e == "hmac-secret") {
             println!(
                 "Using device: {}",
                 dev_info.product_name.as_deref().unwrap_or("Unknown")
@@ -72,7 +72,7 @@ fn main() {
             break;
         }
     }
-    let conn = conn.expect("No FIDO device with credBlob support found!");
+    let conn = conn.expect("No FIDO device with hmac-secret support found!");
     let interaction = common::CliInteraction::new();
     let client = Fido2Client::new(
         &conn,
@@ -82,11 +82,7 @@ fn main() {
     )
     .expect("Failed to create client");
 
-    // Generate random blob data
-    let mut blob = [0u8; 32];
-    getrandom::fill(&mut blob).expect("Failed to generate random blob");
-
-    // ---- Registration with credBlob ----
+    // ---- Registration with prf ----
     let create_options = PublicKeyCredentialCreationOptions {
         rp: PublicKeyCredentialRpEntity {
             name: "Example RP".into(),
@@ -97,7 +93,7 @@ fn main() {
             id: b"user_id".to_vec(),
             display_name: Some("A. User".into()),
         },
-        challenge: b"cred-blob-challenge".to_vec(),
+        challenge: b"prf-registration-challenge".to_vec(),
         pub_key_cred_params: vec![PublicKeyCredentialParameters {
             type_: PublicKeyCredentialType::PublicKey,
             alg: -7,
@@ -107,87 +103,119 @@ fn main() {
         authenticator_selection: Some(AuthenticatorSelectionCriteria {
             authenticator_attachment: None,
             resident_key: Some(ResidentKeyRequirement::Required),
-            user_verification: Some(UserVerificationRequirement::Preferred),
+            user_verification: Some(UserVerificationRequirement::Required),
             require_resident_key: None,
         }),
         hints: None,
         attestation: None,
         attestation_formats: None,
         extensions: Some(serde_json::json!({
-            "credBlob": fido2::utils::websafe_encode(&blob),
+            "prf": {},
         })),
     };
 
-    println!("Creating a credential with credBlob...");
-    println!("Blob data: {}", fido2::logging::hex_encode(&blob));
-
+    println!("Creating a credential with PRF support...");
     let result = client
         .make_credential(&create_options)
         .expect("Registration failed");
 
-    // Check credBlob was stored (via authenticator extensions in auth_data)
-    let cred_blob_stored = result
-        .attestation
-        .auth_data
-        .extensions
-        .as_ref()
-        .and_then(|ext| ext.map_get_text("credBlob"))
+    // Check prf enabled
+    let prf_enabled = result
+        .extension_outputs
+        .get("prf")
+        .and_then(|v| v.map_get_text("enabled"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    println!("PRF enabled: {}", prf_enabled);
 
-    if !cred_blob_stored {
-        eprintln!("Credential was registered, but credBlob was NOT saved.");
-        std::process::exit(1);
-    }
+    let cred_data = result
+        .attestation
+        .auth_data
+        .credential_data
+        .as_ref()
+        .expect("No credential data");
 
-    println!("New credential created, with the credBlob extension.");
-
-    // ---- Authentication to read back credBlob ----
+    // ---- Evaluate PRF with a single salt ----
+    let salt1 = fido2_server::utils::websafe_encode(b"example-prf-salt-1______________");
     let auth_options = PublicKeyCredentialRequestOptions {
-        challenge: b"cred-blob-auth-challenge".to_vec(),
+        challenge: b"prf-auth-challenge".to_vec(),
         timeout: None,
         rp_id: Some("example.com".into()),
-        allow_credentials: None, // Discoverable
-        user_verification: Some(UserVerificationRequirement::Preferred),
+        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
+            type_: PublicKeyCredentialType::PublicKey,
+            id: cred_data.credential_id.clone(),
+            transports: None,
+        }]),
+        user_verification: Some(UserVerificationRequirement::Required),
         hints: None,
         extensions: Some(serde_json::json!({
-            "getCredBlob": true,
+            "prf": {
+                "eval": {
+                    "first": salt1,
+                }
+            }
         })),
     };
 
-    println!("Authenticating to read back credBlob...");
+    println!("\nEvaluating PRF with single salt...");
     let result = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
+    let ext_outputs = &result.extension_outputs[0];
 
-    let assertion = &result.assertions[0];
+    if let Some(prf) = ext_outputs.get("prf")
+        && let Some(results) = prf.map_get_text("results")
+        && let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes())
+    {
+        println!(
+            "PRF output (first): {}",
+            fido2_server::logging::hex_encode(first)
+        );
+    }
 
-    // Read credBlob from assertion extensions
-    let blob_result = assertion
-        .auth_data
-        .extensions
-        .as_ref()
-        .and_then(|ext| ext.map_get_text("credBlob"))
-        .and_then(|v| v.as_bytes());
+    // ---- Evaluate PRF with two salts ----
+    let salt2 = fido2_server::utils::websafe_encode(b"example-prf-salt-2______________");
+    let auth_options2 = PublicKeyCredentialRequestOptions {
+        challenge: b"prf-auth-challenge-2".to_vec(),
+        timeout: None,
+        rp_id: Some("example.com".into()),
+        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
+            type_: PublicKeyCredentialType::PublicKey,
+            id: cred_data.credential_id.clone(),
+            transports: None,
+        }]),
+        user_verification: Some(UserVerificationRequirement::Required),
+        hints: None,
+        extensions: Some(serde_json::json!({
+            "prf": {
+                "eval": {
+                    "first": salt1,
+                    "second": salt2,
+                }
+            }
+        })),
+    };
 
-    match blob_result {
-        Some(result) if result == blob => {
+    println!("\nEvaluating PRF with two salts...");
+    let result = client
+        .get_assertion(&auth_options2)
+        .expect("Authentication failed");
+    let ext_outputs = &result.extension_outputs[0];
+
+    if let Some(prf) = ext_outputs.get("prf")
+        && let Some(results) = prf.map_get_text("results")
+    {
+        if let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes()) {
             println!(
-                "Authenticated, got correct blob: {}",
-                fido2::logging::hex_encode(result)
+                "PRF output (first):  {}",
+                fido2_server::logging::hex_encode(first)
             );
         }
-        Some(result) => {
-            eprintln!(
-                "Authenticated, got incorrect blob! (was {}, expected {})",
-                fido2::logging::hex_encode(result),
-                fido2::logging::hex_encode(&blob)
+        if let Some(second) = results.map_get_text("second").and_then(|v| v.as_bytes()) {
+            println!(
+                "PRF output (second): {}",
+                fido2_server::logging::hex_encode(second)
             );
-            std::process::exit(1);
-        }
-        None => {
-            eprintln!("Authenticated, but no credBlob in response!");
-            std::process::exit(1);
         }
     }
 }

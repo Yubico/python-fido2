@@ -25,27 +25,27 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-//! Large Blob Storage (largeBlob) example.
+//! Credential Blob (credBlob) example.
 //!
-//! Creates a credential with largeBlobKey support, writes a blob via the
-//! largeBlob extension during authentication, then reads it back.
+//! Creates a credential with the credBlob extension to store arbitrary data,
+//! then reads it back during authentication.
 
 mod common;
 
-use fido2::client::Fido2Client;
-use fido2::extensions::default_extensions;
-use fido2::transport::ctaphid;
-use fido2::webauthn::{
+use fido2_client::client::Fido2Client;
+use fido2_client::extensions::default_extensions;
+use fido2_client::transport::ctaphid;
+use fido2_server::webauthn::{
     AuthenticatorSelectionCriteria, PublicKeyCredentialCreationOptions,
-    PublicKeyCredentialDescriptor, PublicKeyCredentialParameters,
-    PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity, PublicKeyCredentialType,
-    PublicKeyCredentialUserEntity, ResidentKeyRequirement, UserVerificationRequirement,
+    PublicKeyCredentialParameters, PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity,
+    PublicKeyCredentialType, PublicKeyCredentialUserEntity, ResidentKeyRequirement,
+    UserVerificationRequirement,
 };
 
 fn main() {
     let devices = ctaphid::list_devices().expect("Failed to enumerate HID devices");
 
-    // Find a device that supports largeBlobs
+    // Find a device that supports credBlob
     let mut conn = None;
     for dev_info in &devices {
         let c = match ctaphid::CtapHidConnection::open(dev_info) {
@@ -62,7 +62,7 @@ fn main() {
             Ok(cl) => cl,
             Err(_) => continue,
         };
-        if client.info().options.get("largeBlobs") == Some(&true) {
+        if client.info().extensions.iter().any(|e| e == "credBlob") {
             println!(
                 "Using device: {}",
                 dev_info.product_name.as_deref().unwrap_or("Unknown")
@@ -72,7 +72,7 @@ fn main() {
             break;
         }
     }
-    let conn = conn.expect("No FIDO device with largeBlob support found!");
+    let conn = conn.expect("No FIDO device with credBlob support found!");
     let interaction = common::CliInteraction::new();
     let client = Fido2Client::new(
         &conn,
@@ -82,7 +82,11 @@ fn main() {
     )
     .expect("Failed to create client");
 
-    // ---- Registration with largeBlob support ----
+    // Generate random blob data
+    let mut blob = [0u8; 32];
+    getrandom::fill(&mut blob).expect("Failed to generate random blob");
+
+    // ---- Registration with credBlob ----
     let create_options = PublicKeyCredentialCreationOptions {
         rp: PublicKeyCredentialRpEntity {
             name: "Example RP".into(),
@@ -93,7 +97,7 @@ fn main() {
             id: b"user_id".to_vec(),
             display_name: Some("A. User".into()),
         },
-        challenge: b"large-blob-challenge".to_vec(),
+        challenge: b"cred-blob-challenge".to_vec(),
         pub_key_cred_params: vec![PublicKeyCredentialParameters {
             type_: PublicKeyCredentialType::PublicKey,
             alg: -7,
@@ -103,109 +107,86 @@ fn main() {
         authenticator_selection: Some(AuthenticatorSelectionCriteria {
             authenticator_attachment: None,
             resident_key: Some(ResidentKeyRequirement::Required),
-            user_verification: Some(UserVerificationRequirement::Required),
+            user_verification: Some(UserVerificationRequirement::Preferred),
             require_resident_key: None,
         }),
         hints: None,
         attestation: None,
         attestation_formats: None,
         extensions: Some(serde_json::json!({
-            "largeBlob": { "support": "required" },
+            "credBlob": fido2_server::utils::websafe_encode(&blob),
         })),
     };
 
-    println!("Creating a credential with largeBlob support...");
+    println!("Creating a credential with credBlob...");
+    println!("Blob data: {}", fido2_server::logging::hex_encode(&blob));
+
     let result = client
         .make_credential(&create_options)
         .expect("Registration failed");
 
-    // Check largeBlob extension output
-    let supported = result
-        .extension_outputs
-        .get("largeBlob")
-        .and_then(|v| v.map_get_text("supported"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    println!("largeBlob supported: {}", supported);
-
-    let cred_data = result
+    // Check credBlob was stored (via authenticator extensions in auth_data)
+    let cred_blob_stored = result
         .attestation
         .auth_data
-        .credential_data
+        .extensions
         .as_ref()
-        .expect("No credential data");
-
-    let cred_id = &cred_data.credential_id;
-
-    // ---- Write a blob ----
-    let blob_data = b"Hello from Rust large blob!";
-    let write_options = PublicKeyCredentialRequestOptions {
-        challenge: b"write-blob-challenge".to_vec(),
-        timeout: None,
-        rp_id: Some("example.com".into()),
-        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
-            type_: PublicKeyCredentialType::PublicKey,
-            id: cred_id.clone(),
-            transports: None,
-        }]),
-        user_verification: Some(UserVerificationRequirement::Required),
-        hints: None,
-        extensions: Some(serde_json::json!({
-            "largeBlob": { "write": fido2::utils::websafe_encode(blob_data) },
-        })),
-    };
-
-    println!("Writing large blob...");
-    let result = client
-        .get_assertion(&write_options)
-        .expect("Write assertion failed");
-    let ext_outputs = &result.extension_outputs[0];
-
-    let written = ext_outputs
-        .get("largeBlob")
-        .and_then(|v| v.map_get_text("written"))
+        .and_then(|ext| ext.map_get_text("credBlob"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    println!("Blob written: {}", written);
 
-    // ---- Read the blob back ----
-    let read_options = PublicKeyCredentialRequestOptions {
-        challenge: b"read-blob-challenge".to_vec(),
+    if !cred_blob_stored {
+        eprintln!("Credential was registered, but credBlob was NOT saved.");
+        std::process::exit(1);
+    }
+
+    println!("New credential created, with the credBlob extension.");
+
+    // ---- Authentication to read back credBlob ----
+    let auth_options = PublicKeyCredentialRequestOptions {
+        challenge: b"cred-blob-auth-challenge".to_vec(),
         timeout: None,
         rp_id: Some("example.com".into()),
-        allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
-            type_: PublicKeyCredentialType::PublicKey,
-            id: cred_id.clone(),
-            transports: None,
-        }]),
-        user_verification: Some(UserVerificationRequirement::Required),
+        allow_credentials: None, // Discoverable
+        user_verification: Some(UserVerificationRequirement::Preferred),
         hints: None,
         extensions: Some(serde_json::json!({
-            "largeBlob": { "read": true },
+            "getCredBlob": true,
         })),
     };
 
-    println!("Reading large blob...");
+    println!("Authenticating to read back credBlob...");
     let result = client
-        .get_assertion(&read_options)
-        .expect("Read assertion failed");
-    let ext_outputs = &result.extension_outputs[0];
+        .get_assertion(&auth_options)
+        .expect("Authentication failed");
 
-    let read_blob = ext_outputs
-        .get("largeBlob")
-        .and_then(|v| v.map_get_text("blob"))
+    let assertion = &result.assertions[0];
+
+    // Read credBlob from assertion extensions
+    let blob_result = assertion
+        .auth_data
+        .extensions
+        .as_ref()
+        .and_then(|ext| ext.map_get_text("credBlob"))
         .and_then(|v| v.as_bytes());
 
-    match read_blob {
-        Some(data) if data == blob_data => {
-            println!("Read back correct blob: {:?}", std::str::from_utf8(data));
+    match blob_result {
+        Some(result) if result == blob => {
+            println!(
+                "Authenticated, got correct blob: {}",
+                fido2_server::logging::hex_encode(result)
+            );
         }
-        Some(data) => {
-            eprintln!("Read back incorrect blob: {:?}", data);
+        Some(result) => {
+            eprintln!(
+                "Authenticated, got incorrect blob! (was {}, expected {})",
+                fido2_server::logging::hex_encode(result),
+                fido2_server::logging::hex_encode(&blob)
+            );
             std::process::exit(1);
         }
         None => {
-            eprintln!("No blob data in response!");
+            eprintln!("Authenticated, but no credBlob in response!");
             std::process::exit(1);
         }
     }

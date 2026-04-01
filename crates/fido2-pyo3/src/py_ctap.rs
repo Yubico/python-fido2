@@ -27,15 +27,15 @@
 
 //! PyO3 wrappers for CTAP1 and CTAP2 protocols.
 
-use fido2::bio::FPBioEnrollment;
-use fido2::blob::LargeBlobs;
-use fido2::cbor::Value;
-use fido2::config::Config;
-use fido2::credman::CredentialManagement;
-use fido2::ctap::{ApduError, CtapDevice, CtapError};
-use fido2::ctap1;
-use fido2::ctap2::{self, AssertionResponse, AttestationResponse, Info};
-use fido2::pin::{ClientPin, PinProtocol};
+use fido2_client::bio::FPBioEnrollment;
+use fido2_client::blob::LargeBlobs;
+use fido2_client::config::Config;
+use fido2_client::credman::CredentialManagement;
+use fido2_client::ctap::{ApduError, CtapDevice, CtapError};
+use fido2_client::ctap1;
+use fido2_client::ctap2::{self, AssertionResponse, AttestationResponse, Info};
+use fido2_client::pin::{ClientPin, PinProtocol};
+use fido2_server::cbor::Value;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
@@ -147,15 +147,18 @@ fn apdu_err(e: ApduError) -> PyErr {
 
 // ---- Conversion helpers ----
 
-pub fn py_to_val(py: Python<'_>, obj: PyObject) -> PyResult<fido2::cbor::Value> {
+pub fn py_to_val(py: Python<'_>, obj: PyObject) -> PyResult<fido2_server::cbor::Value> {
     py_cbor::py_to_value(obj.bind(py))
 }
 
-fn py_opt_to_val(py: Python<'_>, obj: Option<PyObject>) -> PyResult<Option<fido2::cbor::Value>> {
+fn py_opt_to_val(
+    py: Python<'_>,
+    obj: Option<PyObject>,
+) -> PyResult<Option<fido2_server::cbor::Value>> {
     obj.map(|o| py_to_val(py, o)).transpose()
 }
 
-pub fn val_to_pyobj(py: Python<'_>, val: &fido2::cbor::Value) -> PyResult<PyObject> {
+pub fn val_to_pyobj(py: Python<'_>, val: &fido2_server::cbor::Value) -> PyResult<PyObject> {
     Ok(py_cbor::value_to_py(py, val)?.unbind())
 }
 

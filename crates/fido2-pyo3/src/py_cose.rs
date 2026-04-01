@@ -27,7 +27,7 @@
 
 use std::collections::BTreeMap;
 
-use fido2::cose::{CoseError, CoseKey};
+use fido2_server::cose::{CoseError, CoseKey};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 

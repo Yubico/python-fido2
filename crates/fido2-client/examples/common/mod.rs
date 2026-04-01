@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use fido2::client::UserInteraction;
+use fido2_client::client::UserInteraction;
 
 pub struct CliInteraction {
     pin: std::cell::RefCell<Option<String>>,

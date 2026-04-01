@@ -33,7 +33,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use log::{Level, LevelFilter, Log, Metadata, Record};
 use pyo3::prelude::*;
 
-use fido2::logging::TRAFFIC_TARGET_PREFIX;
+use fido2_server::logging::TRAFFIC_TARGET_PREFIX;
 
 /// Python logging levels
 const PY_LOG_ERROR: u32 = 40;

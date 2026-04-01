@@ -27,16 +27,16 @@
 
 use std::collections::BTreeMap;
 
-use fido2::cbor::Value;
-use fido2::client::{self, ClientBackend};
-use fido2::ctap::capability;
-use fido2::ctap2::{self, AssertionResponse, AttestationResponse, Info};
-use fido2::extensions::{
+use fido2_client::client::{self, ClientBackend};
+use fido2_client::ctap::capability;
+use fido2_client::ctap2::{self, AssertionResponse, AttestationResponse, Info};
+use fido2_client::extensions::{
     self, AuthenticationExtensionProcessor, Ctap2Extension, ExtensionInputs, ExtensionOutputs,
     RegistrationExtensionProcessor,
 };
-use fido2::pin::PinProtocol;
-use fido2::webauthn::{Aaguid, AuthenticatorData};
+use fido2_client::pin::PinProtocol;
+use fido2_server::cbor::Value;
+use fido2_server::webauthn::{Aaguid, AuthenticatorData};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
@@ -124,7 +124,7 @@ impl ClientDataCollector {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         self.check_rp_id(py, &rp_id)?;
 
-        let cd = fido2::webauthn::CollectedClientData::create(
+        let cd = fido2_server::webauthn::CollectedClientData::create(
             type_,
             challenge,
             self.inner.origin(),
@@ -694,7 +694,7 @@ impl NativeFido2Client {
         rp_id: &str,
         event: Option<PyObject>,
     ) -> PyResult<PyObject> {
-        let options: fido2::webauthn::PublicKeyCredentialCreationOptions =
+        let options: fido2_server::webauthn::PublicKeyCredentialCreationOptions =
             serde_json::from_str(options_json)
                 .map_err(|e| PyValueError::new_err(format!("Invalid options JSON: {}", e)))?;
 
@@ -725,7 +725,7 @@ impl NativeFido2Client {
         rp_id: &str,
         event: Option<PyObject>,
     ) -> PyResult<PyObject> {
-        let options: fido2::webauthn::PublicKeyCredentialRequestOptions =
+        let options: fido2_server::webauthn::PublicKeyCredentialRequestOptions =
             serde_json::from_str(options_json)
                 .map_err(|e| PyValueError::new_err(format!("Invalid options JSON: {}", e)))?;
 
@@ -757,7 +757,7 @@ impl NativeFido2Client {
 /// Convert extension outputs (BTreeMap<String, Value>) to a Python dict.
 fn extension_outputs_to_py(
     py: Python<'_>,
-    outputs: &fido2::extensions::ExtensionOutputs,
+    outputs: &fido2_client::extensions::ExtensionOutputs,
 ) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     for (key, value) in outputs {

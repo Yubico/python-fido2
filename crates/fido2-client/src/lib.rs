@@ -25,21 +25,16 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+pub use fido2_server;
+
 pub mod bio;
 pub mod blob;
-pub mod cbor;
 pub mod client;
 pub mod config;
-pub mod cose;
 pub mod credman;
 pub mod ctap;
 pub mod ctap1;
 pub mod ctap2;
 pub mod extensions;
-pub mod logging;
 pub mod pin;
-pub mod server;
 pub mod transport;
-pub mod utils;
-pub mod webauthn;
-pub mod x509;

@@ -25,7 +25,7 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-use fido2::webauthn::{
+use fido2_server::webauthn::{
     AttestationObject, AttestedCredentialData, AuthenticatorData, CollectedClientData,
 };
 use pyo3::exceptions::PyValueError;

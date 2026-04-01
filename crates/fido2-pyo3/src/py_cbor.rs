@@ -25,7 +25,7 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-use fido2::cbor;
+use fido2_server::cbor;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyInt, PyList, PyMemoryView, PyString};

@@ -27,10 +27,10 @@
 
 //! CTAP2.1 Authenticator Config API.
 
-use crate::cbor::{self, Value};
 use crate::ctap::CtapError;
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
+use fido2_server::cbor::{self, Value};
 
 /// Config sub-commands.
 pub mod cmd {

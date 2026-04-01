@@ -32,11 +32,11 @@
 
 mod common;
 
-use fido2::client::Fido2Client;
-use fido2::extensions::default_extensions;
-use fido2::server::Fido2Server;
-use fido2::transport::ctaphid;
-use fido2::webauthn::{
+use fido2_client::client::Fido2Client;
+use fido2_client::extensions::default_extensions;
+use fido2_client::transport::ctaphid;
+use fido2_server::server::Fido2Server;
+use fido2_server::webauthn::{
     AttestationObject, PublicKeyCredentialDescriptor, PublicKeyCredentialRpEntity,
     PublicKeyCredentialType, PublicKeyCredentialUserEntity,
 };
@@ -102,7 +102,7 @@ fn main() {
     println!("New credential created!");
     println!(
         "CREDENTIAL ID: {}",
-        fido2::logging::hex_encode(&cred_data.credential_id)
+        fido2_server::logging::hex_encode(&cred_data.credential_id)
     );
 
     // ---- Authentication ----

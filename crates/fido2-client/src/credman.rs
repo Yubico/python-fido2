@@ -27,10 +27,10 @@
 
 //! CTAP2 Credential Management API.
 
-use crate::cbor::{self, Value};
 use crate::ctap::{CtapError, CtapStatus};
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
+use fido2_server::cbor::{self, Value};
 
 /// Sub-command identifiers for credential management.
 pub mod cmd {

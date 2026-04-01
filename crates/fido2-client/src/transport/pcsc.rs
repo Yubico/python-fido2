@@ -31,7 +31,7 @@ use pcsc::{Card, Context, Protocols, Scope, ShareMode};
 use std::ffi::CString;
 
 use crate::ctap::{self, CtapDevice, CtapError};
-use crate::log_traffic;
+use fido2_server::log_traffic;
 use std::sync::atomic::AtomicBool;
 
 const AID_FIDO: &[u8] = b"\xa0\x00\x00\x06\x47\x2f\x00\x01";
@@ -96,11 +96,11 @@ impl PcscConnection {
     /// (including the status word).
     pub fn transmit(&self, apdu: &[u8]) -> Result<Vec<u8>, PcscError> {
         let card = self.card.as_ref().ok_or(PcscError::ConnectionClosed)?;
-        log_traffic!("SEND: {}", crate::logging::hex_encode(apdu));
+        log_traffic!("SEND: {}", fido2_server::logging::hex_encode(apdu));
         let mut resp_buf = vec![0u8; 65538];
         let resp = card.transmit(apdu, &mut resp_buf)?;
         let result = resp.to_vec();
-        log_traffic!("RECV: {}", crate::logging::hex_encode(&result));
+        log_traffic!("RECV: {}", fido2_server::logging::hex_encode(&result));
         Ok(result)
     }
 

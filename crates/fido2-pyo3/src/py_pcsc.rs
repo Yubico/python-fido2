@@ -25,7 +25,7 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-use fido2::transport::pcsc;
+use fido2_client::transport::pcsc;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;

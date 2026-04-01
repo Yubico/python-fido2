@@ -27,7 +27,7 @@
 
 use std::sync::Mutex;
 
-use fido2::transport::ctaphid;
+use fido2_client::transport::ctaphid;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;

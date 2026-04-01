@@ -34,7 +34,7 @@ use hidapi::HidApi;
 
 use std::sync::atomic::AtomicBool;
 
-use crate::log_traffic;
+use fido2_server::log_traffic;
 
 const USAGE_PAGE_FIDO: u16 = 0xF1D0;
 const USAGE_FIDO: u16 = 0x0001;
@@ -339,7 +339,7 @@ impl CtapHidConnection {
             // Pad to packet_size + 1 (report ID byte)
             packet.resize(self.packet_size + 1, 0);
 
-            log_traffic!("SEND: {}", crate::logging::hex_encode(&packet[1..]));
+            log_traffic!("SEND: {}", fido2_server::logging::hex_encode(&packet[1..]));
             dev.write(&packet)?;
         }
 
@@ -376,7 +376,7 @@ impl CtapHidConnection {
                 return Err(CtapHidTransportError::Timeout);
             }
             let recv = &buf[..n];
-            log_traffic!("RECV: {}", crate::logging::hex_encode(recv));
+            log_traffic!("RECV: {}", fido2_server::logging::hex_encode(recv));
 
             if recv.len() < 4 {
                 return Err(CtapHidTransportError::InvalidResponse);

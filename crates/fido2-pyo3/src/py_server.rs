@@ -25,10 +25,10 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-use fido2::cbor;
-use fido2::cose::CoseKey;
-use fido2::server;
-use fido2::webauthn::{
+use fido2_server::cbor;
+use fido2_server::cose::CoseKey;
+use fido2_server::server;
+use fido2_server::webauthn::{
     AttestationObject, AuthenticatorData, CollectedClientData, PublicKeyCredentialRpEntity,
 };
 use pyo3::exceptions::PyValueError;
@@ -136,7 +136,7 @@ impl Fido2Server {
         server::ServerState {
             challenge: challenge.to_vec(),
             user_verification: if user_verification_required {
-                Some(fido2::webauthn::UserVerificationRequirement::Required)
+                Some(fido2_server::webauthn::UserVerificationRequirement::Required)
             } else {
                 None
             },

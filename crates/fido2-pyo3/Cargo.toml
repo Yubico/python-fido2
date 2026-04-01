@@ -8,7 +8,8 @@ name = "_fido2_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-fido2 = { path = "../fido2" }
+fido2-server = { path = "../fido2-server" }
+fido2-client = { path = "../fido2-client" }
 pyo3 = { version = "0.25", features = ["extension-module"] }
 serde_json = "1"
 log = "0.4"

@@ -31,10 +31,10 @@
 
 mod common;
 
-use fido2::client::Fido2Client;
-use fido2::extensions::default_extensions;
-use fido2::transport::ctaphid;
-use fido2::webauthn::{
+use fido2_client::client::Fido2Client;
+use fido2_client::extensions::default_extensions;
+use fido2_client::transport::ctaphid;
+use fido2_server::webauthn::{
     AuthenticatorSelectionCriteria, PublicKeyCredentialCreationOptions,
     PublicKeyCredentialParameters, PublicKeyCredentialRequestOptions, PublicKeyCredentialRpEntity,
     PublicKeyCredentialType, PublicKeyCredentialUserEntity, ResidentKeyRequirement,
@@ -107,7 +107,7 @@ fn main() {
     println!("New discoverable credential created!");
     println!(
         "CREDENTIAL ID: {}",
-        fido2::logging::hex_encode(&cred_data.credential_id)
+        fido2_server::logging::hex_encode(&cred_data.credential_id)
     );
 
     // ---- Authentication without allow list (discoverable) ----
@@ -136,6 +136,6 @@ fn main() {
     if let Some(ref user) = assertion.user
         && let Some(user_id) = user.map_get_text("id").and_then(|v| v.as_bytes())
     {
-        println!("User ID: {}", fido2::logging::hex_encode(user_id));
+        println!("User ID: {}", fido2_server::logging::hex_encode(user_id));
     }
 }

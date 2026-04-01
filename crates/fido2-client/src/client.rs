@@ -32,8 +32,6 @@
 
 use std::time::Duration;
 
-use crate::cbor::Value;
-use crate::cose::Algorithm;
 use crate::ctap::{ApduError, CtapDevice, CtapError, CtapStatus, apdu, capability, keepalive};
 use crate::ctap1;
 use crate::ctap2::{self, AssertionResponse, AttestationResponse, Info};
@@ -41,9 +39,11 @@ use crate::extensions::{
     AuthenticationExtensionProcessor, Ctap2Extension, ExtensionInputs, ExtensionOutputs,
 };
 use crate::pin::{ClientPin, PinProtocol};
-use crate::server::verify_rp_id;
-use crate::utils::sha256;
-use crate::webauthn::{
+use fido2_server::cbor::Value;
+use fido2_server::cose::Algorithm;
+use fido2_server::server::verify_rp_id;
+use fido2_server::utils::sha256;
+use fido2_server::webauthn::{
     self, Aaguid, AttestationConveyancePreference, CollectedClientData,
     PublicKeyCredentialCreationOptions, PublicKeyCredentialParameters,
     PublicKeyCredentialRequestOptions, ResidentKeyRequirement, UserVerificationRequirement,

@@ -34,10 +34,10 @@
 use std::collections::BTreeMap;
 
 use crate::blob::LargeBlobs;
-use crate::cbor::Value;
 use crate::ctap2::{AssertionResponse, AttestationResponse, Ctap2, Info};
 use crate::pin::{ClientPin, CoseKeyAgreement, PinProtocol};
-use crate::utils::sha256;
+use fido2_server::cbor::Value;
+use fido2_server::utils::sha256;
 
 /// Authenticator extension inputs: maps extension name to CBOR value.
 pub type ExtensionInputs = BTreeMap<String, Value>;
@@ -195,7 +195,7 @@ fn prf_salt(secret: &[u8]) -> [u8; 32] {
 /// Helper to extract salt bytes from a JSON value.
 fn get_salt_bytes(v: &serde_json::Value) -> Option<Vec<u8>> {
     v.as_str()
-        .and_then(|s| crate::utils::websafe_decode(s).ok())
+        .and_then(|s| fido2_server::utils::websafe_decode(s).ok())
         .or_else(|| {
             // Also accept raw byte arrays if present
             v.as_array().map(|arr| {
@@ -229,7 +229,7 @@ fn prepare_salts(
             if let Some(selected_val) = selected {
                 // Get the credential ID from selected and look up in evalByCredential
                 if let Some(cred_id) = selected_val.map_get_text("id").and_then(|v| v.as_bytes()) {
-                    let key = crate::utils::websafe_encode(cred_id);
+                    let key = fido2_server::utils::websafe_encode(cred_id);
                     if let Some(per_cred) = by_creds_obj.get(&key) {
                         secrets = Some(per_cred);
                     }

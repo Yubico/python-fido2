@@ -27,11 +27,11 @@
 
 //! CTAP2.1 Large Blobs API.
 
-use crate::cbor::{self, Value};
 use crate::ctap::CtapError;
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
-use crate::utils;
+use fido2_server::cbor::{self, Value};
+use fido2_server::utils;
 
 /// Large Blobs API.
 pub struct LargeBlobs<'a> {

@@ -38,10 +38,10 @@ use sha2::Sha256;
 
 use std::sync::atomic::AtomicBool;
 
-use crate::cbor::Value;
 use crate::ctap::CtapError;
 use crate::ctap2::Ctap2;
-use crate::utils;
+use fido2_server::cbor::Value;
+use fido2_server::utils;
 
 type Aes128CbcEnc = cbc::Encryptor<Aes128>;
 type Aes128CbcDec = cbc::Decryptor<Aes128>;
