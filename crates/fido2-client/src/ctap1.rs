@@ -48,16 +48,28 @@ pub struct RegistrationData {
 impl RegistrationData {
     /// Parse from binary response data.
     pub fn from_bytes(data: &[u8]) -> Result<Self, ApduError> {
+        let too_short = || ApduError::new(0, b"Registration data too short".to_vec());
+
         if data.is_empty() || data[0] != 0x05 {
             return Err(ApduError::new(0, b"Reserved byte != 0x05".to_vec()));
         }
 
+        // 1 (reserved) + 65 (public key) + 1 (key handle length) = 67
+        if data.len() < 67 {
+            return Err(too_short());
+        }
         let public_key = data[1..66].to_vec();
         let kh_len = data[66] as usize;
         let kh_end = 67 + kh_len;
+        if data.len() < kh_end {
+            return Err(too_short());
+        }
         let key_handle = data[67..kh_end].to_vec();
 
-        // Parse DER certificate
+        // Parse DER certificate: need at least tag + length byte
+        if data.len() < kh_end + 2 {
+            return Err(too_short());
+        }
         let mut off = kh_end;
         let cert_tag = data[off];
         off += 1;
@@ -68,6 +80,9 @@ impl RegistrationData {
         let cert_header_len;
         if first_len > 0x80 {
             let n_bytes = first_len - 0x80;
+            if data.len() < off + n_bytes {
+                return Err(too_short());
+            }
             let mut len_val = 0usize;
             for i in 0..n_bytes {
                 len_val = (len_val << 8) | (data[off + i] as usize);
@@ -82,6 +97,9 @@ impl RegistrationData {
 
         let cert_start = kh_end;
         let cert_end = cert_start + cert_header_len + cert_len;
+        if data.len() < cert_end {
+            return Err(too_short());
+        }
         let certificate = data[cert_start..cert_end].to_vec();
         let _ = cert_tag; // Used implicitly in the slice
 
@@ -106,12 +124,15 @@ pub struct SignatureData {
 
 impl SignatureData {
     /// Parse from binary response data.
-    pub fn from_bytes(data: &[u8]) -> Self {
-        Self {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, ApduError> {
+        if data.len() < 5 {
+            return Err(ApduError::new(0, b"Signature data too short".to_vec()));
+        }
+        Ok(Self {
             user_presence: data[0],
             counter: u32::from_be_bytes([data[1], data[2], data[3], data[4]]),
             signature: data[5..].to_vec(),
-        }
+        })
     }
 }
 
@@ -203,6 +224,6 @@ impl<'a> Ctap1<'a> {
 
         let p1 = if check_only { 0x07 } else { 0x03 };
         let response = self.send_apdu(0, ins::AUTHENTICATE, p1, 0, &data)?;
-        Ok(SignatureData::from_bytes(&response))
+        SignatureData::from_bytes(&response)
     }
 }
