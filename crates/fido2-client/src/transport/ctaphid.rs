@@ -32,8 +32,6 @@
 
 use hidapi::HidApi;
 
-use std::sync::atomic::AtomicBool;
-
 use fido2_server::log_traffic;
 
 const USAGE_PAGE_FIDO: u16 = 0xF1D0;
@@ -282,7 +280,7 @@ impl CtapHidConnection {
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapHidTransportError> {
         self.send_request(cmd, data)?;
         self.recv_response(cmd, on_keepalive, cancel)
@@ -351,7 +349,7 @@ impl CtapHidConnection {
         &self,
         expected_cmd: u8,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapHidTransportError> {
         let dev = self.device()?;
         let mut response = Vec::new();
@@ -409,9 +407,7 @@ impl CtapHidConnection {
                             on_keepalive(status);
                         }
                     }
-                    if let Some(flag) = cancel
-                        && flag.load(std::sync::atomic::Ordering::Relaxed)
-                    {
+                    if cancel.is_some_and(|f| f()) {
                         let _ = self.send_request(CtapHidCommand::Cancel as u8, &[]);
                         // Continue reading — the authenticator will respond to the
                         // pending command with a CBOR error (KeepaliveCancel).
@@ -456,7 +452,7 @@ impl crate::ctap::CtapDevice for CtapHidConnection {
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, crate::ctap::CtapError> {
         self.call_with_keepalive(cmd, data, on_keepalive, cancel)
             .map_err(|e| crate::ctap::CtapError::TransportError(e.to_string()))

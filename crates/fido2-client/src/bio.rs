@@ -31,7 +31,6 @@ use crate::ctap::CtapError;
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
 use fido2_server::cbor::{self, Value};
-use std::sync::atomic::AtomicBool;
 
 /// BioEnrollment result keys.
 pub mod bio_result {
@@ -136,7 +135,7 @@ impl<'a> FPBioEnrollment<'a> {
         params: Option<Value>,
         auth: bool,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         let (pin_uv_protocol, pin_uv_param) = if auth {
             let mut msg = vec![self.modality as u8, sub_cmd as u8];
@@ -168,7 +167,7 @@ impl<'a> FPBioEnrollment<'a> {
     pub fn get_fingerprint_sensor_info(
         &self,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         self._call(fp_cmd::GET_SENSOR_INFO, None, false, on_keepalive, cancel)
     }
@@ -179,7 +178,7 @@ impl<'a> FPBioEnrollment<'a> {
         &self,
         timeout: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<(Vec<u8>, u32, u32), CtapError> {
         let params = timeout.map(|t| {
             Value::Map(vec![(
@@ -206,7 +205,7 @@ impl<'a> FPBioEnrollment<'a> {
         template_id: &[u8],
         timeout: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<(u32, u32), CtapError> {
         let mut entries = vec![(
             Value::Int(fp_param::TEMPLATE_ID),

@@ -32,7 +32,6 @@ use std::ffi::CString;
 
 use crate::ctap::{self, CtapDevice, CtapError};
 use fido2_server::log_traffic;
-use std::sync::atomic::AtomicBool;
 
 const AID_FIDO: &[u8] = b"\xa0\x00\x00\x06\x47\x2f\x00\x01";
 const SW_SUCCESS: (u8, u8) = (0x90, 0x00);
@@ -300,7 +299,7 @@ impl CtapPcscDevice {
         &self,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapError> {
         // NFCCTAP_MSG: CLA=0x80, INS=0x10, P1=0x80 (use NFCCTAP_GETRESPONSE), P2=0x00
         let (mut resp, mut sw1, mut sw2) = self.chain_apdus(0x80, 0x10, 0x80, 0x00, data)?;
@@ -311,7 +310,7 @@ impl CtapPcscDevice {
                 on_keepalive(resp[0]);
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
-            let p1 = if cancel.is_some_and(|f| f.load(std::sync::atomic::Ordering::Relaxed)) {
+            let p1 = if cancel.is_some_and(|f| f()) {
                 0x11 // Cancel
             } else {
                 0x00
@@ -338,7 +337,7 @@ impl CtapDevice for CtapPcscDevice {
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapError> {
         match cmd {
             ctap::cmd::CBOR => self.call_cbor(data, on_keepalive, cancel),

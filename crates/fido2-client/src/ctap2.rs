@@ -32,8 +32,6 @@
 
 use std::collections::BTreeMap;
 
-use std::sync::atomic::AtomicBool;
-
 use crate::ctap::{CtapDevice, CtapError, CtapStatus, capability, cmd};
 use fido2_server::cbor::{self, Value};
 use fido2_server::webauthn::{Aaguid, AuthenticatorData, WebauthnError};
@@ -496,7 +494,7 @@ impl<'a> Ctap2<'a> {
         cmd_byte: u8,
         data: Option<&Value>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         let mut request = vec![cmd_byte];
         if let Some(val) = data {
@@ -562,7 +560,7 @@ impl<'a> Ctap2<'a> {
         permissions: Option<u32>,
         permissions_rpid: Option<&str>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         let data = args_map(&[
             Some(Value::Int(pin_uv_protocol as i64)),
@@ -594,7 +592,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_protocol: Option<u32>,
         enterprise_attestation: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<AttestationResponse, CtapError> {
         let data = args_map(&[
             Some(Value::Bytes(client_data_hash.to_vec())),
@@ -634,7 +632,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<&[u8]>,
         pin_uv_protocol: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<AssertionResponse, CtapError> {
         let data = args_map(&[
             Some(Value::Text(rp_id.to_string())),
@@ -676,7 +674,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<&[u8]>,
         pin_uv_protocol: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<AssertionResponse>, CtapError> {
         let first = self.get_assertion(
             rp_id,
@@ -702,7 +700,7 @@ impl<'a> Ctap2<'a> {
     pub fn selection(
         &self,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<(), CtapError> {
         self.send_cbor(ctap2_cmd::SELECTION, None, on_keepalive, cancel)?;
         Ok(())
@@ -712,7 +710,7 @@ impl<'a> Ctap2<'a> {
     pub fn reset(
         &self,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<(), CtapError> {
         self.send_cbor(ctap2_cmd::RESET, None, on_keepalive, cancel)?;
         Ok(())
@@ -728,7 +726,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_protocol: Option<Value>,
         pin_uv_param: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         let cmd_byte = if self.info.options.get("credMgmt") == Some(&true) {
             ctap2_cmd::CREDENTIAL_MGMT
@@ -758,7 +756,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<Value>,
         get_modality: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         let cmd_byte = if self.info.options.contains_key("bioEnroll") {
             ctap2_cmd::BIO_ENROLLMENT
@@ -796,7 +794,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_param: Option<&[u8]>,
         pin_uv_protocol: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         let data = args_map(&[
             get.map(|g| Value::Int(g as i64)),
@@ -817,7 +815,7 @@ impl<'a> Ctap2<'a> {
         pin_uv_protocol: Option<Value>,
         pin_uv_param: Option<Value>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
         let data = args_map(&[Some(sub_cmd), sub_cmd_params, pin_uv_protocol, pin_uv_param]);
         self.send_cbor(ctap2_cmd::CONFIG, Some(&data), on_keepalive, cancel)

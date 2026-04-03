@@ -37,8 +37,6 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use std::sync::atomic::AtomicBool;
-
 use crate::ctap::CtapError;
 use crate::ctap2::Ctap2;
 use fido2_server::cbor::Value;
@@ -515,7 +513,7 @@ impl<'a> ClientPin<'a> {
         permissions: u32,
         permissions_rpid: Option<&str>,
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapError> {
         let (key_agreement, shared_secret) = self._get_shared_secret()?;
 

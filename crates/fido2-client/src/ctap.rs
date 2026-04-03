@@ -47,8 +47,6 @@ pub mod keepalive {
     pub const UPNEEDED: u8 = 2;
 }
 
-use std::sync::atomic::AtomicBool;
-
 /// Trait for a CTAP-capable device.
 ///
 /// This unifies USB HID and NFC transports behind a single interface.
@@ -59,7 +57,7 @@ pub trait CtapDevice {
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),
-        cancel: Option<&AtomicBool>,
+        cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapError>;
 
     /// Get device capability flags.

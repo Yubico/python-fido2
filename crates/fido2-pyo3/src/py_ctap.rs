@@ -27,6 +27,7 @@
 
 //! PyO3 wrappers for CTAP1 and CTAP2 protocols.
 
+use crate::py_cbor;
 use fido2_client::bio::FPBioEnrollment;
 use fido2_client::blob::LargeBlobs;
 use fido2_client::config::Config;
@@ -39,9 +40,6 @@ use fido2_server::cbor::Value;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
-use std::sync::atomic::AtomicBool;
-
-use crate::py_cbor;
 
 // ---- Bridge: Python CtapDevice -> Rust CtapDevice trait ----
 
@@ -92,7 +90,7 @@ impl CtapDevice for PyCtapDevice {
         cmd: u8,
         data: &[u8],
         _on_keepalive: &mut dyn FnMut(u8),
-        _cancel: Option<&AtomicBool>,
+        _cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapError> {
         Python::with_gil(|py| {
             let result = if self.pass_event_args {
