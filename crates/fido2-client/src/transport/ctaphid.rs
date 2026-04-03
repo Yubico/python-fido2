@@ -188,7 +188,8 @@ pub struct CtapHidConnection {
 }
 
 // Safety: HidDevice uses libusb/hidraw file descriptors which are safe to use from
-// any thread. We ensure exclusive access through the Mutex in the PyO3 wrapper.
+// any thread. Required by the PyO3 wrapper: #[pyclass] needs Send, and
+// py.allow_threads() captures &self which needs Sync.
 unsafe impl Send for CtapHidConnection {}
 unsafe impl Sync for CtapHidConnection {}
 
