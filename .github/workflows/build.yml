@@ -56,35 +56,69 @@ jobs:
       - name: Run unit tests
         run: uv run pytest --no-device
 
-  build:
-    #needs: test
+  sdist:
     runs-on: ubuntu-latest
-    name: Build Python source .tar.gz
+    name: Build source distribution
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
         with:
-          enable-cache: false
+          command: sdist
+          args: --out dist
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: 3.x
-
-      - name: Build source package
-        run: |
-          # poetry will by default set all timestamps to 0, which Debian doesn't allow
-          export SOURCE_DATE_EPOCH=$(git show --no-patch --format=%ct)
-          uv build
-
-      - name: Upload source package
+      - name: Upload sdist
         uses: actions/upload-artifact@v6
         with:
-          name: fido2-python-sdist
-          path: dist
+          name: fido2-sdist
+          path: dist/*.tar.gz
+
+  wheels:
+    runs-on: ${{ matrix.os }}
+    name: Wheels - ${{ matrix.os }} ${{ matrix.target }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64
+          - os: ubuntu-latest
+            target: aarch64
+          - os: macos-latest
+            target: universal2-apple-darwin
+          - os: windows-latest
+            target: x64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        if: matrix.os != 'ubuntu-latest'
+        uses: actions/setup-python@v6
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter
+          manylinux: auto
+          before-script-linux: yum install -y pcsc-lite-devel systemd-devel
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v6
+        with:
+          name: fido2-wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: dist/*.whl
 
   docs:
     runs-on: ubuntu-latest
