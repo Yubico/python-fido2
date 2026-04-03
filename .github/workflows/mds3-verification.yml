@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get install -qq swig libpcsclite-dev
+          sudo apt-get install -qq swig libpcsclite-dev libudev-dev
           uv sync --all-extras
 
       - name: Download MDS3 blob
