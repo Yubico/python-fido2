@@ -124,12 +124,13 @@ impl CtapHidConnection {
     }
 
     /// Send a CTAP HID command and receive the response.
-    #[pyo3(signature = (cmd, data, on_keepalive=None))]
+    #[pyo3(signature = (cmd, data, event=None, on_keepalive=None))]
     fn call<'py>(
         &self,
         py: Python<'py>,
         cmd: u8,
         data: &[u8],
+        event: Option<PyObject>,
         on_keepalive: Option<PyObject>,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let guard = self
@@ -140,9 +141,24 @@ impl CtapHidConnection {
             .as_ref()
             .ok_or_else(|| PyOSError::new_err("Connection is closed"))?;
 
-        let response = py.allow_threads(|| match on_keepalive {
-            Some(ref cb) => conn
-                .call_with_keepalive(
+        let response = py.allow_threads(|| {
+            let cancel_fn = || -> bool {
+                event.as_ref().is_some_and(|e| {
+                    Python::with_gil(|py| {
+                        e.call_method0(py, "is_set")
+                            .and_then(|r| r.extract::<bool>(py))
+                            .unwrap_or(false)
+                    })
+                })
+            };
+            let cancel: Option<&dyn Fn() -> bool> = if event.is_some() {
+                Some(&cancel_fn)
+            } else {
+                None
+            };
+
+            match on_keepalive {
+                Some(ref cb) => conn.call_with_keepalive(
                     cmd,
                     data,
                     &mut |status| {
@@ -150,10 +166,11 @@ impl CtapHidConnection {
                             let _ = cb.call1(py, (status,));
                         });
                     },
-                    None,
-                )
-                .map_err(ctap_err),
-            None => conn.call(cmd, data).map_err(ctap_err),
+                    cancel,
+                ),
+                None => conn.call_with_keepalive(cmd, data, &mut |_| {}, cancel),
+            }
+            .map_err(ctap_err)
         })?;
         Ok(PyBytes::new(py, &response))
     }

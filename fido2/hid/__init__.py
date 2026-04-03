@@ -147,7 +147,7 @@ class CtapHidDevice(CtapDevice):
 
         while True:
             try:
-                return self._connection.call(cmd, data, _ka_cb)
+                return self._connection.call(cmd, data, event, _ka_cb)
             except OSError as e:
                 err_msg = str(e)
                 if "ChannelBusy" in err_msg:

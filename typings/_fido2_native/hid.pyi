@@ -1,3 +1,4 @@
+from threading import Event
 from typing import Callable
 
 class HidDescriptor:
@@ -19,6 +20,7 @@ class CtapHidConnection:
         self,
         cmd: int,
         data: bytes,
+        event: Event | None = None,
         on_keepalive: Callable[[int], None] | None = None,
     ) -> bytes: ...
     @property
