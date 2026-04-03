@@ -40,6 +40,7 @@ jobs:
       - name: Install dependencies
         if: "startsWith(matrix.os, 'ubuntu')"
         run: |
+          sudo apt-get update -qq
           sudo apt-get install -qq swig libpcsclite-dev libudev-dev
 
       - name: Install the project
@@ -117,8 +118,8 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          manylinux: auto
-          before-script-linux: yum install -y pcsc-lite-devel systemd-devel
+          manylinux: manylinux_2_28
+          before-script-linux: dnf install -y pcsc-lite-devel systemd-devel
 
       - name: Upload wheels
         uses: actions/upload-artifact@v6
@@ -145,6 +146,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update -qq
           sudo apt-get install -qq swig libpcsclite-dev libudev-dev
 
       - name: Build sphinx documentation
