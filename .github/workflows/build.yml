@@ -95,6 +95,7 @@ jobs:
             target: x64
           - os: windows-latest
             target: aarch64-pc-windows-msvc
+            find-interpreter: false
 
     steps:
       - uses: actions/checkout@v6
@@ -120,9 +121,10 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist ${{ matrix.find-interpreter == false && '-i 3.10 3.11 3.12 3.13 3.14' || '--find-interpreter' }}
           manylinux: manylinux_2_28
           container: ${{ matrix.container }}
+          before-script-linux: ${{ matrix.container && 'dnf install -y pcsc-lite-devel systemd-devel' || '' }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v6
