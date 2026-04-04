@@ -87,27 +87,20 @@ jobs:
           - os: ubuntu-latest
             target: x86_64
             container: quay.io/pypa/manylinux_2_28_x86_64
-          - os: ubuntu-latest
+          - os: ubuntu-arm64
             target: aarch64
-            container: quay.io/pypa/manylinux_2_28_aarch64
           - os: macos-latest
             target: universal2-apple-darwin
           - os: windows-latest
             target: x64
           - os: windows-latest
-            target: aarch64
+            target: aarch64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up QEMU
-        if: matrix.target == 'aarch64' && startsWith(matrix.os, 'ubuntu')
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - name: Set up Python
-        if: matrix.os != 'ubuntu-latest'
+        if: "!startsWith(matrix.os, 'ubuntu')"
         uses: actions/setup-python@v6
         with:
           python-version: |
@@ -117,6 +110,12 @@ jobs:
             3.13
             3.14
 
+      - name: Install dependencies
+        if: "startsWith(matrix.os, 'ubuntu')"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq libpcsclite-dev libudev-dev
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -124,7 +123,6 @@ jobs:
           args: --release --out dist --find-interpreter
           manylinux: manylinux_2_28
           container: ${{ matrix.container }}
-          before-script-linux: dnf install -y pcsc-lite-devel systemd-devel
 
       - name: Upload wheels
         uses: actions/upload-artifact@v6
