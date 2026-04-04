@@ -86,8 +86,10 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64
+            container: quay.io/pypa/manylinux_2_28_x86_64
           - os: ubuntu-latest
             target: aarch64
+            container: quay.io/pypa/manylinux_2_28_aarch64
           - os: macos-latest
             target: universal2-apple-darwin
           - os: windows-latest
@@ -119,6 +121,7 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
           manylinux: manylinux_2_28
+          container: ${{ matrix.container }}
           before-script-linux: dnf install -y pcsc-lite-devel systemd-devel
 
       - name: Upload wheels
