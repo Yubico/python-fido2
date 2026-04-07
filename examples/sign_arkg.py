@@ -36,8 +36,7 @@ import sys
 from exampleutils import get_client
 
 from fido2 import cbor
-from fido2.arkg import ARKG_P256_ESP256
-from fido2.cose import CoseKey
+from fido2.cose import ESP256_SPLIT_ARKG_PLACEHOLDER, CoseKey
 from fido2.ctap2.extensions import SignExtension
 from fido2.server import Fido2Server
 from fido2.utils import sha256, websafe_decode, websafe_encode
@@ -63,7 +62,9 @@ result = client.make_credential(
     {
         **create_options["publicKey"],
         "extensions": {
-            SignExtension.NAME: {"generateKey": {"algorithms": [ARKG_P256_ESP256]}}
+            SignExtension.NAME: {
+                "generateKey": {"algorithms": [ESP256_SPLIT_ARKG_PLACEHOLDER]}
+            }
         },
     }
 )
@@ -92,8 +93,8 @@ print("public key", pk)
 
 # Master public key contains blinding and KEM keys
 # ARKG derive_public_key uses these
-print("Blinding public key", pk.pkbl)
-print("KEM public key", pk.pkkem)
+print("Blinding public key", pk.pk_bl)
+print("KEM public key", pk.pk_kem)
 
 # Arbitrary bytestring used for ctx, ikm
 ctx = b"my-ctx-here"

@@ -5,8 +5,8 @@ from typing import Mapping, cast
 
 import cryptography.exceptions
 import pytest
-from fido2 import arkg, cbor
-from fido2.cose import CoseKey
+from fido2 import cbor
+from fido2.cose import ESP256_SPLIT_ARKG_PLACEHOLDER, CoseKey
 from fido2.ctap import CtapError
 from fido2.ctap2.pin import ClientPin
 from fido2.utils import sha256
@@ -39,10 +39,10 @@ ALL_ALGORITHMS = [
     -7,  # ES256
     -300,  # Requested assignment for ESP256-split https://www.ietf.org/archive/id/draft-lundberg-cose-two-party-signing-algs-06.html#name-ecdsa
     -70009,  # Placeholder value for ESP256-split used by some prototypes
-    arkg.ARKG_P256_ESP256,  # Placeholder for ESP256-split-ARKG https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#name-cose-algorithms
+    ESP256_SPLIT_ARKG_PLACEHOLDER,  # Placeholder for ESP256-split-ARKG https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#name-cose-algorithms
 ]
 PREHASH_ALGS = [
-    arkg.ARKG_P256_ESP256,
+    ESP256_SPLIT_ARKG_PLACEHOLDER,
     -300,
     -70009,  # Placeholder value for ESP256-split used by some prototypes
 ]
@@ -499,8 +499,10 @@ def test_assert_missing_required_parameter(
 
 def test_assert_missing_args_alg(ctap2, on_keepalive, credential_cache):
     cred = credential_cache.make_cred_or_skip(
-        lambda cred: cred.algorithm == arkg.ARKG_P256_ESP256 and cred.flags == 0b000,
-        [arkg.ARKG_P256_ESP256],
+        lambda cred: (
+            cred.algorithm == ESP256_SPLIT_ARKG_PLACEHOLDER and cred.flags == 0b000
+        ),
+        [ESP256_SPLIT_ARKG_PLACEHOLDER],
     )
     credential_id = cred.response.auth_data.credential_data.credential_id
     tbs = os.urandom(32)
@@ -536,8 +538,10 @@ def test_assert_missing_args_alg(ctap2, on_keepalive, credential_cache):
 
 def test_assert_incorrect_args_alg(ctap2, on_keepalive, credential_cache):
     cred = credential_cache.make_cred_or_skip(
-        lambda cred: cred.algorithm == arkg.ARKG_P256_ESP256 and cred.flags == 0b000,
-        [arkg.ARKG_P256_ESP256],
+        lambda cred: (
+            cred.algorithm == ESP256_SPLIT_ARKG_PLACEHOLDER and cred.flags == 0b000
+        ),
+        [ESP256_SPLIT_ARKG_PLACEHOLDER],
     )
     credential_id = cred.response.auth_data.credential_data.credential_id
     tbs = os.urandom(32)
@@ -573,8 +577,10 @@ def test_assert_incorrect_args_alg(ctap2, on_keepalive, credential_cache):
 
 def test_assert_missing_args(ctap2, on_keepalive, credential_cache, sign):
     cred = credential_cache.make_cred_or_skip(
-        lambda cred: cred.algorithm == arkg.ARKG_P256_ESP256 and cred.flags == 0b000,
-        [arkg.ARKG_P256_ESP256],
+        lambda cred: (
+            cred.algorithm == ESP256_SPLIT_ARKG_PLACEHOLDER and cred.flags == 0b000
+        ),
+        [ESP256_SPLIT_ARKG_PLACEHOLDER],
     )
     tbs = os.urandom(32)
     public_key, args = if_arkg(cred.algorithm, cred.public_key)
@@ -592,8 +598,10 @@ def test_assert_missing_args(ctap2, on_keepalive, credential_cache, sign):
 
 def test_assert_unknown_args(ctap2, on_keepalive, credential_cache, sign):
     cred = credential_cache.make_cred_or_skip(
-        lambda cred: cred.algorithm == arkg.ARKG_P256_ESP256 and cred.flags == 0b000,
-        [arkg.ARKG_P256_ESP256],
+        lambda cred: (
+            cred.algorithm == ESP256_SPLIT_ARKG_PLACEHOLDER and cred.flags == 0b000
+        ),
+        [ESP256_SPLIT_ARKG_PLACEHOLDER],
     )
     tbs = os.urandom(32)
     public_key, args = if_arkg(cred.algorithm, cred.public_key)

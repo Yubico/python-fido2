@@ -30,7 +30,7 @@
 
 import pytest
 
-from fido2.arkg import ARKG_P256
+from fido2.cose import ARKG_P256_PLACEHOLDER
 
 
 TEST_VECTORS = [
@@ -80,7 +80,7 @@ TEST_VECTORS = [
 
 @pytest.mark.parametrize("test_vector", TEST_VECTORS)
 def test_vectors(test_vector):
-    pub_key = ARKG_P256(
+    pub_key = ARKG_P256_PLACEHOLDER(
         {
             1: -65537,
             2: b"implementation-specific-keyhandle",

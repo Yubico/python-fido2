@@ -27,23 +27,21 @@
 
 import struct
 from dataclasses import dataclass
-from typing import Mapping, Sequence, Tuple
+from typing import Sequence, Tuple
 
 from cryptography.hazmat.primitives.asymmetric.ec import (
     ECDH,
-    SECP256R1,
     EllipticCurve,
     EllipticCurvePrivateKey,
     EllipticCurvePublicKey,
     EllipticCurvePublicNumbers,
     derive_private_key,
 )
-from cryptography.hazmat.primitives.hashes import SHA256, Hash, HashAlgorithm
+from cryptography.hazmat.primitives.hashes import Hash, HashAlgorithm
 from cryptography.hazmat.primitives.hmac import HMAC
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from .cose import ESP256, CoseKey
 from .utils import bytes2int
 
 """
@@ -445,80 +443,3 @@ class _ARKG:
         kh = c
 
         return pk_prime, kh
-
-
-def _cose2key(cose: CoseKey, curve: EllipticCurve) -> EllipticCurvePublicKey:
-    return EllipticCurvePublicNumbers(
-        bytes2int(cose[-2]), bytes2int(cose[-3]), curve
-    ).public_key()
-
-
-ARKG_P256_ESP256 = -65539
-
-
-class ARKG_P256(CoseKey):
-    """
-    The identifier ARKG-P256 represents the following ARKG instance:
-
-        BL: Elliptic curve addition as described in Section 3.1 with the parameters:
-
-            crv: The NIST curve secp256r1 [SEC2].
-
-            hash-to-crv-suite: P256_XMD:SHA-256_SSWU_RO_ [RFC9380].
-
-            DST_ext: 'ARKG-P256'.
-
-        KEM: ECDH as described in Section 3.3 with the parameters:
-
-            crv: The NIST curve secp256r1 [SEC2].
-
-            Hash: SHA-256 [FIPS 180-4].
-
-            hash-to-crv-suite: P256_XMD:SHA-256_SSWU_RO_ [RFC9380].
-
-            DST_ext: 'ARKG-P256'.
-    """
-
-    ALGORITHM = -65700
-
-    _CRV = SECP256R1()
-    _ARKG = _ARKG(
-        bl=_BL(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-P256"),
-        kem=_KEM(crv=_CRV, Hash=SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
-    )
-
-    @property
-    def pk_bl(self) -> CoseKey:
-        return CoseKey.parse(self[-1])
-
-    @property
-    def pk_kem(self) -> CoseKey:
-        return CoseKey.parse(self[-2])
-
-    def derive_public_key(self, ikm: bytes, ctx: bytes) -> Tuple[CoseKey, Mapping]:
-        pk, kh = self._ARKG.derive_public_key(
-            _cose2key(self.pk_bl, self._CRV),
-            _cose2key(self.pk_kem, self._CRV),
-            ikm,
-            ctx,
-        )
-        point_enc = pk.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
-        ln = (len(point_enc) - 1) // 2
-
-        pk_cose = ESP256(
-            {
-                1: 2,  # kty: EC
-                3: self[-3],  # derived key alg (-9)
-                -1: 1,
-                -2: point_enc[1 : ln + 1],  # x-coordinate
-                -3: point_enc[1 + ln :],  # y-coordinate
-            }
-        )
-
-        args = {
-            3: ARKG_P256_ESP256,  # alg: ESP256 with key derived by ARKG-P256
-            -1: kh,
-            -2: ctx,
-        }
-
-        return pk_cose, args
