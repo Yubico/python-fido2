@@ -45,16 +45,6 @@ from ..webauthn import Aaguid, AuthenticatorData
 logger = logging.getLogger(__name__)
 
 
-def args(*params) -> dict[int, Any]:
-    """Constructs a dict from a list of arguments for sending a CBOR command.
-    None elements will be omitted.
-
-    :param params: Arguments, in order, to add to the command.
-    :return: The input parameters as a dict.
-    """
-    return {i: v for i, v in enumerate(params, 1) if v is not None}
-
-
 class _CborDataObject(_DataClassMapping[int]):
     @classmethod
     def _get_field_key(cls, field: Field) -> int:
@@ -282,8 +272,10 @@ class Ctap2:
 
         :return: Information about the authenticator.
         """
-        self._info = Info.from_dict(self.send_cbor(Ctap2.CMD.GET_INFO))
-        self._native.max_msg_size = self._info.max_msg_size
+        try:
+            self._info = Info(**self._native.refresh_info())
+        except ValueError as e:
+            self._handle_native_error(e)
         return self._info
 
     def client_pin(
@@ -318,23 +310,21 @@ class Ctap2:
             messages from the authenticator.
         :return: The response of the command, decoded.
         """
-        return self.send_cbor(
-            Ctap2.CMD.CLIENT_PIN,
-            args(
+        try:
+            return self._native.client_pin(
                 pin_uv_protocol,
                 sub_cmd,
                 key_agreement,
                 pin_uv_param,
                 new_pin_enc,
                 pin_hash_enc,
-                None,
-                None,
                 permissions,
                 permissions_rpid,
-            ),
-            event=event,
-            on_keepalive=on_keepalive,
-        )
+                event,
+                on_keepalive,
+            )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def reset(
         self,
@@ -348,7 +338,10 @@ class Ctap2:
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
         """
-        self.send_cbor(Ctap2.CMD.RESET, event=event, on_keepalive=on_keepalive)
+        try:
+            self._native.reset(event, on_keepalive)
+        except ValueError as e:
+            self._handle_native_error(e)
         logger.info("Reset completed - All data erased")
 
     def make_credential(
@@ -385,10 +378,9 @@ class Ctap2:
         :return: The new credential.
         """
         logger.debug("Calling CTAP2 make_credential")
-        return AttestationResponse.from_dict(
-            self.send_cbor(
-                Ctap2.CMD.MAKE_CREDENTIAL,
-                args(
+        try:
+            return AttestationResponse(
+                **self._native.make_credential(
                     client_data_hash,
                     rp,
                     user,
@@ -399,11 +391,12 @@ class Ctap2:
                     pin_uv_param,
                     pin_uv_protocol,
                     enterprise_attestation,
-                ),
-                event=event,
-                on_keepalive=on_keepalive,
+                    event,
+                    on_keepalive,
+                )
             )
-        )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_assertion(
         self,
@@ -433,10 +426,9 @@ class Ctap2:
         :return: The new assertion.
         """
         logger.debug("Calling CTAP2 get_assertion")
-        return AssertionResponse.from_dict(
-            self.send_cbor(
-                Ctap2.CMD.GET_ASSERTION,
-                args(
+        try:
+            return AssertionResponse(
+                **self._native.get_assertion(
                     rp_id,
                     client_data_hash,
                     allow_list,
@@ -444,18 +436,22 @@ class Ctap2:
                     options,
                     pin_uv_param,
                     pin_uv_protocol,
-                ),
-                event=event,
-                on_keepalive=on_keepalive,
+                    event,
+                    on_keepalive,
+                )
             )
-        )
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_next_assertion(self) -> AssertionResponse:
         """CTAP2 getNextAssertion command.
 
         :return: The next available assertion response.
         """
-        return AssertionResponse.from_dict(self.send_cbor(Ctap2.CMD.GET_NEXT_ASSERTION))
+        try:
+            return AssertionResponse(**self._native.get_next_assertion())
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def get_assertions(self, *args, **kwargs) -> list[AssertionResponse]:
         """Convenience method to get list of assertions.
@@ -554,7 +550,10 @@ class Ctap2:
         :param on_keepalive: Optional callback function to handle keep-alive messages
             from the authenticator.
         """
-        self.send_cbor(Ctap2.CMD.SELECTION, event=event, on_keepalive=on_keepalive)
+        try:
+            self._native.selection(event, on_keepalive)
+        except ValueError as e:
+            self._handle_native_error(e)
 
     def large_blobs(
         self,
