@@ -30,8 +30,9 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Mapping, cast
+from typing import Any, Mapping, Sequence, cast
 
+from .. import cbor
 from ..utils import _JsonDataObject, sha256, websafe_encode
 from ..webauthn import (
     AuthenticatorSelectionCriteria,
@@ -39,6 +40,7 @@ from ..webauthn import (
     PublicKeyCredentialDescriptor,
     PublicKeyCredentialRequestOptions,
     ResidentKeyRequirement,
+    UserVerificationRequirement,
 )
 from .base import AssertionResponse, AttestationResponse, Ctap2
 from .blob import LargeBlobs
@@ -662,6 +664,148 @@ class ThirdPartyPaymentExtension(Ctap2Extension):
         )
         if self.is_supported(ctap) and data and data.is_payment:
             return AuthenticationExtensionProcessor(inputs={self.NAME: True})
+
+
+@dataclass(eq=False, frozen=True)
+class _SignGenerateKeyInputs(_JsonDataObject):
+    algorithms: Sequence[int]
+
+
+@dataclass(eq=False, frozen=True)
+class _SignSignInputs(_JsonDataObject):
+    key_handle: bytes
+    tbs: bytes
+    additional_args: bytes | None = None
+
+
+@dataclass(eq=False, frozen=True)
+class _SignInputs(_JsonDataObject):
+    generate_key: _SignGenerateKeyInputs | None = None
+    sign_by_credential: Mapping[str, _SignSignInputs] | None = None
+
+
+@dataclass(eq=False, frozen=True)
+class _SignGeneratedKey(_JsonDataObject):
+    key_handle: bytes
+    public_key: bytes
+    algorithm: int
+    attestation_object: bytes
+
+
+@dataclass(eq=False, frozen=True)
+class _SignOutputs(_JsonDataObject):
+    generated_key: _SignGeneratedKey | None = None
+    signature: bytes | None = None
+
+
+class PreviewSignExtension(Ctap2Extension):
+    """
+    WARNING: This extension is currently in DRAFT.
+    It is to be considered experimental, and NOT part of the stable API of this library.
+
+    Implements version 4-SNAPSHOT-2025-08-21T15:00 of the sign CTAP2 extension.
+
+    https://github.com/yubicolabs/webauthn-sign-extension
+    """
+
+    NAME = "previewSign"
+
+    def is_supported(self, ctap):
+        return self.NAME in ctap.info.extensions
+
+    def make_credential(self, ctap, options, pin_protocol):
+        inputs = options.extensions or {}
+        data = _SignInputs.from_dict(inputs.get(self.NAME))
+        if not data or not self.is_supported(ctap):
+            return
+
+        if data.sign_by_credential or not data.generate_key:
+            raise ValueError("Invalid inputs")
+
+        class Processor(RegistrationExtensionProcessor):
+            def prepare_inputs(self, pin_token):
+                gk = data.generate_key
+
+                selection = (
+                    options.authenticator_selection or AuthenticatorSelectionCriteria()
+                )
+                flags = (
+                    0b101
+                    if selection.user_verification
+                    == UserVerificationRequirement.REQUIRED
+                    else 0b001
+                )
+                outputs = {3: gk.algorithms, 4: flags}
+
+                return {PreviewSignExtension.NAME: outputs}
+
+            def prepare_outputs(self, response, pin_token):
+                extensions = response.auth_data.extensions or {}
+                data = extensions.get(PreviewSignExtension.NAME)
+                if not data:
+                    return None
+                att_obj_bytes = response.unsigned_extension_outputs[
+                    PreviewSignExtension.NAME
+                ][7]
+                att_obj = AttestationResponse.from_dict(
+                    cast(Mapping, cbor.decode(att_obj_bytes))
+                )
+                cred_data = att_obj.auth_data.credential_data
+                assert cred_data is not None  # noqa: S101
+                kh = cred_data.credential_id
+                pk = cred_data.public_key
+
+                return {
+                    PreviewSignExtension.NAME: _SignOutputs(
+                        generated_key=_SignGeneratedKey(
+                            key_handle=kh,
+                            public_key=cbor.encode(pk),
+                            algorithm=data.get(3),
+                            attestation_object=att_obj_bytes,
+                        ),
+                    )
+                }
+
+        return Processor()
+
+    def get_assertion(self, ctap, options, pin_protocol):
+        inputs = options.extensions or {}
+        data = _SignInputs.from_dict(inputs.get(self.NAME))
+        if not data or not self.is_supported(ctap):
+            return
+
+        if not data.sign_by_credential or data.generate_key:
+            raise ValueError("Invalid inputs")
+
+        class Processor(AuthenticationExtensionProcessor):
+            def prepare_inputs(self, selected, pin_token):
+                by_creds = data.sign_by_credential
+
+                # Make sure all keys are valid IDs from allow_credentials
+                allow_list = options.allow_credentials
+                if not allow_list or not selected:
+                    raise ValueError("sign requires allowCredentials")
+                ids = {websafe_encode(c.id) for c in allow_list}
+                if ids.difference(by_creds):
+                    raise ValueError("keyHandleByCredential is not valid")
+                cred_inputs = by_creds[websafe_encode(selected.id)]
+
+                authenticator_input = {
+                    2: cred_inputs.key_handle,
+                    6: cred_inputs.tbs,
+                }
+                if cred_inputs.additional_args:
+                    authenticator_input[7] = cred_inputs.additional_args
+
+                return {PreviewSignExtension.NAME: authenticator_input}
+
+            def prepare_outputs(self, response, pin_token):
+                extensions = response.auth_data.extensions or {}
+                data = extensions.get(PreviewSignExtension.NAME)
+                if data:
+                    return {PreviewSignExtension.NAME: _SignOutputs(signature=data[6])}
+
+        return Processor()
 
 
 _DEFAULT_EXTENSIONS = [
