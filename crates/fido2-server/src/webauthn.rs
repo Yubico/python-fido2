@@ -621,7 +621,6 @@ mod base64url_bytes {
     }
 }
 
-#[allow(dead_code)]
 mod base64url_bytes_option {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -842,7 +841,7 @@ pub struct PublicKeyCredentialRequestOptions {
 // --- Response types (JSON from the browser) ---
 
 /// Attestation response from the authenticator (registration).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorAttestationResponse {
     /// Raw client data JSON bytes (base64url-encoded in JSON).
@@ -869,7 +868,7 @@ impl AuthenticatorAttestationResponse {
 }
 
 /// Assertion response from the authenticator (authentication).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorAssertionResponse {
     /// Raw client data JSON bytes (base64url-encoded in JSON).
@@ -898,8 +897,8 @@ impl AuthenticatorAssertionResponse {
     }
 }
 
-/// Full registration response from the browser (RegistrationResponseJSON).
-#[derive(Debug, Clone, Deserialize)]
+/// Full registration response (RegistrationResponseJSON).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistrationResponse {
     /// Credential ID (base64url string).
@@ -920,8 +919,8 @@ pub struct RegistrationResponse {
     pub type_: Option<PublicKeyCredentialType>,
 }
 
-/// Full authentication response from the browser (AuthenticationResponseJSON).
-#[derive(Debug, Clone, Deserialize)]
+/// Full authentication response (AuthenticationResponseJSON).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticationResponse {
     /// Credential ID (base64url string).

@@ -121,19 +121,15 @@ fn main() {
 
     // Check prf enabled
     let prf_enabled = result
-        .extension_outputs
-        .get("prf")
-        .and_then(|v| v.map_get_text("enabled"))
+        .client_extension_results
+        .as_ref()
+        .and_then(|v| v.get("prf"))
+        .and_then(|v| v.get("enabled"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     println!("PRF enabled: {}", prf_enabled);
 
-    let cred_data = result
-        .attestation
-        .auth_data
-        .credential_data
-        .as_ref()
-        .expect("No credential data");
+    let cred_id = result.raw_id.clone();
 
     // ---- Evaluate PRF with a single salt ----
     let salt1 = fido2_server::utils::websafe_encode(b"example-prf-salt-1______________");
@@ -143,7 +139,7 @@ fn main() {
         rp_id: Some("example.com".into()),
         allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
             type_: PublicKeyCredentialType::PublicKey,
-            id: cred_data.credential_id.clone(),
+            id: cred_id.clone(),
             transports: None,
         }]),
         user_verification: Some(UserVerificationRequirement::Required),
@@ -158,18 +154,22 @@ fn main() {
     };
 
     println!("\nEvaluating PRF with single salt...");
-    let result = client
+    let selection = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
-    let ext_outputs = &result.extension_outputs[0];
+    let response = selection.get_response(0);
 
-    if let Some(prf) = ext_outputs.get("prf")
-        && let Some(results) = prf.map_get_text("results")
-        && let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes())
+    if let Some(prf) = response
+        .client_extension_results
+        .as_ref()
+        .and_then(|v| v.get("prf"))
+        && let Some(results) = prf.get("results")
+        && let Some(first) = results.get("first").and_then(|v| v.as_str())
     {
+        let bytes = fido2_server::utils::websafe_decode(first).unwrap();
         println!(
             "PRF output (first): {}",
-            fido2_server::logging::hex_encode(first)
+            fido2_server::logging::hex_encode(&bytes)
         );
     }
 
@@ -181,7 +181,7 @@ fn main() {
         rp_id: Some("example.com".into()),
         allow_credentials: Some(vec![PublicKeyCredentialDescriptor {
             type_: PublicKeyCredentialType::PublicKey,
-            id: cred_data.credential_id.clone(),
+            id: cred_id.clone(),
             transports: None,
         }]),
         user_verification: Some(UserVerificationRequirement::Required),
@@ -197,24 +197,29 @@ fn main() {
     };
 
     println!("\nEvaluating PRF with two salts...");
-    let result = client
+    let selection = client
         .get_assertion(&auth_options2)
         .expect("Authentication failed");
-    let ext_outputs = &result.extension_outputs[0];
+    let response = selection.get_response(0);
 
-    if let Some(prf) = ext_outputs.get("prf")
-        && let Some(results) = prf.map_get_text("results")
+    if let Some(prf) = response
+        .client_extension_results
+        .as_ref()
+        .and_then(|v| v.get("prf"))
+        && let Some(results) = prf.get("results")
     {
-        if let Some(first) = results.map_get_text("first").and_then(|v| v.as_bytes()) {
+        if let Some(first) = results.get("first").and_then(|v| v.as_str()) {
+            let bytes = fido2_server::utils::websafe_decode(first).unwrap();
             println!(
                 "PRF output (first):  {}",
-                fido2_server::logging::hex_encode(first)
+                fido2_server::logging::hex_encode(&bytes)
             );
         }
-        if let Some(second) = results.map_get_text("second").and_then(|v| v.as_bytes()) {
+        if let Some(second) = results.get("second").and_then(|v| v.as_str()) {
+            let bytes = fido2_server::utils::websafe_decode(second).unwrap();
             println!(
                 "PRF output (second): {}",
-                fido2_server::logging::hex_encode(second)
+                fido2_server::logging::hex_encode(&bytes)
             );
         }
     }

@@ -43,10 +43,13 @@ use fido2_server::cbor::Value;
 use fido2_server::cose::Algorithm;
 use fido2_server::server::verify_rp_id;
 use fido2_server::utils::sha256;
+use fido2_server::utils::websafe_encode;
 use fido2_server::webauthn::{
-    self, Aaguid, AttestationConveyancePreference, CollectedClientData,
-    PublicKeyCredentialCreationOptions, PublicKeyCredentialParameters,
-    PublicKeyCredentialRequestOptions, ResidentKeyRequirement, UserVerificationRequirement,
+    self, Aaguid, AttestationConveyancePreference, AttestationObject, AuthenticationResponse,
+    AuthenticatorAssertionResponse, AuthenticatorAttachment, AuthenticatorAttestationResponse,
+    CollectedClientData, PublicKeyCredentialCreationOptions, PublicKeyCredentialParameters,
+    PublicKeyCredentialRequestOptions, PublicKeyCredentialType, RegistrationResponse,
+    ResidentKeyRequirement, UserVerificationRequirement,
 };
 
 // ---------------------------------------------------------------------------
@@ -398,18 +401,89 @@ impl ClientDataCollector {
 // Backend trait
 // ---------------------------------------------------------------------------
 
-/// Result of a make_credential operation.
-pub struct RegistrationResult {
-    pub attestation: AttestationResponse,
-    pub client_data: CollectedClientData,
-    pub extension_outputs: ExtensionOutputs,
+/// Result of a get_assertion operation, providing access to individual assertions
+/// and their corresponding `AuthenticationResponse` representations.
+pub struct AssertionSelection {
+    client_data: CollectedClientData,
+    assertions: Vec<AssertionResponse>,
+    extension_outputs: Vec<ExtensionOutputs>,
 }
 
-/// Result of a get_assertion operation.
-pub struct AssertionResult {
-    pub client_data: CollectedClientData,
-    pub assertions: Vec<AssertionResponse>,
-    pub extension_outputs: Vec<ExtensionOutputs>,
+impl AssertionSelection {
+    /// Get the raw CTAP assertion responses.
+    pub fn get_assertions(&self) -> &[AssertionResponse] {
+        &self.assertions
+    }
+
+    /// Build an `AuthenticationResponse` for the assertion at the given index.
+    pub fn get_response(&self, index: usize) -> AuthenticationResponse {
+        let assertion = &self.assertions[index];
+        let extension_outputs = &self.extension_outputs[index];
+
+        let credential_id = assertion
+            .credential
+            .map_get_text("id")
+            .and_then(|v| v.as_bytes())
+            .unwrap_or(&[])
+            .to_vec();
+
+        let user_handle = assertion.user.as_ref().and_then(|u| {
+            u.map_get_text("id")
+                .and_then(|v| v.as_bytes())
+                .map(|b| b.to_vec())
+        });
+
+        let client_extension_results = if extension_outputs.is_empty() {
+            None
+        } else {
+            cbor_map_to_json(extension_outputs)
+        };
+
+        AuthenticationResponse {
+            id: websafe_encode(&credential_id),
+            raw_id: credential_id,
+            response: AuthenticatorAssertionResponse {
+                client_data_json: self.client_data.as_bytes().to_vec(),
+                authenticator_data: assertion.auth_data.as_bytes().to_vec(),
+                signature: assertion.signature.clone(),
+                user_handle,
+            },
+            authenticator_attachment: Some(AuthenticatorAttachment::CrossPlatform),
+            client_extension_results,
+            type_: Some(PublicKeyCredentialType::PublicKey),
+        }
+    }
+}
+
+/// Convert a CBOR extension outputs map to a JSON value.
+fn cbor_map_to_json(map: &ExtensionOutputs) -> Option<serde_json::Value> {
+    let mut json_map = serde_json::Map::new();
+    for (k, v) in map {
+        json_map.insert(k.clone(), cbor_to_json(v));
+    }
+    Some(serde_json::Value::Object(json_map))
+}
+
+fn cbor_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Int(n) => serde_json::json!(n),
+        Value::Bool(b) => serde_json::json!(b),
+        Value::Text(s) => serde_json::json!(s),
+        Value::Bytes(b) => serde_json::json!(websafe_encode(b)),
+        Value::Array(arr) => serde_json::Value::Array(arr.iter().map(cbor_to_json).collect()),
+        Value::Map(entries) => {
+            let mut m = serde_json::Map::new();
+            for (k, v) in entries {
+                let key = match k {
+                    Value::Text(s) => s.clone(),
+                    Value::Int(n) => n.to_string(),
+                    _ => continue,
+                };
+                m.insert(key, cbor_to_json(v));
+            }
+            serde_json::Value::Object(m)
+        }
+    }
 }
 
 /// Backend abstraction for FIDO client operations.
@@ -1161,7 +1235,7 @@ impl<'a> Fido2Client<'a> {
     pub fn make_credential(
         &self,
         options: &PublicKeyCredentialCreationOptions,
-    ) -> Result<RegistrationResult, ClientError> {
+    ) -> Result<RegistrationResponse, ClientError> {
         let rp_id = self.collector.get_rp_id(options.rp.id.as_deref())?;
         self.collector.verify_rp_id(&rp_id)?;
 
@@ -1174,10 +1248,36 @@ impl<'a> Fido2Client<'a> {
             self.backend
                 .do_make_credential(options, &client_data_hash, &rp_id)?;
 
-        Ok(RegistrationResult {
-            attestation,
-            client_data,
-            extension_outputs,
+        let att_object = AttestationObject::create(
+            &attestation.fmt,
+            &attestation.auth_data,
+            &attestation.att_stmt,
+        );
+
+        let credential_id = attestation
+            .auth_data
+            .credential_data
+            .as_ref()
+            .map(|cd| cd.credential_id.clone())
+            .unwrap_or_default();
+
+        let client_extension_results = if extension_outputs.is_empty() {
+            None
+        } else {
+            cbor_map_to_json(&extension_outputs)
+        };
+
+        Ok(RegistrationResponse {
+            id: websafe_encode(&credential_id),
+            raw_id: credential_id,
+            response: AuthenticatorAttestationResponse {
+                client_data_json: client_data.as_bytes().to_vec(),
+                attestation_object: att_object.as_bytes().to_vec(),
+                transports: None,
+            },
+            authenticator_attachment: Some(AuthenticatorAttachment::CrossPlatform),
+            client_extension_results,
+            type_: Some(PublicKeyCredentialType::PublicKey),
         })
     }
 
@@ -1185,7 +1285,7 @@ impl<'a> Fido2Client<'a> {
     pub fn get_assertion(
         &self,
         options: &PublicKeyCredentialRequestOptions,
-    ) -> Result<AssertionResult, ClientError> {
+    ) -> Result<AssertionSelection, ClientError> {
         let rp_id = self.collector.get_rp_id(options.rp_id.as_deref())?;
         self.collector.verify_rp_id(&rp_id)?;
 
@@ -1198,7 +1298,7 @@ impl<'a> Fido2Client<'a> {
             self.backend
                 .do_get_assertion(options, &client_data_hash, &rp_id)?;
 
-        Ok(AssertionResult {
+        Ok(AssertionSelection {
             client_data,
             assertions,
             extension_outputs,

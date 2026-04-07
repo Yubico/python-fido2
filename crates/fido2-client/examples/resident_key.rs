@@ -97,17 +97,10 @@ fn main() {
         .make_credential(&create_options)
         .expect("Registration failed");
 
-    let cred_data = result
-        .attestation
-        .auth_data
-        .credential_data
-        .as_ref()
-        .expect("No credential data");
-
     println!("New discoverable credential created!");
     println!(
         "CREDENTIAL ID: {}",
-        fido2_server::logging::hex_encode(&cred_data.credential_id)
+        fido2_server::logging::hex_encode(&result.raw_id)
     );
 
     // ---- Authentication without allow list (discoverable) ----
@@ -122,20 +115,25 @@ fn main() {
     };
 
     println!("Authenticating with discoverable credential...");
-    let result = client
+    let selection = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
 
-    let assertion = &result.assertions[0];
+    let response = selection.get_response(0);
+    let auth_data = response
+        .response
+        .authenticator_data()
+        .expect("Invalid authenticator data");
 
     println!("Authenticated!");
-    println!("UP: {}", assertion.auth_data.is_user_present());
-    println!("UV: {}", assertion.auth_data.is_user_verified());
-    println!("Sign count: {}", assertion.auth_data.counter);
+    println!("UP: {}", auth_data.is_user_present());
+    println!("UV: {}", auth_data.is_user_verified());
+    println!("Sign count: {}", auth_data.counter);
 
-    if let Some(ref user) = assertion.user
-        && let Some(user_id) = user.map_get_text("id").and_then(|v| v.as_bytes())
-    {
-        println!("User ID: {}", fido2_server::logging::hex_encode(user_id));
+    if let Some(ref user_handle) = response.response.user_handle {
+        println!(
+            "User ID: {}",
+            fido2_server::logging::hex_encode(user_handle)
+        );
     }
 }

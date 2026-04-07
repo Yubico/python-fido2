@@ -121,21 +121,15 @@ fn main() {
 
     // Check largeBlob extension output
     let supported = result
-        .extension_outputs
-        .get("largeBlob")
-        .and_then(|v| v.map_get_text("supported"))
+        .client_extension_results
+        .as_ref()
+        .and_then(|v| v.get("largeBlob"))
+        .and_then(|v| v.get("supported"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     println!("largeBlob supported: {}", supported);
 
-    let cred_data = result
-        .attestation
-        .auth_data
-        .credential_data
-        .as_ref()
-        .expect("No credential data");
-
-    let cred_id = &cred_data.credential_id;
+    let cred_id = &result.raw_id;
 
     // ---- Write a blob ----
     let blob_data = b"Hello from Rust large blob!";
@@ -156,14 +150,16 @@ fn main() {
     };
 
     println!("Writing large blob...");
-    let result = client
+    let selection = client
         .get_assertion(&write_options)
         .expect("Write assertion failed");
-    let ext_outputs = &result.extension_outputs[0];
+    let response = selection.get_response(0);
 
-    let written = ext_outputs
-        .get("largeBlob")
-        .and_then(|v| v.map_get_text("written"))
+    let written = response
+        .client_extension_results
+        .as_ref()
+        .and_then(|v| v.get("largeBlob"))
+        .and_then(|v| v.get("written"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     println!("Blob written: {}", written);
@@ -186,21 +182,24 @@ fn main() {
     };
 
     println!("Reading large blob...");
-    let result = client
+    let selection = client
         .get_assertion(&read_options)
         .expect("Read assertion failed");
-    let ext_outputs = &result.extension_outputs[0];
+    let response = selection.get_response(0);
 
-    let read_blob = ext_outputs
-        .get("largeBlob")
-        .and_then(|v| v.map_get_text("blob"))
-        .and_then(|v| v.as_bytes());
+    let read_blob = response
+        .client_extension_results
+        .as_ref()
+        .and_then(|v| v.get("largeBlob"))
+        .and_then(|v| v.get("blob"))
+        .and_then(|v| v.as_str())
+        .and_then(|s| fido2_server::utils::websafe_decode(s).ok());
 
     match read_blob {
-        Some(data) if data == blob_data => {
+        Some(ref data) if data == blob_data => {
             println!("Read back correct blob: {:?}", std::str::from_utf8(data));
         }
-        Some(data) => {
+        Some(ref data) => {
             eprintln!("Read back incorrect blob: {:?}", data);
             std::process::exit(1);
         }

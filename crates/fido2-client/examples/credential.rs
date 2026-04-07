@@ -37,8 +37,8 @@ use fido2_client::extensions::default_extensions;
 use fido2_client::transport::ctaphid;
 use fido2_server::server::Fido2Server;
 use fido2_server::webauthn::{
-    AttestationObject, PublicKeyCredentialDescriptor, PublicKeyCredentialRpEntity,
-    PublicKeyCredentialType, PublicKeyCredentialUserEntity,
+    PublicKeyCredentialDescriptor, PublicKeyCredentialRpEntity, PublicKeyCredentialType,
+    PublicKeyCredentialUserEntity,
 };
 
 fn main() {
@@ -85,13 +85,13 @@ fn main() {
         .make_credential(&create_options)
         .expect("Registration failed");
 
-    let att_obj = AttestationObject::create(
-        &result.attestation.fmt,
-        &result.attestation.auth_data,
-        &result.attestation.att_stmt,
-    );
+    let client_data = result.response.client_data().expect("Invalid client data");
+    let att_obj = result
+        .response
+        .attestation_object()
+        .expect("Invalid attestation object");
     let auth_data = server
-        .register_complete(&reg_state, &result.client_data, &att_obj)
+        .register_complete(&reg_state, &client_data, &att_obj)
         .expect("Registration verification failed");
 
     let cred_data = auth_data
@@ -120,11 +120,19 @@ fn main() {
         .expect("Failed to create authentication options");
 
     println!("Authenticating...");
-    let result = client
+    let selection = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
 
-    let assertion = &result.assertions[0];
+    let response = selection.get_response(0);
+    let client_data = response
+        .response
+        .client_data()
+        .expect("Invalid client data");
+    let auth_data = response
+        .response
+        .authenticator_data()
+        .expect("Invalid authenticator data");
 
     let credentials = vec![(
         cred_data.credential_id.clone(),
@@ -134,15 +142,15 @@ fn main() {
         .authenticate_complete(
             &auth_state,
             &credentials,
-            &cred_data.credential_id,
-            &result.client_data,
-            &assertion.auth_data,
-            &assertion.signature,
+            &response.raw_id,
+            &client_data,
+            &auth_data,
+            &response.response.signature,
         )
         .expect("Authentication verification failed");
 
     println!("Credential authenticated!");
-    println!("UP: {}", assertion.auth_data.is_user_present());
-    println!("UV: {}", assertion.auth_data.is_user_verified());
-    println!("Sign count: {}", assertion.auth_data.counter);
+    println!("UP: {}", auth_data.is_user_present());
+    println!("UV: {}", auth_data.is_user_verified());
+    println!("Sign count: {}", auth_data.counter);
 }

@@ -126,8 +126,11 @@ fn main() {
         .expect("Registration failed");
 
     // Check credBlob was stored (via authenticator extensions in auth_data)
-    let cred_blob_stored = result
-        .attestation
+    let att_obj = result
+        .response
+        .attestation_object()
+        .expect("Invalid attestation object");
+    let cred_blob_stored = att_obj
         .auth_data
         .extensions
         .as_ref()
@@ -156,15 +159,18 @@ fn main() {
     };
 
     println!("Authenticating to read back credBlob...");
-    let result = client
+    let selection = client
         .get_assertion(&auth_options)
         .expect("Authentication failed");
 
-    let assertion = &result.assertions[0];
+    let response = selection.get_response(0);
+    let auth_data = response
+        .response
+        .authenticator_data()
+        .expect("Invalid authenticator data");
 
     // Read credBlob from assertion extensions
-    let blob_result = assertion
-        .auth_data
+    let blob_result = auth_data
         .extensions
         .as_ref()
         .and_then(|ext| ext.map_get_text("credBlob"))
