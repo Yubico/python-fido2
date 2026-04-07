@@ -839,6 +839,127 @@ pub struct PublicKeyCredentialRequestOptions {
     pub extensions: Option<serde_json::Value>,
 }
 
+// --- Response types (JSON from the browser) ---
+
+/// Attestation response from the authenticator (registration).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticatorAttestationResponse {
+    /// Raw client data JSON bytes (base64url-encoded in JSON).
+    #[serde(rename = "clientDataJSON", with = "base64url_bytes")]
+    pub client_data_json: Vec<u8>,
+    /// Raw attestation object bytes (base64url-encoded in JSON).
+    #[serde(with = "base64url_bytes")]
+    pub attestation_object: Vec<u8>,
+    /// Transports supported by the authenticator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transports: Option<Vec<AuthenticatorTransport>>,
+}
+
+impl AuthenticatorAttestationResponse {
+    /// Parse the client data JSON.
+    pub fn client_data(&self) -> Result<CollectedClientData, WebauthnError> {
+        CollectedClientData::from_bytes(&self.client_data_json)
+    }
+
+    /// Parse the attestation object.
+    pub fn attestation_object(&self) -> Result<AttestationObject, WebauthnError> {
+        AttestationObject::from_bytes(&self.attestation_object)
+    }
+}
+
+/// Assertion response from the authenticator (authentication).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticatorAssertionResponse {
+    /// Raw client data JSON bytes (base64url-encoded in JSON).
+    #[serde(rename = "clientDataJSON", with = "base64url_bytes")]
+    pub client_data_json: Vec<u8>,
+    /// Raw authenticator data bytes (base64url-encoded in JSON).
+    #[serde(with = "base64url_bytes")]
+    pub authenticator_data: Vec<u8>,
+    /// Signature bytes (base64url-encoded in JSON).
+    #[serde(with = "base64url_bytes")]
+    pub signature: Vec<u8>,
+    /// User handle (base64url-encoded in JSON), if any.
+    #[serde(default, with = "base64url_bytes_option")]
+    pub user_handle: Option<Vec<u8>>,
+}
+
+impl AuthenticatorAssertionResponse {
+    /// Parse the client data JSON.
+    pub fn client_data(&self) -> Result<CollectedClientData, WebauthnError> {
+        CollectedClientData::from_bytes(&self.client_data_json)
+    }
+
+    /// Parse the authenticator data.
+    pub fn authenticator_data(&self) -> Result<AuthenticatorData, WebauthnError> {
+        AuthenticatorData::from_bytes(&self.authenticator_data)
+    }
+}
+
+/// Full registration response from the browser (RegistrationResponseJSON).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistrationResponse {
+    /// Credential ID (base64url string).
+    pub id: String,
+    /// Raw credential ID (base64url-encoded in JSON).
+    #[serde(with = "base64url_bytes")]
+    pub raw_id: Vec<u8>,
+    /// The attestation response.
+    pub response: AuthenticatorAttestationResponse,
+    /// Authenticator attachment, if reported.
+    #[serde(default)]
+    pub authenticator_attachment: Option<AuthenticatorAttachment>,
+    /// Client extension results.
+    #[serde(default)]
+    pub client_extension_results: Option<serde_json::Value>,
+    /// Credential type (always "public-key").
+    #[serde(default, rename = "type")]
+    pub type_: Option<PublicKeyCredentialType>,
+}
+
+/// Full authentication response from the browser (AuthenticationResponseJSON).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticationResponse {
+    /// Credential ID (base64url string).
+    pub id: String,
+    /// Raw credential ID (base64url-encoded in JSON).
+    #[serde(with = "base64url_bytes")]
+    pub raw_id: Vec<u8>,
+    /// The assertion response.
+    pub response: AuthenticatorAssertionResponse,
+    /// Authenticator attachment, if reported.
+    #[serde(default)]
+    pub authenticator_attachment: Option<AuthenticatorAttachment>,
+    /// Client extension results.
+    #[serde(default)]
+    pub client_extension_results: Option<serde_json::Value>,
+    /// Credential type (always "public-key").
+    #[serde(default, rename = "type")]
+    pub type_: Option<PublicKeyCredentialType>,
+}
+
+// --- Options wrapper types ---
+
+/// Wrapper for `PublicKeyCredentialCreationOptions` with the `publicKey` key,
+/// as expected by the WebAuthn browser API.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialCreationOptions {
+    pub public_key: PublicKeyCredentialCreationOptions,
+}
+
+/// Wrapper for `PublicKeyCredentialRequestOptions` with the `publicKey` key,
+/// as expected by the WebAuthn browser API.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialRequestOptions {
+    pub public_key: PublicKeyCredentialRequestOptions,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
