@@ -27,12 +27,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Mapping, Sequence, Tuple, TypeVar
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, ed448, ed25519, padding, rsa
 
+from . import arkg
 from .utils import bytes2int, int2bytes
 
 if TYPE_CHECKING:
@@ -377,3 +378,87 @@ class ES256K(CoseKey):
                 -3: int2bytes(pn.y, 32),
             }
         )
+
+
+def _cose2key(cose: CoseKey, curve: ec.EllipticCurve) -> ec.EllipticCurvePublicKey:
+    return ec.EllipticCurvePublicNumbers(
+        bytes2int(cose[-2]), bytes2int(cose[-3]), curve
+    ).public_key()
+
+
+# ESP256-split using private key derived by ARKG-P256
+# https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#section-8.3
+ESP256_SPLIT_ARKG_PLACEHOLDER = -65539  # placeholder value
+
+
+class ARKG_P256_PLACEHOLDER(CoseKey):
+    """
+    https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#ARKG-P256
+
+    The identifier ARKG-P256 represents the following ARKG instance:
+
+        BL: Elliptic curve addition as described in Section 3.1 with the parameters:
+
+            crv: The NIST curve secp256r1 [SEC2].
+
+            hash-to-crv-suite: P256_XMD:SHA-256_SSWU_RO_ [RFC9380].
+
+            DST_ext: 'ARKG-P256'.
+
+        KEM: ECDH as described in Section 3.3 with the parameters:
+
+            crv: The NIST curve secp256r1 [SEC2].
+
+            Hash: SHA-256 [FIPS 180-4].
+
+            hash-to-crv-suite: P256_XMD:SHA-256_SSWU_RO_ [RFC9380].
+
+            DST_ext: 'ARKG-P256'.
+    """
+
+    ALGORITHM = -65700  # placeholder value
+
+    _CRV = ec.SECP256R1()
+    _ARKG = arkg._ARKG(
+        bl=arkg._BL(crv=_CRV, Hash=hashes.SHA256(), DST_ext=b"ARKG-P256"),
+        kem=arkg._KEM(crv=_CRV, Hash=hashes.SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
+    )
+
+    @property
+    def pk_bl(self) -> CoseKey:
+        return CoseKey.parse(self[-1])
+
+    @property
+    def pk_kem(self) -> CoseKey:
+        return CoseKey.parse(self[-2])
+
+    def derive_public_key(self, ikm: bytes, ctx: bytes) -> Tuple[CoseKey, Mapping]:
+        pk, kh = self._ARKG.derive_public_key(
+            _cose2key(self.pk_bl, self._CRV),
+            _cose2key(self.pk_kem, self._CRV),
+            ikm,
+            ctx,
+        )
+        point_enc = pk.public_bytes(
+            serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+        )
+        ln = (len(point_enc) - 1) // 2
+
+        pk_cose = ESP256(
+            {
+                1: 2,  # kty: EC
+                3: self[-3],  # alg: derived key alg (key -3) from seed (value -9)
+                -1: 1,
+                -2: point_enc[1 : ln + 1],  # x-coordinate
+                -3: point_enc[1 + ln :],  # y-coordinate
+            }
+        )
+
+        # COSE_Sign_Args: https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#name-cose-signing-arguments
+        args = {
+            3: ESP256_SPLIT_ARKG_PLACEHOLDER,
+            -1: kh,
+            -2: ctx,
+        }
+
+        return pk_cose, args
