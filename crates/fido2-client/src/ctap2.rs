@@ -432,16 +432,16 @@ impl AssertionResponse {
 }
 
 /// CTAP2 protocol implementation.
-pub struct Ctap2<'a> {
-    device: &'a dyn CtapDevice,
+pub struct Ctap2<D: CtapDevice> {
+    device: D,
     strict_cbor: bool,
     max_msg_size: usize,
     info: Info,
 }
 
-impl<'a> Ctap2<'a> {
+impl<D: CtapDevice> Ctap2<D> {
     /// Create a new Ctap2 instance, performing initial GET_INFO.
-    pub fn new(device: &'a dyn CtapDevice, strict_cbor: bool) -> Result<Self, CtapError> {
+    pub fn new(device: D, strict_cbor: bool) -> Result<Self, CtapError> {
         if device.capabilities() & capability::CBOR == 0 {
             return Err(CtapError::InvalidResponse(
                 "Device does not support CTAP2".into(),
@@ -462,15 +462,21 @@ impl<'a> Ctap2<'a> {
         Ok(ctap)
     }
 
-    /// Create from parts without calling GET_INFO.
-    /// Used when info is already cached (e.g., from PyO3 wrapper).
-    pub fn from_parts(device: &'a dyn CtapDevice, strict_cbor: bool, max_msg_size: usize) -> Self {
+    /// Create a Ctap2 from parts without calling get_info.
+    ///
+    /// Caller must call `set_info()` afterwards to set authenticator info.
+    pub fn from_parts(device: D, strict_cbor: bool, max_msg_size: usize) -> Self {
         Self {
             device,
             strict_cbor,
             max_msg_size,
             info: Info::from_cbor(&[]),
         }
+    }
+
+    /// Consume the Ctap2 and return the owned device.
+    pub fn into_device(self) -> D {
+        self.device
     }
 
     /// Update cached authenticator info.
@@ -483,14 +489,19 @@ impl<'a> Ctap2<'a> {
         &self.info
     }
 
-    /// Get the underlying device.
-    pub fn device(&self) -> &dyn CtapDevice {
-        self.device
+    /// Get a reference to the underlying device.
+    pub fn device(&self) -> &D {
+        &self.device
+    }
+
+    /// Get a mutable reference to the underlying device.
+    pub fn device_mut(&mut self) -> &mut D {
+        &mut self.device
     }
 
     /// Send a CBOR command and receive the decoded response.
     pub fn send_cbor(
-        &self,
+        &mut self,
         cmd_byte: u8,
         data: Option<&Value>,
         on_keepalive: &mut dyn FnMut(u8),
@@ -539,7 +550,7 @@ impl<'a> Ctap2<'a> {
     }
 
     /// GET_INFO command.
-    pub fn get_info(&self) -> Result<Info, CtapError> {
+    pub fn get_info(&mut self) -> Result<Info, CtapError> {
         let resp = self.send_cbor(ctap2_cmd::GET_INFO, None, &mut |_| {}, None)?;
         match resp {
             Value::Map(entries) => Ok(Info::from_cbor(&entries)),
@@ -550,7 +561,7 @@ impl<'a> Ctap2<'a> {
     /// clientPin command.
     #[allow(clippy::too_many_arguments)]
     pub fn client_pin(
-        &self,
+        &mut self,
         pin_uv_protocol: u32,
         sub_cmd: u32,
         key_agreement: Option<Value>,
@@ -580,7 +591,7 @@ impl<'a> Ctap2<'a> {
     /// makeCredential command.
     #[allow(clippy::too_many_arguments)]
     pub fn make_credential(
-        &self,
+        &mut self,
         client_data_hash: &[u8],
         rp: Value,
         user: Value,
@@ -623,7 +634,7 @@ impl<'a> Ctap2<'a> {
     /// getAssertion command.
     #[allow(clippy::too_many_arguments)]
     pub fn get_assertion(
-        &self,
+        &mut self,
         rp_id: &str,
         client_data_hash: &[u8],
         allow_list: Option<Value>,
@@ -653,7 +664,7 @@ impl<'a> Ctap2<'a> {
     }
 
     /// getNextAssertion command.
-    pub fn get_next_assertion(&self) -> Result<AssertionResponse, CtapError> {
+    pub fn get_next_assertion(&mut self) -> Result<AssertionResponse, CtapError> {
         let resp = self.send_cbor(ctap2_cmd::GET_NEXT_ASSERTION, None, &mut |_| {}, None)?;
         match resp {
             Value::Map(entries) => AssertionResponse::from_cbor(&entries)
@@ -665,7 +676,7 @@ impl<'a> Ctap2<'a> {
     /// Get all assertions (first + next).
     #[allow(clippy::too_many_arguments)]
     pub fn get_assertions(
-        &self,
+        &mut self,
         rp_id: &str,
         client_data_hash: &[u8],
         allow_list: Option<Value>,
@@ -698,7 +709,7 @@ impl<'a> Ctap2<'a> {
 
     /// selection command.
     pub fn selection(
-        &self,
+        &mut self,
         on_keepalive: &mut dyn FnMut(u8),
         cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<(), CtapError> {
@@ -708,7 +719,7 @@ impl<'a> Ctap2<'a> {
 
     /// reset command.
     pub fn reset(
-        &self,
+        &mut self,
         on_keepalive: &mut dyn FnMut(u8),
         cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<(), CtapError> {
@@ -720,7 +731,7 @@ impl<'a> Ctap2<'a> {
     ///
     /// Automatically determines the command byte from cached device info.
     pub fn credential_mgmt(
-        &self,
+        &mut self,
         sub_cmd: Value,
         sub_cmd_params: Option<Value>,
         pin_uv_protocol: Option<Value>,
@@ -748,7 +759,7 @@ impl<'a> Ctap2<'a> {
     /// Automatically determines the command byte from cached device info.
     #[allow(clippy::too_many_arguments)]
     pub fn bio_enrollment(
-        &self,
+        &mut self,
         modality: Option<Value>,
         sub_cmd: Option<Value>,
         sub_cmd_params: Option<Value>,
@@ -786,7 +797,7 @@ impl<'a> Ctap2<'a> {
     /// largeBlobs command.
     #[allow(clippy::too_many_arguments)]
     pub fn large_blobs(
-        &self,
+        &mut self,
         offset: u64,
         get: Option<u64>,
         set: Option<&[u8]>,
@@ -809,7 +820,7 @@ impl<'a> Ctap2<'a> {
 
     /// authenticatorConfig command.
     pub fn config(
-        &self,
+        &mut self,
         sub_cmd: Value,
         sub_cmd_params: Option<Value>,
         pin_uv_protocol: Option<Value>,

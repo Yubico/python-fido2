@@ -37,7 +37,7 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::ctap::CtapError;
+use crate::ctap::{CtapDevice, CtapError};
 use crate::ctap2::{Ctap2, Info};
 use fido2_server::cbor::Value;
 use fido2_server::utils;
@@ -327,6 +327,59 @@ impl PinProtocol {
     }
 }
 
+/// Get key agreement and shared secret from the authenticator.
+///
+/// This is a free function that works with `&mut Ctap2<D>` directly,
+/// unlike `ClientPin::_get_shared_secret` which requires ownership.
+pub fn get_shared_secret<D: CtapDevice>(
+    ctap: &mut Ctap2<D>,
+    protocol: &PinProtocol,
+) -> Result<(CoseKeyAgreement, Vec<u8>), CtapError> {
+    let resp = ctap.client_pin(
+        protocol.version(),
+        client_pin_cmd::GET_KEY_AGREEMENT,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        &mut |_| {},
+        None,
+    )?;
+
+    let map = match &resp {
+        Value::Map(m) => m,
+        _ => {
+            return Err(CtapError::InvalidResponse(
+                "Expected map response".to_string(),
+            ));
+        }
+    };
+
+    let ka = cbor_map_get(map, client_pin_result::KEY_AGREEMENT)
+        .ok_or_else(|| CtapError::InvalidResponse("Missing key agreement".to_string()))?;
+
+    let ka_map = match ka {
+        Value::Map(m) => m,
+        _ => {
+            return Err(CtapError::InvalidResponse(
+                "Key agreement is not a map".to_string(),
+            ));
+        }
+    };
+
+    let peer_x = cbor_map_get(ka_map, -2)
+        .and_then(|v| v.as_bytes())
+        .ok_or_else(|| CtapError::InvalidResponse("Missing peer x".to_string()))?;
+    let peer_y = cbor_map_get(ka_map, -3)
+        .and_then(|v| v.as_bytes())
+        .ok_or_else(|| CtapError::InvalidResponse("Missing peer y".to_string()))?;
+
+    let (key_agreement, shared_secret) = protocol.encapsulate(peer_x, peer_y)?;
+    Ok((key_agreement, shared_secret))
+}
+
 /// Sub-command identifiers for the clientPin CTAP2 command.
 pub mod client_pin_cmd {
     pub const GET_PIN_RETRIES: u32 = 0x01;
@@ -377,12 +430,12 @@ fn pad_pin(pin: &str) -> Result<Vec<u8>, PinError> {
 }
 
 /// High-level client for the CTAP2 clientPin command.
-pub struct ClientPin<'a> {
-    ctap: &'a Ctap2<'a>,
+pub struct ClientPin<D: CtapDevice> {
+    ctap: Ctap2<D>,
     protocol: PinProtocol,
 }
 
-impl<'a> ClientPin<'a> {
+impl<D: CtapDevice> ClientPin<D> {
     /// Checks if ClientPin functionality is supported.
     pub fn is_supported(info: &Info) -> bool {
         info.options.contains_key("clientPin")
@@ -397,7 +450,7 @@ impl<'a> ClientPin<'a> {
     ///
     /// If `protocol` is None, the best supported protocol is chosen
     /// (preferring V2 over V1).
-    pub fn new(ctap: &'a Ctap2<'a>, protocol: Option<PinProtocol>) -> Result<Self, CtapError> {
+    pub fn new(ctap: Ctap2<D>, protocol: Option<PinProtocol>) -> Result<Self, CtapError> {
         let protocol = match protocol {
             Some(p) => p,
             None => {
@@ -416,13 +469,28 @@ impl<'a> ClientPin<'a> {
         Ok(Self { ctap, protocol })
     }
 
+    /// Consume the ClientPin and return the owned Ctap2.
+    pub fn into_ctap(self) -> Ctap2<D> {
+        self.ctap
+    }
+
+    /// Get a reference to the underlying Ctap2.
+    pub fn ctap(&self) -> &Ctap2<D> {
+        &self.ctap
+    }
+
+    /// Get a mutable reference to the underlying Ctap2.
+    pub fn ctap_mut(&mut self) -> &mut Ctap2<D> {
+        &mut self.ctap
+    }
+
     /// Get a reference to the current protocol.
     pub fn protocol(&self) -> &PinProtocol {
         &self.protocol
     }
 
     /// Get the key agreement and shared secret from the authenticator.
-    pub fn _get_shared_secret(&self) -> Result<(CoseKeyAgreement, Vec<u8>), CtapError> {
+    pub fn _get_shared_secret(&mut self) -> Result<(CoseKeyAgreement, Vec<u8>), CtapError> {
         let resp = self.ctap.client_pin(
             self.protocol.version(),
             client_pin_cmd::GET_KEY_AGREEMENT,
@@ -470,7 +538,7 @@ impl<'a> ClientPin<'a> {
 
     /// Get a PIN/UV token using a PIN.
     pub fn get_pin_token(
-        &self,
+        &mut self,
         pin: &str,
         permissions: Option<u32>,
         permissions_rpid: Option<&str>,
@@ -530,7 +598,7 @@ impl<'a> ClientPin<'a> {
 
     /// Get a PIN/UV token using built-in user verification.
     pub fn get_uv_token(
-        &self,
+        &mut self,
         permissions: u32,
         permissions_rpid: Option<&str>,
         on_keepalive: &mut dyn FnMut(u8),
@@ -570,7 +638,7 @@ impl<'a> ClientPin<'a> {
     }
 
     /// Get the number of PIN retries remaining.
-    pub fn get_pin_retries(&self) -> Result<(u32, Option<u32>), CtapError> {
+    pub fn get_pin_retries(&mut self) -> Result<(u32, Option<u32>), CtapError> {
         let resp = self.ctap.client_pin(
             self.protocol.version(),
             client_pin_cmd::GET_PIN_RETRIES,
@@ -606,7 +674,7 @@ impl<'a> ClientPin<'a> {
     }
 
     /// Get the number of UV retries remaining.
-    pub fn get_uv_retries(&self) -> Result<u32, CtapError> {
+    pub fn get_uv_retries(&mut self) -> Result<u32, CtapError> {
         let resp = self.ctap.client_pin(
             self.protocol.version(),
             client_pin_cmd::GET_UV_RETRIES,
@@ -638,7 +706,7 @@ impl<'a> ClientPin<'a> {
     }
 
     /// Set a new PIN (when no PIN is currently set).
-    pub fn set_pin(&self, pin: &str) -> Result<(), CtapError> {
+    pub fn set_pin(&mut self, pin: &str) -> Result<(), CtapError> {
         let padded = pad_pin(pin)?;
 
         let (key_agreement, shared_secret) = self._get_shared_secret()?;
@@ -662,7 +730,7 @@ impl<'a> ClientPin<'a> {
     }
 
     /// Change an existing PIN.
-    pub fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), CtapError> {
+    pub fn change_pin(&mut self, old_pin: &str, new_pin: &str) -> Result<(), CtapError> {
         let padded = pad_pin(new_pin)?;
 
         let (key_agreement, shared_secret) = self._get_shared_secret()?;

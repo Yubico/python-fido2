@@ -137,18 +137,23 @@ impl SignatureData {
 }
 
 /// CTAP1/U2F protocol implementation.
-pub struct Ctap1<'a> {
-    device: &'a dyn CtapDevice,
+pub struct Ctap1<D: CtapDevice> {
+    device: D,
 }
 
-impl<'a> Ctap1<'a> {
-    pub fn new(device: &'a dyn CtapDevice) -> Self {
+impl<D: CtapDevice> Ctap1<D> {
+    pub fn new(device: D) -> Self {
         Self { device }
+    }
+
+    /// Consume the Ctap1 and return the owned device.
+    pub fn into_device(self) -> D {
+        self.device
     }
 
     /// Pack and send an APDU, return the response data.
     pub fn send_apdu(
-        &self,
+        &mut self,
         cla: u8,
         ins: u8,
         p1: u8,
@@ -189,14 +194,14 @@ impl<'a> Ctap1<'a> {
     }
 
     /// Get the U2F version string.
-    pub fn get_version(&self) -> Result<String, ApduError> {
+    pub fn get_version(&mut self) -> Result<String, ApduError> {
         let data = self.send_apdu(0, ins::VERSION, 0, 0, b"")?;
         String::from_utf8(data).map_err(|e| ApduError::new(0, e.to_string().into_bytes()))
     }
 
     /// Register a new U2F credential.
     pub fn register(
-        &self,
+        &mut self,
         client_param: &[u8],
         app_param: &[u8],
     ) -> Result<RegistrationData, ApduError> {
@@ -210,7 +215,7 @@ impl<'a> Ctap1<'a> {
 
     /// Authenticate with a previously registered credential.
     pub fn authenticate(
-        &self,
+        &mut self,
         client_param: &[u8],
         app_param: &[u8],
         key_handle: &[u8],

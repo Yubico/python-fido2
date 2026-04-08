@@ -448,7 +448,7 @@ impl CtapHidConnection {
 
 impl crate::ctap::CtapDevice for CtapHidConnection {
     fn call(
-        &self,
+        &mut self,
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),

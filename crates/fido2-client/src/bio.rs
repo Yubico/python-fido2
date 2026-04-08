@@ -27,7 +27,7 @@
 
 //! CTAP2 Bio Enrollment API.
 
-use crate::ctap::CtapError;
+use crate::ctap::{CtapDevice, CtapError};
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
 use fido2_server::cbor::{self, Value};
@@ -72,19 +72,19 @@ pub mod template_info {
 }
 
 /// Fingerprint Bio Enrollment API.
-pub struct FPBioEnrollment<'a> {
-    ctap: &'a Ctap2<'a>,
-    protocol: &'a PinProtocol,
-    pin_uv_token: &'a [u8],
+pub struct FPBioEnrollment<D: CtapDevice> {
+    ctap: Ctap2<D>,
+    protocol: PinProtocol,
+    pin_uv_token: Vec<u8>,
     modality: u32,
 }
 
-impl<'a> FPBioEnrollment<'a> {
+impl<D: CtapDevice> FPBioEnrollment<D> {
     /// Create a new FPBioEnrollment instance.
     pub fn new(
-        ctap: &'a Ctap2<'a>,
-        protocol: &'a PinProtocol,
-        pin_uv_token: &'a [u8],
+        mut ctap: Ctap2<D>,
+        protocol: PinProtocol,
+        pin_uv_token: Vec<u8>,
     ) -> Result<Self, CtapError> {
         // Verify modality
         let modality_resp = ctap.bio_enrollment(
@@ -114,11 +114,11 @@ impl<'a> FPBioEnrollment<'a> {
         })
     }
 
-    /// Create without validation (for PyO3 wrappers).
+    /// Create from parts without checking modality.
     pub fn from_parts(
-        ctap: &'a Ctap2<'a>,
-        protocol: &'a PinProtocol,
-        pin_uv_token: &'a [u8],
+        ctap: Ctap2<D>,
+        protocol: PinProtocol,
+        pin_uv_token: Vec<u8>,
         modality: u32,
     ) -> Self {
         Self {
@@ -129,8 +129,23 @@ impl<'a> FPBioEnrollment<'a> {
         }
     }
 
+    /// Consume and return the owned Ctap2.
+    pub fn into_ctap(self) -> Ctap2<D> {
+        self.ctap
+    }
+
+    /// Get a reference to the underlying Ctap2.
+    pub fn ctap(&self) -> &Ctap2<D> {
+        &self.ctap
+    }
+
+    /// Get a mutable reference to the underlying Ctap2.
+    pub fn ctap_mut(&mut self) -> &mut Ctap2<D> {
+        &mut self.ctap
+    }
+
     fn _call(
-        &self,
+        &mut self,
         sub_cmd: u32,
         params: Option<Value>,
         auth: bool,
@@ -145,7 +160,7 @@ impl<'a> FPBioEnrollment<'a> {
             (
                 Some(Value::Int(self.protocol.version() as i64)),
                 Some(Value::Bytes(
-                    self.protocol.authenticate(self.pin_uv_token, &msg),
+                    self.protocol.authenticate(&self.pin_uv_token, &msg),
                 )),
             )
         } else {
@@ -165,7 +180,7 @@ impl<'a> FPBioEnrollment<'a> {
 
     /// Get fingerprint sensor info.
     pub fn get_fingerprint_sensor_info(
-        &self,
+        &mut self,
         on_keepalive: &mut dyn FnMut(u8),
         cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Value, CtapError> {
@@ -175,7 +190,7 @@ impl<'a> FPBioEnrollment<'a> {
     /// Begin fingerprint enrollment.
     /// Returns (template_id, last_sample_status, remaining_samples).
     pub fn enroll_begin(
-        &self,
+        &mut self,
         timeout: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
         cancel: Option<&dyn Fn() -> bool>,
@@ -201,7 +216,7 @@ impl<'a> FPBioEnrollment<'a> {
     /// Capture next fingerprint sample.
     /// Returns (last_sample_status, remaining_samples).
     pub fn enroll_capture_next(
-        &self,
+        &mut self,
         template_id: &[u8],
         timeout: Option<u32>,
         on_keepalive: &mut dyn FnMut(u8),
@@ -232,19 +247,19 @@ impl<'a> FPBioEnrollment<'a> {
     }
 
     /// Cancel ongoing enrollment.
-    pub fn enroll_cancel(&self) -> Result<(), CtapError> {
+    pub fn enroll_cancel(&mut self) -> Result<(), CtapError> {
         self._call(fp_cmd::ENROLL_CANCEL, None, false, &mut |_| {}, None)?;
         Ok(())
     }
 
     /// Enumerate enrolled fingerprints.
     /// Returns the raw response Value containing template infos.
-    pub fn enumerate_enrollments(&self) -> Result<Value, CtapError> {
+    pub fn enumerate_enrollments(&mut self) -> Result<Value, CtapError> {
         self._call(fp_cmd::ENUMERATE_ENROLLMENTS, None, true, &mut |_| {}, None)
     }
 
     /// Set name for a template.
-    pub fn set_name(&self, template_id: &[u8], name: &str) -> Result<(), CtapError> {
+    pub fn set_name(&mut self, template_id: &[u8], name: &str) -> Result<(), CtapError> {
         let params = Value::Map(vec![
             (
                 Value::Int(template_info::ID),
@@ -260,7 +275,7 @@ impl<'a> FPBioEnrollment<'a> {
     }
 
     /// Remove an enrollment.
-    pub fn remove_enrollment(&self, template_id: &[u8]) -> Result<(), CtapError> {
+    pub fn remove_enrollment(&mut self, template_id: &[u8]) -> Result<(), CtapError> {
         let params = Value::Map(vec![(
             Value::Int(template_info::ID),
             Value::Bytes(template_id.to_vec()),

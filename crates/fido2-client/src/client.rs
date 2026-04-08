@@ -37,6 +37,7 @@ use crate::ctap1;
 use crate::ctap2::{self, AssertionResponse, AttestationResponse, Info};
 use crate::extensions::{
     AuthenticationExtensionProcessor, Ctap2Extension, ExtensionInputs, ExtensionOutputs,
+    RegistrationExtensionProcessor,
 };
 use crate::pin::{ClientPin, PinProtocol};
 use fido2_server::cbor::Value;
@@ -143,8 +144,8 @@ pub fn should_use_uv(
 }
 
 /// Filter a credential list against the authenticator.
-pub fn filter_creds(
-    ctap: &ctap2::Ctap2,
+pub fn filter_creds<D: CtapDevice>(
+    ctap: &mut ctap2::Ctap2<D>,
     rp_id: &str,
     cred_list: &[Value],
     pin_auth: Option<&[u8]>,
@@ -227,9 +228,9 @@ pub fn filter_creds(
 
 /// Get a PIN/UV token from the authenticator.
 #[allow(clippy::too_many_arguments)]
-pub fn get_token(
+pub fn get_token<D: CtapDevice>(
     info: &Info,
-    client_pin: &ClientPin,
+    client_pin: &mut ClientPin<D>,
     permissions: u32,
     rp_id: Option<&str>,
     on_keepalive: &mut dyn FnMut(u8),
@@ -264,9 +265,12 @@ pub fn get_token(
 }
 
 /// Get auth parameters (pin_token, internal_uv) for a CTAP2 operation.
+///
+/// Takes ownership of the `Ctap2` to create a temporary `ClientPin`, then
+/// returns the `Ctap2` back along with the result.
 #[allow(clippy::too_many_arguments)]
-pub fn get_auth_params(
-    ctap: &ctap2::Ctap2,
+pub fn get_auth_params<D: CtapDevice>(
+    mut ctap: ctap2::Ctap2<D>,
     rp_id: &str,
     user_verification: Option<&str>,
     permissions: u32,
@@ -274,7 +278,7 @@ pub fn get_auth_params(
     on_keepalive: &mut dyn FnMut(u8),
     user_interaction: &dyn UserInteraction,
     pin_protocol_version: Option<u32>,
-) -> Result<(Option<Vec<u8>>, bool), ClientError> {
+) -> Result<(ctap2::Ctap2<D>, Option<Vec<u8>>, bool), ClientError> {
     let info = ctap.get_info()?;
 
     let mut pin_token = None;
@@ -290,14 +294,14 @@ pub fn get_auth_params(
             .ok_or_else(|| {
                 ClientError::ConfigurationUnsupported("No PIN/UV protocol available".into())
             })?;
-        let client_pin = ClientPin::new(ctap, Some(protocol))?;
+        let mut client_pin = ClientPin::new(ctap, Some(protocol))?;
 
         let allow_internal_uv =
             permissions & !(permission::MAKE_CREDENTIAL | permission::GET_ASSERTION) == 0;
 
         let token = get_token(
             &info,
-            &client_pin,
+            &mut client_pin,
             permissions,
             Some(rp_id),
             on_keepalive,
@@ -310,9 +314,10 @@ pub fn get_auth_params(
             internal_uv = true;
         }
         pin_token = token;
+        ctap = client_pin.into_ctap();
     }
 
-    Ok((pin_token, internal_uv))
+    Ok((ctap, pin_token, internal_uv))
 }
 
 // ---------------------------------------------------------------------------
@@ -494,11 +499,11 @@ pub trait ClientBackend {
     fn info(&self) -> &Info;
 
     /// Perform authenticator selection (touch).
-    fn selection(&self) -> Result<(), ClientError>;
+    fn selection(&mut self) -> Result<(), ClientError>;
 
     /// Create a credential with pre-computed client data hash and RP ID.
     fn do_make_credential(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialCreationOptions,
         client_data_hash: &[u8],
         rp_id: &str,
@@ -506,7 +511,7 @@ pub trait ClientBackend {
 
     /// Get assertions with pre-computed client data hash and RP ID.
     fn do_get_assertion(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialRequestOptions,
         client_data_hash: &[u8],
         rp_id: &str,
@@ -521,14 +526,14 @@ pub trait ClientBackend {
 const CTAP1_POLL_DELAY: Duration = Duration::from_millis(250);
 
 /// CTAP1/U2F backend.
-pub struct Ctap1Backend<'a> {
-    ctap1: ctap1::Ctap1<'a>,
+pub struct Ctap1Backend<D: CtapDevice> {
+    ctap1: ctap1::Ctap1<D>,
     info: Info,
-    interaction: &'a dyn UserInteraction,
+    interaction: Box<dyn UserInteraction>,
 }
 
-impl<'a> Ctap1Backend<'a> {
-    pub fn new(device: &'a dyn CtapDevice, interaction: &'a dyn UserInteraction) -> Self {
+impl<D: CtapDevice> Ctap1Backend<D> {
+    pub fn new(device: D, interaction: Box<dyn UserInteraction>) -> Self {
         let ctap1 = ctap1::Ctap1::new(device);
         let info = Info {
             versions: vec!["U2F_V2".into()],
@@ -542,14 +547,19 @@ impl<'a> Ctap1Backend<'a> {
         }
     }
 
+    /// Consume and return the owned device.
+    pub fn into_device(self) -> D {
+        self.ctap1.into_device()
+    }
+
     /// Poll a CTAP1 operation until it succeeds or fails.
-    fn call_polling<F, T>(&self, mut func: F) -> Result<T, ClientError>
+    fn call_polling<F, T>(&mut self, mut func: F) -> Result<T, ClientError>
     where
-        F: FnMut() -> Result<T, ApduError>,
+        F: FnMut(&mut ctap1::Ctap1<D>) -> Result<T, ApduError>,
     {
         let mut prompted = false;
         loop {
-            match func() {
+            match func(&mut self.ctap1) {
                 Ok(result) => return Ok(result),
                 Err(e) if e.code == apdu::USE_NOT_SATISFIED => {
                     if !prompted {
@@ -569,19 +579,19 @@ impl<'a> Ctap1Backend<'a> {
     }
 }
 
-impl ClientBackend for Ctap1Backend<'_> {
+impl<D: CtapDevice> ClientBackend for Ctap1Backend<D> {
     fn info(&self) -> &Info {
         &self.info
     }
 
-    fn selection(&self) -> Result<(), ClientError> {
+    fn selection(&mut self) -> Result<(), ClientError> {
         let dummy = [0u8; 32];
-        self.call_polling(|| self.ctap1.register(&dummy, &dummy))?;
+        self.call_polling(|ctap1| ctap1.register(&dummy, &dummy))?;
         Ok(())
     }
 
     fn do_make_credential(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialCreationOptions,
         client_data_hash: &[u8],
         rp_id: &str,
@@ -628,7 +638,7 @@ impl ClientBackend for Ctap1Backend<'_> {
                 {
                     Err(e) if e.code == apdu::USE_NOT_SATISFIED => {
                         // Credential exists — register with dummy to prompt UP, then fail
-                        self.call_polling(|| self.ctap1.register(&dummy_param, &dummy_param))?;
+                        self.call_polling(|ctap1| ctap1.register(&dummy_param, &dummy_param))?;
                         return Err(ClientError::DeviceIneligible);
                     }
                     _ => {}
@@ -637,7 +647,7 @@ impl ClientBackend for Ctap1Backend<'_> {
         }
 
         let registration =
-            self.call_polling(|| self.ctap1.register(client_data_hash, &app_param))?;
+            self.call_polling(|ctap1| ctap1.register(client_data_hash, &app_param))?;
 
         let att_resp = AttestationResponse::from_ctap1(&app_param, &registration)
             .map_err(|e| ClientError::BadRequest(e.to_string()))?;
@@ -646,7 +656,7 @@ impl ClientBackend for Ctap1Backend<'_> {
     }
 
     fn do_get_assertion(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialRequestOptions,
         client_data_hash: &[u8],
         rp_id: &str,
@@ -672,9 +682,8 @@ impl ClientBackend for Ctap1Backend<'_> {
         let app_param = sha256(rp_id.as_bytes());
 
         for cred in allow_list {
-            match self.call_polling(|| {
-                self.ctap1
-                    .authenticate(client_data_hash, &app_param, &cred.id, false)
+            match self.call_polling(|ctap1| {
+                ctap1.authenticate(client_data_hash, &app_param, &cred.id, false)
             }) {
                 Ok(sig_data) => {
                     let cred_cbor = cred.to_cbor_value();
@@ -722,40 +731,65 @@ fn merge_extension_inputs(inputs: &ExtensionInputs) -> Value {
 }
 
 /// CTAP2 backend.
-pub struct Ctap2Backend<'a> {
-    ctap: ctap2::Ctap2<'a>,
-    extensions: Vec<Box<dyn Ctap2Extension>>,
-    interaction: &'a dyn UserInteraction,
+pub struct Ctap2Backend<D: CtapDevice> {
+    ctap: Option<ctap2::Ctap2<D>>,
+    extensions: Vec<Box<dyn Ctap2Extension<D>>>,
+    interaction: Box<dyn UserInteraction>,
     enterprise_rpid_list: Option<Vec<String>>,
 }
 
-impl<'a> Ctap2Backend<'a> {
+impl<D: CtapDevice> Ctap2Backend<D> {
     pub fn new(
-        device: &'a dyn CtapDevice,
-        interaction: &'a dyn UserInteraction,
-        extensions: Vec<Box<dyn Ctap2Extension>>,
+        device: D,
+        interaction: Box<dyn UserInteraction>,
+        extensions: Vec<Box<dyn Ctap2Extension<D>>>,
     ) -> Result<Self, CtapError> {
         let ctap = ctap2::Ctap2::new(device, false)?;
         Ok(Self {
-            ctap,
+            ctap: Some(ctap),
             extensions,
             interaction,
             enterprise_rpid_list: None,
         })
     }
 
-    pub fn from_parts(
-        device: &'a dyn CtapDevice,
-        strict_cbor: bool,
-        max_msg_size: usize,
-        interaction: &'a dyn UserInteraction,
-        extensions: Vec<Box<dyn Ctap2Extension>>,
+    /// Consume and return the owned Ctap2.
+    pub fn into_ctap(mut self) -> ctap2::Ctap2<D> {
+        self.ctap.take().expect("Ctap2 already taken")
+    }
+
+    /// Consume and return the owned device.
+    pub fn into_device(self) -> D {
+        self.into_ctap().into_device()
+    }
+
+    fn ctap(&self) -> &ctap2::Ctap2<D> {
+        self.ctap.as_ref().expect("Ctap2 already taken")
+    }
+
+    fn ctap_mut(&mut self) -> &mut ctap2::Ctap2<D> {
+        self.ctap.as_mut().expect("Ctap2 already taken")
+    }
+
+    fn take_ctap(&mut self) -> ctap2::Ctap2<D> {
+        self.ctap.take().expect("Ctap2 already taken")
+    }
+
+    fn restore_ctap(&mut self, ctap: ctap2::Ctap2<D>) {
+        self.ctap = Some(ctap);
+    }
+
+    /// Create from a pre-existing Ctap2, for PyO3 per-call reconstruction.
+    pub fn from_ctap(
+        ctap: ctap2::Ctap2<D>,
+        interaction: Box<dyn UserInteraction>,
+        extensions: Vec<Box<dyn Ctap2Extension<D>>>,
         info: Info,
     ) -> Self {
-        let mut ctap = ctap2::Ctap2::from_parts(device, strict_cbor, max_msg_size);
-        ctap.set_info(info);
+        let mut c = ctap;
+        c.set_info(info);
         Self {
-            ctap,
+            ctap: Some(c),
             extensions,
             interaction,
             enterprise_rpid_list: None,
@@ -776,19 +810,19 @@ impl<'a> Ctap2Backend<'a> {
 
     #[allow(clippy::type_complexity)]
     fn do_get_assertion_inner(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialRequestOptions,
         client_data_hash: &[u8],
         rp_id: &str,
     ) -> Result<
         (
             Vec<AssertionResponse>,
-            Vec<Box<dyn AuthenticationExtensionProcessor>>,
+            Vec<Box<dyn AuthenticationExtensionProcessor<D>>>,
             Option<Vec<u8>>,
         ),
         ClientError,
     > {
-        let info = self.ctap.get_info()?;
+        let info = self.ctap_mut().get_info()?;
         let pin_protocol = negotiate_pin_protocol(&info);
 
         let uv_requirement = options.user_verification.as_ref();
@@ -796,7 +830,7 @@ impl<'a> Ctap2Backend<'a> {
         let mut user_verification = uv_requirement.cloned();
 
         loop {
-            let mut used_extensions: Vec<Box<dyn AuthenticationExtensionProcessor>> = Vec::new();
+            let mut used_extensions: Vec<Box<dyn AuthenticationExtensionProcessor<D>>> = Vec::new();
             let mut permissions = permission::GET_ASSERTION;
 
             let allow_cbor: Option<Vec<Value>> = options
@@ -804,9 +838,10 @@ impl<'a> Ctap2Backend<'a> {
                 .as_ref()
                 .map(|creds| creds.iter().map(|d| d.to_cbor_value()).collect());
 
+            let ctap = self.ctap.as_mut().expect("Ctap2 already taken");
             for ext_factory in &self.extensions {
                 if let Some(proc) = ext_factory.get_assertion(
-                    &self.ctap,
+                    ctap,
                     options.extensions.as_ref(),
                     allow_cbor.as_deref(),
                     pin_protocol,
@@ -817,16 +852,18 @@ impl<'a> Ctap2Backend<'a> {
             }
 
             let uv_str = user_verification.as_ref().map(|uv| uv.as_str());
-            let (pin_token, internal_uv) = get_auth_params(
-                &self.ctap,
+            let ctap = self.take_ctap();
+            let (ctap, pin_token, internal_uv) = get_auth_params(
+                ctap,
                 rp_id,
                 uv_str,
                 permissions,
                 allow_uv,
                 &mut self.keepalive(),
-                self.interaction,
+                self.interaction.as_ref(),
                 pin_protocol.map(|p| p.version()),
             )?;
+            self.restore_ctap(ctap);
 
             // Filter allow list
             let selected_cred = if let Some(ref allow_list) = options.allow_credentials {
@@ -835,7 +872,7 @@ impl<'a> Ctap2Backend<'a> {
                     pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
                 });
                 filter_creds(
-                    &self.ctap,
+                    self.ctap_mut(),
                     rp_id,
                     &allow_cbor,
                     pin_auth_for_filter.as_deref(),
@@ -895,7 +932,14 @@ impl<'a> Ctap2Backend<'a> {
                 Some(merge_extension_inputs(&extension_inputs))
             };
 
-            match self.ctap.get_assertions(
+            let interaction = &*self.interaction;
+            let mut on_keepalive = |status: u8| {
+                if status == keepalive::UPNEEDED {
+                    interaction.prompt_up();
+                }
+            };
+            let ctap = self.ctap.as_mut().expect("Ctap2 already taken");
+            match ctap.get_assertions(
                 rp_id,
                 client_data_hash,
                 allow_list_val,
@@ -903,7 +947,7 @@ impl<'a> Ctap2Backend<'a> {
                 opts,
                 pin_uv_param.as_deref(),
                 pin_uv_protocol,
-                &mut self.keepalive(),
+                &mut on_keepalive,
                 None,
             ) {
                 Ok(assertions) => {
@@ -926,19 +970,26 @@ impl<'a> Ctap2Backend<'a> {
     }
 }
 
-impl ClientBackend for Ctap2Backend<'_> {
+impl<D: CtapDevice> ClientBackend for Ctap2Backend<D> {
     fn info(&self) -> &Info {
-        self.ctap.info()
+        self.ctap().info()
     }
 
-    fn selection(&self) -> Result<(), ClientError> {
-        let info = self.ctap.get_info()?;
+    fn selection(&mut self) -> Result<(), ClientError> {
+        let ctap = self.ctap.as_mut().expect("Ctap2 already taken");
+        let info = ctap.get_info()?;
+        let interaction = &*self.interaction;
+        let mut on_keepalive = |status: u8| {
+            if status == keepalive::UPNEEDED {
+                interaction.prompt_up();
+            }
+        };
+        let ctap = self.ctap.as_mut().expect("Ctap2 already taken");
         if info.versions.iter().any(|v| v == "FIDO_2_1") {
-            self.ctap
-                .selection(&mut self.keepalive(), None)
+            ctap.selection(&mut on_keepalive, None)
                 .map_err(ClientError::from)
         } else {
-            match self.ctap.make_credential(
+            match ctap.make_credential(
                 &[0u8; 32],
                 Value::Map(vec![
                     (Value::Text("id".into()), Value::Text("example.com".into())),
@@ -961,7 +1012,7 @@ impl ClientBackend for Ctap2Backend<'_> {
                 Some(b""),
                 None,
                 None,
-                &mut self.keepalive(),
+                &mut on_keepalive,
                 None,
             ) {
                 Ok(_) => Ok(()),
@@ -974,12 +1025,12 @@ impl ClientBackend for Ctap2Backend<'_> {
     }
 
     fn do_make_credential(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialCreationOptions,
         client_data_hash: &[u8],
         rp_id: &str,
     ) -> Result<(AttestationResponse, ExtensionOutputs), ClientError> {
-        let info = self.ctap.get_info()?;
+        let info = self.ctap_mut().get_info()?;
         let pin_protocol = negotiate_pin_protocol(&info);
 
         let selection = options.authenticator_selection.as_ref();
@@ -1008,37 +1059,38 @@ impl ClientBackend for Ctap2Backend<'_> {
         let mut user_verification = uv_requirement.cloned();
 
         loop {
-            let mut used_extensions: Vec<
-                Box<dyn crate::extensions::RegistrationExtensionProcessor>,
-            > = Vec::new();
+            let mut used_extensions: Vec<Box<dyn RegistrationExtensionProcessor<D>>> = Vec::new();
             let mut permissions = permission::MAKE_CREDENTIAL;
 
             if options.exclude_credentials.is_some() {
                 permissions |= permission::GET_ASSERTION;
             }
 
-            for ext_factory in &self.extensions {
-                if let Some(proc) = ext_factory.make_credential(
-                    &self.ctap,
-                    options.extensions.as_ref(),
-                    pin_protocol,
-                ) {
-                    permissions |= proc.permissions();
-                    used_extensions.push(proc);
+            {
+                let ctap = self.ctap.as_mut().expect("Ctap2 already taken");
+                for ext_factory in &self.extensions {
+                    if let Some(proc) =
+                        ext_factory.make_credential(ctap, options.extensions.as_ref(), pin_protocol)
+                    {
+                        permissions |= proc.permissions();
+                        used_extensions.push(proc);
+                    }
                 }
             }
 
             let uv_str = user_verification.as_ref().map(|uv| uv.as_str());
-            let (pin_token, internal_uv) = get_auth_params(
-                &self.ctap,
+            let ctap = self.take_ctap();
+            let (ctap, pin_token, internal_uv) = get_auth_params(
+                ctap,
                 rp_id,
                 uv_str,
                 permissions,
                 allow_uv,
                 &mut self.keepalive(),
-                self.interaction,
+                self.interaction.as_ref(),
                 pin_protocol.map(|p| p.version()),
             )?;
+            self.restore_ctap(ctap);
 
             // Filter exclude list
             if let Some(ref exclude_list) = options.exclude_credentials {
@@ -1048,7 +1100,7 @@ impl ClientBackend for Ctap2Backend<'_> {
                     pin_protocol.map(|proto| proto.authenticate(token, &[0u8; 32]))
                 });
                 let excluded = filter_creds(
-                    &self.ctap,
+                    self.ctap_mut(),
                     rp_id,
                     &exclude_cbor,
                     pin_auth_for_filter.as_deref(),
@@ -1112,7 +1164,14 @@ impl ClientBackend for Ctap2Backend<'_> {
                 Some(merge_extension_inputs(&extension_inputs))
             };
 
-            match self.ctap.make_credential(
+            let interaction = &*self.interaction;
+            let mut on_keepalive = |status: u8| {
+                if status == keepalive::UPNEEDED {
+                    interaction.prompt_up();
+                }
+            };
+            let ctap = self.ctap.as_mut().expect("Ctap2 already taken");
+            match ctap.make_credential(
                 client_data_hash,
                 options.rp.to_cbor_value(rp_id),
                 options.user.to_cbor_value(),
@@ -1123,14 +1182,14 @@ impl ClientBackend for Ctap2Backend<'_> {
                 pin_uv_param.as_deref(),
                 pin_uv_protocol,
                 enterprise_attestation,
-                &mut self.keepalive(),
+                &mut on_keepalive,
                 None,
             ) {
                 Ok(att_resp) => {
                     let mut extension_outputs = ExtensionOutputs::new();
                     for ext in &used_extensions {
                         if let Some(output) =
-                            ext.prepare_outputs(&att_resp, pin_token.as_deref(), &self.ctap)
+                            ext.prepare_outputs(&att_resp, pin_token.as_deref(), self.ctap_mut())
                         {
                             extension_outputs.extend(output);
                         }
@@ -1154,7 +1213,7 @@ impl ClientBackend for Ctap2Backend<'_> {
     }
 
     fn do_get_assertion(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialRequestOptions,
         client_data_hash: &[u8],
         rp_id: &str,
@@ -1162,20 +1221,18 @@ impl ClientBackend for Ctap2Backend<'_> {
         let (assertions, extensions, pin_token) =
             self.do_get_assertion_inner(options, client_data_hash, rp_id)?;
 
-        let ext_outputs: Vec<ExtensionOutputs> = assertions
-            .iter()
-            .map(|assertion| {
-                let mut outputs = ExtensionOutputs::new();
-                for ext in &extensions {
-                    if let Some(ext_out) =
-                        ext.prepare_outputs(assertion, pin_token.as_deref(), &self.ctap)
-                    {
-                        outputs.extend(ext_out);
-                    }
+        let mut ext_outputs: Vec<ExtensionOutputs> = Vec::new();
+        for assertion in &assertions {
+            let mut outputs = ExtensionOutputs::new();
+            for ext in &extensions {
+                if let Some(ext_out) =
+                    ext.prepare_outputs(assertion, pin_token.as_deref(), self.ctap_mut())
+                {
+                    outputs.extend(ext_out);
                 }
-                outputs
-            })
-            .collect();
+            }
+            ext_outputs.push(outputs);
+        }
 
         Ok((assertions, ext_outputs))
     }
@@ -1189,27 +1246,31 @@ impl ClientBackend for Ctap2Backend<'_> {
 ///
 /// Automatically selects between CTAP1 (U2F) and CTAP2 backends based on
 /// device capabilities. Falls back to CTAP1 if CTAP2 initialization fails.
-pub struct Fido2Client<'a> {
-    backend: Box<dyn ClientBackend + 'a>,
+pub struct Fido2Client {
+    backend: Box<dyn ClientBackend>,
     collector: ClientDataCollector,
 }
 
-impl<'a> Fido2Client<'a> {
+impl Fido2Client {
     /// Create a new Fido2Client.
     ///
     /// Tries CTAP2 first, then falls back to CTAP1 if the device doesn't
     /// support CBOR or if CTAP2 initialization fails.
-    pub fn new(
-        device: &'a dyn CtapDevice,
+    pub fn new<D: CtapDevice + 'static>(
+        device: D,
         origin: &str,
-        interaction: &'a dyn UserInteraction,
-        extensions: Vec<Box<dyn Ctap2Extension>>,
+        interaction: Box<dyn UserInteraction>,
+        extensions: Vec<Box<dyn Ctap2Extension<D>>>,
     ) -> Result<Self, ClientError> {
-        let backend: Box<dyn ClientBackend + 'a> = if device.capabilities() & capability::CBOR != 0
-        {
+        let backend: Box<dyn ClientBackend> = if device.capabilities() & capability::CBOR != 0 {
             match Ctap2Backend::new(device, interaction, extensions) {
                 Ok(b) => Box::new(b),
-                Err(_) => Box::new(Ctap1Backend::new(device, interaction)),
+                Err(_) => {
+                    // Device consumed by failed Ctap2::new — can't fall back to CTAP1
+                    return Err(ClientError::BadRequest(
+                        "CTAP2 initialization failed".into(),
+                    ));
+                }
             }
         } else {
             Box::new(Ctap1Backend::new(device, interaction))
@@ -1227,13 +1288,13 @@ impl<'a> Fido2Client<'a> {
     }
 
     /// Perform authenticator selection (touch).
-    pub fn selection(&self) -> Result<(), ClientError> {
+    pub fn selection(&mut self) -> Result<(), ClientError> {
         self.backend.selection()
     }
 
     /// Create a credential (WebAuthn registration).
     pub fn make_credential(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialCreationOptions,
     ) -> Result<RegistrationResponse, ClientError> {
         let rp_id = self.collector.get_rp_id(options.rp.id.as_deref())?;
@@ -1283,7 +1344,7 @@ impl<'a> Fido2Client<'a> {
 
     /// Authenticate with a credential (WebAuthn authentication).
     pub fn get_assertion(
-        &self,
+        &mut self,
         options: &PublicKeyCredentialRequestOptions,
     ) -> Result<AssertionSelection, ClientError> {
         let rp_id = self.collector.get_rp_id(options.rp_id.as_deref())?;

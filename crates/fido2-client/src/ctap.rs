@@ -53,7 +53,7 @@ pub mod keepalive {
 pub trait CtapDevice {
     /// Send a command and receive the response.
     fn call(
-        &self,
+        &mut self,
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),

@@ -27,7 +27,7 @@
 
 //! CTAP2.1 Authenticator Config API.
 
-use crate::ctap::CtapError;
+use crate::ctap::{CtapDevice, CtapError};
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
 use fido2_server::cbor::{self, Value};
@@ -49,18 +49,18 @@ pub mod param {
 }
 
 /// Authenticator Config API.
-pub struct Config<'a> {
-    ctap: &'a Ctap2<'a>,
-    protocol: Option<&'a PinProtocol>,
-    pin_uv_token: Option<&'a [u8]>,
+pub struct Config<D: CtapDevice> {
+    ctap: Ctap2<D>,
+    protocol: Option<PinProtocol>,
+    pin_uv_token: Option<Vec<u8>>,
 }
 
-impl<'a> Config<'a> {
+impl<D: CtapDevice> Config<D> {
     /// Create a new Config instance.
     pub fn new(
-        ctap: &'a Ctap2<'a>,
-        protocol: Option<&'a PinProtocol>,
-        pin_uv_token: Option<&'a [u8]>,
+        ctap: Ctap2<D>,
+        protocol: Option<PinProtocol>,
+        pin_uv_token: Option<Vec<u8>>,
     ) -> Result<Self, CtapError> {
         let info = ctap.info();
         if info.options.get("authnrCfg") != Some(&true) {
@@ -75,11 +75,11 @@ impl<'a> Config<'a> {
         })
     }
 
-    /// Create without validation (for PyO3 wrappers).
+    /// Create from parts without validation.
     pub fn from_parts(
-        ctap: &'a Ctap2<'a>,
-        protocol: Option<&'a PinProtocol>,
-        pin_uv_token: Option<&'a [u8]>,
+        ctap: Ctap2<D>,
+        protocol: Option<PinProtocol>,
+        pin_uv_token: Option<Vec<u8>>,
     ) -> Self {
         Self {
             ctap,
@@ -88,9 +88,24 @@ impl<'a> Config<'a> {
         }
     }
 
-    fn _call(&self, sub_cmd: u32, params: Option<Value>) -> Result<Value, CtapError> {
+    /// Consume and return the owned Ctap2.
+    pub fn into_ctap(self) -> Ctap2<D> {
+        self.ctap
+    }
+
+    /// Get a reference to the underlying Ctap2.
+    pub fn ctap(&self) -> &Ctap2<D> {
+        &self.ctap
+    }
+
+    /// Get a mutable reference to the underlying Ctap2.
+    pub fn ctap_mut(&mut self) -> &mut Ctap2<D> {
+        &mut self.ctap
+    }
+
+    fn _call(&mut self, sub_cmd: u32, params: Option<Value>) -> Result<Value, CtapError> {
         let (pin_uv_protocol, pin_uv_param) =
-            if let (Some(protocol), Some(token)) = (self.protocol, self.pin_uv_token) {
+            if let (Some(protocol), Some(token)) = (&self.protocol, &self.pin_uv_token) {
                 let mut msg = vec![0xFFu8; 32];
                 msg.push(0x0D);
                 msg.push(sub_cmd as u8);
@@ -115,20 +130,20 @@ impl<'a> Config<'a> {
     }
 
     /// Enable enterprise attestation.
-    pub fn enable_enterprise_attestation(&self) -> Result<(), CtapError> {
+    pub fn enable_enterprise_attestation(&mut self) -> Result<(), CtapError> {
         self._call(cmd::ENABLE_ENTERPRISE_ATT, None)?;
         Ok(())
     }
 
     /// Toggle always UV.
-    pub fn toggle_always_uv(&self) -> Result<(), CtapError> {
+    pub fn toggle_always_uv(&mut self) -> Result<(), CtapError> {
         self._call(cmd::TOGGLE_ALWAYS_UV, None)?;
         Ok(())
     }
 
     /// Set minimum PIN length.
     pub fn set_min_pin_length(
-        &self,
+        &mut self,
         min_pin_length: Option<u32>,
         rp_ids: Option<&[&str]>,
         force_change_pin: bool,

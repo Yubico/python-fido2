@@ -27,26 +27,26 @@
 
 //! CTAP2.1 Large Blobs API.
 
-use crate::ctap::CtapError;
+use crate::ctap::{CtapDevice, CtapError};
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
 use fido2_server::cbor::{self, Value};
 use fido2_server::utils;
 
 /// Large Blobs API.
-pub struct LargeBlobs<'a> {
-    ctap: &'a Ctap2<'a>,
+pub struct LargeBlobs<D: CtapDevice> {
+    ctap: Ctap2<D>,
     max_fragment_length: usize,
-    protocol: Option<&'a PinProtocol>,
-    pin_uv_token: Option<&'a [u8]>,
+    protocol: Option<PinProtocol>,
+    pin_uv_token: Option<Vec<u8>>,
 }
 
-impl<'a> LargeBlobs<'a> {
+impl<D: CtapDevice> LargeBlobs<D> {
     /// Create a new LargeBlobs instance.
     pub fn new(
-        ctap: &'a Ctap2<'a>,
-        protocol: Option<&'a PinProtocol>,
-        pin_uv_token: Option<&'a [u8]>,
+        ctap: Ctap2<D>,
+        protocol: Option<PinProtocol>,
+        pin_uv_token: Option<Vec<u8>>,
     ) -> Result<Self, CtapError> {
         let info = ctap.info();
         if info.options.get("largeBlobs") != Some(&true) {
@@ -63,12 +63,12 @@ impl<'a> LargeBlobs<'a> {
         })
     }
 
-    /// Create without validation (for PyO3 wrappers).
+    /// Create from parts without validation.
     pub fn from_parts(
-        ctap: &'a Ctap2<'a>,
+        ctap: Ctap2<D>,
         max_fragment_length: usize,
-        protocol: Option<&'a PinProtocol>,
-        pin_uv_token: Option<&'a [u8]>,
+        protocol: Option<PinProtocol>,
+        pin_uv_token: Option<Vec<u8>>,
     ) -> Self {
         Self {
             ctap,
@@ -78,8 +78,23 @@ impl<'a> LargeBlobs<'a> {
         }
     }
 
+    /// Consume and return the owned Ctap2.
+    pub fn into_ctap(self) -> Ctap2<D> {
+        self.ctap
+    }
+
+    /// Get a reference to the underlying Ctap2.
+    pub fn ctap(&self) -> &Ctap2<D> {
+        &self.ctap
+    }
+
+    /// Get a mutable reference to the underlying Ctap2.
+    pub fn ctap_mut(&mut self) -> &mut Ctap2<D> {
+        &mut self.ctap
+    }
+
     /// Read the entire large blob array.
-    pub fn read_blob_array(&self) -> Result<Vec<Value>, CtapError> {
+    pub fn read_blob_array(&mut self) -> Result<Vec<Value>, CtapError> {
         let mut offset: u64 = 0;
         let mut buf = Vec::new();
         loop {
@@ -119,7 +134,7 @@ impl<'a> LargeBlobs<'a> {
     }
 
     /// Write the entire large blob array.
-    pub fn write_blob_array(&self, blob_array: &[Value]) -> Result<(), CtapError> {
+    pub fn write_blob_array(&mut self, blob_array: &[Value]) -> Result<(), CtapError> {
         let data = cbor::encode(&Value::Array(blob_array.to_vec()));
         let hash = utils::sha256(&data);
         let mut full_data = data;
@@ -133,7 +148,7 @@ impl<'a> LargeBlobs<'a> {
             let fragment = &full_data[offset as usize..end];
 
             let (pin_uv_param, pin_uv_protocol) =
-                if let (Some(protocol), Some(token)) = (self.protocol, self.pin_uv_token) {
+                if let (Some(protocol), Some(token)) = (&self.protocol, &self.pin_uv_token) {
                     let mut msg = vec![0xFFu8; 32];
                     msg.extend_from_slice(&[0x0C, 0x00]);
                     msg.extend_from_slice(&(offset as u32).to_le_bytes());
@@ -162,7 +177,7 @@ impl<'a> LargeBlobs<'a> {
     }
 
     /// Get a single blob by key.
-    pub fn get_blob(&self, large_blob_key: &[u8]) -> Result<Option<Vec<u8>>, CtapError> {
+    pub fn get_blob(&mut self, large_blob_key: &[u8]) -> Result<Option<Vec<u8>>, CtapError> {
         let entries = self.read_blob_array()?;
         for entry in &entries {
             if let Ok(data) = lb_unpack(large_blob_key, entry)
@@ -176,7 +191,11 @@ impl<'a> LargeBlobs<'a> {
     }
 
     /// Store a blob (or delete if data is None).
-    pub fn put_blob(&self, large_blob_key: &[u8], data: Option<&[u8]>) -> Result<(), CtapError> {
+    pub fn put_blob(
+        &mut self,
+        large_blob_key: &[u8],
+        data: Option<&[u8]>,
+    ) -> Result<(), CtapError> {
         let mut modified = data.is_some();
         let mut entries = Vec::new();
 
@@ -200,7 +219,7 @@ impl<'a> LargeBlobs<'a> {
     }
 
     /// Delete blob(s) for a key.
-    pub fn delete_blob(&self, large_blob_key: &[u8]) -> Result<(), CtapError> {
+    pub fn delete_blob(&mut self, large_blob_key: &[u8]) -> Result<(), CtapError> {
         self.put_blob(large_blob_key, None)
     }
 }
@@ -272,6 +291,143 @@ fn decompress(data: &[u8], max_size: usize) -> Result<Vec<u8>, std::io::Error> {
         ));
     }
     Ok(result)
+}
+
+/// Read the large blob array from a borrowed Ctap2 device.
+pub fn read_blob_array<D: CtapDevice>(ctap: &mut Ctap2<D>) -> Result<Vec<Value>, CtapError> {
+    let max_fragment_length = ctap.info().max_msg_size.saturating_sub(64);
+    let mut offset: u64 = 0;
+    let mut buf = Vec::new();
+    loop {
+        let resp = ctap.large_blobs(
+            offset,
+            Some(max_fragment_length as u64),
+            None,
+            None,
+            None,
+            None,
+            &mut |_| {},
+            None,
+        )?;
+        let fragment = cbor_map_get_bytes(&resp, 1).unwrap_or_default();
+        let frag_len = fragment.len();
+        buf.extend_from_slice(&fragment);
+        if frag_len < max_fragment_length {
+            break;
+        }
+        offset += frag_len as u64;
+    }
+
+    if buf.len() < 16 {
+        return Ok(vec![]);
+    }
+
+    let (data, check) = buf.split_at(buf.len() - 16);
+    let hash = utils::sha256(data);
+    if check != &hash[..16] {
+        return Ok(vec![]);
+    }
+
+    match cbor::decode(data) {
+        Ok(Value::Array(arr)) => Ok(arr),
+        _ => Ok(vec![]),
+    }
+}
+
+/// Write the large blob array to a borrowed Ctap2 device.
+pub fn write_blob_array<D: CtapDevice>(
+    ctap: &mut Ctap2<D>,
+    blob_array: &[Value],
+    protocol: Option<&PinProtocol>,
+    pin_uv_token: Option<&[u8]>,
+) -> Result<(), CtapError> {
+    let max_fragment_length = ctap.info().max_msg_size.saturating_sub(64);
+    let data = cbor::encode(&Value::Array(blob_array.to_vec()));
+    let hash = utils::sha256(&data);
+    let mut full_data = data;
+    full_data.extend_from_slice(&hash[..16]);
+
+    let size = full_data.len();
+    let mut offset: u64 = 0;
+
+    while (offset as usize) < size {
+        let end = std::cmp::min(size, offset as usize + max_fragment_length);
+        let fragment = &full_data[offset as usize..end];
+
+        let (pin_uv_param, pin_uv_protocol) =
+            if let (Some(protocol), Some(token)) = (protocol, pin_uv_token) {
+                let mut msg = vec![0xFFu8; 32];
+                msg.extend_from_slice(&[0x0C, 0x00]);
+                msg.extend_from_slice(&(offset as u32).to_le_bytes());
+                msg.extend_from_slice(&utils::sha256(fragment));
+                let param = protocol.authenticate(token, &msg);
+                (Some(param), Some(protocol.version()))
+            } else {
+                (None, None)
+            };
+
+        ctap.large_blobs(
+            offset,
+            None,
+            Some(fragment),
+            if offset == 0 { Some(size as u64) } else { None },
+            pin_uv_param.as_deref(),
+            pin_uv_protocol,
+            &mut |_| {},
+            None,
+        )?;
+
+        offset += (end - offset as usize) as u64;
+    }
+
+    Ok(())
+}
+
+/// Get a single blob by key from a borrowed Ctap2 device.
+pub fn get_blob<D: CtapDevice>(
+    ctap: &mut Ctap2<D>,
+    large_blob_key: &[u8],
+) -> Result<Option<Vec<u8>>, CtapError> {
+    let entries = read_blob_array(ctap)?;
+    for entry in &entries {
+        if let Ok(data) = lb_unpack(large_blob_key, entry)
+            && let Ok(decompressed) = decompress(&data.0, data.1)
+            && decompressed.len() == data.1
+        {
+            return Ok(Some(decompressed));
+        }
+    }
+    Ok(None)
+}
+
+/// Store a blob (or delete if data is None) using a borrowed Ctap2 device.
+pub fn put_blob<D: CtapDevice>(
+    ctap: &mut Ctap2<D>,
+    large_blob_key: &[u8],
+    data: Option<&[u8]>,
+    protocol: Option<&PinProtocol>,
+    pin_uv_token: Option<&[u8]>,
+) -> Result<(), CtapError> {
+    let mut modified = data.is_some();
+    let mut entries = Vec::new();
+
+    for entry in read_blob_array(ctap)? {
+        if lb_unpack(large_blob_key, &entry).is_ok() {
+            modified = true;
+        } else {
+            entries.push(entry);
+        }
+    }
+
+    if let Some(data) = data {
+        entries.push(lb_pack(large_blob_key, data)?);
+    }
+
+    if modified {
+        write_blob_array(ctap, &entries, protocol, pin_uv_token)?;
+    }
+
+    Ok(())
 }
 
 fn cbor_map_get_bytes(val: &Value, key: i64) -> Option<Vec<u8>> {

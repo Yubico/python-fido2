@@ -333,7 +333,7 @@ impl CtapPcscDevice {
 
 impl CtapDevice for CtapPcscDevice {
     fn call(
-        &self,
+        &mut self,
         cmd: u8,
         data: &[u8],
         on_keepalive: &mut dyn FnMut(u8),

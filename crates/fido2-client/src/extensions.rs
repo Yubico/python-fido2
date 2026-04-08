@@ -33,9 +33,10 @@
 
 use std::collections::BTreeMap;
 
-use crate::blob::LargeBlobs;
+use crate::blob;
+use crate::ctap::CtapDevice;
 use crate::ctap2::{AssertionResponse, AttestationResponse, Ctap2, Info};
-use crate::pin::{ClientPin, CoseKeyAgreement, PinProtocol};
+use crate::pin::{self, CoseKeyAgreement, PinProtocol};
 use fido2_server::cbor::Value;
 use fido2_server::utils::sha256;
 use zeroize::Zeroizing;
@@ -51,7 +52,7 @@ pub type ExtensionOutputs = BTreeMap<String, Value>;
 // ---------------------------------------------------------------------------
 
 /// Processing state for a registration (makeCredential) extension.
-pub trait RegistrationExtensionProcessor {
+pub trait RegistrationExtensionProcessor<D: CtapDevice> {
     /// Additional pinUvAuthToken permissions required by this extension.
     fn permissions(&self) -> u32 {
         0
@@ -67,14 +68,14 @@ pub trait RegistrationExtensionProcessor {
         &self,
         _response: &AttestationResponse,
         _pin_token: Option<&[u8]>,
-        _ctap: &Ctap2,
+        _ctap: &mut Ctap2<D>,
     ) -> Option<ExtensionOutputs> {
         None
     }
 }
 
 /// Processing state for an authentication (getAssertion) extension.
-pub trait AuthenticationExtensionProcessor {
+pub trait AuthenticationExtensionProcessor<D: CtapDevice> {
     /// Additional pinUvAuthToken permissions required by this extension.
     fn permissions(&self) -> u32 {
         0
@@ -94,37 +95,39 @@ pub trait AuthenticationExtensionProcessor {
         &self,
         _response: &AssertionResponse,
         _pin_token: Option<&[u8]>,
-        _ctap: &Ctap2,
+        _ctap: &mut Ctap2<D>,
     ) -> Option<ExtensionOutputs> {
         None
     }
 }
 
 /// Factory for extension processors. Reusable across multiple requests.
-pub trait Ctap2Extension {
+pub trait Ctap2Extension<D: CtapDevice> {
     /// Whether the authenticator supports this extension.
     fn is_supported(&self, info: &Info) -> bool;
 
     /// Create a registration processor, or None if extension not applicable.
     fn make_credential(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor>>;
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<D>>>;
 
     /// Create an authentication processor, or None if extension not applicable.
     fn get_assertion(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         allow_credentials: Option<&[Value]>,
         pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor>>;
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<D>>>;
 }
 
 /// Return the default set of extensions.
-pub fn default_extensions(allow_hmac_secret: bool) -> Vec<Box<dyn Ctap2Extension>> {
+pub fn default_extensions<D: CtapDevice>(
+    allow_hmac_secret: bool,
+) -> Vec<Box<dyn Ctap2Extension<D>>> {
     vec![
         Box::new(HmacSecretExtension::new(allow_hmac_secret)),
         Box::new(LargeBlobExtension),
@@ -144,7 +147,7 @@ struct SimpleRegistrationProcessor {
     outputs: Option<ExtensionOutputs>,
 }
 
-impl RegistrationExtensionProcessor for SimpleRegistrationProcessor {
+impl<D: CtapDevice> RegistrationExtensionProcessor<D> for SimpleRegistrationProcessor {
     fn prepare_inputs(&self, _pin_token: Option<&[u8]>) -> Option<ExtensionInputs> {
         self.inputs.clone()
     }
@@ -153,7 +156,7 @@ impl RegistrationExtensionProcessor for SimpleRegistrationProcessor {
         &self,
         _response: &AttestationResponse,
         _pin_token: Option<&[u8]>,
-        _ctap: &Ctap2,
+        _ctap: &mut Ctap2<D>,
     ) -> Option<ExtensionOutputs> {
         self.outputs.clone()
     }
@@ -164,7 +167,7 @@ struct SimpleAuthenticationProcessor {
     inputs: Option<ExtensionInputs>,
 }
 
-impl AuthenticationExtensionProcessor for SimpleAuthenticationProcessor {
+impl<D: CtapDevice> AuthenticationExtensionProcessor<D> for SimpleAuthenticationProcessor {
     fn permissions(&self) -> u32 {
         self.perms
     }
@@ -327,17 +330,17 @@ impl HmacSecretExtension {
     }
 }
 
-impl Ctap2Extension for HmacSecretExtension {
+impl<D: CtapDevice> Ctap2Extension<D> for HmacSecretExtension {
     fn is_supported(&self, info: &Info) -> bool {
         info.extensions.iter().any(|e| e == HMAC_SECRET_NAME)
     }
 
     fn make_credential(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<D>>> {
         let ext = extensions?;
         let is_prf = ext.get("prf").is_some();
         let is_hmac = self.allow_hmac_secret
@@ -345,7 +348,7 @@ impl Ctap2Extension for HmacSecretExtension {
         let pin_protocol = pin_protocol?;
         let info = ctap.info();
 
-        if !self.is_supported(info) || (!is_prf && !is_hmac) {
+        if !<Self as Ctap2Extension<D>>::is_supported(self, info) || (!is_prf && !is_hmac) {
             return None;
         }
 
@@ -364,8 +367,7 @@ impl Ctap2Extension for HmacSecretExtension {
             };
 
             if let Some(salts) = prepare_salts(prf_input, hmac_input, None, None, is_prf) {
-                let client_pin = ClientPin::new(ctap, Some(pin_protocol)).ok()?;
-                let (key_agreement, ss) = client_pin._get_shared_secret().ok()?;
+                let (key_agreement, ss) = pin::get_shared_secret(ctap, &pin_protocol).ok()?;
 
                 let mut salt_data = salts.0;
                 salt_data.extend_from_slice(&salts.1);
@@ -393,7 +395,7 @@ impl Ctap2Extension for HmacSecretExtension {
             is_prf: bool,
         }
 
-        impl RegistrationExtensionProcessor for Processor {
+        impl<D: CtapDevice> RegistrationExtensionProcessor<D> for Processor {
             fn prepare_inputs(&self, _pin_token: Option<&[u8]>) -> Option<ExtensionInputs> {
                 Some(self.inputs.clone())
             }
@@ -402,7 +404,7 @@ impl Ctap2Extension for HmacSecretExtension {
                 &self,
                 response: &AttestationResponse,
                 _pin_token: Option<&[u8]>,
-                _ctap: &Ctap2,
+                _ctap: &mut Ctap2<D>,
             ) -> Option<ExtensionOutputs> {
                 let extensions = &response.auth_data.extensions;
                 let enabled = extensions
@@ -431,11 +433,11 @@ impl Ctap2Extension for HmacSecretExtension {
 
     fn get_assertion(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         allow_credentials: Option<&[Value]>,
         pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<D>>> {
         let ext = extensions?;
         let prf_input = ext.get("prf");
         let hmac_input = if self.allow_hmac_secret {
@@ -446,13 +448,14 @@ impl Ctap2Extension for HmacSecretExtension {
         let is_prf = prf_input.is_some();
         let pin_protocol = pin_protocol?;
 
-        if !self.is_supported(ctap.info()) || (!is_prf && hmac_input.is_none()) {
+        if !<Self as Ctap2Extension<D>>::is_supported(self, ctap.info())
+            || (!is_prf && hmac_input.is_none())
+        {
             return None;
         }
 
         // Perform ECDH key agreement now; processor owns the result
-        let client_pin = ClientPin::new(ctap, Some(pin_protocol)).ok()?;
-        let (key_agreement, ss) = client_pin._get_shared_secret().ok()?;
+        let (key_agreement, ss) = pin::get_shared_secret(ctap, &pin_protocol).ok()?;
         let shared_secret = Zeroizing::new(ss);
 
         struct Processor {
@@ -465,7 +468,7 @@ impl Ctap2Extension for HmacSecretExtension {
             allow_credentials: Option<Vec<Value>>,
         }
 
-        impl AuthenticationExtensionProcessor for Processor {
+        impl<D: CtapDevice> AuthenticationExtensionProcessor<D> for Processor {
             fn prepare_inputs(
                 &self,
                 selected: Option<&Value>,
@@ -509,7 +512,7 @@ impl Ctap2Extension for HmacSecretExtension {
                 &self,
                 response: &AssertionResponse,
                 _pin_token: Option<&[u8]>,
-                _ctap: &Ctap2,
+                _ctap: &mut Ctap2<D>,
             ) -> Option<ExtensionOutputs> {
                 let extensions = &response.auth_data.extensions;
                 let value = extensions
@@ -541,7 +544,7 @@ const LARGE_BLOB_KEY_NAME: &str = "largeBlobKey";
 
 pub struct LargeBlobExtension;
 
-impl Ctap2Extension for LargeBlobExtension {
+impl<D: CtapDevice> Ctap2Extension<D> for LargeBlobExtension {
     fn is_supported(&self, info: &Info) -> bool {
         info.extensions.iter().any(|e| e == LARGE_BLOB_KEY_NAME)
             && info.options.get("largeBlobs") == Some(&true)
@@ -549,10 +552,10 @@ impl Ctap2Extension for LargeBlobExtension {
 
     fn make_credential(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<D>>> {
         let ext = extensions?;
         let lb = ext.get("largeBlob")?;
 
@@ -562,13 +565,13 @@ impl Ctap2Extension for LargeBlobExtension {
         }
 
         let support = lb.get("support").and_then(|v| v.as_str())?;
-        if support == "required" && !self.is_supported(ctap.info()) {
+        if support == "required" && !<Self as Ctap2Extension<D>>::is_supported(self, ctap.info()) {
             return None; // Required but not supported
         }
 
         struct Processor;
 
-        impl RegistrationExtensionProcessor for Processor {
+        impl<D: CtapDevice> RegistrationExtensionProcessor<D> for Processor {
             fn prepare_inputs(&self, _pin_token: Option<&[u8]>) -> Option<ExtensionInputs> {
                 let mut inputs = ExtensionInputs::new();
                 inputs.insert(LARGE_BLOB_KEY_NAME.into(), Value::Bool(true));
@@ -579,7 +582,7 @@ impl Ctap2Extension for LargeBlobExtension {
                 &self,
                 response: &AttestationResponse,
                 _pin_token: Option<&[u8]>,
-                _ctap: &Ctap2,
+                _ctap: &mut Ctap2<D>,
             ) -> Option<ExtensionOutputs> {
                 let supported = response.large_blob_key.is_some();
                 let mut outputs = ExtensionOutputs::new();
@@ -599,11 +602,11 @@ impl Ctap2Extension for LargeBlobExtension {
 
     fn get_assertion(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         _allow_credentials: Option<&[Value]>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<D>>> {
         let ext = extensions?;
         let lb = ext.get("largeBlob")?;
 
@@ -617,7 +620,7 @@ impl Ctap2Extension for LargeBlobExtension {
             return None;
         }
 
-        if !self.is_supported(ctap.info()) {
+        if !<Self as Ctap2Extension<D>>::is_supported(self, ctap.info()) {
             return None;
         }
 
@@ -633,7 +636,7 @@ impl Ctap2Extension for LargeBlobExtension {
             perms: u32,
         }
 
-        impl AuthenticationExtensionProcessor for Processor {
+        impl<D: CtapDevice> AuthenticationExtensionProcessor<D> for Processor {
             fn permissions(&self) -> u32 {
                 self.perms
             }
@@ -652,17 +655,16 @@ impl Ctap2Extension for LargeBlobExtension {
                 &self,
                 response: &AssertionResponse,
                 pin_token: Option<&[u8]>,
-                ctap: &Ctap2,
+                ctap: &mut Ctap2<D>,
             ) -> Option<ExtensionOutputs> {
                 let blob_key = response.large_blob_key.as_ref()?;
                 let mut outputs = ExtensionOutputs::new();
 
                 if self.read {
-                    let large_blobs = LargeBlobs::new(ctap, None, None).ok()?;
-                    let blob = large_blobs.get_blob(blob_key).ok()?;
+                    let result = blob::get_blob(ctap, blob_key).ok()?;
                     outputs.insert(
                         "largeBlob".into(),
-                        Value::Map(vec![(Value::Text("blob".into()), Value::Bytes(blob?))]),
+                        Value::Map(vec![(Value::Text("blob".into()), Value::Bytes(result?))]),
                     );
                 } else if let Some(ref data) = self.write_data {
                     // Need pin_token for writing
@@ -679,8 +681,8 @@ impl Ctap2Extension for LargeBlobExtension {
                     } else {
                         None
                     };
-                    let large_blobs = LargeBlobs::new(ctap, protocol.as_ref(), pin_token).ok()?;
-                    large_blobs.put_blob(blob_key, Some(data)).ok()?;
+                    blob::put_blob(ctap, blob_key, Some(data), protocol.as_ref(), pin_token)
+                        .ok()?;
                     outputs.insert(
                         "largeBlob".into(),
                         Value::Map(vec![(Value::Text("written".into()), Value::Bool(true))]),
@@ -709,19 +711,19 @@ impl Ctap2Extension for LargeBlobExtension {
 
 pub struct CredBlobExtension;
 
-impl Ctap2Extension for CredBlobExtension {
+impl<D: CtapDevice> Ctap2Extension<D> for CredBlobExtension {
     fn is_supported(&self, info: &Info) -> bool {
         info.extensions.iter().any(|e| e == "credBlob")
     }
 
     fn make_credential(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<D>>> {
         let ext = extensions?;
-        if !self.is_supported(ctap.info()) {
+        if !<Self as Ctap2Extension<D>>::is_supported(self, ctap.info()) {
             return None;
         }
         let blob = ext.get("credBlob").and_then(get_salt_bytes)?;
@@ -740,13 +742,13 @@ impl Ctap2Extension for CredBlobExtension {
 
     fn get_assertion(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         _allow_credentials: Option<&[Value]>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<D>>> {
         let ext = extensions?;
-        if !self.is_supported(ctap.info()) {
+        if !<Self as Ctap2Extension<D>>::is_supported(self, ctap.info()) {
             return None;
         }
         if ext.get("getCredBlob") != Some(&serde_json::Value::Bool(true)) {
@@ -779,17 +781,17 @@ impl CredProtectExtension {
     }
 }
 
-impl Ctap2Extension for CredProtectExtension {
+impl<D: CtapDevice> Ctap2Extension<D> for CredProtectExtension {
     fn is_supported(&self, info: &Info) -> bool {
         info.extensions.iter().any(|e| e == "credProtect")
     }
 
     fn make_credential(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<D>>> {
         let ext = extensions?;
         let policy_str = ext
             .get("credentialProtectionPolicy")
@@ -800,7 +802,7 @@ impl Ctap2Extension for CredProtectExtension {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        if enforce && !self.is_supported(ctap.info()) && index > 1 {
+        if enforce && !<Self as Ctap2Extension<D>>::is_supported(self, ctap.info()) && index > 1 {
             return None; // Authenticator doesn't support credProtect
         }
 
@@ -814,11 +816,11 @@ impl Ctap2Extension for CredProtectExtension {
 
     fn get_assertion(
         &self,
-        _ctap: &Ctap2,
+        _ctap: &mut Ctap2<D>,
         _extensions: Option<&serde_json::Value>,
         _allow_credentials: Option<&[Value]>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<D>>> {
         None
     }
 }
@@ -829,19 +831,19 @@ impl Ctap2Extension for CredProtectExtension {
 
 pub struct MinPinLengthExtension;
 
-impl Ctap2Extension for MinPinLengthExtension {
+impl<D: CtapDevice> Ctap2Extension<D> for MinPinLengthExtension {
     fn is_supported(&self, info: &Info) -> bool {
         info.options.get("setMinPINLength") == Some(&true)
     }
 
     fn make_credential(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<D>>> {
         let ext = extensions?;
-        if !self.is_supported(ctap.info()) {
+        if !<Self as Ctap2Extension<D>>::is_supported(self, ctap.info()) {
             return None;
         }
         if ext.get("minPinLength") != Some(&serde_json::Value::Bool(true)) {
@@ -858,11 +860,11 @@ impl Ctap2Extension for MinPinLengthExtension {
 
     fn get_assertion(
         &self,
-        _ctap: &Ctap2,
+        _ctap: &mut Ctap2<D>,
         _extensions: Option<&serde_json::Value>,
         _allow_credentials: Option<&[Value]>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<D>>> {
         None
     }
 }
@@ -873,17 +875,17 @@ impl Ctap2Extension for MinPinLengthExtension {
 
 pub struct CredPropsExtension;
 
-impl Ctap2Extension for CredPropsExtension {
+impl<D: CtapDevice> Ctap2Extension<D> for CredPropsExtension {
     fn is_supported(&self, _info: &Info) -> bool {
         true // Always supported
     }
 
     fn make_credential(
         &self,
-        ctap: &Ctap2,
+        ctap: &mut Ctap2<D>,
         extensions: Option<&serde_json::Value>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor>> {
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<D>>> {
         let ext = extensions?;
         if ext.get("credProps") != Some(&serde_json::Value::Bool(true)) {
             return None;
@@ -912,11 +914,11 @@ impl Ctap2Extension for CredPropsExtension {
 
     fn get_assertion(
         &self,
-        _ctap: &Ctap2,
+        _ctap: &mut Ctap2<D>,
         _extensions: Option<&serde_json::Value>,
         _allow_credentials: Option<&[Value]>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor>> {
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<D>>> {
         None
     }
 }

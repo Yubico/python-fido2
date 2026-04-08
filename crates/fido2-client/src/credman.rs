@@ -27,7 +27,7 @@
 
 //! CTAP2 Credential Management API.
 
-use crate::ctap::{CtapError, CtapStatus};
+use crate::ctap::{CtapDevice, CtapError, CtapStatus};
 use crate::ctap2::Ctap2;
 use crate::pin::PinProtocol;
 use fido2_server::cbor::{self, Value};
@@ -67,15 +67,15 @@ pub mod result {
 }
 
 /// Credential Management API.
-pub struct CredentialManagement<'a> {
-    ctap: &'a Ctap2<'a>,
-    protocol: &'a PinProtocol,
-    pin_uv_token: &'a [u8],
+pub struct CredentialManagement<D: CtapDevice> {
+    ctap: Ctap2<D>,
+    protocol: PinProtocol,
+    pin_uv_token: Vec<u8>,
 }
 
-impl<'a> CredentialManagement<'a> {
+impl<D: CtapDevice> CredentialManagement<D> {
     /// Create a new CredentialManagement instance.
-    pub fn new(ctap: &'a Ctap2<'a>, protocol: &'a PinProtocol, pin_uv_token: &'a [u8]) -> Self {
+    pub fn new(ctap: Ctap2<D>, protocol: PinProtocol, pin_uv_token: Vec<u8>) -> Self {
         Self {
             ctap,
             protocol,
@@ -83,7 +83,27 @@ impl<'a> CredentialManagement<'a> {
         }
     }
 
-    fn _call(&self, sub_cmd: u32, params: Option<Value>, auth: bool) -> Result<Value, CtapError> {
+    /// Consume and return the owned Ctap2.
+    pub fn into_ctap(self) -> Ctap2<D> {
+        self.ctap
+    }
+
+    /// Get a reference to the underlying Ctap2.
+    pub fn ctap(&self) -> &Ctap2<D> {
+        &self.ctap
+    }
+
+    /// Get a mutable reference to the underlying Ctap2.
+    pub fn ctap_mut(&mut self) -> &mut Ctap2<D> {
+        &mut self.ctap
+    }
+
+    fn _call(
+        &mut self,
+        sub_cmd: u32,
+        params: Option<Value>,
+        auth: bool,
+    ) -> Result<Value, CtapError> {
         let (pin_uv_protocol, pin_uv_param) = if auth {
             let mut msg = vec![(sub_cmd & 0xFF) as u8];
             if let Some(ref p) = params {
@@ -92,7 +112,7 @@ impl<'a> CredentialManagement<'a> {
             (
                 Some(Value::Int(self.protocol.version() as i64)),
                 Some(Value::Bytes(
-                    self.protocol.authenticate(self.pin_uv_token, &msg),
+                    self.protocol.authenticate(&self.pin_uv_token, &msg),
                 )),
             )
         } else {
@@ -109,22 +129,22 @@ impl<'a> CredentialManagement<'a> {
     }
 
     /// Get credentials metadata.
-    pub fn get_metadata(&self) -> Result<Value, CtapError> {
+    pub fn get_metadata(&mut self) -> Result<Value, CtapError> {
         self._call(cmd::GET_CREDS_METADATA, None, true)
     }
 
     /// Start RP enumeration.
-    pub fn enumerate_rps_begin(&self) -> Result<Value, CtapError> {
+    pub fn enumerate_rps_begin(&mut self) -> Result<Value, CtapError> {
         self._call(cmd::ENUMERATE_RPS_BEGIN, None, true)
     }
 
     /// Get the next RP.
-    pub fn enumerate_rps_next(&self) -> Result<Value, CtapError> {
+    pub fn enumerate_rps_next(&mut self) -> Result<Value, CtapError> {
         self._call(cmd::ENUMERATE_RPS_NEXT, None, false)
     }
 
     /// Enumerate all RPs.
-    pub fn enumerate_rps(&self) -> Result<Vec<Value>, CtapError> {
+    pub fn enumerate_rps(&mut self) -> Result<Vec<Value>, CtapError> {
         let first = match self.enumerate_rps_begin() {
             Ok(v) => v,
             Err(CtapError::StatusError(CtapStatus::NoCredentials)) => return Ok(vec![]),
@@ -142,7 +162,7 @@ impl<'a> CredentialManagement<'a> {
     }
 
     /// Start credential enumeration for an RP.
-    pub fn enumerate_creds_begin(&self, rp_id_hash: &[u8]) -> Result<Value, CtapError> {
+    pub fn enumerate_creds_begin(&mut self, rp_id_hash: &[u8]) -> Result<Value, CtapError> {
         let params = Value::Map(vec![(
             Value::Int(param::RP_ID_HASH),
             Value::Bytes(rp_id_hash.to_vec()),
@@ -151,12 +171,12 @@ impl<'a> CredentialManagement<'a> {
     }
 
     /// Get the next credential.
-    pub fn enumerate_creds_next(&self) -> Result<Value, CtapError> {
+    pub fn enumerate_creds_next(&mut self) -> Result<Value, CtapError> {
         self._call(cmd::ENUMERATE_CREDS_NEXT, None, false)
     }
 
     /// Enumerate all credentials for an RP.
-    pub fn enumerate_creds(&self, rp_id_hash: &[u8]) -> Result<Vec<Value>, CtapError> {
+    pub fn enumerate_creds(&mut self, rp_id_hash: &[u8]) -> Result<Vec<Value>, CtapError> {
         let first = match self.enumerate_creds_begin(rp_id_hash) {
             Ok(v) => v,
             Err(CtapError::StatusError(CtapStatus::NoCredentials)) => return Ok(vec![]),
@@ -171,14 +191,14 @@ impl<'a> CredentialManagement<'a> {
     }
 
     /// Delete a credential.
-    pub fn delete_cred(&self, cred_id: Value) -> Result<(), CtapError> {
+    pub fn delete_cred(&mut self, cred_id: Value) -> Result<(), CtapError> {
         let params = Value::Map(vec![(Value::Int(param::CREDENTIAL_ID), cred_id)]);
         self._call(cmd::DELETE_CREDENTIAL, Some(params), true)?;
         Ok(())
     }
 
     /// Update user info for a credential.
-    pub fn update_user_info(&self, cred_id: Value, user: Value) -> Result<(), CtapError> {
+    pub fn update_user_info(&mut self, cred_id: Value, user: Value) -> Result<(), CtapError> {
         let params = Value::Map(vec![
             (Value::Int(param::CREDENTIAL_ID), cred_id),
             (Value::Int(param::USER), user),
