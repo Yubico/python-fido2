@@ -481,6 +481,7 @@ impl<D: CtapDevice> Ctap2<D> {
 
     /// Update cached authenticator info.
     pub fn set_info(&mut self, info: Info) {
+        self.max_msg_size = info.max_msg_size;
         self.info = info;
     }
 

@@ -602,7 +602,7 @@ struct NativeFido2Client {
 impl NativeFido2Client {
     /// Create a PyCtapDevice for a call.
     fn make_device(&self, py: Python<'_>) -> PyResult<PyCtapDevice> {
-        PyCtapDevice::new_ctap2(py, self.device.clone_ref(py))
+        PyCtapDevice::new(py, self.device.clone_ref(py))
     }
 
     /// Create a PyUserInteraction from the stored user_interaction.
@@ -1048,16 +1048,9 @@ impl NativeExtension {
         options: PyObject,
         pin_protocol: PyObject,
     ) -> PyResult<Option<NativeRegistrationProcessor>> {
-        let native = ctap.bind(py).getattr("_native")?;
-        let device: PyObject = native.getattr("device")?.unbind();
-        let strict_cbor: bool = native.getattr("strict_cbor")?.extract()?;
-        let max_msg_size: usize = native.getattr("max_msg_size")?.extract()?;
-
-        let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
-        let info_obj = ctap.bind(py).getattr("info")?.unbind();
-        let info = py_to_info(py, &info_obj)?;
-        let mut ctap2 = ctap2::Ctap2::from_parts(dev, strict_cbor, max_msg_size);
-        ctap2.set_info(info);
+        let native: Py<crate::py_ctap::NativeCtap2> =
+            ctap.bind(py).getattr("_native")?.extract()?;
+        let mut ctap2 = native.borrow(py).make_ctap(py)?;
 
         let ext_json = py_options_extensions(py, &options)?;
         let pp = py_pin_protocol(py, &pin_protocol)?;
@@ -1066,9 +1059,7 @@ impl NativeExtension {
         let processor = inner.make_credential(&mut ctap2, ext_json.as_ref(), pp);
         Ok(processor.map(|p| NativeRegistrationProcessor {
             inner: p,
-            device,
-            strict_cbor,
-            max_msg_size,
+            native: native.clone_ref(py),
         }))
     }
 
@@ -1080,16 +1071,9 @@ impl NativeExtension {
         options: PyObject,
         pin_protocol: PyObject,
     ) -> PyResult<Option<NativeAuthenticationProcessor>> {
-        let native = ctap.bind(py).getattr("_native")?;
-        let device: PyObject = native.getattr("device")?.unbind();
-        let strict_cbor: bool = native.getattr("strict_cbor")?.extract()?;
-        let max_msg_size: usize = native.getattr("max_msg_size")?.extract()?;
-
-        let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
-        let info_obj = ctap.bind(py).getattr("info")?.unbind();
-        let info = py_to_info(py, &info_obj)?;
-        let mut ctap2 = ctap2::Ctap2::from_parts(dev, strict_cbor, max_msg_size);
-        ctap2.set_info(info);
+        let native: Py<crate::py_ctap::NativeCtap2> =
+            ctap.bind(py).getattr("_native")?.extract()?;
+        let mut ctap2 = native.borrow(py).make_ctap(py)?;
 
         let ext_json = py_options_extensions(py, &options)?;
         let allow_creds = py_allow_credentials(py, &options)?;
@@ -1100,9 +1084,7 @@ impl NativeExtension {
             inner.get_assertion(&mut ctap2, ext_json.as_ref(), allow_creds.as_deref(), pp);
         Ok(processor.map(|p| NativeAuthenticationProcessor {
             inner: p,
-            device,
-            strict_cbor,
-            max_msg_size,
+            native: native.clone_ref(py),
         }))
     }
 }
@@ -1113,9 +1095,7 @@ impl NativeExtension {
 #[pyclass(unsendable)]
 struct NativeRegistrationProcessor {
     inner: Box<dyn RegistrationExtensionProcessor<PyCtapDevice>>,
-    device: PyObject,
-    strict_cbor: bool,
-    max_msg_size: usize,
+    native: Py<crate::py_ctap::NativeCtap2>,
 }
 
 #[pymethods]
@@ -1143,8 +1123,7 @@ impl NativeRegistrationProcessor {
         pin_token: Option<&[u8]>,
     ) -> PyResult<Option<PyObject>> {
         let att_resp = py_to_attestation_response(py, &response)?;
-        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
-        let mut ctap = ctap2::Ctap2::from_parts(dev, self.strict_cbor, self.max_msg_size);
+        let mut ctap = self.native.borrow(py).make_ctap(py)?;
 
         match self.inner.prepare_outputs(&att_resp, pin_token, &mut ctap) {
             Some(outputs) => Ok(Some(extension_outputs_to_py(py, &outputs)?)),
@@ -1159,9 +1138,7 @@ impl NativeRegistrationProcessor {
 #[pyclass(unsendable)]
 struct NativeAuthenticationProcessor {
     inner: Box<dyn AuthenticationExtensionProcessor<PyCtapDevice>>,
-    device: PyObject,
-    strict_cbor: bool,
-    max_msg_size: usize,
+    native: Py<crate::py_ctap::NativeCtap2>,
 }
 
 #[pymethods]
@@ -1196,8 +1173,7 @@ impl NativeAuthenticationProcessor {
         pin_token: Option<&[u8]>,
     ) -> PyResult<Option<PyObject>> {
         let ass_resp = py_to_assertion_response(py, &response)?;
-        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
-        let mut ctap = ctap2::Ctap2::from_parts(dev, self.strict_cbor, self.max_msg_size);
+        let mut ctap = self.native.borrow(py).make_ctap(py)?;
 
         match self.inner.prepare_outputs(&ass_resp, pin_token, &mut ctap) {
             Some(outputs) => Ok(Some(extension_outputs_to_py(py, &outputs)?)),

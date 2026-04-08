@@ -66,34 +66,19 @@ pub(crate) fn with_event_args<R>(
 
 /// Wraps a Python CtapDevice object to implement the Rust CtapDevice trait.
 ///
-/// For CTAP2 (`pass_event_args=true`), event and on_keepalive are retrieved
-/// from thread-local storage for each call, set by the PyO3 method wrappers.
+/// If event/on_keepalive are set in thread-local storage (via `with_event_args`),
+/// they are passed to the Python `device.call()`. Otherwise only cmd and data are passed.
 pub struct PyCtapDevice {
     py_device: PyObject,
     capabilities: u8,
-    /// When true, event/on_keepalive are always passed to device.call()
-    /// (as None if unset). Used for CTAP2 which always passes these args.
-    pass_event_args: bool,
 }
 
 impl PyCtapDevice {
-    /// Create a new PyCtapDevice for CTAP1 (2-arg call).
     pub fn new(py: Python<'_>, py_device: PyObject) -> PyResult<Self> {
         let capabilities: u8 = py_device.getattr(py, "capabilities")?.extract(py)?;
         Ok(Self {
             py_device,
             capabilities,
-            pass_event_args: false,
-        })
-    }
-
-    /// Create a new PyCtapDevice for CTAP2 (4-arg call with event/on_keepalive).
-    pub fn new_ctap2(py: Python<'_>, py_device: PyObject) -> PyResult<Self> {
-        let capabilities: u8 = py_device.getattr(py, "capabilities")?.extract(py)?;
-        Ok(Self {
-            py_device,
-            capabilities,
-            pass_event_args: true,
         })
     }
 }
@@ -107,17 +92,20 @@ impl CtapDevice for PyCtapDevice {
         _cancel: Option<&dyn Fn() -> bool>,
     ) -> Result<Vec<u8>, CtapError> {
         Python::with_gil(|py| {
-            let result = if self.pass_event_args {
-                let event = CALL_EVENT
-                    .with(|e| e.borrow().as_ref().map(|v| v.clone_ref(py)))
-                    .unwrap_or_else(|| py.None());
-                let on_keepalive = CALL_ON_KEEPALIVE
-                    .with(|k| k.borrow().as_ref().map(|v| v.clone_ref(py)))
-                    .unwrap_or_else(|| py.None());
+            let event = CALL_EVENT.with(|e| e.borrow().as_ref().map(|v| v.clone_ref(py)));
+            let on_keepalive =
+                CALL_ON_KEEPALIVE.with(|k| k.borrow().as_ref().map(|v| v.clone_ref(py)));
+
+            let result = if event.is_some() || on_keepalive.is_some() {
                 self.py_device.call_method1(
                     py,
                     "call",
-                    (cmd, PyBytes::new(py, data), event, on_keepalive),
+                    (
+                        cmd,
+                        PyBytes::new(py, data),
+                        event.unwrap_or_else(|| py.None()),
+                        on_keepalive.unwrap_or_else(|| py.None()),
+                    ),
                 )
             } else {
                 self.py_device
@@ -286,18 +274,21 @@ pub fn assertion_response_to_py(py: Python<'_>, resp: &AssertionResponse) -> PyR
 
 #[pyclass]
 struct NativeCtap1 {
-    device: PyObject,
+    inner: ctap1::Ctap1<PyCtapDevice>,
 }
 
 #[pymethods]
 impl NativeCtap1 {
     #[new]
-    fn new(device: PyObject) -> Self {
-        Self { device }
+    fn new(py: Python<'_>, device: PyObject) -> PyResult<Self> {
+        let dev = PyCtapDevice::new(py, device)?;
+        Ok(Self {
+            inner: ctap1::Ctap1::new(dev),
+        })
     }
 
     fn send_apdu<'py>(
-        &self,
+        &mut self,
         py: Python<'py>,
         cla: u8,
         ins: u8,
@@ -305,30 +296,28 @@ impl NativeCtap1 {
         p2: u8,
         data: &[u8],
     ) -> PyResult<Bound<'py, PyBytes>> {
-        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
-        let mut ctap = ctap1::Ctap1::new(dev);
-        let resp = ctap.send_apdu(cla, ins, p1, p2, data).map_err(apdu_err)?;
+        let resp = self
+            .inner
+            .send_apdu(cla, ins, p1, p2, data)
+            .map_err(apdu_err)?;
         Ok(PyBytes::new(py, &resp))
     }
 
-    fn get_version(&self, py: Python<'_>) -> PyResult<String> {
-        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
-        let mut ctap = ctap1::Ctap1::new(dev);
-        ctap.get_version().map_err(apdu_err)
+    fn get_version(&mut self) -> PyResult<String> {
+        self.inner.get_version().map_err(apdu_err)
     }
 
     fn register<'py>(
-        &self,
+        &mut self,
         py: Python<'py>,
         client_param: &[u8],
         app_param: &[u8],
     ) -> PyResult<Bound<'py, PyBytes>> {
-        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
-        let mut ctap = ctap1::Ctap1::new(dev);
         let mut data = Vec::with_capacity(64);
         data.extend_from_slice(client_param);
         data.extend_from_slice(app_param);
-        let response = ctap
+        let response = self
+            .inner
             .send_apdu(0, ctap1::ins::REGISTER, 0, 0, &data)
             .map_err(apdu_err)?;
         Ok(PyBytes::new(py, &response))
@@ -336,22 +325,21 @@ impl NativeCtap1 {
 
     #[pyo3(signature = (client_param, app_param, key_handle, check_only=false))]
     fn authenticate<'py>(
-        &self,
+        &mut self,
         py: Python<'py>,
         client_param: &[u8],
         app_param: &[u8],
         key_handle: &[u8],
         check_only: bool,
     ) -> PyResult<Bound<'py, PyBytes>> {
-        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
-        let mut ctap = ctap1::Ctap1::new(dev);
         let mut data = Vec::with_capacity(65 + key_handle.len());
         data.extend_from_slice(client_param);
         data.extend_from_slice(app_param);
         data.push(key_handle.len() as u8);
         data.extend_from_slice(key_handle);
         let p1 = if check_only { 0x07 } else { 0x03 };
-        let response = ctap
+        let response = self
+            .inner
             .send_apdu(0, ctap1::ins::AUTHENTICATE, p1, 0, &data)
             .map_err(apdu_err)?;
         Ok(PyBytes::new(py, &response))
@@ -361,24 +349,30 @@ impl NativeCtap1 {
 // ---- NativeCtap2 ----
 
 #[pyclass]
-struct NativeCtap2 {
+pub(crate) struct NativeCtap2 {
     device: PyObject,
     strict_cbor: bool,
-    info_cache: Option<Info>,
     max_msg_size: usize,
+    inner: ctap2::Ctap2<PyCtapDevice>,
 }
 
 #[pymethods]
 impl NativeCtap2 {
     #[new]
     #[pyo3(signature = (device, strict_cbor=true, max_msg_size=1024))]
-    fn new(device: PyObject, strict_cbor: bool, max_msg_size: usize) -> Self {
-        Self {
+    fn new(
+        py: Python<'_>,
+        device: PyObject,
+        strict_cbor: bool,
+        max_msg_size: usize,
+    ) -> PyResult<Self> {
+        let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
+        Ok(Self {
             device,
             strict_cbor,
-            info_cache: None,
             max_msg_size,
-        }
+            inner: ctap2::Ctap2::from_parts(dev, strict_cbor, max_msg_size),
+        })
     }
 
     #[getter]
@@ -387,26 +381,8 @@ impl NativeCtap2 {
     }
 
     #[getter]
-    fn strict_cbor(&self) -> bool {
-        self.strict_cbor
-    }
-
-    #[getter]
-    fn get_max_msg_size(&self) -> usize {
-        self.max_msg_size
-    }
-
-    #[getter]
     fn info(&self, py: Python<'_>) -> PyResult<PyObject> {
-        match &self.info_cache {
-            Some(info) => info_to_py(py, info),
-            None => Err(PyValueError::new_err("Info not available")),
-        }
-    }
-
-    #[setter]
-    fn set_max_msg_size(&mut self, size: usize) {
-        self.max_msg_size = size;
+        info_to_py(py, self.inner.info())
     }
 
     #[pyo3(signature = (cmd, data=None, event=None, on_keepalive=None))]
@@ -419,30 +395,29 @@ impl NativeCtap2 {
         on_keepalive: Option<PyObject>,
     ) -> PyResult<PyObject> {
         let cbor_data = py_opt_to_val(py, data)?;
-        let mut ctap = self.make_ctap(py)?;
         let result = with_event_args(event, on_keepalive, || {
-            ctap.send_cbor(cmd, cbor_data.as_ref(), &mut |_| {}, None)
+            self.inner
+                .send_cbor(cmd, cbor_data.as_ref(), &mut |_| {}, None)
         })
         .map_err(ctap_err)?;
 
-        // Cache info when GET_INFO is called
+        // Update info when GET_INFO is called
         if cmd == ctap2::ctap2_cmd::GET_INFO
             && let Value::Map(ref entries) = result
         {
             let info = Info::from_cbor(entries);
             self.max_msg_size = info.max_msg_size;
-            self.info_cache = Some(info);
+            self.inner.set_info(info);
         }
 
         val_to_pyobj(py, &result)
     }
 
     fn refresh_info(&mut self, py: Python<'_>) -> PyResult<PyObject> {
-        let mut ctap = self.make_ctap(py)?;
-        let info = ctap.get_info().map_err(ctap_err)?;
-        self.max_msg_size = info.max_msg_size;
+        let info = self.inner.get_info().map_err(ctap_err)?;
         let result = info_to_py(py, &info)?;
-        self.info_cache = Some(info);
+        self.max_msg_size = info.max_msg_size;
+        self.inner.set_info(info);
         Ok(result)
     }
 
@@ -455,7 +430,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn make_credential(
-        &self,
+        &mut self,
         py: Python<'_>,
         client_data_hash: &[u8],
         rp: PyObject,
@@ -477,9 +452,8 @@ impl NativeCtap2 {
         let ext_val = py_opt_to_val(py, extensions)?;
         let opts_val = py_opt_to_val(py, options)?;
 
-        let mut ctap = self.make_ctap(py)?;
         let resp = with_event_args(event, on_keepalive, || {
-            ctap.make_credential(
+            self.inner.make_credential(
                 client_data_hash,
                 rp_val,
                 user_val,
@@ -507,7 +481,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn get_assertion(
-        &self,
+        &mut self,
         py: Python<'_>,
         rp_id: &str,
         client_data_hash: &[u8],
@@ -523,9 +497,8 @@ impl NativeCtap2 {
         let ext_val = py_opt_to_val(py, extensions)?;
         let opts_val = py_opt_to_val(py, options)?;
 
-        let mut ctap = self.make_ctap(py)?;
         let resp = with_event_args(event, on_keepalive, || {
-            ctap.get_assertion(
+            self.inner.get_assertion(
                 rp_id,
                 client_data_hash,
                 allow_val,
@@ -542,9 +515,8 @@ impl NativeCtap2 {
         assertion_response_to_py(py, &resp)
     }
 
-    fn get_next_assertion(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let mut ctap = self.make_ctap(py)?;
-        let resp = ctap.get_next_assertion().map_err(ctap_err)?;
+    fn get_next_assertion(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let resp = self.inner.get_next_assertion().map_err(ctap_err)?;
         assertion_response_to_py(py, &resp)
     }
 
@@ -556,7 +528,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn get_assertions(
-        &self,
+        &mut self,
         py: Python<'_>,
         rp_id: &str,
         client_data_hash: &[u8],
@@ -572,9 +544,8 @@ impl NativeCtap2 {
         let ext_val = py_opt_to_val(py, extensions)?;
         let opts_val = py_opt_to_val(py, options)?;
 
-        let mut ctap = self.make_ctap(py)?;
         let results = with_event_args(event, on_keepalive, || {
-            ctap.get_assertions(
+            self.inner.get_assertions(
                 rp_id,
                 client_data_hash,
                 allow_val,
@@ -604,7 +575,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn client_pin(
-        &self,
+        &mut self,
         py: Python<'_>,
         pin_uv_protocol: u32,
         sub_cmd: u32,
@@ -619,9 +590,8 @@ impl NativeCtap2 {
     ) -> PyResult<PyObject> {
         let ka_val = py_opt_to_val(py, key_agreement)?;
 
-        let mut ctap = self.make_ctap(py)?;
         let result = with_event_args(event, on_keepalive, || {
-            ctap.client_pin(
+            self.inner.client_pin(
                 pin_uv_protocol,
                 sub_cmd,
                 ka_val,
@@ -641,24 +611,20 @@ impl NativeCtap2 {
 
     #[pyo3(signature = (event=None, on_keepalive=None))]
     fn selection(
-        &self,
-        py: Python<'_>,
+        &mut self,
         event: Option<PyObject>,
         on_keepalive: Option<PyObject>,
     ) -> PyResult<()> {
-        let mut ctap = self.make_ctap(py)?;
-        with_event_args(event, on_keepalive, || ctap.selection(&mut |_| {}, None)).map_err(ctap_err)
+        with_event_args(event, on_keepalive, || {
+            self.inner.selection(&mut |_| {}, None)
+        })
+        .map_err(ctap_err)
     }
 
     #[pyo3(signature = (event=None, on_keepalive=None))]
-    fn reset(
-        &self,
-        py: Python<'_>,
-        event: Option<PyObject>,
-        on_keepalive: Option<PyObject>,
-    ) -> PyResult<()> {
-        let mut ctap = self.make_ctap(py)?;
-        with_event_args(event, on_keepalive, || ctap.reset(&mut |_| {}, None)).map_err(ctap_err)
+    fn reset(&mut self, event: Option<PyObject>, on_keepalive: Option<PyObject>) -> PyResult<()> {
+        with_event_args(event, on_keepalive, || self.inner.reset(&mut |_| {}, None))
+            .map_err(ctap_err)
     }
 
     #[pyo3(signature = (
@@ -668,7 +634,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn credential_mgmt(
-        &self,
+        &mut self,
         py: Python<'_>,
         sub_cmd: PyObject,
         sub_cmd_params: Option<PyObject>,
@@ -682,12 +648,8 @@ impl NativeCtap2 {
         let proto_val = py_opt_to_val(py, pin_uv_protocol)?;
         let param_val = py_opt_to_val(py, pin_uv_param)?;
 
-        let mut ctap = self.make_ctap(py)?;
-        if let Some(ref info) = self.info_cache {
-            ctap.set_info(info.clone());
-        }
         let result = with_event_args(event, on_keepalive, || {
-            ctap.credential_mgmt(
+            self.inner.credential_mgmt(
                 sub_cmd_val,
                 params_val,
                 proto_val,
@@ -707,7 +669,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn bio_enrollment(
-        &self,
+        &mut self,
         py: Python<'_>,
         modality: Option<PyObject>,
         sub_cmd: Option<PyObject>,
@@ -725,12 +687,8 @@ impl NativeCtap2 {
         let param_val = py_opt_to_val(py, pin_uv_param)?;
         let gm_val = py_opt_to_val(py, get_modality)?;
 
-        let mut ctap = self.make_ctap(py)?;
-        if let Some(ref info) = self.info_cache {
-            ctap.set_info(info.clone());
-        }
         let result = with_event_args(event, on_keepalive, || {
-            ctap.bio_enrollment(
+            self.inner.bio_enrollment(
                 mod_val,
                 cmd_val,
                 params_val,
@@ -752,7 +710,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn large_blobs(
-        &self,
+        &mut self,
         py: Python<'_>,
         offset: u64,
         get: Option<u64>,
@@ -763,9 +721,8 @@ impl NativeCtap2 {
         event: Option<PyObject>,
         on_keepalive: Option<PyObject>,
     ) -> PyResult<PyObject> {
-        let mut ctap = self.make_ctap(py)?;
         let result = with_event_args(event, on_keepalive, || {
-            ctap.large_blobs(
+            self.inner.large_blobs(
                 offset,
                 get,
                 set,
@@ -787,7 +744,7 @@ impl NativeCtap2 {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn config(
-        &self,
+        &mut self,
         py: Python<'_>,
         sub_cmd: PyObject,
         sub_cmd_params: Option<PyObject>,
@@ -801,9 +758,9 @@ impl NativeCtap2 {
         let proto_val = py_opt_to_val(py, pin_uv_protocol)?;
         let param_val = py_opt_to_val(py, pin_uv_param)?;
 
-        let mut ctap = self.make_ctap(py)?;
         let result = with_event_args(event, on_keepalive, || {
-            ctap.config(cmd_val, params_val, proto_val, param_val, &mut |_| {}, None)
+            self.inner
+                .config(cmd_val, params_val, proto_val, param_val, &mut |_| {}, None)
         })
         .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
@@ -811,13 +768,11 @@ impl NativeCtap2 {
 }
 
 impl NativeCtap2 {
-    /// Create an owned Ctap2<PyCtapDevice>.
-    fn make_ctap(&self, py: Python<'_>) -> PyResult<ctap2::Ctap2<PyCtapDevice>> {
-        let dev = PyCtapDevice::new_ctap2(py, self.device.clone_ref(py))?;
+    /// Create a new Ctap2<PyCtapDevice> for session types that need their own.
+    pub(crate) fn make_ctap(&self, py: Python<'_>) -> PyResult<ctap2::Ctap2<PyCtapDevice>> {
+        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
         let mut ctap = ctap2::Ctap2::from_parts(dev, self.strict_cbor, self.max_msg_size);
-        if let Some(ref info) = self.info_cache {
-            ctap.set_info(info.clone());
-        }
+        ctap.set_info(self.inner.info().clone());
         Ok(ctap)
     }
 }

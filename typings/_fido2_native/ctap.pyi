@@ -14,10 +14,10 @@ class NativeCtap1:
     ) -> bytes: ...
 
 class NativeCtap2:
-    info: dict[str, Any]
-    max_msg_size: int
-    device: Any
-    strict_cbor: bool
+    @property
+    def info(self) -> dict[str, Any]: ...
+    @property
+    def device(self) -> Any: ...
     def __init__(
         self, device: Any, strict_cbor: bool = True, max_msg_size: int = 1024
     ) -> None: ...
