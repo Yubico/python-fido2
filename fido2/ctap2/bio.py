@@ -32,6 +32,8 @@ from enum import IntEnum, unique
 from threading import Event
 from typing import Any, Callable, Mapping
 
+from _fido2_native.ctap import NativeFPBioEnrollment
+
 from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol
@@ -198,7 +200,8 @@ class FPBioEnrollment(BioEnrollment):
     def __init__(self, ctap: Ctap2, pin_uv_protocol: PinProtocol, pin_uv_token: bytes):
         super().__init__(ctap, BioEnrollment.MODALITY.FINGERPRINT)
 
-        self._native = ctap._native.create_bio_enrollment(
+        self._native = NativeFPBioEnrollment(
+            ctap._native,
             pin_uv_protocol.VERSION,
             pin_uv_token,
             self.modality,

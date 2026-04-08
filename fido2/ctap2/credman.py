@@ -114,11 +114,10 @@ class CredentialManagement:
 
         self.ctap = ctap
 
-        self._native: NativeCredentialManagement = (
-            ctap._native.create_credential_management(
-                pin_uv_protocol.VERSION,
-                pin_uv_token,
-            )
+        self._native = NativeCredentialManagement(
+            ctap._native,
+            pin_uv_protocol.VERSION,
+            pin_uv_token,
         )
 
     def get_metadata(self) -> Mapping[int, Any]:

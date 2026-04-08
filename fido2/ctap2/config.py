@@ -73,9 +73,7 @@ class Config:
         self.ctap = ctap
 
         self._native = NativeConfig(
-            ctap._native.device,
-            ctap._native.strict_cbor,
-            ctap._native.max_msg_size,
+            ctap._native,
             pin_uv_protocol.VERSION if pin_uv_protocol else None,
             pin_uv_token,
         )

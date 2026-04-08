@@ -176,9 +176,7 @@ class ClientPin:
         else:
             self.protocol = protocol
         self._native = NativeClientPin(
-            ctap._native.device,
-            ctap._native.strict_cbor,
-            ctap._native.max_msg_size,
+            ctap._native,
             self.protocol.VERSION,
         )
 

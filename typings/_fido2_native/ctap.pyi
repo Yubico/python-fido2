@@ -132,26 +132,17 @@ class NativeCtap2:
         event: Any | None = None,
         on_keepalive: Callable[[int], None] | None = None,
     ) -> Mapping[int, Any]: ...
-    def create_credential_management(
-        self,
-        protocol_version: int,
-        pin_uv_token: bytes,
-    ) -> NativeCredentialManagement: ...
-    def create_bio_enrollment(
-        self,
-        protocol_version: int,
-        pin_uv_token: bytes,
-        modality: int,
-    ) -> NativeFPBioEnrollment: ...
 
 class NativeClientPin:
     def __init__(
         self,
-        device: Any,
-        strict_cbor: bool,
-        max_msg_size: int,
+        ctap: NativeCtap2,
         protocol_version: int,
     ) -> None: ...
+    @staticmethod
+    def is_supported(info: Any) -> bool: ...
+    @staticmethod
+    def is_token_supported(info: Any) -> bool: ...
     def get_pin_token(
         self,
         pin: str,
@@ -172,6 +163,12 @@ class NativeClientPin:
     def get_shared_secret(self) -> tuple[dict[int, Any], bytes]: ...
 
 class NativeCredentialManagement:
+    def __init__(
+        self,
+        ctap: NativeCtap2,
+        protocol_version: int,
+        pin_uv_token: bytes,
+    ) -> None: ...
     def get_metadata(self) -> Mapping[int, Any]: ...
     def enumerate_rps_begin(self) -> Mapping[int, Any]: ...
     def enumerate_rps_next(self) -> Mapping[int, Any]: ...
@@ -183,6 +180,13 @@ class NativeCredentialManagement:
     def update_user_info(self, cred_id: Any, user: Any) -> None: ...
 
 class NativeFPBioEnrollment:
+    def __init__(
+        self,
+        ctap: NativeCtap2,
+        protocol_version: int,
+        pin_uv_token: bytes,
+        modality: int,
+    ) -> None: ...
     def get_fingerprint_sensor_info(
         self,
         event: Any | None = None,
@@ -209,9 +213,7 @@ class NativeFPBioEnrollment:
 class NativeLargeBlobs:
     def __init__(
         self,
-        device: Any,
-        strict_cbor: bool,
-        max_msg_size: int,
+        ctap: NativeCtap2,
         max_fragment_length: int,
         protocol_version: int | None = None,
         pin_uv_token: bytes | None = None,
@@ -225,9 +227,7 @@ class NativeLargeBlobs:
 class NativeConfig:
     def __init__(
         self,
-        device: Any,
-        strict_cbor: bool,
-        max_msg_size: int,
+        ctap: NativeCtap2,
         protocol_version: int | None = None,
         pin_uv_token: bytes | None = None,
     ) -> None: ...

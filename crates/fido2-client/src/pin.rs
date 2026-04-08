@@ -38,7 +38,7 @@ use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::ctap::CtapError;
-use crate::ctap2::Ctap2;
+use crate::ctap2::{Ctap2, Info};
 use fido2_server::cbor::Value;
 use fido2_server::utils;
 
@@ -383,6 +383,16 @@ pub struct ClientPin<'a> {
 }
 
 impl<'a> ClientPin<'a> {
+    /// Checks if ClientPin functionality is supported.
+    pub fn is_supported(info: &Info) -> bool {
+        info.options.contains_key("clientPin")
+    }
+
+    /// Checks if pinUvAuthToken is supported.
+    pub fn is_token_supported(info: &Info) -> bool {
+        info.options.get("pinUvAuthToken") == Some(&true)
+    }
+
     /// Create a new ClientPin instance.
     ///
     /// If `protocol` is None, the best supported protocol is chosen
@@ -465,16 +475,27 @@ impl<'a> ClientPin<'a> {
         permissions: Option<u32>,
         permissions_rpid: Option<&str>,
     ) -> Result<Vec<u8>, CtapError> {
+        if !Self::is_supported(self.ctap.info()) {
+            return Err(CtapError::InvalidResponse(
+                "Authenticator does not support get_pin_token".to_string(),
+            ));
+        }
+
         let (key_agreement, shared_secret) = self._get_shared_secret()?;
 
         let pin_hash = utils::sha256(pin.as_bytes());
         let pin_hash_enc = self.protocol.encrypt(&shared_secret, &pin_hash[..16])?;
 
-        let sub_cmd = if permissions.is_some() {
-            client_pin_cmd::GET_TOKEN_USING_PIN
-        } else {
-            client_pin_cmd::GET_TOKEN_USING_PIN_LEGACY
-        };
+        let (sub_cmd, permissions, permissions_rpid) =
+            if Self::is_token_supported(self.ctap.info()) && permissions.is_some() {
+                (
+                    client_pin_cmd::GET_TOKEN_USING_PIN,
+                    permissions,
+                    permissions_rpid,
+                )
+            } else {
+                (client_pin_cmd::GET_TOKEN_USING_PIN_LEGACY, None, None)
+            };
 
         let resp = self.ctap.client_pin(
             self.protocol.version(),

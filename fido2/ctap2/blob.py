@@ -61,9 +61,7 @@ class LargeBlobs:
         max_fragment_length = ctap.info.max_msg_size - 64
 
         self._native = NativeLargeBlobs(
-            ctap._native.device,
-            ctap._native.strict_cbor,
-            ctap._native.max_msg_size,
+            ctap._native,
             max_fragment_length,
             pin_uv_protocol.VERSION if pin_uv_protocol else None,
             pin_uv_token,
