@@ -833,18 +833,17 @@ fn make_protocol(version: u32) -> PyResult<PinProtocol> {
 
 #[pyclass]
 struct NativeClientPin {
-    ctap: Py<NativeCtap2>,
-    protocol_version: u32,
+    inner: ClientPin<PyCtapDevice>,
 }
 
 #[pymethods]
 impl NativeClientPin {
     #[new]
-    fn new(ctap: Py<NativeCtap2>, protocol_version: u32) -> Self {
-        Self {
-            ctap,
-            protocol_version,
-        }
+    fn new(ctap: &NativeCtap2, py: Python<'_>, protocol_version: u32) -> PyResult<Self> {
+        let ctap2 = ctap.make_ctap(py, None, None)?;
+        let protocol = make_protocol(protocol_version)?;
+        let inner = ClientPin::new(ctap2, Some(protocol)).map_err(ctap_err)?;
+        Ok(Self { inner })
     }
 
     #[staticmethod]
@@ -865,36 +864,31 @@ impl NativeClientPin {
 
     #[pyo3(signature = (pin, permissions=None, permissions_rpid=None))]
     fn get_pin_token<'py>(
-        &self,
+        &mut self,
         py: Python<'py>,
         pin: &str,
         permissions: Option<u32>,
         permissions_rpid: Option<&str>,
     ) -> PyResult<Bound<'py, PyBytes>> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(ctap_err)?;
-        let token = client_pin
+        let token = self
+            .inner
             .get_pin_token(pin, permissions, permissions_rpid)
             .map_err(ctap_err)?;
         Ok(PyBytes::new(py, &token))
     }
 
     #[pyo3(signature = (permissions=None, permissions_rpid=None, event=None, on_keepalive=None))]
+    #[allow(unused_variables)]
     fn get_uv_token<'py>(
-        &self,
+        &mut self,
         py: Python<'py>,
         permissions: Option<u32>,
         permissions_rpid: Option<&str>,
         event: Option<PyObject>,
         on_keepalive: Option<PyObject>,
     ) -> PyResult<Bound<'py, PyBytes>> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, event, on_keepalive)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(ctap_err)?;
-        let token = client_pin
+        let token = self
+            .inner
             .get_uv_token(
                 permissions.unwrap_or(0),
                 permissions_rpid,
@@ -905,12 +899,8 @@ impl NativeClientPin {
         Ok(PyBytes::new(py, &token))
     }
 
-    fn get_pin_retries(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(ctap_err)?;
-        let (retries, power_cycle) = client_pin.get_pin_retries().map_err(ctap_err)?;
+    fn get_pin_retries(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let (retries, power_cycle) = self.inner.get_pin_retries().map_err(ctap_err)?;
         Ok(PyTuple::new(
             py,
             [
@@ -924,36 +914,20 @@ impl NativeClientPin {
         .into())
     }
 
-    fn get_uv_retries(&self, py: Python<'_>) -> PyResult<u32> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(ctap_err)?;
-        client_pin.get_uv_retries().map_err(ctap_err)
+    fn get_uv_retries(&mut self) -> PyResult<u32> {
+        self.inner.get_uv_retries().map_err(ctap_err)
     }
 
-    fn set_pin(&self, py: Python<'_>, pin: &str) -> PyResult<()> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(ctap_err)?;
-        client_pin.set_pin(pin).map_err(ctap_err)
+    fn set_pin(&mut self, pin: &str) -> PyResult<()> {
+        self.inner.set_pin(pin).map_err(ctap_err)
     }
 
-    fn change_pin(&self, py: Python<'_>, old_pin: &str, new_pin: &str) -> PyResult<()> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(ctap_err)?;
-        client_pin.change_pin(old_pin, new_pin).map_err(ctap_err)
+    fn change_pin(&mut self, old_pin: &str, new_pin: &str) -> PyResult<()> {
+        self.inner.change_pin(old_pin, new_pin).map_err(ctap_err)
     }
 
-    fn get_shared_secret(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(ctap_err)?;
-        let (ka, shared) = client_pin._get_shared_secret().map_err(ctap_err)?;
+    fn get_shared_secret(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let (ka, shared) = self.inner._get_shared_secret().map_err(ctap_err)?;
 
         let ka_dict = PyDict::new(py);
         ka_dict.set_item(1i32, 2i32)?;
@@ -971,55 +945,41 @@ impl NativeClientPin {
 
 #[pyclass]
 struct NativeCredentialManagement {
-    ctap: Py<NativeCtap2>,
-    protocol_version: u32,
-    pin_uv_token: Vec<u8>,
+    inner: CredentialManagement<PyCtapDevice>,
 }
 
 #[pymethods]
 impl NativeCredentialManagement {
     #[new]
-    fn new(ctap: Py<NativeCtap2>, protocol_version: u32, pin_uv_token: Vec<u8>) -> Self {
-        Self {
-            ctap,
-            protocol_version,
-            pin_uv_token,
-        }
+    fn new(
+        ctap: &NativeCtap2,
+        py: Python<'_>,
+        protocol_version: u32,
+        pin_uv_token: Vec<u8>,
+    ) -> PyResult<Self> {
+        let ctap2 = ctap.make_ctap(py, None, None)?;
+        let protocol = make_protocol(protocol_version)?;
+        let inner = CredentialManagement::new(ctap2, protocol, pin_uv_token);
+        Ok(Self { inner })
     }
 
-    fn get_metadata(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        let result = cm.get_metadata().map_err(ctap_err)?;
+    fn get_metadata(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let result = self.inner.get_metadata().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
-    fn enumerate_rps_begin(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        let result = cm.enumerate_rps_begin().map_err(ctap_err)?;
+    fn enumerate_rps_begin(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let result = self.inner.enumerate_rps_begin().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
-    fn enumerate_rps_next(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        let result = cm.enumerate_rps_next().map_err(ctap_err)?;
+    fn enumerate_rps_next(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let result = self.inner.enumerate_rps_next().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
-    fn enumerate_rps(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        let results = cm.enumerate_rps().map_err(ctap_err)?;
+    fn enumerate_rps(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let results = self.inner.enumerate_rps().map_err(ctap_err)?;
         let list = PyList::empty(py);
         for v in &results {
             list.append(py_cbor::value_to_py(py, v)?)?;
@@ -1027,32 +987,21 @@ impl NativeCredentialManagement {
         Ok(list.into())
     }
 
-    fn enumerate_creds_begin(&self, py: Python<'_>, rp_id_hash: &[u8]) -> PyResult<PyObject> {
-        let rp_id_hash = rp_id_hash.to_vec();
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        let result = cm.enumerate_creds_begin(&rp_id_hash).map_err(ctap_err)?;
+    fn enumerate_creds_begin(&mut self, py: Python<'_>, rp_id_hash: &[u8]) -> PyResult<PyObject> {
+        let result = self
+            .inner
+            .enumerate_creds_begin(rp_id_hash)
+            .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
-    fn enumerate_creds_next(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        let result = cm.enumerate_creds_next().map_err(ctap_err)?;
+    fn enumerate_creds_next(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let result = self.inner.enumerate_creds_next().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
-    fn enumerate_creds(&self, py: Python<'_>, rp_id_hash: &[u8]) -> PyResult<PyObject> {
-        let rp_id_hash = rp_id_hash.to_vec();
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        let results = cm.enumerate_creds(&rp_id_hash).map_err(ctap_err)?;
+    fn enumerate_creds(&mut self, py: Python<'_>, rp_id_hash: &[u8]) -> PyResult<PyObject> {
+        let results = self.inner.enumerate_creds(rp_id_hash).map_err(ctap_err)?;
         let list = PyList::empty(py);
         for v in &results {
             list.append(py_cbor::value_to_py(py, v)?)?;
@@ -1060,23 +1009,22 @@ impl NativeCredentialManagement {
         Ok(list.into())
     }
 
-    fn delete_cred(&self, py: Python<'_>, cred_id: PyObject) -> PyResult<()> {
+    fn delete_cred(&mut self, py: Python<'_>, cred_id: PyObject) -> PyResult<()> {
         let cred_val = py_to_val(py, cred_id)?;
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        cm.delete_cred(cred_val).map_err(ctap_err)
+        self.inner.delete_cred(cred_val).map_err(ctap_err)
     }
 
-    fn update_user_info(&self, py: Python<'_>, cred_id: PyObject, user: PyObject) -> PyResult<()> {
+    fn update_user_info(
+        &mut self,
+        py: Python<'_>,
+        cred_id: PyObject,
+        user: PyObject,
+    ) -> PyResult<()> {
         let cred_val = py_to_val(py, cred_id)?;
         let user_val = py_to_val(py, user)?;
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut cm = CredentialManagement::new(ctap, protocol, self.pin_uv_token.clone());
-        cm.update_user_info(cred_val, user_val).map_err(ctap_err)
+        self.inner
+            .update_user_info(cred_val, user_val)
+            .map_err(ctap_err)
     }
 }
 
@@ -1084,60 +1032,50 @@ impl NativeCredentialManagement {
 
 #[pyclass]
 struct NativeFPBioEnrollment {
-    ctap: Py<NativeCtap2>,
-    protocol_version: u32,
-    pin_uv_token: Vec<u8>,
-    modality: u32,
+    inner: FPBioEnrollment<PyCtapDevice>,
 }
 
 #[pymethods]
 impl NativeFPBioEnrollment {
     #[new]
     fn new(
-        ctap: Py<NativeCtap2>,
+        ctap: &NativeCtap2,
+        py: Python<'_>,
         protocol_version: u32,
         pin_uv_token: Vec<u8>,
         modality: u32,
-    ) -> Self {
-        Self {
-            ctap,
-            protocol_version,
-            pin_uv_token,
-            modality,
-        }
+    ) -> PyResult<Self> {
+        let ctap2 = ctap.make_ctap(py, None, None)?;
+        let protocol = make_protocol(protocol_version)?;
+        let inner = FPBioEnrollment::from_parts(ctap2, protocol, pin_uv_token, modality);
+        Ok(Self { inner })
     }
 
+    #[allow(unused_variables)]
     fn get_fingerprint_sensor_info(
-        &self,
+        &mut self,
         py: Python<'_>,
         event: Option<PyObject>,
         on_keepalive: Option<PyObject>,
     ) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, event, on_keepalive)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut bio =
-            FPBioEnrollment::from_parts(ctap, protocol, self.pin_uv_token.clone(), self.modality);
-        let result = bio
+        let result = self
+            .inner
             .get_fingerprint_sensor_info(&mut |_| {}, None)
             .map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
     #[pyo3(signature = (timeout=None, event=None, on_keepalive=None))]
+    #[allow(unused_variables)]
     fn enroll_begin(
-        &self,
+        &mut self,
         py: Python<'_>,
         timeout: Option<u32>,
         event: Option<PyObject>,
         on_keepalive: Option<PyObject>,
     ) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, event, on_keepalive)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut bio =
-            FPBioEnrollment::from_parts(ctap, protocol, self.pin_uv_token.clone(), self.modality);
-        let (template_id, status, remaining) = bio
+        let (template_id, status, remaining) = self
+            .inner
             .enroll_begin(timeout, &mut |_| {}, None)
             .map_err(ctap_err)?;
         Ok(PyTuple::new(
@@ -1152,22 +1090,18 @@ impl NativeFPBioEnrollment {
     }
 
     #[pyo3(signature = (template_id, timeout=None, event=None, on_keepalive=None))]
+    #[allow(unused_variables)]
     fn enroll_capture_next(
-        &self,
+        &mut self,
         py: Python<'_>,
         template_id: &[u8],
         timeout: Option<u32>,
         event: Option<PyObject>,
         on_keepalive: Option<PyObject>,
     ) -> PyResult<PyObject> {
-        let template_id = template_id.to_vec();
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, event, on_keepalive)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut bio =
-            FPBioEnrollment::from_parts(ctap, protocol, self.pin_uv_token.clone(), self.modality);
-        let (status, remaining) = bio
-            .enroll_capture_next(&template_id, timeout, &mut |_| {}, None)
+        let (status, remaining) = self
+            .inner
+            .enroll_capture_next(template_id, timeout, &mut |_| {}, None)
             .map_err(ctap_err)?;
         Ok(PyTuple::new(
             py,
@@ -1179,44 +1113,21 @@ impl NativeFPBioEnrollment {
         .into())
     }
 
-    fn enroll_cancel(&self, py: Python<'_>) -> PyResult<()> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut bio =
-            FPBioEnrollment::from_parts(ctap, protocol, self.pin_uv_token.clone(), self.modality);
-        bio.enroll_cancel().map_err(ctap_err)
+    fn enroll_cancel(&mut self) -> PyResult<()> {
+        self.inner.enroll_cancel().map_err(ctap_err)
     }
 
-    fn enumerate_enrollments(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut bio =
-            FPBioEnrollment::from_parts(ctap, protocol, self.pin_uv_token.clone(), self.modality);
-        let result = bio.enumerate_enrollments().map_err(ctap_err)?;
+    fn enumerate_enrollments(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let result = self.inner.enumerate_enrollments().map_err(ctap_err)?;
         val_to_pyobj(py, &result)
     }
 
-    fn set_name(&self, py: Python<'_>, template_id: &[u8], name: &str) -> PyResult<()> {
-        let template_id = template_id.to_vec();
-        let name = name.to_string();
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut bio =
-            FPBioEnrollment::from_parts(ctap, protocol, self.pin_uv_token.clone(), self.modality);
-        bio.set_name(&template_id, &name).map_err(ctap_err)
+    fn set_name(&mut self, template_id: &[u8], name: &str) -> PyResult<()> {
+        self.inner.set_name(template_id, name).map_err(ctap_err)
     }
 
-    fn remove_enrollment(&self, py: Python<'_>, template_id: &[u8]) -> PyResult<()> {
-        let template_id = template_id.to_vec();
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = make_protocol(self.protocol_version)?;
-        let mut bio =
-            FPBioEnrollment::from_parts(ctap, protocol, self.pin_uv_token.clone(), self.modality);
-        bio.remove_enrollment(&template_id).map_err(ctap_err)
+    fn remove_enrollment(&mut self, template_id: &[u8]) -> PyResult<()> {
+        self.inner.remove_enrollment(template_id).map_err(ctap_err)
     }
 }
 
@@ -1224,10 +1135,7 @@ impl NativeFPBioEnrollment {
 
 #[pyclass]
 struct NativeLargeBlobs {
-    ctap: Py<NativeCtap2>,
-    max_fragment_length: usize,
-    protocol_version: Option<u32>,
-    pin_uv_token: Option<Vec<u8>>,
+    inner: LargeBlobs<PyCtapDevice>,
 }
 
 #[pymethods]
@@ -1235,30 +1143,20 @@ impl NativeLargeBlobs {
     #[new]
     #[pyo3(signature = (ctap, max_fragment_length, protocol_version=None, pin_uv_token=None))]
     fn new(
-        ctap: Py<NativeCtap2>,
+        ctap: &NativeCtap2,
+        py: Python<'_>,
         max_fragment_length: usize,
         protocol_version: Option<u32>,
         pin_uv_token: Option<Vec<u8>>,
-    ) -> Self {
-        Self {
-            ctap,
-            max_fragment_length,
-            protocol_version,
-            pin_uv_token,
-        }
+    ) -> PyResult<Self> {
+        let ctap2 = ctap.make_ctap(py, None, None)?;
+        let protocol = protocol_version.map(make_protocol).transpose()?;
+        let inner = LargeBlobs::from_parts(ctap2, max_fragment_length, protocol, pin_uv_token);
+        Ok(Self { inner })
     }
 
-    fn read_blob_array(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut lb = LargeBlobs::from_parts(
-            ctap,
-            self.max_fragment_length,
-            protocol,
-            self.pin_uv_token.clone(),
-        );
-        let results = lb.read_blob_array().map_err(ctap_err)?;
+    fn read_blob_array(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+        let results = self.inner.read_blob_array().map_err(ctap_err)?;
         let list = PyList::empty(py);
         for v in &results {
             list.append(py_cbor::value_to_py(py, v)?)?;
@@ -1266,69 +1164,28 @@ impl NativeLargeBlobs {
         Ok(list.into())
     }
 
-    fn write_blob_array(&self, py: Python<'_>, blob_array: PyObject) -> PyResult<()> {
+    fn write_blob_array(&mut self, py: Python<'_>, blob_array: PyObject) -> PyResult<()> {
         let arr_val = py_to_val(py, blob_array)?;
         let entries = match arr_val {
             Value::Array(a) => a,
             _ => return Err(PyValueError::new_err("Expected list")),
         };
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut lb = LargeBlobs::from_parts(
-            ctap,
-            self.max_fragment_length,
-            protocol,
-            self.pin_uv_token.clone(),
-        );
-        lb.write_blob_array(&entries).map_err(ctap_err)
+        self.inner.write_blob_array(&entries).map_err(ctap_err)
     }
 
-    fn get_blob(&self, py: Python<'_>, large_blob_key: &[u8]) -> PyResult<PyObject> {
-        let large_blob_key = large_blob_key.to_vec();
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut lb = LargeBlobs::from_parts(
-            ctap,
-            self.max_fragment_length,
-            protocol,
-            self.pin_uv_token.clone(),
-        );
-        match lb.get_blob(&large_blob_key).map_err(ctap_err)? {
+    fn get_blob(&mut self, py: Python<'_>, large_blob_key: &[u8]) -> PyResult<PyObject> {
+        match self.inner.get_blob(large_blob_key).map_err(ctap_err)? {
             Some(data) => Ok(PyBytes::new(py, &data).into()),
             None => Ok(py.None()),
         }
     }
 
-    fn put_blob(&self, py: Python<'_>, large_blob_key: &[u8], data: Option<&[u8]>) -> PyResult<()> {
-        let large_blob_key = large_blob_key.to_vec();
-        let data = data.map(|d| d.to_vec());
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut lb = LargeBlobs::from_parts(
-            ctap,
-            self.max_fragment_length,
-            protocol,
-            self.pin_uv_token.clone(),
-        );
-        lb.put_blob(&large_blob_key, data.as_deref())
-            .map_err(ctap_err)
+    fn put_blob(&mut self, large_blob_key: &[u8], data: Option<&[u8]>) -> PyResult<()> {
+        self.inner.put_blob(large_blob_key, data).map_err(ctap_err)
     }
 
-    fn delete_blob(&self, py: Python<'_>, large_blob_key: &[u8]) -> PyResult<()> {
-        let large_blob_key = large_blob_key.to_vec();
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut lb = LargeBlobs::from_parts(
-            ctap,
-            self.max_fragment_length,
-            protocol,
-            self.pin_uv_token.clone(),
-        );
-        lb.delete_blob(&large_blob_key).map_err(ctap_err)
+    fn delete_blob(&mut self, large_blob_key: &[u8]) -> PyResult<()> {
+        self.inner.delete_blob(large_blob_key).map_err(ctap_err)
     }
 }
 
@@ -1336,9 +1193,7 @@ impl NativeLargeBlobs {
 
 #[pyclass]
 struct NativeConfig {
-    ctap: Py<NativeCtap2>,
-    protocol_version: Option<u32>,
-    pin_uv_token: Option<Vec<u8>>,
+    inner: Config<PyCtapDevice>,
 }
 
 #[pymethods]
@@ -1346,49 +1201,37 @@ impl NativeConfig {
     #[new]
     #[pyo3(signature = (ctap, protocol_version=None, pin_uv_token=None))]
     fn new(
-        ctap: Py<NativeCtap2>,
+        ctap: &NativeCtap2,
+        py: Python<'_>,
         protocol_version: Option<u32>,
         pin_uv_token: Option<Vec<u8>>,
-    ) -> Self {
-        Self {
-            ctap,
-            protocol_version,
-            pin_uv_token,
-        }
+    ) -> PyResult<Self> {
+        let ctap2 = ctap.make_ctap(py, None, None)?;
+        let protocol = protocol_version.map(make_protocol).transpose()?;
+        let inner = Config::from_parts(ctap2, protocol, pin_uv_token);
+        Ok(Self { inner })
     }
 
-    fn enable_enterprise_attestation(&self, py: Python<'_>) -> PyResult<()> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut cfg = Config::from_parts(ctap, protocol, self.pin_uv_token.clone());
-        cfg.enable_enterprise_attestation().map_err(ctap_err)
+    fn enable_enterprise_attestation(&mut self) -> PyResult<()> {
+        self.inner.enable_enterprise_attestation().map_err(ctap_err)
     }
 
-    fn toggle_always_uv(&self, py: Python<'_>) -> PyResult<()> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut cfg = Config::from_parts(ctap, protocol, self.pin_uv_token.clone());
-        cfg.toggle_always_uv().map_err(ctap_err)
+    fn toggle_always_uv(&mut self) -> PyResult<()> {
+        self.inner.toggle_always_uv().map_err(ctap_err)
     }
 
     #[pyo3(signature = (min_pin_length=None, rp_ids=None, force_change_pin=false))]
     fn set_min_pin_length(
-        &self,
-        py: Python<'_>,
+        &mut self,
         min_pin_length: Option<u32>,
         rp_ids: Option<Vec<String>>,
         force_change_pin: bool,
     ) -> PyResult<()> {
-        let ctap_ref = self.ctap.borrow(py);
-        let ctap = ctap_ref.make_ctap(py, None, None)?;
-        let protocol = self.protocol_version.map(make_protocol).transpose()?;
-        let mut cfg = Config::from_parts(ctap, protocol, self.pin_uv_token.clone());
         let rp_strs: Option<Vec<&str>> = rp_ids
             .as_ref()
             .map(|v| v.iter().map(|s| s.as_str()).collect());
-        cfg.set_min_pin_length(min_pin_length, rp_strs.as_deref(), force_change_pin)
+        self.inner
+            .set_min_pin_length(min_pin_length, rp_strs.as_deref(), force_change_pin)
             .map_err(ctap_err)
     }
 }
