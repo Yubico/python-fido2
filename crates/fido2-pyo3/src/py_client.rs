@@ -41,7 +41,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
-use crate::py_ctap::PyCtapDevice;
+use crate::py_ctap::{PyCtapDevice, with_event_args};
 
 /// Native client data collector.
 ///
@@ -600,14 +600,9 @@ struct NativeFido2Client {
 }
 
 impl NativeFido2Client {
-    /// Create a PyCtapDevice for a call, using the stored device and on_keepalive.
-    fn make_device(&self, py: Python<'_>, event: Option<PyObject>) -> PyResult<PyCtapDevice> {
-        PyCtapDevice::with_event(
-            py,
-            self.device.clone_ref(py),
-            event,
-            Some(self.on_keepalive.clone_ref(py)),
-        )
+    /// Create a PyCtapDevice for a call.
+    fn make_device(&self, py: Python<'_>) -> PyResult<PyCtapDevice> {
+        PyCtapDevice::new_ctap2(py, self.device.clone_ref(py))
     }
 
     /// Create a PyUserInteraction from the stored user_interaction.
@@ -712,10 +707,13 @@ impl NativeFido2Client {
     /// Perform authenticator selection (touch).
     #[pyo3(signature = (event=None))]
     fn selection(&self, py: Python<'_>, event: Option<PyObject>) -> PyResult<()> {
-        let dev = self.make_device(py, event)?;
+        let dev = self.make_device(py)?;
         let ui = Box::new(self.make_interaction());
         let mut backend = self.make_backend(py, dev, ui);
-        backend.selection().map_err(client_err)
+        let on_keepalive = Some(self.on_keepalive.clone_ref(py));
+        with_event_args(event, on_keepalive, || {
+            backend.selection().map_err(client_err)
+        })
     }
 
     /// Perform the full make_credential operation.
@@ -735,13 +733,16 @@ impl NativeFido2Client {
             serde_json::from_str(options_json)
                 .map_err(|e| PyValueError::new_err(format!("Invalid options JSON: {}", e)))?;
 
-        let dev = self.make_device(py, event)?;
+        let dev = self.make_device(py)?;
         let ui = Box::new(self.make_interaction());
         let mut backend = self.make_backend(py, dev, ui);
+        let on_keepalive = Some(self.on_keepalive.clone_ref(py));
 
-        let (att_resp, ext_outputs) = backend
-            .do_make_credential(&options, client_data_hash, rp_id)
-            .map_err(client_err)?;
+        let (att_resp, ext_outputs) = with_event_args(event, on_keepalive, || {
+            backend
+                .do_make_credential(&options, client_data_hash, rp_id)
+                .map_err(client_err)
+        })?;
 
         let att_dict = crate::py_ctap::attestation_response_to_py(py, &att_resp)?;
         let ext_dict = extension_outputs_to_py(py, &ext_outputs)?;
@@ -766,13 +767,16 @@ impl NativeFido2Client {
             serde_json::from_str(options_json)
                 .map_err(|e| PyValueError::new_err(format!("Invalid options JSON: {}", e)))?;
 
-        let dev = self.make_device(py, event)?;
+        let dev = self.make_device(py)?;
         let ui = Box::new(self.make_interaction());
         let mut backend = self.make_backend(py, dev, ui);
+        let on_keepalive = Some(self.on_keepalive.clone_ref(py));
 
-        let (assertions, ext_outputs_list) = backend
-            .do_get_assertion(&options, client_data_hash, rp_id)
-            .map_err(client_err)?;
+        let (assertions, ext_outputs_list) = with_event_args(event, on_keepalive, || {
+            backend
+                .do_get_assertion(&options, client_data_hash, rp_id)
+                .map_err(client_err)
+        })?;
 
         let assertions_py = PyList::empty(py);
         for resp in &assertions {
