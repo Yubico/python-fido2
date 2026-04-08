@@ -450,7 +450,14 @@ impl<D: CtapDevice> ClientPin<D> {
     ///
     /// If `protocol` is None, the best supported protocol is chosen
     /// (preferring V2 over V1).
-    pub fn new(ctap: Ctap2<D>, protocol: Option<PinProtocol>) -> Result<Self, CtapError> {
+    ///
+    /// On error, the Ctap2 is returned alongside the error so callers
+    /// can recover the device.
+    #[allow(clippy::result_large_err)]
+    pub fn new(
+        ctap: Ctap2<D>,
+        protocol: Option<PinProtocol>,
+    ) -> Result<Self, (Ctap2<D>, CtapError)> {
         let protocol = match protocol {
             Some(p) => p,
             None => {
@@ -460,8 +467,9 @@ impl<D: CtapDevice> ClientPin<D> {
                 } else if protos.contains(&1) {
                     PinProtocol::V1
                 } else {
-                    return Err(CtapError::InvalidResponse(
-                        "No supported PIN/UV protocol".to_string(),
+                    return Err((
+                        ctap,
+                        CtapError::InvalidResponse("No supported PIN/UV protocol".to_string()),
                     ));
                 }
             }

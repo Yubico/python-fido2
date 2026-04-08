@@ -800,7 +800,7 @@ impl NativeClientPin {
     fn new(ctap: &NativeCtap2, py: Python<'_>, protocol_version: u32) -> PyResult<Self> {
         let ctap2 = ctap.make_ctap(py)?;
         let protocol = make_protocol(protocol_version)?;
-        let inner = ClientPin::new(ctap2, Some(protocol)).map_err(ctap_err)?;
+        let inner = ClientPin::new(ctap2, Some(protocol)).map_err(|(_, e)| ctap_err(e))?;
         Ok(Self { inner })
     }
 

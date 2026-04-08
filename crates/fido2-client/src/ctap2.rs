@@ -441,10 +441,15 @@ pub struct Ctap2<D: CtapDevice> {
 
 impl<D: CtapDevice> Ctap2<D> {
     /// Create a new Ctap2 instance, performing initial GET_INFO.
-    pub fn new(device: D, strict_cbor: bool) -> Result<Self, CtapError> {
+    ///
+    /// On error, the device is returned alongside the error so callers
+    /// can recover the connection.
+    #[allow(clippy::result_large_err)]
+    pub fn new(device: D, strict_cbor: bool) -> Result<Self, (D, CtapError)> {
         if device.capabilities() & capability::CBOR == 0 {
-            return Err(CtapError::InvalidResponse(
-                "Device does not support CTAP2".into(),
+            return Err((
+                device,
+                CtapError::InvalidResponse("Device does not support CTAP2".into()),
             ));
         }
 
@@ -455,11 +460,14 @@ impl<D: CtapDevice> Ctap2<D> {
             info: Info::from_cbor(&[]),
         };
 
-        let info = ctap.get_info()?;
-        ctap.max_msg_size = info.max_msg_size;
-        ctap.info = info;
-
-        Ok(ctap)
+        match ctap.get_info() {
+            Ok(info) => {
+                ctap.max_msg_size = info.max_msg_size;
+                ctap.info = info;
+                Ok(ctap)
+            }
+            Err(e) => Err((ctap.device, e)),
+        }
     }
 
     /// Create a Ctap2 from parts without calling get_info.

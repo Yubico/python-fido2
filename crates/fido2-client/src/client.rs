@@ -294,7 +294,7 @@ pub fn get_auth_params<D: CtapDevice>(
             .ok_or_else(|| {
                 ClientError::ConfigurationUnsupported("No PIN/UV protocol available".into())
             })?;
-        let mut client_pin = ClientPin::new(ctap, Some(protocol))?;
+        let mut client_pin = ClientPin::new(ctap, Some(protocol)).map_err(|(_, e)| e)?;
 
         let allow_internal_uv =
             permissions & !(permission::MAKE_CREDENTIAL | permission::GET_ASSERTION) == 0;
@@ -744,7 +744,7 @@ impl<D: CtapDevice> Ctap2Backend<D> {
         interaction: Box<dyn UserInteraction>,
         extensions: Vec<Box<dyn Ctap2Extension<D>>>,
     ) -> Result<Self, CtapError> {
-        let ctap = ctap2::Ctap2::new(device, false)?;
+        let ctap = ctap2::Ctap2::new(device, false).map_err(|(_, e)| e)?;
         Ok(Self {
             ctap: Some(ctap),
             extensions,

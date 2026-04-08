@@ -650,7 +650,7 @@ impl NativeFido2Client {
             let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
             match ctap2::Ctap2::new(dev, false) {
                 Ok(ctap) => ctap.info().clone(),
-                Err(e) => return Err(crate::py_ctap::ctap_err(e)),
+                Err((_, e)) => return Err(crate::py_ctap::ctap_err(e)),
             }
         } else {
             Info {

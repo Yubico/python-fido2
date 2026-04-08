@@ -81,13 +81,16 @@ pub struct FPBioEnrollment<D: CtapDevice> {
 
 impl<D: CtapDevice> FPBioEnrollment<D> {
     /// Create a new FPBioEnrollment instance.
+    ///
+    /// On error, the Ctap2 is returned alongside the error.
+    #[allow(clippy::result_large_err)]
     pub fn new(
         mut ctap: Ctap2<D>,
         protocol: PinProtocol,
         pin_uv_token: Vec<u8>,
-    ) -> Result<Self, CtapError> {
+    ) -> Result<Self, (Ctap2<D>, CtapError)> {
         // Verify modality
-        let modality_resp = ctap.bio_enrollment(
+        let modality_resp = match ctap.bio_enrollment(
             None,
             None,
             None,
@@ -96,13 +99,23 @@ impl<D: CtapDevice> FPBioEnrollment<D> {
             Some(Value::Bool(true)),
             &mut |_| {},
             None,
-        )?;
-        let modality = cbor_map_get_int(&modality_resp, bio_result::MODALITY)
-            .ok_or_else(|| CtapError::InvalidResponse("Missing modality".to_string()))?
-            as u32;
+        ) {
+            Ok(r) => r,
+            Err(e) => return Err((ctap, e)),
+        };
+        let modality = match cbor_map_get_int(&modality_resp, bio_result::MODALITY) {
+            Some(m) => m as u32,
+            None => {
+                return Err((
+                    ctap,
+                    CtapError::InvalidResponse("Missing modality".to_string()),
+                ));
+            }
+        };
         if modality != MODALITY_FINGERPRINT {
-            return Err(CtapError::InvalidResponse(
-                "Device does not support fingerprint".to_string(),
+            return Err((
+                ctap,
+                CtapError::InvalidResponse("Device does not support fingerprint".to_string()),
             ));
         }
 

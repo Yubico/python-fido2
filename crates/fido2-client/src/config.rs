@@ -57,15 +57,19 @@ pub struct Config<D: CtapDevice> {
 
 impl<D: CtapDevice> Config<D> {
     /// Create a new Config instance.
+    ///
+    /// On error, the Ctap2 is returned alongside the error.
+    #[allow(clippy::result_large_err)]
     pub fn new(
         ctap: Ctap2<D>,
         protocol: Option<PinProtocol>,
         pin_uv_token: Option<Vec<u8>>,
-    ) -> Result<Self, CtapError> {
+    ) -> Result<Self, (Ctap2<D>, CtapError)> {
         let info = ctap.info();
         if info.options.get("authnrCfg") != Some(&true) {
-            return Err(CtapError::InvalidResponse(
-                "Authenticator does not support Config".to_string(),
+            return Err((
+                ctap,
+                CtapError::InvalidResponse("Authenticator does not support Config".to_string()),
             ));
         }
         Ok(Self {
