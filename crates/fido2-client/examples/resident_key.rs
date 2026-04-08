@@ -54,10 +54,10 @@ fn main() {
 
     let conn = ctaphid::CtapHidConnection::open(dev_info).expect("Failed to open device");
     let interaction = common::CliInteraction::new();
-    let client = Fido2Client::new(
-        &conn,
+    let mut client = Fido2Client::new(
+        conn,
         "https://example.com",
-        &interaction,
+        Box::new(interaction),
         default_extensions(false),
     )
     .expect("Failed to create client");

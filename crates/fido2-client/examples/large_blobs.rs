@@ -46,41 +46,32 @@ fn main() {
     let devices = ctaphid::list_devices().expect("Failed to enumerate HID devices");
 
     // Find a device that supports largeBlobs
-    let mut conn = None;
+    let mut client = None;
     for dev_info in &devices {
         let c = match ctaphid::CtapHidConnection::open(dev_info) {
             Ok(c) => c,
             Err(_) => continue,
         };
         let interaction = common::CliInteraction::new();
-        let client = match Fido2Client::new(
-            &c,
+        let cl = match Fido2Client::new(
+            c,
             "https://example.com",
-            &interaction,
+            Box::new(interaction),
             default_extensions(false),
         ) {
             Ok(cl) => cl,
             Err(_) => continue,
         };
-        if client.info().options.get("largeBlobs") == Some(&true) {
+        if cl.info().options.get("largeBlobs") == Some(&true) {
             println!(
                 "Using device: {}",
                 dev_info.product_name.as_deref().unwrap_or("Unknown")
             );
-            drop(client);
-            conn = Some(c);
+            client = Some(cl);
             break;
         }
     }
-    let conn = conn.expect("No FIDO device with largeBlob support found!");
-    let interaction = common::CliInteraction::new();
-    let client = Fido2Client::new(
-        &conn,
-        "https://example.com",
-        &interaction,
-        default_extensions(false),
-    )
-    .expect("Failed to create client");
+    let mut client = client.expect("No FIDO device with largeBlob support found!");
 
     // ---- Registration with largeBlob support ----
     let create_options = PublicKeyCredentialCreationOptions {
