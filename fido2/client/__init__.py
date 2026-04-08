@@ -32,7 +32,7 @@ import json
 import logging
 from enum import IntEnum, unique
 from threading import Event, Timer
-from typing import Any, Callable, Mapping, NoReturn, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from _fido2_native.client import ClientDataCollector as NativeClientDataCollector
 from _fido2_native.client import NativeFido2Client
@@ -139,25 +139,6 @@ class PinRequiredError(ClientError):
         self, code=ClientError.ERR.BAD_REQUEST, cause="PIN required but not provided"
     ):
         super().__init__(code, cause)
-
-
-def _handle_native_error(e: ValueError) -> NoReturn:
-    """Convert native ValueError exceptions to appropriate Python exceptions."""
-    msg = str(e)
-    if msg.startswith("CTAP_ERR:"):
-        ctap_e = CtapError(int(msg.split(":")[1]))
-        raise _ctap2client_err(ctap_e) from None
-    if msg.startswith("CLIENT_BAD_REQUEST:"):
-        raise ClientError.ERR.BAD_REQUEST(msg.split(":", 1)[1]) from None
-    if msg.startswith("CLIENT_CONFIG_UNSUPPORTED:"):
-        raise ClientError.ERR.CONFIGURATION_UNSUPPORTED(msg.split(":", 1)[1]) from None
-    if msg == "CLIENT_PIN_REQUIRED":
-        raise PinRequiredError() from None
-    if msg == "CLIENT_DEVICE_INELIGIBLE":
-        raise ClientError.ERR.DEVICE_INELIGIBLE() from None
-    if msg == "CLIENT_TIMEOUT":
-        raise ClientError.ERR.TIMEOUT() from None
-    raise ClientError.ERR.OTHER_ERROR(e)
 
 
 class AssertionSelection:
@@ -401,10 +382,7 @@ class Fido2Client(WebAuthnClient):
         self._native.enterprise_rpid_list = value
 
     def selection(self, event: Event | None = None) -> None:
-        try:
-            self._native.selection(event)
-        except ValueError as e:
-            _handle_native_error(e)
+        self._native.selection(event)
 
     def make_credential(
         self,
@@ -431,15 +409,12 @@ class Fido2Client(WebAuthnClient):
         logger.debug(f"Register a new credential for RP ID: {rp_id}")
 
         try:
-            try:
-                att_resp_dict, ext_outputs = self._native.do_make_credential(
-                    json.dumps(dict(options), cls=_BytesEncoder),
-                    client_data.hash,
-                    rp_id,
-                    event,
-                )
-            except ValueError as e:
-                _handle_native_error(e)
+            att_resp_dict, ext_outputs = self._native.do_make_credential(
+                json.dumps(dict(options), cls=_BytesEncoder),
+                client_data.hash,
+                rp_id,
+                event,
+            )
         finally:
             if timer:
                 timer.cancel()
@@ -488,15 +463,12 @@ class Fido2Client(WebAuthnClient):
         logger.debug(f"Assert a credential for RP ID: {rp_id}")
 
         try:
-            try:
-                assertions_dicts, ext_outputs_list = self._native.do_get_assertion(
-                    json.dumps(dict(options), cls=_BytesEncoder),
-                    client_data.hash,
-                    rp_id,
-                    event,
-                )
-            except ValueError as e:
-                _handle_native_error(e)
+            assertions_dicts, ext_outputs_list = self._native.do_get_assertion(
+                json.dumps(dict(options), cls=_BytesEncoder),
+                client_data.hash,
+                rp_id,
+                event,
+            )
         finally:
             if timer:
                 timer.cancel()

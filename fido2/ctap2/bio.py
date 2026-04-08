@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 from enum import IntEnum, unique
 from threading import Event
-from typing import Any, Callable, Mapping, NoReturn
+from typing import Any, Callable, Mapping
 
 from ..ctap import CtapError
 from .base import Ctap2, Info
@@ -204,22 +204,12 @@ class FPBioEnrollment(BioEnrollment):
             self.modality,
         )
 
-    @staticmethod
-    def _handle_native_error(e: ValueError) -> NoReturn:
-        msg = str(e)
-        if msg.startswith("CTAP_ERR:"):
-            raise CtapError(int(msg.split(":")[1])) from None
-        raise
-
     def get_fingerprint_sensor_info(self) -> Mapping[int, Any]:
         """Get fingerprint sensor info.
 
         :return: A dict containing FINGERPRINT_KIND and MAX_SAMPLES_REQUIRES.
         """
-        try:
-            return self._native.get_fingerprint_sensor_info(None, None)
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_fingerprint_sensor_info(None, None)
 
     def enroll_begin(
         self,
@@ -237,12 +227,9 @@ class FPBioEnrollment(BioEnrollment):
             number of samples remaining to complete the enrollment.
         """
         logger.debug(f"Starting fingerprint enrollment (timeout={timeout})")
-        try:
-            template_id, status, remaining = self._native.enroll_begin(
-                timeout, event, on_keepalive
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        template_id, status, remaining = self._native.enroll_begin(
+            timeout, event, on_keepalive
+        )
         return (template_id, FPBioEnrollment.FEEDBACK(status), remaining)
 
     def enroll_capture_next(
@@ -264,21 +251,15 @@ class FPBioEnrollment(BioEnrollment):
             remaining to complete the enrollment.
         """
         logger.debug(f"Capturing next sample with (timeout={timeout})")
-        try:
-            status, remaining = self._native.enroll_capture_next(
-                template_id, timeout, event, on_keepalive
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        status, remaining = self._native.enroll_capture_next(
+            template_id, timeout, event, on_keepalive
+        )
         return (FPBioEnrollment.FEEDBACK(status), remaining)
 
     def enroll_cancel(self) -> None:
         """Cancel any ongoing fingerprint enrollment."""
         logger.debug("Cancelling fingerprint enrollment.")
-        try:
-            self._native.enroll_cancel()
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.enroll_cancel()
 
     def enroll(self, timeout: int | None = None) -> FPEnrollmentContext:
         """Convenience wrapper for doing fingerprint enrollment.
@@ -304,8 +285,6 @@ class FPBioEnrollment(BioEnrollment):
             if e.code == CtapError.ERR.INVALID_OPTION:
                 return {}
             raise
-        except ValueError as e:
-            self._handle_native_error(e)
 
     def set_name(self, template_id: bytes, name: str) -> None:
         """Set/Change the friendly name of a previously enrolled fingerprint template.
@@ -314,10 +293,7 @@ class FPBioEnrollment(BioEnrollment):
         :param name: A friendly name to give the template.
         """
         logger.debug(f"Changing name of template: {template_id.hex()} to {name}")
-        try:
-            self._native.set_name(template_id, name)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.set_name(template_id, name)
         logger.info("Fingerprint template renamed")
 
     def remove_enrollment(self, template_id: bytes) -> None:
@@ -326,8 +302,5 @@ class FPBioEnrollment(BioEnrollment):
         :param template_id: The Id of the template to remove.
         """
         logger.debug(f"Deleting template: {template_id.hex()}")
-        try:
-            self._native.remove_enrollment(template_id)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.remove_enrollment(template_id)
         logger.info("Fingerprint template deleted")

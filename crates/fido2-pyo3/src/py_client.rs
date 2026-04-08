@@ -137,23 +137,65 @@ impl ClientDataCollector {
 
 // ---- Error conversion helpers ----
 
-fn client_err(e: client::ClientError) -> PyErr {
-    match e {
-        client::ClientError::BadRequest(msg) => {
-            PyValueError::new_err(format!("CLIENT_BAD_REQUEST:{}", msg))
-        }
-        client::ClientError::ConfigurationUnsupported(msg) => {
-            PyValueError::new_err(format!("CLIENT_CONFIG_UNSUPPORTED:{}", msg))
-        }
-        client::ClientError::PinRequired => {
-            PyValueError::new_err("CLIENT_PIN_REQUIRED".to_string())
-        }
-        client::ClientError::DeviceIneligible => {
-            PyValueError::new_err("CLIENT_DEVICE_INELIGIBLE".to_string())
-        }
-        client::ClientError::Timeout => PyValueError::new_err("CLIENT_TIMEOUT".to_string()),
-        client::ClientError::Ctap(e) => crate::py_ctap::ctap_err(e),
+fn make_client_error(py: Python<'_>, code: u32, cause: Option<PyObject>) -> PyErr {
+    let Ok(m) = py.import("fido2.client") else {
+        return PyValueError::new_err(format!("ClientError code {code}"));
+    };
+    let Ok(cls) = m.getattr("ClientError") else {
+        return PyValueError::new_err(format!("ClientError code {code}"));
+    };
+    let args = match cause {
+        Some(c) => (code, c),
+        None => (code, py.None()),
+    };
+    match cls.call1(args) {
+        Ok(inst) => PyErr::from_value(inst.into_any()),
+        Err(e) => e,
     }
+}
+
+fn client_err(e: client::ClientError) -> PyErr {
+    Python::with_gil(|py| match e {
+        client::ClientError::BadRequest(msg) => make_client_error(
+            py,
+            2,
+            Some(msg.into_pyobject(py).unwrap().into_any().unbind()),
+        ),
+        client::ClientError::ConfigurationUnsupported(msg) => make_client_error(
+            py,
+            3,
+            Some(msg.into_pyobject(py).unwrap().into_any().unbind()),
+        ),
+        client::ClientError::PinRequired => match py.import("fido2.client") {
+            Ok(m) => match m.getattr("PinRequiredError") {
+                Ok(cls) => match cls.call0() {
+                    Ok(inst) => PyErr::from_value(inst.into_any()),
+                    Err(e) => e,
+                },
+                Err(e) => e,
+            },
+            Err(e) => e,
+        },
+        client::ClientError::DeviceIneligible => make_client_error(py, 4, None),
+        client::ClientError::Timeout => make_client_error(py, 5, None),
+        client::ClientError::Ctap(e) => {
+            // Convert CTAP error to ClientError via _ctap2client_err
+            let ctap_err = crate::py_ctap::ctap_err(e);
+            match py.import("fido2.client") {
+                Ok(m) => match m.getattr("_ctap2client_err") {
+                    Ok(func) => {
+                        let ctap_exc = ctap_err.value(py);
+                        match func.call1((ctap_exc,)) {
+                            Ok(inst) => PyErr::from_value(inst.into_any()),
+                            Err(e) => e,
+                        }
+                    }
+                    Err(_) => ctap_err,
+                },
+                Err(_) => ctap_err,
+            }
+        }
+    })
 }
 
 // ---- UserInteraction bridge ----

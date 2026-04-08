@@ -128,9 +128,16 @@ impl CtapDevice for PyCtapDevice {
 
 pub fn ctap_err(e: CtapError) -> PyErr {
     match e {
-        CtapError::StatusError(status) => {
-            PyValueError::new_err(format!("CTAP_ERR:{}", status.as_byte()))
-        }
+        CtapError::StatusError(status) => Python::with_gil(|py| match py.import("fido2.ctap") {
+            Ok(m) => match m.getattr("CtapError") {
+                Ok(cls) => match cls.call1((status.as_byte(),)) {
+                    Ok(inst) => PyErr::from_value(inst.into_any()),
+                    Err(e) => e,
+                },
+                Err(e) => e,
+            },
+            Err(e) => e,
+        }),
         CtapError::InvalidResponse(ref msg) if msg.starts_with("Invalid PIN:") => {
             PyValueError::new_err(msg.clone())
         }

@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from enum import IntEnum, unique
-from typing import Any, Mapping, NoReturn, Sequence
+from typing import Any, Mapping, Sequence
 
 from _fido2_native.ctap import NativeCredentialManagement
 
@@ -121,13 +121,6 @@ class CredentialManagement:
             )
         )
 
-    @staticmethod
-    def _handle_native_error(e: ValueError) -> NoReturn:
-        msg = str(e)
-        if msg.startswith("CTAP_ERR:"):
-            raise CtapError(int(msg.split(":")[1])) from None
-        raise
-
     def get_metadata(self) -> Mapping[int, Any]:
         """Get credentials metadata.
 
@@ -137,10 +130,7 @@ class CredentialManagement:
 
         :return: A dict containing EXISTING_CRED_COUNT, and MAX_REMAINING_COUNT.
         """
-        try:
-            return self._native.get_metadata()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_metadata()
 
     def enumerate_rps_begin(self) -> Mapping[int, Any]:
         """Start enumeration of RP entities of resident credentials.
@@ -150,10 +140,7 @@ class CredentialManagement:
 
         :return: A dict containing RP, RP_ID_HASH, and TOTAL_RPS.
         """
-        try:
-            return self._native.enumerate_rps_begin()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.enumerate_rps_begin()
 
     def enumerate_rps_next(self) -> Mapping[int, Any]:
         """Get the next RP entity stored.
@@ -163,10 +150,7 @@ class CredentialManagement:
 
         :return: A dict containing RP, and RP_ID_HASH.
         """
-        try:
-            return self._native.enumerate_rps_next()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.enumerate_rps_next()
 
     def enumerate_rps(self) -> Sequence[Mapping[int, Any]]:
         """Convenience method to enumerate all RPs.
@@ -196,10 +180,7 @@ class CredentialManagement:
         :return: A dict containing USER, CREDENTIAL_ID, PUBLIC_KEY, and
             TOTAL_CREDENTIALS.
         """
-        try:
-            return self._native.enumerate_creds_begin(rp_id_hash)
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.enumerate_creds_begin(rp_id_hash)
 
     def enumerate_creds_next(self) -> Mapping[int, Any]:
         """Get the next resident credential stored.
@@ -209,10 +190,7 @@ class CredentialManagement:
 
         :return: A dict containing USER, CREDENTIAL_ID, and PUBLIC_KEY.
         """
-        try:
-            return self._native.enumerate_creds_next()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.enumerate_creds_next()
 
     def enumerate_creds(self, *args, **kwargs) -> Sequence[Mapping[int, Any]]:
         """Convenience method to enumerate all resident credentials for an RP.
@@ -240,10 +218,7 @@ class CredentialManagement:
         """
         cred_id = PublicKeyCredentialDescriptor.from_dict(cred_id)
         logger.debug(f"Deleting credential with ID: {cred_id}")
-        try:
-            self._native.delete_cred(_as_cbor(cred_id))
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.delete_cred(_as_cbor(cred_id))
         logger.info("Credential deleted")
 
     def update_user_info(
@@ -262,8 +237,5 @@ class CredentialManagement:
         cred_id = PublicKeyCredentialDescriptor.from_dict(cred_id)
         user_info = PublicKeyCredentialUserEntity.from_dict(user_info)
         logger.debug(f"Updating credential: {cred_id} with user info: {user_info}")
-        try:
-            self._native.update_user_info(_as_cbor(cred_id), _as_cbor(user_info))
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.update_user_info(_as_cbor(cred_id), _as_cbor(user_info))
         logger.info("Credential user info updated")

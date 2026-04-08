@@ -31,13 +31,12 @@ import abc
 import logging
 from enum import IntEnum, IntFlag, unique
 from threading import Event
-from typing import Any, Callable, ClassVar, Mapping, NoReturn
+from typing import Any, Callable, ClassVar, Mapping
 
 from _fido2_native.ctap import NativeClientPin
 from _fido2_native.pin import NativePinProtocol
 
 from ..cose import CoseKey
-from ..ctap import CtapError
 from .base import Ctap2
 
 logger = logging.getLogger(__name__)
@@ -183,18 +182,8 @@ class ClientPin:
             self.protocol.VERSION,
         )
 
-    @staticmethod
-    def _handle_native_error(e: ValueError) -> NoReturn:
-        msg = str(e)
-        if msg.startswith("CTAP_ERR:"):
-            raise CtapError(int(msg.split(":")[1])) from None
-        raise
-
     def _get_shared_secret(self):
-        try:
-            return self._native.get_shared_secret()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_shared_secret()
 
     def get_pin_token(
         self,
@@ -209,14 +198,11 @@ class ClientPin:
         :param permissions_rpid: The permissions RPID to associate with the token.
         :return: A PIN/UV token.
         """
-        try:
-            return self._native.get_pin_token(
-                pin,
-                int(permissions) if permissions is not None else None,
-                permissions_rpid,
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_pin_token(
+            pin,
+            int(permissions) if permissions is not None else None,
+            permissions_rpid,
+        )
 
     def get_uv_token(
         self,
@@ -236,15 +222,12 @@ class ClientPin:
             consecutive keep-alive messages with the same status.
         :return: A PIN/UV token.
         """
-        try:
-            return self._native.get_uv_token(
-                int(permissions) if permissions is not None else None,
-                permissions_rpid,
-                event,
-                on_keepalive,
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_uv_token(
+            int(permissions) if permissions is not None else None,
+            permissions_rpid,
+            event,
+            on_keepalive,
+        )
 
     def get_pin_retries(self) -> tuple[int, int | None]:
         """Get the number of PIN retries remaining.
@@ -252,10 +235,7 @@ class ClientPin:
         :return: A tuple of the number of PIN attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
-        try:
-            return self._native.get_pin_retries()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_pin_retries()
 
     def get_uv_retries(self) -> int:
         """Get the number of UV retries remaining.
@@ -263,10 +243,7 @@ class ClientPin:
         :return: A tuple of the number of UV attempts remaining until the
         authenticator is locked, and the power cycle state, if available.
         """
-        try:
-            return self._native.get_uv_retries()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_uv_retries()
 
     def set_pin(self, pin: str) -> None:
         """Set the PIN of the autenticator.
@@ -276,10 +253,7 @@ class ClientPin:
 
         :param pin: A PIN to set.
         """
-        try:
-            self._native.set_pin(pin)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.set_pin(pin)
 
     def change_pin(self, old_pin: str, new_pin: str) -> None:
         """Change the PIN of the authenticator.
@@ -290,7 +264,4 @@ class ClientPin:
         :param old_pin: The currently set PIN.
         :param new_pin: The new PIN to set.
         """
-        try:
-            self._native.change_pin(old_pin, new_pin)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.change_pin(old_pin, new_pin)

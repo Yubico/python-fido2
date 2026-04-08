@@ -27,11 +27,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, NoReturn, Sequence
+from typing import Any, Mapping, Sequence
 
 from _fido2_native.ctap import NativeLargeBlobs
 
-from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol
 
@@ -70,22 +69,12 @@ class LargeBlobs:
             pin_uv_token,
         )
 
-    @staticmethod
-    def _handle_native_error(e: ValueError) -> NoReturn:
-        msg = str(e)
-        if msg.startswith("CTAP_ERR:"):
-            raise CtapError(int(msg.split(":")[1])) from None
-        raise
-
     def read_blob_array(self) -> Sequence[Mapping[int, Any]]:
         """Gets the entire contents of the Large Blobs array.
 
         :return: The CBOR decoded list of Large Blobs.
         """
-        try:
-            return self._native.read_blob_array()
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.read_blob_array()
 
     def write_blob_array(self, blob_array: Sequence[Mapping[int, Any]]) -> None:
         """Writes the entire Large Blobs array.
@@ -94,10 +83,7 @@ class LargeBlobs:
         """
         if not isinstance(blob_array, list):
             raise TypeError("large-blob array must be a list")
-        try:
-            self._native.write_blob_array(blob_array)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.write_blob_array(blob_array)
 
     def get_blob(self, large_blob_key: bytes) -> bytes | None:
         """Gets the Large Blob stored for a single credential.
@@ -105,10 +91,7 @@ class LargeBlobs:
         :param large_blob_key: The largeBlobKey for the credential, or None.
         :returns: The decrypted and deflated value stored for the credential.
         """
-        try:
-            return self._native.get_blob(large_blob_key)
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.get_blob(large_blob_key)
 
     def put_blob(self, large_blob_key: bytes, data: bytes | None) -> None:
         """Stores a Large Blob for a single credential.
@@ -118,17 +101,11 @@ class LargeBlobs:
         :param large_blob_key: The largeBlobKey for the credential.
         :param data: The data to compress, encrypt and store.
         """
-        try:
-            self._native.put_blob(large_blob_key, data)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.put_blob(large_blob_key, data)
 
     def delete_blob(self, large_blob_key: bytes) -> None:
         """Deletes any Large Blob(s) stored for a single credential.
 
         :param large_blob_key: The largeBlobKey for the credential.
         """
-        try:
-            self._native.delete_blob(large_blob_key)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.delete_blob(large_blob_key)

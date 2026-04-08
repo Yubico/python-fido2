@@ -28,11 +28,9 @@
 from __future__ import annotations
 
 from enum import IntEnum, unique
-from typing import NoReturn
 
 from _fido2_native.ctap import NativeConfig
 
-from ..ctap import CtapError
 from .base import Ctap2, Info
 from .pin import PinProtocol
 
@@ -82,32 +80,19 @@ class Config:
             pin_uv_token,
         )
 
-    @staticmethod
-    def _handle_native_error(e: ValueError) -> NoReturn:
-        msg = str(e)
-        if msg.startswith("CTAP_ERR:"):
-            raise CtapError(int(msg.split(":")[1])) from None
-        raise
-
     def enable_enterprise_attestation(self) -> None:
         """Enables Enterprise Attestation.
 
         If already enabled, this command is ignored.
         """
-        try:
-            self._native.enable_enterprise_attestation()
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.enable_enterprise_attestation()
 
     def toggle_always_uv(self) -> None:
         """Toggle the alwaysUV setting.
 
         When true, the Authenticator always requires UV for credential assertion.
         """
-        try:
-            self._native.toggle_always_uv()
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.toggle_always_uv()
 
     def set_min_pin_length(
         self,
@@ -131,7 +116,4 @@ class Config:
                 raise ValueError(
                     "Authenticator does not support setting PIN complexity policy"
                 )
-        try:
-            self._native.set_min_pin_length(min_pin_length, rp_ids, force_change_pin)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.set_min_pin_length(min_pin_length, rp_ids, force_change_pin)

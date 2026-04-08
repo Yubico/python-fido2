@@ -31,13 +31,13 @@ import logging
 from dataclasses import Field, dataclass, field, fields
 from enum import IntEnum, unique
 from threading import Event
-from typing import Any, Callable, Mapping, NoReturn, cast
+from typing import Any, Callable, Mapping, cast
 
 from _fido2_native.ctap import NativeCtap2
 from _fido2_native.pin import aes_cbc_decrypt, hkdf_sha256
 
 from ..cose import CoseKey
-from ..ctap import CtapDevice, CtapError
+from ..ctap import CtapDevice
 from ..hid import CAPABILITY
 from ..utils import _DataClassMapping
 from ..webauthn import Aaguid, AuthenticatorData
@@ -236,13 +236,6 @@ class Ctap2:
         """
         return self._info
 
-    @staticmethod
-    def _handle_native_error(e: ValueError) -> NoReturn:
-        msg = str(e)
-        if msg.startswith("CTAP_ERR:"):
-            raise CtapError(int(msg.split(":")[1])) from None
-        raise
-
     def send_cbor(
         self,
         cmd: int,
@@ -259,10 +252,7 @@ class Ctap2:
         :param on_keepalive: Optional function called when keep-alive is sent by
             the authenticator.
         """
-        try:
-            result = self._native.send_cbor(cmd, data, event, on_keepalive)
-        except ValueError as e:
-            self._handle_native_error(e)
+        result = self._native.send_cbor(cmd, data, event, on_keepalive)
         if isinstance(result, Mapping):
             return cast(Mapping[int, Any], result)
         raise TypeError("Decoded value of wrong type")
@@ -272,10 +262,7 @@ class Ctap2:
 
         :return: Information about the authenticator.
         """
-        try:
-            self._info = Info(**self._native.refresh_info())
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._info = Info(**self._native.refresh_info())
         return self._info
 
     def client_pin(
@@ -310,21 +297,18 @@ class Ctap2:
             messages from the authenticator.
         :return: The response of the command, decoded.
         """
-        try:
-            return self._native.client_pin(
-                pin_uv_protocol,
-                sub_cmd,
-                key_agreement,
-                pin_uv_param,
-                new_pin_enc,
-                pin_hash_enc,
-                permissions,
-                permissions_rpid,
-                event,
-                on_keepalive,
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.client_pin(
+            pin_uv_protocol,
+            sub_cmd,
+            key_agreement,
+            pin_uv_param,
+            new_pin_enc,
+            pin_hash_enc,
+            permissions,
+            permissions_rpid,
+            event,
+            on_keepalive,
+        )
 
     def reset(
         self,
@@ -338,10 +322,7 @@ class Ctap2:
         :param on_keepalive: Optional callback function to handle keep-alive
             messages from the authenticator.
         """
-        try:
-            self._native.reset(event, on_keepalive)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.reset(event, on_keepalive)
         logger.info("Reset completed - All data erased")
 
     def make_credential(
@@ -378,25 +359,22 @@ class Ctap2:
         :return: The new credential.
         """
         logger.debug("Calling CTAP2 make_credential")
-        try:
-            return AttestationResponse(
-                **self._native.make_credential(
-                    client_data_hash,
-                    rp,
-                    user,
-                    key_params,
-                    exclude_list,
-                    extensions,
-                    options,
-                    pin_uv_param,
-                    pin_uv_protocol,
-                    enterprise_attestation,
-                    event,
-                    on_keepalive,
-                )
+        return AttestationResponse(
+            **self._native.make_credential(
+                client_data_hash,
+                rp,
+                user,
+                key_params,
+                exclude_list,
+                extensions,
+                options,
+                pin_uv_param,
+                pin_uv_protocol,
+                enterprise_attestation,
+                event,
+                on_keepalive,
             )
-        except ValueError as e:
-            self._handle_native_error(e)
+        )
 
     def get_assertion(
         self,
@@ -426,32 +404,26 @@ class Ctap2:
         :return: The new assertion.
         """
         logger.debug("Calling CTAP2 get_assertion")
-        try:
-            return AssertionResponse(
-                **self._native.get_assertion(
-                    rp_id,
-                    client_data_hash,
-                    allow_list,
-                    extensions,
-                    options,
-                    pin_uv_param,
-                    pin_uv_protocol,
-                    event,
-                    on_keepalive,
-                )
+        return AssertionResponse(
+            **self._native.get_assertion(
+                rp_id,
+                client_data_hash,
+                allow_list,
+                extensions,
+                options,
+                pin_uv_param,
+                pin_uv_protocol,
+                event,
+                on_keepalive,
             )
-        except ValueError as e:
-            self._handle_native_error(e)
+        )
 
     def get_next_assertion(self) -> AssertionResponse:
         """CTAP2 getNextAssertion command.
 
         :return: The next available assertion response.
         """
-        try:
-            return AssertionResponse(**self._native.get_next_assertion())
-        except ValueError as e:
-            self._handle_native_error(e)
+        return AssertionResponse(**self._native.get_next_assertion())
 
     def get_assertions(self, *args, **kwargs) -> list[AssertionResponse]:
         """Convenience method to get list of assertions.
@@ -486,12 +458,9 @@ class Ctap2:
         :param pin_uv_protocol: PIN/UV auth protocol version used.
         :param pin_uv_param: PIN/UV Auth parameter.
         """
-        try:
-            return self._native.credential_mgmt(
-                sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.credential_mgmt(
+            sub_cmd, sub_cmd_params, pin_uv_protocol, pin_uv_param
+        )
 
     def bio_enrollment(
         self,
@@ -521,19 +490,16 @@ class Ctap2:
         :param pin_uv_param: PIN/UV auth param.
         :param get_modality: Get the user verification type modality.
         """
-        try:
-            return self._native.bio_enrollment(
-                modality,
-                sub_cmd,
-                sub_cmd_params,
-                pin_uv_protocol,
-                pin_uv_param,
-                get_modality,
-                event,
-                on_keepalive,
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.bio_enrollment(
+            modality,
+            sub_cmd,
+            sub_cmd_params,
+            pin_uv_protocol,
+            pin_uv_param,
+            get_modality,
+            event,
+            on_keepalive,
+        )
 
     def selection(
         self,
@@ -550,10 +516,7 @@ class Ctap2:
         :param on_keepalive: Optional callback function to handle keep-alive messages
             from the authenticator.
         """
-        try:
-            self._native.selection(event, on_keepalive)
-        except ValueError as e:
-            self._handle_native_error(e)
+        self._native.selection(event, on_keepalive)
 
     def large_blobs(
         self,
@@ -578,17 +541,14 @@ class Ctap2:
         :param pin_uv_protocol: PIN/UV protocol version used.
         :param pin_uv_param: PIN/UV auth param.
         """
-        try:
-            return self._native.large_blobs(
-                offset,
-                get,
-                set,
-                length,
-                pin_uv_param,
-                pin_uv_protocol,
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.large_blobs(
+            offset,
+            get,
+            set,
+            length,
+            pin_uv_param,
+            pin_uv_protocol,
+        )
 
     def config(
         self,
@@ -610,12 +570,9 @@ class Ctap2:
         :param pin_uv_protocol: PIN/UV auth protocol version used.
         :param pin_uv_param: PIN/UV Auth parameter.
         """
-        try:
-            return self._native.config(
-                sub_cmd,
-                sub_cmd_params,
-                pin_uv_protocol,
-                pin_uv_param,
-            )
-        except ValueError as e:
-            self._handle_native_error(e)
+        return self._native.config(
+            sub_cmd,
+            sub_cmd_params,
+            pin_uv_protocol,
+            pin_uv_param,
+        )
