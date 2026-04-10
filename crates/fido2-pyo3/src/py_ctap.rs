@@ -44,7 +44,7 @@ use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
 // ---- Bridge: Python CtapDevice -> Rust CtapDevice trait ----
 
 // Thread-local storage for Python event/on_keepalive objects.
-// Set before calling into Rust Ctap2 methods and consumed by PyCtapDevice::call().
+// Set before calling into Rust Ctap2 methods and consumed by PythonCtapDevice::call().
 thread_local! {
     static CALL_EVENT: std::cell::RefCell<Option<PyObject>> = const { std::cell::RefCell::new(None) };
     static CALL_ON_KEEPALIVE: std::cell::RefCell<Option<PyObject>> = const { std::cell::RefCell::new(None) };
@@ -64,17 +64,25 @@ pub(crate) fn with_event_args<R>(
     result
 }
 
-/// Wraps a Python CtapDevice object to implement the Rust CtapDevice trait.
+/// Type alias for a boxed CTAP device (used as the generic parameter
+/// for protocol types in the PyO3 layer).
+pub type BoxedCtapDevice = Box<dyn CtapDevice + Send + Sync>;
+
+/// Bridges an arbitrary Python CtapDevice object to the Rust CtapDevice trait.
 ///
 /// If event/on_keepalive are set in thread-local storage (via `with_event_args`),
 /// they are passed to the Python `device.call()`. Otherwise only cmd and data are passed.
-pub struct PyCtapDevice {
+struct PythonCtapDevice {
     py_device: PyObject,
     capabilities: u8,
 }
 
-impl PyCtapDevice {
-    pub fn new(py: Python<'_>, py_device: PyObject) -> PyResult<Self> {
+/// `PyObject` is Send+Sync by design in pyo3 ≥0.21.
+unsafe impl Send for PythonCtapDevice {}
+unsafe impl Sync for PythonCtapDevice {}
+
+impl PythonCtapDevice {
+    fn new(py: Python<'_>, py_device: PyObject) -> PyResult<Self> {
         let capabilities: u8 = py_device.getattr(py, "capabilities")?.extract(py)?;
         Ok(Self {
             py_device,
@@ -83,7 +91,7 @@ impl PyCtapDevice {
     }
 }
 
-impl CtapDevice for PyCtapDevice {
+impl CtapDevice for PythonCtapDevice {
     fn call(
         &mut self,
         cmd: u8,
@@ -122,6 +130,23 @@ impl CtapDevice for PyCtapDevice {
     fn capabilities(&self) -> u8 {
         self.capabilities
     }
+}
+
+/// Extract a `BoxedCtapDevice` from a Python device argument.
+///
+/// **Fast path**: if `obj` is a native `CtapHidConnection`, take the inner
+/// `fido2_client::transport::ctaphid::CtapHidConnection` directly.
+///
+/// **Slow path**: wrap the Python object in a `PythonCtapDevice` bridge.
+pub(crate) fn extract_ctap_device(py: Python<'_>, obj: &PyObject) -> PyResult<BoxedCtapDevice> {
+    let bound = obj.bind(py);
+    // Fast path: native CtapHidConnection
+    if let Ok(hid_conn) = bound.downcast::<crate::py_hid::CtapHidConnection>() {
+        let conn = hid_conn.borrow().take_inner()?;
+        return Ok(Box::new(conn));
+    }
+    // Slow path: arbitrary Python device
+    Ok(Box::new(PythonCtapDevice::new(py, obj.clone_ref(py))?))
 }
 
 // ---- Error conversion helpers ----
@@ -274,14 +299,14 @@ pub fn assertion_response_to_py(py: Python<'_>, resp: &AssertionResponse) -> PyR
 
 #[pyclass]
 struct NativeCtap1 {
-    inner: ctap1::Ctap1<PyCtapDevice>,
+    inner: ctap1::Ctap1<BoxedCtapDevice>,
 }
 
 #[pymethods]
 impl NativeCtap1 {
     #[new]
     fn new(py: Python<'_>, device: PyObject) -> PyResult<Self> {
-        let dev = PyCtapDevice::new(py, device)?;
+        let dev = extract_ctap_device(py, &device)?;
         Ok(Self {
             inner: ctap1::Ctap1::new(dev),
         })
@@ -353,7 +378,7 @@ pub(crate) struct NativeCtap2 {
     device: PyObject,
     strict_cbor: bool,
     max_msg_size: usize,
-    inner: ctap2::Ctap2<PyCtapDevice>,
+    inner: ctap2::Ctap2<BoxedCtapDevice>,
 }
 
 #[pymethods]
@@ -366,7 +391,7 @@ impl NativeCtap2 {
         strict_cbor: bool,
         max_msg_size: usize,
     ) -> PyResult<Self> {
-        let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
+        let dev = extract_ctap_device(py, &device)?;
         Ok(Self {
             device,
             strict_cbor,
@@ -768,9 +793,9 @@ impl NativeCtap2 {
 }
 
 impl NativeCtap2 {
-    /// Create a new Ctap2<PyCtapDevice> for session types that need their own.
-    pub(crate) fn make_ctap(&self, py: Python<'_>) -> PyResult<ctap2::Ctap2<PyCtapDevice>> {
-        let dev = PyCtapDevice::new(py, self.device.clone_ref(py))?;
+    /// Create a new Ctap2<BoxedCtapDevice> for session types that need their own.
+    pub(crate) fn make_ctap(&self, py: Python<'_>) -> PyResult<ctap2::Ctap2<BoxedCtapDevice>> {
+        let dev = extract_ctap_device(py, &self.device)?;
         let mut ctap = ctap2::Ctap2::from_parts(dev, self.strict_cbor, self.max_msg_size);
         ctap.set_info(self.inner.info().clone());
         Ok(ctap)
@@ -791,7 +816,7 @@ fn make_protocol(version: u32) -> PyResult<PinProtocol> {
 
 #[pyclass]
 struct NativeClientPin {
-    inner: ClientPin<PyCtapDevice>,
+    inner: ClientPin<BoxedCtapDevice>,
 }
 
 #[pymethods]
@@ -902,7 +927,7 @@ impl NativeClientPin {
 
 #[pyclass]
 struct NativeCredentialManagement {
-    inner: CredentialManagement<PyCtapDevice>,
+    inner: CredentialManagement<BoxedCtapDevice>,
 }
 
 #[pymethods]
@@ -989,7 +1014,7 @@ impl NativeCredentialManagement {
 
 #[pyclass]
 struct NativeFPBioEnrollment {
-    inner: FPBioEnrollment<PyCtapDevice>,
+    inner: FPBioEnrollment<BoxedCtapDevice>,
 }
 
 #[pymethods]
@@ -1090,7 +1115,7 @@ impl NativeFPBioEnrollment {
 
 #[pyclass]
 struct NativeLargeBlobs {
-    inner: LargeBlobs<PyCtapDevice>,
+    inner: LargeBlobs<BoxedCtapDevice>,
 }
 
 #[pymethods]
@@ -1148,7 +1173,7 @@ impl NativeLargeBlobs {
 
 #[pyclass]
 struct NativeConfig {
-    inner: Config<PyCtapDevice>,
+    inner: Config<BoxedCtapDevice>,
 }
 
 #[pymethods]

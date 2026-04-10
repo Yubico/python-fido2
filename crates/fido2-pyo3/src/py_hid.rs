@@ -85,6 +85,26 @@ pub struct CtapHidConnection {
     capabilities: u8,
 }
 
+impl CtapHidConnection {
+    /// Take the inner native connection, leaving None behind.
+    pub fn take_inner(&self) -> PyResult<ctaphid::CtapHidConnection> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| PyOSError::new_err("lock poisoned"))?;
+        guard
+            .take()
+            .ok_or_else(|| PyOSError::new_err("CTAP HID connection already consumed or closed"))
+    }
+
+    /// Restore a previously taken inner connection.
+    pub fn restore_inner(&self, conn: ctaphid::CtapHidConnection) {
+        if let Ok(mut guard) = self.inner.lock() {
+            *guard = Some(conn);
+        }
+    }
+}
+
 #[pymethods]
 impl CtapHidConnection {
     #[new]

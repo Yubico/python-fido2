@@ -41,7 +41,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
-use crate::py_ctap::{PyCtapDevice, with_event_args};
+use crate::py_ctap::{BoxedCtapDevice, extract_ctap_device, with_event_args};
 
 /// Native client data collector.
 ///
@@ -352,7 +352,7 @@ struct PyExtensionBridge {
     py_obj: PyObject,
 }
 
-impl Ctap2Extension<PyCtapDevice> for PyExtensionBridge {
+impl Ctap2Extension<BoxedCtapDevice> for PyExtensionBridge {
     fn is_supported(&self, info: &Info) -> bool {
         Python::with_gil(|py| {
             let proxy = create_ctap_proxy(py, info).ok()?;
@@ -366,10 +366,10 @@ impl Ctap2Extension<PyCtapDevice> for PyExtensionBridge {
 
     fn make_credential(
         &self,
-        ctap: &mut ctap2::Ctap2<PyCtapDevice>,
+        ctap: &mut ctap2::Ctap2<BoxedCtapDevice>,
         extensions: Option<&serde_json::Value>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn RegistrationExtensionProcessor<PyCtapDevice>>> {
+    ) -> Option<Box<dyn RegistrationExtensionProcessor<BoxedCtapDevice>>> {
         Python::with_gil(|py| {
             let ctap_proxy = create_ctap_proxy(py, ctap.info()).ok()?;
             let options_proxy = create_options_proxy(py, extensions, None).ok()?;
@@ -385,17 +385,17 @@ impl Ctap2Extension<PyCtapDevice> for PyExtensionBridge {
             }
 
             Some(Box::new(PyRegistrationProcessorBridge { py_obj: result })
-                as Box<dyn RegistrationExtensionProcessor<PyCtapDevice>>)
+                as Box<dyn RegistrationExtensionProcessor<BoxedCtapDevice>>)
         })
     }
 
     fn get_assertion(
         &self,
-        ctap: &mut ctap2::Ctap2<PyCtapDevice>,
+        ctap: &mut ctap2::Ctap2<BoxedCtapDevice>,
         extensions: Option<&serde_json::Value>,
         allow_credentials: Option<&[Value]>,
         _pin_protocol: Option<PinProtocol>,
-    ) -> Option<Box<dyn AuthenticationExtensionProcessor<PyCtapDevice>>> {
+    ) -> Option<Box<dyn AuthenticationExtensionProcessor<BoxedCtapDevice>>> {
         Python::with_gil(|py| {
             let ctap_proxy = create_ctap_proxy(py, ctap.info()).ok()?;
             let options_proxy = create_options_proxy(py, extensions, allow_credentials).ok()?;
@@ -411,7 +411,7 @@ impl Ctap2Extension<PyCtapDevice> for PyExtensionBridge {
             }
 
             Some(Box::new(PyAuthenticationProcessorBridge { py_obj: result })
-                as Box<dyn AuthenticationExtensionProcessor<PyCtapDevice>>)
+                as Box<dyn AuthenticationExtensionProcessor<BoxedCtapDevice>>)
         })
     }
 }
@@ -423,7 +423,7 @@ struct PyRegistrationProcessorBridge {
     py_obj: PyObject,
 }
 
-impl RegistrationExtensionProcessor<PyCtapDevice> for PyRegistrationProcessorBridge {
+impl RegistrationExtensionProcessor<BoxedCtapDevice> for PyRegistrationProcessorBridge {
     fn permissions(&self) -> u32 {
         Python::with_gil(|py| {
             self.py_obj
@@ -450,7 +450,7 @@ impl RegistrationExtensionProcessor<PyCtapDevice> for PyRegistrationProcessorBri
         &self,
         response: &AttestationResponse,
         pin_token: Option<&[u8]>,
-        _ctap: &mut ctap2::Ctap2<PyCtapDevice>,
+        _ctap: &mut ctap2::Ctap2<BoxedCtapDevice>,
     ) -> Option<ExtensionOutputs> {
         Python::with_gil(|py| {
             let resp_py = crate::py_ctap::attestation_response_to_py(py, response).ok()?;
@@ -470,7 +470,7 @@ struct PyAuthenticationProcessorBridge {
     py_obj: PyObject,
 }
 
-impl AuthenticationExtensionProcessor<PyCtapDevice> for PyAuthenticationProcessorBridge {
+impl AuthenticationExtensionProcessor<BoxedCtapDevice> for PyAuthenticationProcessorBridge {
     fn permissions(&self) -> u32 {
         Python::with_gil(|py| {
             self.py_obj
@@ -507,7 +507,7 @@ impl AuthenticationExtensionProcessor<PyCtapDevice> for PyAuthenticationProcesso
         &self,
         response: &AssertionResponse,
         pin_token: Option<&[u8]>,
-        _ctap: &mut ctap2::Ctap2<PyCtapDevice>,
+        _ctap: &mut ctap2::Ctap2<BoxedCtapDevice>,
     ) -> Option<ExtensionOutputs> {
         Python::with_gil(|py| {
             let resp_py = crate::py_ctap::assertion_response_to_py(py, response).ok()?;
@@ -533,8 +533,8 @@ impl AuthenticationExtensionProcessor<PyCtapDevice> for PyAuthenticationProcesso
 fn create_extensions_from_py(
     py: Python<'_>,
     py_extensions: &[PyObject],
-) -> Vec<Box<dyn Ctap2Extension<PyCtapDevice>>> {
-    let mut extensions: Vec<Box<dyn Ctap2Extension<PyCtapDevice>>> = Vec::new();
+) -> Vec<Box<dyn Ctap2Extension<BoxedCtapDevice>>> {
+    let mut extensions: Vec<Box<dyn Ctap2Extension<BoxedCtapDevice>>> = Vec::new();
 
     for ext_obj in py_extensions {
         if let Ok(tag) = ext_obj.getattr(py, "_native_tag")
@@ -600,9 +600,9 @@ struct NativeFido2Client {
 }
 
 impl NativeFido2Client {
-    /// Create a PyCtapDevice for a call.
-    fn make_device(&self, py: Python<'_>) -> PyResult<PyCtapDevice> {
-        PyCtapDevice::new(py, self.device.clone_ref(py))
+    /// Create a BoxedCtapDevice for a call.
+    fn make_device(&self, py: Python<'_>) -> PyResult<BoxedCtapDevice> {
+        extract_ctap_device(py, &self.device)
     }
 
     /// Create a PyUserInteraction from the stored user_interaction.
@@ -616,7 +616,7 @@ impl NativeFido2Client {
     fn make_backend(
         &self,
         py: Python<'_>,
-        dev: PyCtapDevice,
+        dev: BoxedCtapDevice,
         ui: Box<PyUserInteraction>,
     ) -> Box<dyn ClientBackend> {
         if self.is_ctap2 {
@@ -647,7 +647,7 @@ impl NativeFido2Client {
         let is_ctap2 = capabilities & capability::CBOR != 0;
 
         let info = if is_ctap2 {
-            let dev = PyCtapDevice::new(py, device.clone_ref(py))?;
+            let dev = extract_ctap_device(py, &device)?;
             match ctap2::Ctap2::new(dev, false) {
                 Ok(ctap) => ctap.info().clone(),
                 Err((_, e)) => return Err(crate::py_ctap::ctap_err(e)),
@@ -983,7 +983,7 @@ fn py_allow_credentials(py: Python<'_>, options: &PyObject) -> PyResult<Option<V
 /// The Python extension classes delegate to this for their logic.
 #[pyclass]
 struct NativeExtension {
-    inner: std::sync::Mutex<Box<dyn Ctap2Extension<PyCtapDevice> + Send>>,
+    inner: std::sync::Mutex<Box<dyn Ctap2Extension<BoxedCtapDevice> + Send>>,
 }
 
 #[pymethods]
@@ -1094,7 +1094,7 @@ impl NativeExtension {
 /// Wraps a Rust RegistrationExtensionProcessor for use from Python.
 #[pyclass(unsendable)]
 struct NativeRegistrationProcessor {
-    inner: Box<dyn RegistrationExtensionProcessor<PyCtapDevice>>,
+    inner: Box<dyn RegistrationExtensionProcessor<BoxedCtapDevice>>,
     native: Py<crate::py_ctap::NativeCtap2>,
 }
 
@@ -1137,7 +1137,7 @@ impl NativeRegistrationProcessor {
 /// Wraps a Rust AuthenticationExtensionProcessor for use from Python.
 #[pyclass(unsendable)]
 struct NativeAuthenticationProcessor {
-    inner: Box<dyn AuthenticationExtensionProcessor<PyCtapDevice>>,
+    inner: Box<dyn AuthenticationExtensionProcessor<BoxedCtapDevice>>,
     native: Py<crate::py_ctap::NativeCtap2>,
 }
 

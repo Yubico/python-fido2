@@ -67,6 +67,46 @@ pub trait CtapDevice {
     fn close(&mut self) {}
 }
 
+impl CtapDevice for Box<dyn CtapDevice + Send> {
+    fn call(
+        &mut self,
+        cmd: u8,
+        data: &[u8],
+        on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&dyn Fn() -> bool>,
+    ) -> Result<Vec<u8>, CtapError> {
+        (**self).call(cmd, data, on_keepalive, cancel)
+    }
+
+    fn capabilities(&self) -> u8 {
+        (**self).capabilities()
+    }
+
+    fn close(&mut self) {
+        (**self).close();
+    }
+}
+
+impl CtapDevice for Box<dyn CtapDevice + Send + Sync> {
+    fn call(
+        &mut self,
+        cmd: u8,
+        data: &[u8],
+        on_keepalive: &mut dyn FnMut(u8),
+        cancel: Option<&dyn Fn() -> bool>,
+    ) -> Result<Vec<u8>, CtapError> {
+        (**self).call(cmd, data, on_keepalive, cancel)
+    }
+
+    fn capabilities(&self) -> u8 {
+        (**self).capabilities()
+    }
+
+    fn close(&mut self) {
+        (**self).close();
+    }
+}
+
 /// CTAP error status codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
