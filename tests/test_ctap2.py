@@ -206,15 +206,13 @@ class TestCtap2(unittest.TestCase):
         ctap.device.call.return_value = b"\0" + cbor.encode({1: b"response"})
 
         self.assertEqual({1: b"response"}, ctap.send_cbor(2, b"foobar"))
-        ctap.device.call.assert_called_with(
-            0x10, b"\2" + cbor.encode(b"foobar"), mock.ANY, None
-        )
+        ctap.device.call.assert_called_with(0x10, b"\2" + cbor.encode(b"foobar"))
 
     def test_get_info(self):
         ctap = self.mock_ctap()
 
         info = ctap.get_info()
-        ctap.device.call.assert_called_with(0x10, b"\4", mock.ANY, None)
+        ctap.device.call.assert_called_with(0x10, b"\4")
         self.assertIsInstance(info, Info)
 
     def test_make_credential(self):
