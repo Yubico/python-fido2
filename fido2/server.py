@@ -348,7 +348,9 @@ class Fido2Server:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
-        if websafe_decode(state["challenge"]) != client_data.challenge:
+        if not constant_time.bytes_eq(
+            websafe_decode(state["challenge"]), client_data.challenge
+        ):
             raise ValueError("Wrong challenge in response.")
         if not constant_time.bytes_eq(self.rp.id_hash or b"", auth_data.rp_id_hash):
             raise ValueError("Wrong RP ID hash in response.")
