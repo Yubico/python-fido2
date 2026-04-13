@@ -155,7 +155,7 @@ def test_missing_permissions(ctap2, pin_protocol):
     if not ClientPin.is_token_supported(ctap2.info):
         pytest.skip("Permissions not supported")
 
-    credman = get_credman(ctap2, pin_protocol, ClientPin.PERMISSION(0))
+    credman = get_credman(ctap2, pin_protocol, ClientPin.PERMISSION.LARGE_BLOB_WRITE)
 
     with pytest.raises(CtapError, match="PIN_AUTH_INVALID"):
         credman.get_metadata()

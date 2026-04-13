@@ -304,7 +304,7 @@ class ClientPin:
         pin_hash = sha256(pin.encode())[:16]
         pin_hash_enc = self.protocol.encrypt(shared_secret, pin_hash)
 
-        if ClientPin.is_token_supported(self.ctap.info) and permissions:
+        if ClientPin.is_token_supported(self.ctap.info) and permissions is not None:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN
         else:
             cmd = ClientPin.CMD.GET_TOKEN_USING_PIN_LEGACY
