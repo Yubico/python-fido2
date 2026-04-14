@@ -1,3 +1,10 @@
+* Version 2.2.0
+ ** Add support for experimental previewSign extension:
+    https://yubicolabs.github.io/webauthn-sign-extension/4/#sctn-sign-extension
+ ** Add support for PSL wildcard and exception rules to RP validation.
+ ** Fix: WindowsClient hmac_secret extension raising Null pointer access error.
+ ** Fix: TPM attestation certificate Subject field validation.
+
 * Version 2.1.1 (released 2026-01-19)
  ** Fix: Platform detection in fido2.hid module for BSD's.
 
