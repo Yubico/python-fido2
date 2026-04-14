@@ -1,4 +1,4 @@
-* Version 2.2.0
+* Version 2.2.0 (released 2026-04-15)
  ** Restrict DLL search paths (YSA-2026-01).
  ** Add support for experimental previewSign extension:
     https://yubicolabs.github.io/webauthn-sign-extension/4/#sctn-sign-extension
