@@ -92,10 +92,12 @@ from .win_api import (
     WebAuthNUserEntityInformation,
     WebAuthNUserVerification,
     WebAuthNUserVerificationRequirement,
-    windll,
 )
 
 logger = logging.getLogger(__name__)
+
+LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
+user32 = ctypes.WinDLL("user32", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)  # type: ignore
 
 _extension_output_types: dict[str, type[_JsonDataObject]] = {
     "hmacGetSecret": HMACGetSecretOutput,
@@ -149,7 +151,7 @@ class WindowsClient(WebAuthnClient):
         handle=None,
         allow_hmac_secret=False,
     ):
-        self.handle = handle or windll.user32.GetForegroundWindow()
+        self.handle = handle or user32.GetForegroundWindow()
         self._client_data_collector = client_data_collector
 
         self._allow_hmac_secret = allow_hmac_secret

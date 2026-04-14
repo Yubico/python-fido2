@@ -27,16 +27,16 @@ from .base import FIDO_USAGE, FIDO_USAGE_PAGE, CtapHidConnection, HidDescriptor
 
 # Only typecheck this file on Windows
 assert sys.platform == "win32"  # noqa: S101
-from ctypes import LibraryLoader, WinDLL, WinError, wintypes  # noqa: E402
+from ctypes import WinError, wintypes  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 
 # Load relevant DLLs
-windll = LibraryLoader(WinDLL)
-hid = windll.Hid
-setupapi = windll.SetupAPI
-kernel32 = windll.Kernel32
+LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
+hid = ctypes.WinDLL("hid", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
+setupapi = ctypes.WinDLL("setupapi", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
+kernel32 = ctypes.WinDLL("kernel32", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
 
 
 # Various structs that are used in the Windows APIs we call

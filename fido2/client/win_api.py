@@ -42,16 +42,13 @@ Definitions taken from https://github.com/microsoft/webauthn/blob/master/webauth
 from __future__ import annotations
 
 import ctypes
-from ctypes import LibraryLoader, WinDLL  # type: ignore
 from ctypes.wintypes import BOOL, DWORD, HWND, LONG, LPCWSTR, WORD
 from enum import IntEnum, unique
 from typing import Any, Mapping, Sequence
 
 # Not implemented: Platform credentials support, listing of built-in authenticators
 
-
-windll = LibraryLoader(WinDLL)
-
+LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
 
 PBYTE = ctypes.POINTER(ctypes.c_ubyte)  # Different from wintypes.PBYTE, which is signed
 PCWSTR = ctypes.c_wchar_p
@@ -849,7 +846,7 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
 
 
 HRESULT = ctypes.HRESULT  # type: ignore
-WEBAUTHN = windll.webauthn
+WEBAUTHN = ctypes.WinDLL("webauthn", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)  # type: ignore
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
 
 WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.argtypes = [

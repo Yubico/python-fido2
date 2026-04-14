@@ -1,4 +1,5 @@
 * Version 2.2.0
+ ** Restrict DLL search paths (YSA-2026-01).
  ** Add support for experimental previewSign extension:
     https://yubicolabs.github.io/webauthn-sign-extension/4/#sctn-sign-extension
  ** Add support for PSL wildcard and exception rules to RP validation.
