@@ -26,7 +26,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """
-Connects to the first FIDO device found which supports the PRF extension,
+Connects to the first FIDO device found which supports the sign extension,
 creates a new credential for it with the extension enabled, and uses it to
 derive two separate secrets.
 """
@@ -77,7 +77,7 @@ auth_data = server.register_complete(state, result)
 credentials = [auth_data.credential_data]
 print("New credential created, with the sign extension.")
 
-# PRF result:
+# sign result:
 sign_result = result.client_extension_results.previewSign
 print("CREATE sign result", sign_result)
 sign_key = sign_result.generated_key

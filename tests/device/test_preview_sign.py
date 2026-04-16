@@ -61,6 +61,23 @@ def test_client_arkg_p256(device, printer):
     # Parse the master public key
     pk = CoseKey.parse(cbor.decode(websafe_decode(sign_key["publicKey"])))
 
+    # Verify the fields of sign_key
+    att_obj = sign_key.attestation_object
+    assert att_obj.auth_data.rp_id_hash == att_obj.auth_data.rp_id_hash
+    assert att_obj.auth_data.flags == att_obj.auth_data.flags
+    assert att_obj.auth_data.counter == 0
+    assert isinstance(att_obj.auth_data.extensions[PreviewSignExtension.NAME][4], int)
+
+    # The "publicKey" above is the same as the inner auth_data
+    assert att_obj.auth_data.credential_data.public_key == pk
+    # AAGUID should be the same as the one in the main auth_data
+    assert att_obj.auth_data.credential_data.aaguid == auth_data.credential_data.aaguid
+    # The inner credential_id should be different from the main one
+    assert (
+        att_obj.auth_data.credential_data.credential_id
+        != auth_data.credential_data.credential_id
+    )
+
     # Derive a public key using ARKG
     ctx = b"python-fido2.test_sign_extension_v4"
     ikm = os.urandom(32)

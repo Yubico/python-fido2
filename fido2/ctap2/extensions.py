@@ -35,6 +35,7 @@ from typing import Any, Mapping, Sequence, cast
 from .. import cbor
 from ..utils import _JsonDataObject, sha256, websafe_encode
 from ..webauthn import (
+    AttestationObject,
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialDescriptor,
@@ -689,7 +690,7 @@ class _SignGeneratedKey(_JsonDataObject):
     key_handle: bytes
     public_key: bytes
     algorithm: int
-    attestation_object: bytes
+    attestation_object: AttestationObject
 
 
 @dataclass(eq=False, frozen=True)
@@ -747,21 +748,22 @@ class PreviewSignExtension(Ctap2Extension):
                 att_obj_bytes = response.unsigned_extension_outputs[
                     PreviewSignExtension.NAME
                 ][7]
-                att_obj = AttestationResponse.from_dict(
+                att_resp = AttestationResponse.from_dict(
                     cast(Mapping, cbor.decode(att_obj_bytes))
+                )
+                att_obj = AttestationObject.create(
+                    att_resp.fmt, att_resp.auth_data, att_resp.att_stmt
                 )
                 cred_data = att_obj.auth_data.credential_data
                 assert cred_data is not None  # noqa: S101
-                kh = cred_data.credential_id
-                pk = cred_data.public_key
 
                 return {
                     PreviewSignExtension.NAME: _SignOutputs(
                         generated_key=_SignGeneratedKey(
-                            key_handle=kh,
-                            public_key=cbor.encode(pk),
+                            key_handle=cred_data.credential_id,
+                            public_key=cbor.encode(cred_data.public_key),
                             algorithm=data.get(3),
-                            attestation_object=att_obj_bytes,
+                            attestation_object=att_obj,
                         ),
                     )
                 }
