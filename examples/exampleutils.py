@@ -48,7 +48,7 @@ try:
     use_winclient = (
         WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin()
     )
-except ImportError:
+except Exception:
     use_winclient = False
 
 
