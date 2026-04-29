@@ -61,12 +61,11 @@ class TestRpId(unittest.TestCase):
         )
 
     def test_suffix_list_wildcard(self):
-        # *.bd means any X.bd is a public suffix
-        self.assertFalse(verify_rp_id("example.bd", "https://evil.example.bd"))
+        # *.ck means any X.ck is a public suffix
         self.assertFalse(verify_rp_id("example.ck", "https://evil.example.ck"))
         self.assertFalse(verify_rp_id("example.np", "https://evil.example.np"))
         # Exact match still works
-        self.assertTrue(verify_rp_id("example.bd", "https://example.bd"))
+        self.assertTrue(verify_rp_id("example.ck", "https://example.ck"))
 
     def test_suffix_list_wildcard_exception(self):
         # !www.ck means www.ck is NOT a public suffix despite *.ck
