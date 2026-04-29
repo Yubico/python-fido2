@@ -41,6 +41,10 @@ if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 
 
+_backend = default_backend()
+_mldsa = hasattr(_backend, "mldsa_supported") and _backend.mldsa_supported()
+
+
 class CoseKey(dict):
     """A COSE formatted public key.
 
@@ -118,7 +122,7 @@ class CoseKey(dict):
     @staticmethod
     def supported_algorithms() -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
-        algs: Sequence[type[CoseKey]] = [
+        algs: list[type[CoseKey]] = [
             ES256,
             EdDSA,
             ES384,
@@ -127,6 +131,9 @@ class CoseKey(dict):
             RS256,
             ES256K,
         ]
+        if _mldsa:
+            algs.extend([MLDSA44, MLDSA65, MLDSA87])
+
         return [cls.ALGORITHM for cls in algs]
 
 
@@ -146,9 +153,7 @@ class ES256(CoseKey):
             raise ValueError("Unsupported elliptic curve")
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256R1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
+        ).public_key(_backend).verify(signature, message, ec.ECDSA(self._HASH_ALG))
 
     @classmethod
     def from_cryptography_key(cls, public_key):
@@ -188,9 +193,7 @@ class ES384(CoseKey):
             raise ValueError("Unsupported elliptic curve")
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP384R1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
+        ).public_key(_backend).verify(signature, message, ec.ECDSA(self._HASH_ALG))
 
     @classmethod
     def from_cryptography_key(cls, public_key):
@@ -221,9 +224,7 @@ class ES512(CoseKey):
             raise ValueError("Unsupported elliptic curve")
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP521R1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
+        ).public_key(_backend).verify(signature, message, ec.ECDSA(self._HASH_ALG))
 
     @classmethod
     def from_cryptography_key(cls, public_key):
@@ -251,7 +252,7 @@ class RS256(CoseKey):
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
-            default_backend()
+            _backend
         ).verify(signature, message, padding.PKCS1v15(), self._HASH_ALG)
 
     @classmethod
@@ -267,7 +268,7 @@ class PS256(CoseKey):
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
-            default_backend()
+            _backend
         ).verify(
             signature,
             message,
@@ -342,7 +343,7 @@ class RS1(CoseKey):
 
     def verify(self, message, signature):
         rsa.RSAPublicNumbers(bytes2int(self[-2]), bytes2int(self[-1])).public_key(
-            default_backend()
+            _backend
         ).verify(signature, message, padding.PKCS1v15(), self._HASH_ALG)
 
     @classmethod
@@ -361,9 +362,7 @@ class ES256K(CoseKey):
             raise ValueError("Unsupported elliptic curve")
         ec.EllipticCurvePublicNumbers(
             bytes2int(self[-2]), bytes2int(self[-3]), ec.SECP256K1()
-        ).public_key(default_backend()).verify(
-            signature, message, ec.ECDSA(self._HASH_ALG)
-        )
+        ).public_key(_backend).verify(signature, message, ec.ECDSA(self._HASH_ALG))
 
     @classmethod
     def from_cryptography_key(cls, public_key):
@@ -462,3 +461,68 @@ class ARKG_P256_PLACEHOLDER(CoseKey):
         }
 
         return pk_cose, args
+
+
+# MLDSA support was added in cryptography 47.0.0, and requires a supported backend
+if _mldsa:
+    from cryptography.hazmat.primitives.asymmetric import mldsa
+
+    class MLDSA44(CoseKey):
+        ALGORITHM = -48
+
+        def verify(self, message, signature):
+            if self[1] != 7:
+                raise ValueError("Invalid key type")
+            pk = mldsa.MLDSA44PublicKey.from_public_bytes(self[-1])
+            pk.verify(signature, message)
+
+        @classmethod
+        def from_cryptography_key(cls, public_key):
+            assert isinstance(public_key, mldsa.MLDSA44PublicKey)  # noqa: S101
+            return cls(
+                {
+                    1: 7,
+                    3: cls.ALGORITHM,
+                    -1: public_key.public_bytes_raw(),
+                }
+            )
+
+    class MLDSA65(CoseKey):
+        ALGORITHM = -49
+
+        def verify(self, message, signature):
+            if self[1] != 7:
+                raise ValueError("Invalid key type")
+            pk = mldsa.MLDSA65PublicKey.from_public_bytes(self[-1])
+            pk.verify(signature, message)
+
+        @classmethod
+        def from_cryptography_key(cls, public_key):
+            assert isinstance(public_key, mldsa.MLDSA65PublicKey)  # noqa: S101
+            return cls(
+                {
+                    1: 7,
+                    3: cls.ALGORITHM,
+                    -1: public_key.public_bytes_raw(),
+                }
+            )
+
+    class MLDSA87(CoseKey):
+        ALGORITHM = -50
+
+        def verify(self, message, signature):
+            if self[1] != 7:
+                raise ValueError("Invalid key type")
+            pk = mldsa.MLDSA87PublicKey.from_public_bytes(self[-1])
+            pk.verify(signature, message)
+
+        @classmethod
+        def from_cryptography_key(cls, public_key):
+            assert isinstance(public_key, mldsa.MLDSA87PublicKey)  # noqa: S101
+            return cls(
+                {
+                    1: 7,
+                    3: cls.ALGORITHM,
+                    -1: public_key.public_bytes_raw(),
+                }
+            )
