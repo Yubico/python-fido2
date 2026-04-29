@@ -31,6 +31,13 @@
 import pytest
 
 from fido2.cose import ARKG_P256_PLACEHOLDER
+from importlib.metadata import version
+
+
+@pytest.fixture(autouse=True, scope="module")
+def check_arkg_support():
+    if int(version("cryptography").split(".")[0]) < 45:
+        pytest.skip("ARKG support requires cryptography 45 or later")
 
 
 TEST_VECTORS = [

@@ -1,4 +1,5 @@
 import os
+from importlib.metadata import version
 
 import pytest
 from fido2 import cbor
@@ -13,6 +14,9 @@ from . import CliInteraction
 
 @pytest.fixture(autouse=True, scope="module")
 def preconditions(dev_manager):
+    if int(version("cryptography").split(".")[0]) < 45:
+        pytest.skip("ARKG support requires cryptography 45 or later")
+
     if PreviewSignExtension.NAME not in dev_manager.info.extensions:
         pytest.skip("previewSign not supported by authenticator")
 
