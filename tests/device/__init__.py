@@ -1,4 +1,12 @@
+import logging
+import time
+from threading import Timer
+
+import urllib.request
+
 from fido2.client import UserInteraction
+
+logger = logging.getLogger(__name__)
 
 TEST_PIN = "a1b2c3d4"
 
@@ -35,6 +43,59 @@ class Printer:
                 else "Disconnect the Authenticator"
             )
         )
+
+
+class PicoController:
+    def __init__(self, base_url, port, printer):
+        self.base_url = base_url.rstrip("/")
+        self.port = port
+        self.printer = printer
+        self._touch_timer = None
+        self._preflight()
+
+    def _preflight(self):
+        import pytest
+
+        try:
+            self._request("/")
+        except Exception as e:
+            pytest.exit(f"Pico controller not reachable at {self.base_url}: {e}")
+
+    def _request(self, path):
+        url = f"{self.base_url}{path}"
+        logger.debug(f"Pico request: {url}")
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            return resp.read()
+
+    def print(self, *messages):
+        self.printer.print(*messages)
+
+    def touch(self):
+        if self._touch_timer:
+            self._touch_timer.cancel()
+            self._touch_timer = None
+        self._request(f"/usb{self.port}/touch/off")
+        time.sleep(0.1)
+        self._request(f"/usb{self.port}/touch/on")
+        self._touch_timer = Timer(10.0, self._touch_off)
+        self._touch_timer.daemon = True
+        self._touch_timer.start()
+
+    def _touch_off(self):
+        self._touch_timer = None
+        try:
+            self._request(f"/usb{self.port}/touch/off")
+        except Exception:
+            pass
+
+    def insert(self, nfc=False):
+        self._request(f"/usb{self.port}/power/on")
+        time.sleep(1)
+
+    def remove(self, nfc=False):
+        self._touch_off()
+        self._request(f"/usb{self.port}/power/off")
+        time.sleep(1)
 
 
 # Handle user interaction
