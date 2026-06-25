@@ -307,10 +307,10 @@ class TestClientPin(unittest.TestCase):
         ctap.info.options = {"clientPin": True}
         prot = ClientPin(ctap, PinProtocolV1())
 
-        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))  # ty:ignore[invalid-assignment]
-        prot.ctap.client_pin.return_value = {2: TOKEN_ENC}  # ty:ignore[invalid-assignment]
+        prot.ctap.client_pin.return_value = {2: TOKEN_ENC}
 
-        self.assertEqual(prot.get_pin_token("1234"), TOKEN)
+        with mock.patch.object(prot, "_get_shared_secret", return_value=({}, SHARED)):
+            self.assertEqual(prot.get_pin_token("1234"), TOKEN)
         prot.ctap.client_pin.assert_called_once()
         self.assertEqual(
             prot.ctap.client_pin.call_args[1]["pin_hash_enc"], PIN_HASH_ENC
@@ -321,9 +321,8 @@ class TestClientPin(unittest.TestCase):
         ctap.info.options = {"clientPin": True}
         prot = ClientPin(ctap, PinProtocolV1())
 
-        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))  # ty:ignore[invalid-assignment]
-
-        prot.set_pin("1234")
+        with mock.patch.object(prot, "_get_shared_secret", return_value=({}, SHARED)):
+            prot.set_pin("1234")
         prot.ctap.client_pin.assert_called_with(
             1,
             3,
@@ -339,9 +338,8 @@ class TestClientPin(unittest.TestCase):
         ctap.info.options = {"clientPin": True}
         prot = ClientPin(ctap, PinProtocolV1())
 
-        prot._get_shared_secret = mock.Mock(return_value=({}, SHARED))  # ty:ignore[invalid-assignment]
-
-        prot.change_pin("1234", "4321")
+        with mock.patch.object(prot, "_get_shared_secret", return_value=({}, SHARED)):
+            prot.change_pin("1234", "4321")
         prot.ctap.client_pin.assert_called_with(
             1,
             4,

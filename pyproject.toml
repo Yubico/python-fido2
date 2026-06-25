@@ -65,6 +65,7 @@ exclude = ["tests/", "docs/", "examples/"]
 reportPrivateImportUsage = false
 
 [tool.ty.src]
+include = ["fido2", "tests"]
 exclude = ["docs"]
 
 [[tool.ty.overrides]]
