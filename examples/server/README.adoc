@@ -4,17 +4,17 @@ WebAuthn credential registration, and use.
 
 
 === Running
-To run this sample, you will need `poetry`. For instructions on installing
-`poetry`, see https://python-poetry.org/.
+To run this sample, you will need `uv`. For instructions on installing
+`uv`, see https://docs.astral.sh/uv/.
 
 Run the following command in the `examples/server` directory to set up the
 example:
 
-  $ poetry install
+  $ uv sync
 
 Once the environment has been created, you can run the server by running:
 
-  $ poetry run server
+  $ uv run server
 
 When the server is running, use a browser supporting WebAuthn and open
 http://localhost:5000 to access the website.
