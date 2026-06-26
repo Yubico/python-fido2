@@ -160,7 +160,7 @@ def get_descriptor(path):
     return client.get_descriptor(path)
 
 class IPC_Connection(CtapHidConnection):
-    def __init__(self, client: client_handler, descriptor: HidDescriptor):
+    def __init__(self, client: ClientHandler, descriptor: HidDescriptor):
         self.client = client
         self.handle = self.client.open_connection(descriptor)
 
