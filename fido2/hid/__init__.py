@@ -237,7 +237,7 @@ class CtapHidDevice(CtapDevice):
                 else:  # Continuation packet
                     r_seq = struct.unpack_from(">B", recv)[0]
                     recv = recv[1:]
-                    if r_seq != seq:
+                    if r_seq != seq & 0x7F:
                         raise ConnectionFailure("Wrong sequence number")
                     seq += 1
 
