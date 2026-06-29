@@ -78,7 +78,7 @@ print("CREDENTIAL DATA:", auth_data.credential_data)
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
 # Authenticate the credential
-results = client.get_assertion(request_options["publicKey"])
+results = client.get_assertion(request_options.public_key)
 
 # Only one cred in allowCredentials, only one response.
 result = results.get_response(0)
