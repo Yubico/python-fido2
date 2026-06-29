@@ -1,3 +1,7 @@
+* Version 2.2.1 (unreleased)
+ ** Server example: Migrate build tool from poetry to uv.
+ ** Fix: Correctly format att_obj in previewSign.
+
 * Version 2.2.0 (released 2026-04-15)
  ** Restrict DLL search paths (YSA-2026-01).
  ** Add support for experimental previewSign extension:
