@@ -97,7 +97,7 @@ from .win_api import (
 logger = logging.getLogger(__name__)
 
 LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
-user32 = ctypes.WinDLL("user32", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)  # type: ignore
+user32 = cast(Any, ctypes).WinDLL("user32", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
 
 _extension_output_types: dict[str, type[_JsonDataObject]] = {
     "hmacGetSecret": HMACGetSecretOutput,

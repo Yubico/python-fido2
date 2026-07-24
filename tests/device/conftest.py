@@ -17,7 +17,7 @@ from fido2.hid import (
     open_device,
 )
 
-from . import TEST_PIN, CliInteraction, Printer
+from . import TEST_PIN, CliInteraction, PicoController, Printer
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,9 @@ class DeviceManager:
         self.setup()
 
     def _select(self):
+        if isinstance(self.printer, PicoController):
+            return self._select_auto()
+
         event = Event()
         selected = []
 
@@ -138,6 +141,18 @@ class DeviceManager:
             return selected[0]
         else:
             pytest.exit("No Authenticator selected")
+
+    def _select_auto(self):
+        event = Event()
+        while not event.wait(0.5):
+            descriptors = list(list_descriptors())
+            if len(descriptors) == 1:
+                d = descriptors[0]
+                logger.debug(f"Auto-selected authenticator: {d.path}")
+                return CtapHidDevice(d, open_connection(d))
+            elif len(descriptors) > 1:
+                pytest.exit("Multiple authenticators found, expected exactly one")
+        pytest.exit("No Authenticator found")
 
     def _connect_pcsc(self, reader, reconnect=True):
         from fido2.pcsc import CtapPcscDevice
@@ -317,7 +332,12 @@ class DeviceManager:
 @pytest.fixture(scope="session")
 def printer(request):
     capmanager = request.config.pluginmanager.getplugin("capturemanager")
-    return Printer(capmanager)
+    p = Printer(capmanager)
+    controller = request.config.getoption("controller")
+    if controller:
+        port = request.config.getoption("pico_port")
+        return PicoController(controller, port, p)
+    return p
 
 
 @pytest.fixture(scope="session", autouse=True)

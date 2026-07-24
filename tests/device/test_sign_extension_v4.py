@@ -198,7 +198,7 @@ def generate_key(dev_manager):
 
         pin_protocol = None
         pin_uv_param = None
-        if options is not None and options["rk"]:
+        if dev_manager.ctap2.info.options.get("clientPin"):
             client_pin = ClientPin(dev_manager.ctap2)
             pin_protocol = client_pin.protocol.VERSION
             pin_token = client_pin.get_pin_token(TEST_PIN)

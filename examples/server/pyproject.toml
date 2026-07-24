@@ -3,20 +3,19 @@ name = "fido2-example-server"
 version = "0.1.0"
 description = "Example server for python-fido2"
 authors = [
-  { name = "Dain Nilsson", email = "<dain@yubico.com>" }
+  { name = "Dain Nilsson", email = "dain@yubico.com" }
 ]
 requires-python = ">=3.10, <4"
-license = "Apache-2"
+license = "Apache-2.0"
 dependencies = [
-  "Flask (>=2.0, <3)",
+  "Flask>=2.0,<3",
   "fido2",
 ]
 
-[tool.poetry.dependencies]
-fido2 = {path = "../.."}
+[tool.uv.sources]
+fido2 = { path = "../..", editable = true }
 
 [tool.poetry]
-requires-poetry = ">=2.0"
 packages = [
   { include = "server" },
 ]

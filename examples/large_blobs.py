@@ -44,7 +44,7 @@ client, info = get_client(lambda info: "largeBlobKey" in info.extensions)
 
 # LargeBlob requires UV if it is configured
 uv = "discouraged"
-if info.options.get("clientPin"):
+if info and info.options.get("clientPin"):
     uv = "required"
 
 

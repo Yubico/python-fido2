@@ -43,7 +43,14 @@ jobs:
           sudo apt-get install -qq swig libpcsclite-dev
 
       - name: Install the project
+        if: ${{ !(startsWith(matrix.os, 'windows') && matrix.architecture == 'x86') }}
         run: uv sync --all-extras
+
+      - name: Install the project (Windows x86)
+        if: ${{ startsWith(matrix.os, 'windows') && matrix.architecture == 'x86' }}
+        run: |
+          uv venv
+          uv pip install --group dev -c .github/constraints/windows-x86.txt -e ".[pcsc]"
 
       - name: Run pre-commit
         if: "!startsWith(matrix.python, 'pypy')"
@@ -54,7 +61,7 @@ jobs:
           pre-commit run --all-files
 
       - name: Run unit tests
-        run: uv run pytest --no-device
+        run: uv run --no-sync pytest --no-device
 
   build:
     #needs: test

@@ -44,7 +44,7 @@ from __future__ import annotations
 import ctypes
 from ctypes.wintypes import BOOL, DWORD, HWND, LONG, LPCWSTR, WORD
 from enum import IntEnum, unique
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 # Not implemented: Platform credentials support, listing of built-in authenticators
 
@@ -845,8 +845,8 @@ class WebAuthNCredentialAttestation(ctypes.Structure):
         WEBAUTHN.WebAuthNFreeCredentialAttestation(ctypes.byref(self))
 
 
-HRESULT = ctypes.HRESULT  # type: ignore
-WEBAUTHN = ctypes.WinDLL("webauthn", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)  # type: ignore
+HRESULT = cast(Any, ctypes).HRESULT
+WEBAUTHN = cast(Any, ctypes).WinDLL("webauthn", winmode=LOAD_LIBRARY_SEARCH_SYSTEM32)
 WEBAUTHN_API_VERSION = WEBAUTHN.WebAuthNGetApiVersionNumber()
 
 WEBAUTHN.WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable.argtypes = [

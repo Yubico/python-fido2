@@ -54,11 +54,15 @@ create_options, state = server.register_begin(
     authenticator_attachment="cross-platform",
 )
 
+# Generate salts for PRF:
+salt = websafe_encode(os.urandom(32))
+salt2 = websafe_encode(os.urandom(32))
+
 # Create a credential
 result = client.make_credential(
     {
         **create_options["publicKey"],
-        "extensions": {"prf": {}},
+        "extensions": {"prf": {"eval": {"first": salt, "second": salt2}}},
     }
 )
 
@@ -74,33 +78,34 @@ else:
     # the credential wasn't made with it, so keep going
     print("Failed to create credential with PRF, it might not work")
 
-print("New credential created, with the PRF extension.")
-
 # If created with UV, keep using UV
 if auth_data.is_user_verified():
     uv = "required"
 
-# Generate a salt for PRF:
-salt = websafe_encode(os.urandom(32))
-print("Authenticate with salt:", salt)
+print("First salt:", salt)
 
 # Prepare parameters for getAssertion
 credentials = [credential]
 request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
-# Authenticate the credential
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        "extensions": {"prf": {"eval": {"first": salt}}},
-    }
-)
+prf_results = result.client_extension_results.get("prf", {}).get("results")
+if prf_results:
+    output1 = prf_results["first"]
+    print("Credential created, with salt. Secret:", output1)
+else:
+    # Authenticate the credential
+    result = client.get_assertion(
+        {
+            **request_options["publicKey"],
+            "extensions": {"prf": {"eval": {"first": salt}}},
+        }
+    )
 
-# Only one cred in allowCredentials, only one response.
-response = result.get_response(0)
+    # Only one cred in allowCredentials, only one response.
+    response = result.get_response(0)
 
-output1 = response.client_extension_results["prf"]["results"]["first"]
-print("Authenticated, secret:", output1)
+    output1 = response.client_extension_results["prf"]["results"]["first"]
+    print("Authenticated, with salt. Secret:", output1)
 
 # Authenticate again, using two salts to generate two secrets.
 
@@ -108,8 +113,6 @@ print("Authenticated, secret:", output1)
 # credentials which use different salts. Here it is not needed, but provided for
 # completeness of the example.
 
-# Generate a second salt for PRF:
-salt2 = websafe_encode(os.urandom(32))
 print("Authenticate with second salt:", salt2)
 # The first salt is reused, which should result in the same secret.
 
