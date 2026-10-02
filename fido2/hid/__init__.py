@@ -272,9 +272,24 @@ class CtapHidDevice(CtapDevice):
         self._connection.close()
 
     @classmethod
+    def _open(cls, descriptor: HidDescriptor) -> CtapHidDevice:
+        connection = open_connection(descriptor)
+        try:
+            return cls(descriptor, connection)
+        except BaseException:
+            # No device was returned to the caller, so it cannot close the transport.
+            try:
+                connection.close()
+            except Exception:
+                logger.debug(
+                    "Failed to close HID connection after INIT failure", exc_info=True
+                )
+            raise
+
+    @classmethod
     def list_devices(cls) -> Iterator[CtapHidDevice]:
         for d in list_descriptors():
-            yield cls(d, open_connection(d))
+            yield cls._open(d)
 
 
 def list_devices() -> Iterator[CtapHidDevice]:
@@ -283,4 +298,4 @@ def list_devices() -> Iterator[CtapHidDevice]:
 
 def open_device(path) -> CtapHidDevice:
     descriptor = get_descriptor(path)
-    return CtapHidDevice(descriptor, open_connection(descriptor))
+    return CtapHidDevice._open(descriptor)
