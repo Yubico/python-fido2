@@ -220,12 +220,8 @@ class MetadataStatement(_JsonDataObject):
     schema: int
     upv: Sequence[Version]
     attestation_types: Sequence[str]
-    user_verification_details: Sequence[Sequence[VerificationMethodDescriptor]] = field(
-        metadata=dict(serialize=lambda xss: [[dict(x) for x in xs] for xs in xss])
-    )
     key_protection: Sequence[str]
     matcher_protection: Sequence[str]
-    attachment_hint: Sequence[str]
     tc_display: Sequence[str]
     attestation_root_certificates: Sequence[bytes] = field(
         metadata=dict(
@@ -254,6 +250,13 @@ class MetadataStatement(_JsonDataObject):
     protocol_family: str | None = None
     authentication_algorithms: Sequence[str] | None = None
     public_key_alg_and_encodings: Sequence[str] | None = None
+    user_verification_details: (
+        Sequence[Sequence[VerificationMethodDescriptor]] | None
+    ) = field(
+        metadata=dict(serialize=lambda xss: [[dict(x) for x in xs] for xs in xss]),
+        default=None,
+    )
+    attachment_hint: Sequence[str] | None = None
     is_key_restricted: bool | None = None
     is_fresh_user_verification_required: bool | None = None
     crypto_strength: int | None = None

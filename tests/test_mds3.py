@@ -1,6 +1,15 @@
+import json
 from base64 import b64decode
 
-from fido2.mds3 import MdsAttestationVerifier, parse_blob
+import pytest
+
+from fido2.mds3 import (
+    MdsAttestationVerifier,
+    MetadataStatement,
+    VerificationMethodDescriptor,
+    parse_blob,
+)
+from fido2.utils import websafe_decode
 
 # Example data from:
 # https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html#examples
@@ -263,6 +272,47 @@ def test_parse_blob():
     data = parse_blob(EXAMPLE_BLOB, EXAMPLE_CA)
     assert data.no == 15
     assert len(data.entries) == 2
+
+
+@pytest.mark.parametrize("omit_uv", [False, True])
+@pytest.mark.parametrize("omit_attachment", [False, True])
+def test_metadata_statement_optional_fields(omit_uv, omit_attachment):
+    payload = json.loads(websafe_decode(EXAMPLE_BLOB.split(b".")[1]))
+    statement = payload["entries"][1]["metadataStatement"]
+    if omit_uv:
+        del statement["userVerificationDetails"]
+    if omit_attachment:
+        del statement["attachmentHint"]
+
+    metadata = MetadataStatement.from_dict(statement)
+
+    if omit_uv:
+        assert metadata.user_verification_details is None
+        assert "userVerificationDetails" not in metadata
+    else:
+        assert metadata.user_verification_details is not None
+        assert isinstance(
+            metadata.user_verification_details[0][0], VerificationMethodDescriptor
+        )
+    if omit_attachment:
+        assert metadata.attachment_hint is None
+        assert "attachmentHint" not in metadata
+    else:
+        assert metadata.attachment_hint == statement["attachmentHint"]
+    assert dict(metadata) == statement
+
+
+def test_metadata_statement_empty_optional_fields():
+    payload = json.loads(websafe_decode(EXAMPLE_BLOB.split(b".")[1]))
+    statement = payload["entries"][1]["metadataStatement"]
+    statement["userVerificationDetails"] = []
+    statement["attachmentHint"] = []
+
+    metadata = MetadataStatement.from_dict(statement)
+
+    assert metadata.user_verification_details == []
+    assert metadata.attachment_hint == []
+    assert dict(metadata) == statement
 
 
 def test_find_by_aaguid():
