@@ -28,9 +28,10 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, cast
 
 from .. import cbor
 from ..utils import _JsonDataObject, sha256, websafe_encode
@@ -716,17 +717,17 @@ class PreviewSignExtension(Ctap2Extension):
 
     def make_credential(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = _SignInputs.from_dict(inputs.get(self.NAME))
+        sign_input: Mapping[str, Any] | None = inputs.get(self.NAME)
+        data = _SignInputs.from_dict(sign_input)
         if not data or not self.is_supported(ctap):
             return
 
         if data.sign_by_credential or not data.generate_key:
             raise ValueError("Invalid inputs")
+        gk = data.generate_key
 
         class Processor(RegistrationExtensionProcessor):
             def prepare_inputs(self, pin_token):
-                gk = data.generate_key
-
                 selection = (
                     options.authenticator_selection or AuthenticatorSelectionCriteria()
                 )
@@ -772,17 +773,17 @@ class PreviewSignExtension(Ctap2Extension):
 
     def get_assertion(self, ctap, options, pin_protocol):
         inputs = options.extensions or {}
-        data = _SignInputs.from_dict(inputs.get(self.NAME))
+        sign_input: Mapping[str, Any] | None = inputs.get(self.NAME)
+        data = _SignInputs.from_dict(sign_input)
         if not data or not self.is_supported(ctap):
             return
 
         if not data.sign_by_credential or data.generate_key:
             raise ValueError("Invalid inputs")
+        by_creds = data.sign_by_credential
 
         class Processor(AuthenticationExtensionProcessor):
             def prepare_inputs(self, selected, pin_token):
-                by_creds = data.sign_by_credential
-
                 # Make sure all keys are valid IDs from allow_credentials
                 allow_list = options.allow_credentials
                 if not allow_list or not selected:

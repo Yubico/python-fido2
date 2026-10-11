@@ -56,7 +56,7 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 
 [tool.ruff.lint]
-extend-select = ["E", "I", "S"]
+select = ["E", "F", "I", "S"]
 
 [tool.pyright]
 venvPath = "."

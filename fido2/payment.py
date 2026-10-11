@@ -25,7 +25,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from .client import DefaultClientDataCollector
 from .ctap2.extensions import (
@@ -98,10 +100,15 @@ class PaymentClientDataCollector(DefaultClientDataCollector):
     """
 
     def collect_client_data(self, options):
+        """Collect client data.
+
+        Raises ValueError for incomplete payment requests.
+        """
         # Get the effective RP ID from the request options, falling back to the origin
         rp_id = self.get_rp_id(options, self._origin)
         inputs = options.extensions or {}
-        data = AuthenticationExtensionsPaymentInputs.from_dict(inputs.get("payment"))
+        payment_input: Mapping[str, Any] | None = inputs.get("payment")
+        data = AuthenticationExtensionsPaymentInputs.from_dict(payment_input)
         if data and data.is_payment:
             if isinstance(options, PublicKeyCredentialCreationOptions):
                 sel = options.authenticator_selection
@@ -122,6 +129,13 @@ class PaymentClientDataCollector(DefaultClientDataCollector):
                 ):
                     raise ValueError("Invalid options for payment extension")
             elif isinstance(options, PublicKeyCredentialRequestOptions):
+                if (
+                    data.rp_id is None
+                    or data.top_origin is None
+                    or data.total is None
+                    or data.instrument is None
+                ):
+                    raise ValueError("Missing required payment request fields")
                 # NOTE: We skip RP ID validation, as per the spec
                 return (
                     CollectedClientPaymentData.create(
