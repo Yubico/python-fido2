@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.19
+  rev: v0.17.0
   hooks:
   # Run the linter
   - id: ruff-check
@@ -8,13 +8,13 @@ repos:
   # Run the formatter
   - id: ruff-format
 - repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v2.1.0
+  rev: v2.4.0
   hooks:
   - id: mypy
     exclude: ^docs/
     files: ^fido2/
 - repo: https://github.com/RobertCraigie/pyright-python
-  rev: v1.1.411
+  rev: v1.1.414
   hooks:
   - id: pyright
 - repo: local
