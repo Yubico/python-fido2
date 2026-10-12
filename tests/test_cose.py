@@ -32,7 +32,16 @@ import unittest
 from binascii import a2b_hex
 
 from fido2 import cbor, cose
-from fido2.cose import ES256, ESP256, RS256, CoseKey, Ed25519, EdDSA, UnsupportedKey
+from fido2.cose import (
+    ES256,
+    ESP256,
+    RS256,
+    CoseKey,
+    Ed25519,
+    EdDSA,
+    UnsupportedKey,
+    _mldsa,
+)
 
 _ES256_KEY = a2b_hex(
     b"A5010203262001215820A5FD5CE1B1C458C530A54FA61B31BF6B04BE8B97AFDE54DD8CBB69275A8A1BE1225820FA3A3231DD9DEED9D1897BE5A6228C59501E4BCD12975D3DFF730F01278EA61C"  # noqa E501
@@ -191,3 +200,8 @@ class TestCoseKey(unittest.TestCase):
         self.assertEqual(CoseKey.for_alg(-53), cose.Ed448)
         self.assertEqual(CoseKey.for_alg(-257), cose.RS256)
         self.assertEqual(CoseKey.for_alg(-65535), cose.RS1)
+
+        if _mldsa:
+            self.assertEqual(CoseKey.for_alg(-48), cose.MLDSA44)
+            self.assertEqual(CoseKey.for_alg(-49), cose.MLDSA65)
+            self.assertEqual(CoseKey.for_alg(-50), cose.MLDSA87)
