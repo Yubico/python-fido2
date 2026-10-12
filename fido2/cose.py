@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Sequence, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Generator, Mapping, Sequence, Tuple, TypeVar
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -73,43 +73,38 @@ class CoseKey(dict):
         """
         raise NotImplementedError("Creation from cryptography not supported.")
 
-    @staticmethod
-    def for_alg(alg: int) -> type[CoseKey]:
+    @classmethod
+    def _traverse_subclasses(base_cls: type[CoseKey]) -> Generator[type[CoseKey]]:
+        for subcls in base_cls.__subclasses__():
+            yield subcls
+            for subsubcls in subcls._traverse_subclasses():
+                yield subsubcls
+
+    @classmethod
+    def for_alg(cls: type[CoseKey], alg: int) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
 
-        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
-            for cls in base_cls.__subclasses__():
-                if cls.ALGORITHM == alg:
-                    return cls
-                subresult = find_subclass(cls)
-                if subresult:
-                    return subresult
-            return None
+        for cls in cls._traverse_subclasses():
+            if cls.ALGORITHM == alg:
+                return cls
+        return UnsupportedKey
 
-        return find_subclass(CoseKey) or UnsupportedKey
-
-    @staticmethod
-    def for_name(name: str) -> type[CoseKey]:
+    @classmethod
+    def for_name(cls: type[CoseKey], name: str) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
 
-        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
-            for cls in base_cls.__subclasses__():
-                if cls.__name__ == name:
-                    return cls
-                subresult = find_subclass(cls)
-                if subresult:
-                    return subresult
-            return None
-
-        return find_subclass(CoseKey) or UnsupportedKey
+        for cls in cls._traverse_subclasses():
+            if cls.__name__ == name:
+                return cls
+        return UnsupportedKey
 
     @staticmethod
     def parse(cose: Mapping[int, Any]) -> CoseKey:
