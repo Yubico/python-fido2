@@ -205,3 +205,7 @@ class TestCoseKey(unittest.TestCase):
             self.assertEqual(CoseKey.for_alg(-48), cose.MLDSA44)
             self.assertEqual(CoseKey.for_alg(-49), cose.MLDSA65)
             self.assertEqual(CoseKey.for_alg(-50), cose.MLDSA87)
+
+        assert (
+            cose.ARKG_P256_PLACEHOLDER.ALGORITHM not in CoseKey.supported_algorithms()
+        )

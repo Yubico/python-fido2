@@ -116,7 +116,8 @@ class CoseKey(dict):
 
     @classmethod
     def supported_algorithms(base_cls: type[CoseKey]) -> Sequence[int]:
-        """Get a list of all supported algorithm identifiers"""
+        """Get a list of all supported algorithm identifiers
+        suitable as FIDO2 credential algorithm."""
         preferred_algs: list[type[CoseKey]] = [
             ES256,
             EdDSA,
@@ -134,7 +135,12 @@ class CoseKey(dict):
         return preferred_algs_ints + [
             cls.ALGORITHM
             for cls in base_cls._traverse_subclasses()
-            if cls.ALGORITHM is not None and cls.ALGORITHM not in preferred_algs_set
+            if cls.ALGORITHM is not None
+            and cls.ALGORITHM not in preferred_algs_set
+            and not (
+                hasattr(cls, "_UNSUITABLE_AS_FIDO2_CREDENTIAL_ALGORITHM")
+                and cls._UNSUITABLE_AS_FIDO2_CREDENTIAL_ALGORITHM
+            )
         ]
 
 
@@ -423,6 +429,7 @@ class ARKG_P256_PLACEHOLDER(CoseKey):
         bl=arkg._BL(crv=_CRV, Hash=hashes.SHA256(), DST_ext=b"ARKG-P256"),
         kem=arkg._KEM(crv=_CRV, Hash=hashes.SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
     )
+    _UNSUITABLE_AS_FIDO2_CREDENTIAL_ALGORITHM = True
 
     @property
     def pk_bl(self) -> CoseKey:
