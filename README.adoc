@@ -66,6 +66,22 @@ requires running as Administrator. This library can still be used when running
 as non-administrator, via the  `fido.client.WindowsClient` class. An example of
 this is included in the file `examples/credential.py`.
 
+To install the dependencies required for using IPC for accessing raw CTAP 
+functionality without elevation on Windows:
+
+  pip install fido2[win]
+
+To enable the IPC service elevation is required, though once started, other programs
+using the IPC may run without elevation. The following enables the service with auto
+start on boot.
+
+  python -m fido2.ipcservice.service --startup auto install
+
+To start the service once installed use the following:
+
+  sc start CTAPIPCService
+
+For stopping and deleting the service, use corresponding sc commands.
 
 Under Linux you will need to add a Udev rule to be able to access the FIDO
 device, or run as root. For example, the Udev rule may contain the following:
@@ -94,6 +110,9 @@ NFC support is optionally available via PC/SC, using the pyscard library. For
 instructions on installing this dependency, see
 https://github.com/LudovicRousseau/pyscard/blob/master/INSTALL.md.
 
+Windows IPC support is optionally available via a Windows service using the pywin32
+library. For instructions on installing this dependency, see
+https://github.com/mhammond/pywin32#installing-via-pip.
 
 === Development
 For development of the library we use https://docs.astral.sh/uv/[uv].

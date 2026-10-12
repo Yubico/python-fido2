@@ -31,6 +31,7 @@ import logging
 import os
 import struct
 import sys
+import ctypes
 from enum import IntEnum, IntFlag, unique
 from threading import Event
 from typing import Callable, Iterator
@@ -45,7 +46,11 @@ logger = logging.getLogger(__name__)
 if sys.platform == "linux":
     from . import linux as backend
 elif sys.platform == "win32":
-    from . import windows as backend
+    from . import ipc as ipc
+    if not ctypes.windll.shell32.IsUserAnAdmin() and ipc.IPC_Pipe.is_pipe_available():
+        from . import ipc as backend
+    else:
+        from . import windows as backend
 elif sys.platform == "darwin":
     from . import macos as backend
 # The following have version numbers at the end
@@ -62,6 +67,13 @@ else:
 list_descriptors = backend.list_descriptors
 get_descriptor = backend.get_descriptor
 open_connection = backend.open_connection
+
+def ipc_available() -> bool:
+    if sys.platform != "win32":
+        return False
+    if hasattr(backend, "IPC_Pipe"):
+        return backend.IPC_Pipe.is_pipe_available()
+    return False
 
 
 class ConnectionFailure(Exception):
