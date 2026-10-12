@@ -25,8 +25,13 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from fido2.hid.base import parse_report_descriptor
+import struct
+from unittest.mock import Mock, patch
+
 import pytest
+
+from fido2.hid import CtapHidDevice, open_device
+from fido2.hid.base import parse_report_descriptor
 
 
 def test_parse_report_descriptor_1():
@@ -48,3 +53,51 @@ def test_parse_report_descriptor_2():
                 "05010930093109381581257f750895038106c0c0"
             )
         )
+
+
+@pytest.mark.parametrize("enumerate_devices", [False, True])
+@pytest.mark.parametrize("close_fails", [False, True])
+@pytest.mark.parametrize(
+    "error", [OSError("disconnected during INIT"), KeyboardInterrupt()]
+)
+def test_failed_open_closes_connection(enumerate_devices, close_fails, error):
+    descriptor = Mock(report_size_out=64)
+    connection = Mock()
+    if close_fails:
+        connection.close.side_effect = OSError("close failed")
+    with (
+        patch("fido2.hid.list_descriptors", return_value=[descriptor]),
+        patch("fido2.hid.get_descriptor", return_value=descriptor),
+        patch("fido2.hid.open_connection", return_value=connection),
+        patch.object(CtapHidDevice, "call", side_effect=error),
+        pytest.raises(type(error)) as raised,
+    ):
+        if enumerate_devices:
+            next(CtapHidDevice.list_devices())
+        else:
+            open_device("fake-hid")
+    assert raised.value is error
+    connection.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize("enumerate_devices", [False, True])
+def test_successful_open_transfers_connection_to_device(enumerate_devices):
+    descriptor = Mock(report_size_out=64)
+    connection = Mock()
+    nonce = b"12345678"
+    response = nonce + struct.pack(">IBBBBB", 1, 2, 3, 4, 5, 4)
+    with (
+        patch("fido2.hid.list_descriptors", return_value=[descriptor]),
+        patch("fido2.hid.get_descriptor", return_value=descriptor),
+        patch("fido2.hid.open_connection", return_value=connection),
+        patch("fido2.hid.os.urandom", return_value=nonce),
+        patch.object(CtapHidDevice, "call", return_value=response),
+    ):
+        if enumerate_devices:
+            device = next(CtapHidDevice.list_devices())
+        else:
+            device = open_device("fake-hid")
+    connection.close.assert_not_called()
+    assert device.device_version == (3, 4, 5)
+    device.close()
+    connection.close.assert_called_once_with()
