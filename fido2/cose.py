@@ -114,10 +114,10 @@ class CoseKey(dict):
             raise ValueError("COSE alg identifier must be provided.")
         return CoseKey.for_alg(alg)(cose)
 
-    @staticmethod
-    def supported_algorithms() -> Sequence[int]:
+    @classmethod
+    def supported_algorithms(base_cls: type[CoseKey]) -> Sequence[int]:
         """Get a list of all supported algorithm identifiers"""
-        algs: list[type[CoseKey]] = [
+        preferred_algs: list[type[CoseKey]] = [
             ES256,
             EdDSA,
             ES384,
@@ -127,9 +127,15 @@ class CoseKey(dict):
             ES256K,
         ]
         if _mldsa:
-            algs.extend([MLDSA44, MLDSA65, MLDSA87])
+            preferred_algs.extend([MLDSA44, MLDSA65, MLDSA87])
 
-        return [cls.ALGORITHM for cls in algs]
+        preferred_algs_ints = [cls.ALGORITHM for cls in preferred_algs]
+        preferred_algs_set = set(preferred_algs_ints)
+        return preferred_algs_ints + [
+            cls.ALGORITHM
+            for cls in base_cls._traverse_subclasses()
+            if cls.ALGORITHM is not None and cls.ALGORITHM not in preferred_algs_set
+        ]
 
 
 T_CoseKey = TypeVar("T_CoseKey", bound=CoseKey)
