@@ -27,6 +27,7 @@
 
 import unittest
 from datetime import datetime, timedelta
+from importlib.metadata import version
 from unittest.mock import patch
 
 import pytest
@@ -132,10 +133,8 @@ def test_certificate_chain_issuer_mismatch():
 
 
 def test_mldsa_certificate_chain():
-    from fido2.cose import _mldsa
-
-    if not _mldsa:
-        pytest.skip("ML-DSA is not supported by this version of cryptography")
+    if int(version("cryptography").split(".")[0]) < 49:
+        pytest.skip("ML-DSA certificates require cryptography 49 or newer")
     from cryptography.hazmat.primitives.asymmetric import mldsa
 
     key = mldsa.MLDSA87PrivateKey.generate()
