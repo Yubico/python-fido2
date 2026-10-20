@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Sequence, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Generator, Mapping, Sequence, Tuple, TypeVar
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -73,43 +73,38 @@ class CoseKey(dict):
         """
         raise NotImplementedError("Creation from cryptography not supported.")
 
-    @staticmethod
-    def for_alg(alg: int) -> type[CoseKey]:
+    @classmethod
+    def _traverse_subclasses(base_cls: type[CoseKey]) -> Generator[type[CoseKey]]:
+        for subcls in base_cls.__subclasses__():
+            yield subcls
+            for subsubcls in subcls._traverse_subclasses():
+                yield subsubcls
+
+    @classmethod
+    def for_alg(cls: type[CoseKey], alg: int) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
 
-        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
-            for cls in base_cls.__subclasses__():
-                if cls.ALGORITHM == alg:
-                    return cls
-                subresult = find_subclass(cls)
-                if subresult:
-                    return subresult
-            return None
+        for cls in cls._traverse_subclasses():
+            if cls.ALGORITHM == alg:
+                return cls
+        return UnsupportedKey
 
-        return find_subclass(CoseKey) or UnsupportedKey
-
-    @staticmethod
-    def for_name(name: str) -> type[CoseKey]:
+    @classmethod
+    def for_name(cls: type[CoseKey], name: str) -> type[CoseKey]:
         """Get a subclass of CoseKey corresponding to an algorithm identifier.
 
         :param alg: The COSE identifier of the algorithm.
         :return: A CoseKey.
         """
 
-        def find_subclass(base_cls: type[CoseKey]) -> type[CoseKey] | None:
-            for cls in base_cls.__subclasses__():
-                if cls.__name__ == name:
-                    return cls
-                subresult = find_subclass(cls)
-                if subresult:
-                    return subresult
-            return None
-
-        return find_subclass(CoseKey) or UnsupportedKey
+        for cls in cls._traverse_subclasses():
+            if cls.__name__ == name:
+                return cls
+        return UnsupportedKey
 
     @staticmethod
     def parse(cose: Mapping[int, Any]) -> CoseKey:
@@ -119,10 +114,11 @@ class CoseKey(dict):
             raise ValueError("COSE alg identifier must be provided.")
         return CoseKey.for_alg(alg)(cose)
 
-    @staticmethod
-    def supported_algorithms() -> Sequence[int]:
-        """Get a list of all supported algorithm identifiers"""
-        algs: list[type[CoseKey]] = [
+    @classmethod
+    def supported_algorithms(base_cls: type[CoseKey]) -> Sequence[int]:
+        """Get a list of all supported algorithm identifiers
+        suitable as FIDO2 credential algorithm."""
+        preferred_algs: list[type[CoseKey]] = [
             ES256,
             EdDSA,
             ES384,
@@ -132,9 +128,20 @@ class CoseKey(dict):
             ES256K,
         ]
         if _mldsa:
-            algs.extend([MLDSA44, MLDSA65, MLDSA87])
+            preferred_algs.extend([MLDSA44, MLDSA65, MLDSA87])
 
-        return [cls.ALGORITHM for cls in algs]
+        preferred_algs_ints = [cls.ALGORITHM for cls in preferred_algs]
+        preferred_algs_set = set(preferred_algs_ints)
+        return preferred_algs_ints + [
+            cls.ALGORITHM
+            for cls in base_cls._traverse_subclasses()
+            if cls.ALGORITHM is not None
+            and cls.ALGORITHM not in preferred_algs_set
+            and not (
+                hasattr(cls, "_UNSUITABLE_AS_FIDO2_CREDENTIAL_ALGORITHM")
+                and cls._UNSUITABLE_AS_FIDO2_CREDENTIAL_ALGORITHM
+            )
+        ]
 
 
 T_CoseKey = TypeVar("T_CoseKey", bound=CoseKey)
@@ -422,6 +429,7 @@ class ARKG_P256_PLACEHOLDER(CoseKey):
         bl=arkg._BL(crv=_CRV, Hash=hashes.SHA256(), DST_ext=b"ARKG-P256"),
         kem=arkg._KEM(crv=_CRV, Hash=hashes.SHA256(), DST_ext=b"ARKG-ECDH.ARKG-P256"),
     )
+    _UNSUITABLE_AS_FIDO2_CREDENTIAL_ALGORITHM = True
 
     @property
     def pk_bl(self) -> CoseKey:
