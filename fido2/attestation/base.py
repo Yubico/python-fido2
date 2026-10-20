@@ -106,16 +106,22 @@ def catch_builtins(f):
 def verify_x509_chain(chain: list[bytes]) -> None:
     """Verifies a chain of certificates.
 
-    Checks that the first item in the chain is signed by the next, and so on.
+    Checks that the first item in the chain is issued by the next, and so on.
     The first item is the leaf, the last is the root.
+    On cryptography versions older than 40, only RSA and ECDSA signatures are
+    supported, and issuer names are not checked.
     """
     certs = [x509.load_der_x509_certificate(der, default_backend()) for der in chain]
     cert = certs.pop(0)
     while certs:
         child = cert
         cert = certs.pop(0)
-        pub = cert.public_key()
         try:
+            if hasattr(child, "verify_directly_issued_by"):
+                child.verify_directly_issued_by(cert)
+                continue
+
+            pub = cert.public_key()
             if isinstance(pub, rsa.RSAPublicKey):
                 assert child.signature_hash_algorithm is not None  # noqa: S101
                 pub.verify(

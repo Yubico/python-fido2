@@ -26,8 +26,14 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import unittest
+from datetime import datetime, timedelta
+from unittest.mock import patch
 
+import pytest
+from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from fido2 import cbor
 from fido2.attestation import (
     AndroidSafetynetAttestation,
@@ -46,6 +52,99 @@ from fido2.attestation import (
 )
 from fido2.ctap2.base import AttestationResponse
 from fido2.webauthn import AuthenticatorData
+
+
+class _LegacyCertificate:
+    def __init__(self, certificate):
+        self._certificate = certificate
+
+    def __getattr__(self, name):
+        if name == "verify_directly_issued_by":
+            raise AttributeError(name)
+        return getattr(self._certificate, name)
+
+
+def _certificate_chain(key, algorithm, issuer_name=None):
+    name = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "Test CA")])
+    now = datetime(2026, 1, 1)
+    builder = (
+        x509.CertificateBuilder()
+        .public_key(key.public_key())
+        .not_valid_before(now)
+        .not_valid_after(now + timedelta(days=365))
+    )
+    root = (
+        builder.subject_name(name)
+        .issuer_name(name)
+        .serial_number(1)
+        .sign(key, algorithm)
+    )
+    leaf = (
+        builder.subject_name(
+            x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "Test leaf")])
+        )
+        .issuer_name(issuer_name or name)
+        .serial_number(2)
+        .sign(key, algorithm)
+    )
+    return [c.public_bytes(serialization.Encoding.DER) for c in (leaf, root)]
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("key_type", ["rsa", "ec"])
+def test_certificate_chain_verification(key_type, legacy):
+    key = (
+        rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        if key_type == "rsa"
+        else ec.generate_private_key(ec.SECP256R1())
+    )
+    chain = _certificate_chain(key, hashes.SHA256())
+    certificates = [x509.load_der_x509_certificate(der) for der in chain]
+    if legacy:
+        certificates = [_LegacyCertificate(c) for c in certificates]
+    with patch(
+        "fido2.attestation.base.x509.load_der_x509_certificate",
+        side_effect=certificates,
+    ):
+        verify_x509_chain(chain)
+
+    tampered = chain[0][:-1] + bytes([chain[0][-1] ^ 1])
+    certificates = [x509.load_der_x509_certificate(der) for der in (tampered, chain[1])]
+    if legacy:
+        certificates = [_LegacyCertificate(c) for c in certificates]
+    with (
+        patch(
+            "fido2.attestation.base.x509.load_der_x509_certificate",
+            side_effect=certificates,
+        ),
+        pytest.raises(InvalidSignature),
+    ):
+        verify_x509_chain([tampered, chain[1]])
+
+
+def test_certificate_chain_issuer_mismatch():
+    if not hasattr(x509.Certificate, "verify_directly_issued_by"):
+        pytest.skip("Requires cryptography 40 or newer")
+    key = ec.generate_private_key(ec.SECP256R1())
+    issuer = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "Wrong CA")])
+    with pytest.raises(InvalidData):
+        verify_x509_chain(_certificate_chain(key, hashes.SHA256(), issuer))
+
+
+def test_mldsa_certificate_chain():
+    from fido2.cose import _mldsa
+
+    if not _mldsa:
+        pytest.skip("ML-DSA is not supported by this version of cryptography")
+    from cryptography.hazmat.primitives.asymmetric import mldsa
+
+    key = mldsa.MLDSA87PrivateKey.generate()
+    chain = _certificate_chain(key, None)
+    verify_x509_chain(chain)
+    tampered = chain[0][:-1] + bytes([chain[0][-1] ^ 1])
+    with pytest.raises(InvalidSignature):
+        verify_x509_chain([tampered, chain[1]])
+
 
 # GS Root R2 (https://pki.goog/)
 _GSR2_DER = bytes.fromhex(
