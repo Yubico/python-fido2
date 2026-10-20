@@ -1,4 +1,6 @@
 * Version 2.2.2 (unreleased)
+ ** Attestation: Use cryptography's certificate issuer verification when available,
+    supporting additional signature algorithms while retaining the legacy fallback.
  ** MDS: Allow omitted userVerificationDetails and attachmentHint fields, as
     specified in Metadata Statement 3.1.1.
 
