@@ -34,7 +34,7 @@ import pytest
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm, _Reasons
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, ed448, rsa
 from fido2 import cbor
 from fido2.attestation import (
     AndroidSafetynetAttestation,
@@ -130,6 +130,16 @@ def test_certificate_chain_issuer_mismatch():
     issuer = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "Wrong CA")])
     with pytest.raises(InvalidData):
         verify_x509_chain(_certificate_chain(key, hashes.SHA256(), issuer))
+
+
+@pytest.mark.parametrize("key_type", [ed25519.Ed25519PrivateKey, ed448.Ed448PrivateKey])
+def test_eddsa_certificate_chain(key_type):
+    key = key_type.generate()
+    chain = _certificate_chain(key, None)
+    verify_x509_chain(chain)
+    tampered = chain[0][:-1] + bytes([chain[0][-1] ^ 1])
+    with pytest.raises(InvalidSignature):
+        verify_x509_chain([tampered, chain[1]])
 
 
 def test_mldsa_certificate_chain():
