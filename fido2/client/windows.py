@@ -488,7 +488,11 @@ class WindowsClient(WebAuthnClient):
                     if secret.second:
                         result["output2"] = secret.second
                     extension_outputs["hmacGetSecret"] = result
-            if obj.dwVersion >= 2 and obj.dwCredLargeBlobStatus != 0:
+            if (
+                "largeBlob" in options.extensions
+                and obj.dwVersion >= 2
+                and obj.dwCredLargeBlobStatus != 0
+            ):
                 if options.extensions["largeBlob"].get("read", False):
                     extension_outputs["largeBlob"] = {"blob": obj.cred_large_blob}
                 else:
