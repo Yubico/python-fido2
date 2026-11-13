@@ -72,5 +72,6 @@ exclude = ["docs"]
 include = ["tests/**", "**/test_*.py"]
 
 [tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
+missing-attribute = "ignore"
+missing-union-attribute = "ignore"
 invalid-argument-type = "ignore"
