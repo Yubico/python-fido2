@@ -28,13 +28,15 @@
 # flake8: noqa ignore lines too long
 
 
-import pytest
-
-from fido2.cose import ARKG_P256_PLACEHOLDER
 from importlib.metadata import version
 
+import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 
-@pytest.fixture(autouse=True, scope="module")
+from fido2.cose import ARKG_P256_PLACEHOLDER
+
+
+@pytest.fixture(scope="module")
 def check_arkg_support():
     if int(version("cryptography").split(".")[0]) < 45:
         pytest.skip("ARKG support requires cryptography 45 or later")
@@ -86,6 +88,7 @@ TEST_VECTORS = [
 
 
 @pytest.mark.parametrize("test_vector", TEST_VECTORS)
+@pytest.mark.usefixtures("check_arkg_support")
 def test_vectors(test_vector):
     pub_key = ARKG_P256_PLACEHOLDER(
         {
@@ -112,3 +115,15 @@ def test_vectors(test_vector):
     pk_derived, args = pub_key.derive_public_key(test_vector["ikm"], test_vector["ctx"])
     point = b"\4" + pk_derived[-2] + pk_derived[-3]
     assert point.hex() == test_vector["pk_prime"].hex()
+
+
+@pytest.mark.parametrize("component", ["bl", "kem"])
+def test_requires_recent_cryptography(monkeypatch, component):
+    instance = ARKG_P256_PLACEHOLDER._ARKG
+    monkeypatch.setattr(getattr(instance, component), "crv", object())
+    public_key = ec.generate_private_key(ec.SECP256R1()).public_key()
+
+    with pytest.raises(
+        NotImplementedError, match="ARKG requires cryptography 45 or later"
+    ):
+        instance.derive_public_key(public_key, public_key, b"seed", b"")

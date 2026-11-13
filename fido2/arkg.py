@@ -25,6 +25,18 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+"""
+WARNING: This module and these algorithms are currently in DRAFT.
+They are to be considered experimental, and NOT part of the stable API of this library.
+
+ARKG functionality requires cryptography 45 or later. Applications using ARKG
+should explicitly declare ``cryptography>=45`` alongside ``fido2``. Older
+cryptography versions can still be used for other library functionality.
+
+This module implements the Asynchronous Remote Key Generation (ARKG) algorithm,
+as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-08.html
+"""
+
 import struct
 from dataclasses import dataclass
 from typing import Sequence, Tuple
@@ -43,14 +55,6 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from .utils import bytes2int
-
-"""
-WARNING: This module and these algorithms are currently in DRAFT.
-They are to be considered experimental, and NOT part of the stable API of this library.
-
-This module implements the Asynchronous Remote Key Generation (ARKG) algorithm,
-as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-08.html
-"""
 
 
 @dataclass(frozen=True)
@@ -429,6 +433,11 @@ class _ARKG:
 
             kh = c
         """
+        if not hasattr(self.bl.crv, "group_order") or not hasattr(
+            self.kem.crv, "group_order"
+        ):
+            raise NotImplementedError("ARKG requires cryptography 45 or later")
+
         if len(ctx) > 64:
             raise ValueError("Context too long, should be at most 64 bytes")
 

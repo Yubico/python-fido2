@@ -90,6 +90,11 @@ to /etc/devd.conf, which can be automated by installing security/u2f-devd:
 This project depends on Cryptography. For instructions on installing this
 dependency, see https://cryptography.io/en/latest/installation/.
 
+Experimental ARKG functionality requires cryptography 45 or later and is not
+part of the stable API. Other functionality remains available with the library's
+declared minimum version. Applications using ARKG should explicitly declare
+`cryptography>=45` alongside `fido2`.
+
 NFC support is optionally available via PC/SC, using the pyscard library. For
 instructions on installing this dependency, see
 https://github.com/LudovicRousseau/pyscard/blob/master/INSTALL.md.
@@ -111,4 +116,3 @@ As a safety precaution, the tests will only run on a device that is in a newly r
 state, as far as the test runner can tell.
 
   uv run pytest
-
