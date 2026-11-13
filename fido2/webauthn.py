@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import struct
 from dataclasses import dataclass, field
-from enum import Enum, EnumMeta, IntFlag, unique
+from enum import EnumMeta, IntFlag, StrEnum, unique
 from typing import Any, Mapping, Sequence, cast
 
 from . import cbor
@@ -354,16 +354,11 @@ class _StringEnumMeta(EnumMeta):
             return cls._get_value(value)
 
 
-# TODO: Python 3.11 use StrEnum, instead of "str, Enum" remove custom __str__().
-class _StringEnum(str, Enum, metaclass=_StringEnumMeta):
+class _StringEnum(StrEnum, metaclass=_StringEnumMeta):
     """Enum of strings for WebAuthn types.
 
     Unrecognized values are treated as missing.
     """
-
-    # Needed in Python 3.15, can be removed when StrEnum is available.
-    def __str__(self):
-        return self.value
 
 
 @dataclass(init=False, frozen=True)

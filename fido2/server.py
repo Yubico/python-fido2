@@ -194,7 +194,11 @@ class Fido2Server:
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
         self._verify_top_origin = verify_top_origin
         self.timeout = timeout
-        self.attestation = AttestationConveyancePreference(attestation)
+        self.attestation = (
+            AttestationConveyancePreference(attestation)
+            if attestation is not None
+            else None
+        )
         self.allowed_algorithms = [
             PublicKeyCredentialParameters(
                 type=PublicKeyCredentialType.PUBLIC_KEY, alg=alg

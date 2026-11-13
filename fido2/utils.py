@@ -38,25 +38,16 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import Field, fields
 from io import BytesIO
 from typing import (
-    TYPE_CHECKING,
     Any,
     ClassVar,
     Hashable,
     Mapping,
+    Self,
     Sequence,
     TypeVar,
     get_type_hints,
     overload,
 )
-
-if TYPE_CHECKING:
-    import sys
-
-    if sys.version_info >= (3, 11):
-        from typing import Self
-    else:
-        # Fallback for Python 3.10 and earlier
-        Self = TypeVar("Self", bound="_DataClassMapping")
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac

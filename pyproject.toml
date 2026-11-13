@@ -4,7 +4,7 @@ version = "2.3.0-dev.0"
 description = "FIDO2/WebAuthn library for implementing clients and servers."
 authors = [{ name = "Dain Nilsson", email = "<dain@yubico.com>" }]
 readme = "README.adoc"
-requires-python = ">=3.10, <4"
+requires-python = ">=3.11, <4"
 license = { file = "COPYING" }
 keywords = ["fido2", "webauthn", "ctap", "u2f"]
 classifiers = [
@@ -29,7 +29,7 @@ pcsc = ["pyscard (>=1.9, <3)"]
 [dependency-groups]
 dev = [
     "pytest>=9.0,<10",
-    "sphinx>=9.0,<10; python_version>='3.11'",
+    "sphinx>=9.0,<10",
     "sphinx-rtd-theme>=3,<4",
     "sphinx-autoapi>=3.3.3,<4",
 ]
