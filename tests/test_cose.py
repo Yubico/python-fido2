@@ -191,3 +191,14 @@ class TestCoseKey(unittest.TestCase):
         self.assertEqual(CoseKey.for_alg(-53), cose.Ed448)
         self.assertEqual(CoseKey.for_alg(-257), cose.RS256)
         self.assertEqual(CoseKey.for_alg(-65535), cose.RS1)
+
+    def test_supported_algorithms_deprecated(self):
+        with self.assertWarnsRegex(
+            DeprecationWarning, "fido2.server.DEFAULT_ALLOWED_ALGORITHMS"
+        ) as warning:
+            algorithms = CoseKey.supported_algorithms()
+        expected = [-7, -8, -35, -36, -37, -257, -47]
+        if cose._mldsa:
+            expected.extend([-48, -49, -50])
+        self.assertEqual(algorithms, expected)
+        self.assertEqual(warning.filename, __file__)

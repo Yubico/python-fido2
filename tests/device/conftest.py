@@ -16,6 +16,7 @@ from fido2.hid import (
     open_connection,
     open_device,
 )
+from fido2.server import DEFAULT_ALLOWED_ALGORITHMS
 
 from . import TEST_PIN, CliInteraction, PicoController, Printer
 
@@ -388,7 +389,7 @@ def info(ctap2):
     return ctap2.get_info()
 
 
-@pytest.fixture(params=[CoseKey.for_alg(alg) for alg in CoseKey.supported_algorithms()])
+@pytest.fixture(params=[CoseKey.for_alg(alg) for alg in DEFAULT_ALLOWED_ALGORITHMS])
 def algorithm(request, info):
     alg_cls = request.param
     alg = {"alg": alg_cls.ALGORITHM, "type": "public-key"}

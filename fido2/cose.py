@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, Mapping, Sequence, Tuple, TypeVar
 
 from cryptography.hazmat.backends import default_backend
@@ -121,7 +122,18 @@ class CoseKey(dict):
 
     @staticmethod
     def supported_algorithms() -> Sequence[int]:
-        """Get a list of all supported algorithm identifiers"""
+        """Return the legacy registration algorithm preference list.
+
+        .. deprecated:: 2.3
+           Use ``fido2.server.DEFAULT_ALLOWED_ALGORITHMS`` for server defaults.
+           This list does not enumerate all supported verification algorithms.
+        """
+        warnings.warn(
+            "CoseKey.supported_algorithms() is deprecated and will be removed in "
+            "3.0. Use fido2.server.DEFAULT_ALLOWED_ALGORITHMS for server defaults.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         algs: list[type[CoseKey]] = [
             ES256,
             EdDSA,

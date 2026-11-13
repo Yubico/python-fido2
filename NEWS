@@ -2,6 +2,9 @@
  ** Server: Add hints to registration and authentication requests, and preferred
     attestation formats to registration requests.
  ** Server: Add keyword-only timeout and allowed_algorithms constructor options.
+ ** COSE: Deprecate CoseKey.supported_algorithms(). Server registration defaults
+    are now defined by server.DEFAULT_ALLOWED_ALGORITHMS, retaining their existing
+    preference order.
  ** Deprecation: Optional arguments to Fido2Server and its begin methods should
     be passed by keyword, except authenticate_begin's credentials argument.
     Other positional optional arguments remain supported until version 3.0;

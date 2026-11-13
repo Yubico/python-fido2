@@ -35,7 +35,7 @@ from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography.hazmat.primitives import constant_time
 
 from . import features
-from .cose import CoseKey
+from .cose import _mldsa
 from .rpid import verify_rp_id
 from .utils import websafe_decode, websafe_encode
 from .webauthn import (
@@ -63,6 +63,29 @@ from .webauthn import (
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_ALLOWED_ALGORITHMS: Sequence[int] = (
+    -7,  # ES256
+    -8,  # EdDSA (Ed25519)
+    -35,  # ES384
+    -36,  # ES512
+    -37,  # PS256
+    -257,  # RS256
+    -47,  # ES256K
+) + (
+    (
+        -48,  # ML-DSA-44
+        -49,  # ML-DSA-65
+        -50,  # ML-DSA-87
+    )
+    if _mldsa
+    else ()
+)
+"""Default registration algorithms, in order of preference.
+
+This is not an exhaustive list of algorithms supported for verification.
+ML-DSA algorithms are included when supported by the cryptography backend.
+"""
 
 
 VerifyAttestation = Callable[[AttestationObject, bytes], None]
@@ -136,7 +159,7 @@ class Fido2Server:
         Attestation is also ignored if `attestation` is set to `none`.
     :param timeout: (optional) Ceremony timeout hint in milliseconds.
     :param allowed_algorithms: (optional) Ordered COSE algorithm identifiers to
-        offer during registration. Defaults to CoseKey.supported_algorithms().
+        offer during registration. Defaults to DEFAULT_ALLOWED_ALGORITHMS.
 
     Optional arguments should be passed by keyword. Positional optional arguments
     are deprecated and will be removed in version 3.0. Enable
@@ -154,7 +177,7 @@ class Fido2Server:
         verify_origin: VerifyOrigin | None = None,
         verify_attestation: VerifyAttestation | None = None,
         timeout: int | None = None,
-        allowed_algorithms: Sequence[int] | None = None,
+        allowed_algorithms: Sequence[int] = DEFAULT_ALLOWED_ALGORITHMS,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         assert self.rp.id is not None  # noqa: S101
@@ -165,11 +188,7 @@ class Fido2Server:
             PublicKeyCredentialParameters(
                 type=PublicKeyCredentialType.PUBLIC_KEY, alg=alg
             )
-            for alg in (
-                CoseKey.supported_algorithms()
-                if allowed_algorithms is None
-                else allowed_algorithms
-            )
+            for alg in allowed_algorithms
         ]
         self._verify_attestation = verify_attestation or _ignore_attestation
         logger.debug(f"Fido2Server initialized for RP: {self.rp}")

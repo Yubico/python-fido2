@@ -244,6 +244,13 @@ def test_empty_allowed_algorithms():
     assert options["publicKey"]["rpId"] == "example.com"
 
 
+def test_default_algorithms_not_deprecated():
+    rp = PublicKeyCredentialRpEntity(name="Example", id="example.com")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        Fido2Server(rp).register_begin(USER)
+
+
 def test_zero_timeout():
     rp = PublicKeyCredentialRpEntity(name="Example", id="example.com")
     server = Fido2Server(rp, timeout=0)
