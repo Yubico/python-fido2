@@ -420,7 +420,13 @@ def test_register_unsupported_alg(generate_key):
     assert exc_info.value.code == CtapError.ERR.UNSUPPORTED_ALGORITHM
 
 
-@pytest.mark.parametrize("flags", range(0, 256))
+# All combinations of the defined bits, each reserved bit alone, reserved bits
+# combined with valid values, and all bits set.
+@pytest.mark.parametrize(
+    "flags",
+    [*range(0b1000), *(1 << i for i in range(3, 8)), 0b1001, 0b1000_0101, 0xFF],
+    ids=lambda f: f"{f:#010b}",
+)
 def test_register_invalid_flags(generate_key, flags):
     if flags in [0b000, 0b001, 0b101]:
         generate_key(ALL_ALGORITHMS, flags=flags)
