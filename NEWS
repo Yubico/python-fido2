@@ -13,6 +13,8 @@
  ** Server: Reject cross-origin (iframe) responses by default, as they were
     previously accepted without verification. Pass verify_top_origin to
     Fido2Server to accept them from expected top-level origins.
+ ** ARKG: Update references to draft-bradleylundberg-cfrg-arkg-11. The optional
+    derived key algorithm (-3) of an ARKG public seed may now be omitted.
  ** Attestation: Use cryptography's certificate issuer verification when available,
     supporting additional signature algorithms while retaining the legacy fallback.
  ** MDS: Allow omitted userVerificationDetails and attachmentHint fields, as

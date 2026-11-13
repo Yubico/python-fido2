@@ -33,7 +33,7 @@ from importlib.metadata import version
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from fido2.cose import ARKG_P256_PLACEHOLDER
+from fido2.cose import ARKG_P256_PLACEHOLDER, ESP256_SPLIT_ARKG_PLACEHOLDER
 
 
 @pytest.fixture(scope="module")
@@ -54,6 +54,7 @@ TEST_VECTORS = [
         "sk_kem": "74e0a4cd81ca2d24246ff75bfd6d4fb7f9dfc938372627feb2c2348f8b1493b5",
         "pk_prime": "04572a111ce5cfd2a67d56a0f7c684184b16ccd212490dc9c5b579df749647d107dac2a1b197cc10d2376559ad6df6bc107318d5cfb90def9f4a1f5347e086c2cd",
         "sk_prime": "775d7fe9a6dfba43ce671cb38afca3d272c4d14aff97bd67559eb500a092e5e7",
+        "kh": "27987995f184a44cfa548d104b0a461d0487fc739dbcdabc293ac5469221da91b220e04c681074ec4692a76ffacb9043dec2847ea9060fd42da267f66852e63589f0c00dc88f290d660c65a65a50c86361",
     },
     {
         "ctx": b"ARKG-P256.test vectors",
@@ -66,6 +67,7 @@ TEST_VECTORS = [
         "sk_kem": "74e0a4cd81ca2d24246ff75bfd6d4fb7f9dfc938372627feb2c2348f8b1493b5",
         "pk_prime": "04ea7d962c9f44ffe8b18f1058a471f394ef81b674948eefc1865b5c021cf858f577f9632b84220e4a1444a20b9430b86731c37e4dcb285eda38d76bf758918d86",
         "sk_prime": "6228e470290e9d7cc0feff32a74caafa14c608c956337eba23997f5904cff226",
+        "kh": "b7507a82771776fbac41a18d94e19a7e0457fd1e438280c127dd55a6138d1baf0a35e3e9671f7e42d8345f47374afa83247a078fa2196cd69497aed59ef92c05cb6b03d306ec24f2f4ff2db09cd95d1b11",
     },
     {
         "ctx": b"ARKG-P256.test vectors.0",
@@ -78,6 +80,7 @@ TEST_VECTORS = [
         "sk_kem": "74e0a4cd81ca2d24246ff75bfd6d4fb7f9dfc938372627feb2c2348f8b1493b5",
         "pk_prime": "04b79b65d6bbb419ff97006a1bd52e3f4ad53042173992423e06e52987a037cb61dd82b126b162e4e7e8dc5c9fd86e82769d402a1968c7c547ef53ae4f96e10b0e",
         "sk_prime": "2a97f4232f9abba32fbfc28c6686f8afd2d851c2a95a3ed2f0a384b9ad55068d",
+        "kh": "81c4e65b552e52350b49864b98b87d510487fc739dbcdabc293ac5469221da91b220e04c681074ec4692a76ffacb9043dec2847ea9060fd42da267f66852e63589f0c00dc88f290d660c65a65a50c86361",
     },
 ]
 # Convert hex strings to bytes
@@ -87,10 +90,8 @@ TEST_VECTORS = [
 ]
 
 
-@pytest.mark.parametrize("test_vector", TEST_VECTORS)
-@pytest.mark.usefixtures("check_arkg_support")
-def test_vectors(test_vector):
-    pub_key = ARKG_P256_PLACEHOLDER(
+def _public_seed(test_vector, params=None):
+    return ARKG_P256_PLACEHOLDER(
         {
             1: -65537,
             3: -65700,
@@ -108,11 +109,34 @@ def test_vectors(test_vector):
                 -2: test_vector["pk_kem"][1:33],
                 -3: test_vector["pk_kem"][33:65],
             },
-            -3: -9,
+            **(params or {}),
         }
     )
 
+
+@pytest.mark.parametrize("test_vector", TEST_VECTORS)
+@pytest.mark.usefixtures("check_arkg_support")
+def test_vectors(test_vector):
+    pub_key = _public_seed(test_vector, {-3: -9})
+
     pk_derived, args = pub_key.derive_public_key(test_vector["ikm"], test_vector["ctx"])
+    point = b"\4" + pk_derived[-2] + pk_derived[-3]
+    assert point.hex() == test_vector["pk_prime"].hex()
+    assert pk_derived[3] == -9
+    assert args == {
+        3: ESP256_SPLIT_ARKG_PLACEHOLDER,
+        -1: test_vector["kh"],
+        -2: test_vector["ctx"],
+    }
+
+
+@pytest.mark.usefixtures("check_arkg_support")
+def test_derive_without_dkalg():
+    test_vector = TEST_VECTORS[0]
+    pub_key = _public_seed(test_vector)
+
+    pk_derived, _ = pub_key.derive_public_key(test_vector["ikm"], test_vector["ctx"])
+    assert 3 not in pk_derived
     point = b"\4" + pk_derived[-2] + pk_derived[-3]
     assert point.hex() == test_vector["pk_prime"].hex()
 

@@ -46,7 +46,7 @@ ALL_ALGORITHMS = [
     -7,  # ES256
     -300,  # Requested assignment for ESP256-split https://www.ietf.org/archive/id/draft-lundberg-cose-two-party-signing-algs-06.html#name-ecdsa
     -70009,  # Placeholder value for ESP256-split used by some prototypes
-    ESP256_SPLIT_ARKG_PLACEHOLDER,  # Placeholder for ESP256-split-ARKG https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#name-cose-algorithms
+    ESP256_SPLIT_ARKG_PLACEHOLDER,  # Placeholder for ESP256-split-ARKG https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-11.html#name-cose-algorithms
 ]
 PREHASH_ALGS = [
     ESP256_SPLIT_ARKG_PLACEHOLDER,
@@ -314,7 +314,7 @@ def test_es256(credential_cache, sign):
 
 def test_esp256_split_arkg(credential_cache, sign):
     algorithms = [
-        -65539,  # Placeholder for ESP256-split-ARKG https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#name-cose-algorithms
+        -65539,  # Placeholder for ESP256-split-ARKG https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-11.html#name-cose-algorithms
     ]
     cred = credential_cache.make_cred_or_skip(
         lambda cred: cred.algorithm in algorithms and cred.flags == 0b000,

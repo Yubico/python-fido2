@@ -34,7 +34,7 @@ should explicitly declare ``cryptography>=45`` alongside ``fido2``. Older
 cryptography versions can still be used for other library functionality.
 
 This module implements the Asynchronous Remote Key Generation (ARKG) algorithm,
-as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-08.html
+as specified in https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-11.html
 """
 
 import struct

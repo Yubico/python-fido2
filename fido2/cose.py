@@ -398,13 +398,13 @@ def _cose2key(cose: CoseKey, curve: ec.EllipticCurve) -> ec.EllipticCurvePublicK
 
 
 # ESP256-split using private key derived by ARKG-P256
-# https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#section-8.3
+# https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-11.html#name-cose-algorithms
 ESP256_SPLIT_ARKG_PLACEHOLDER = -65539  # placeholder value
 
 
 class ARKG_P256_PLACEHOLDER(CoseKey):
     """
-    https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#ARKG-P256
+    https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-11.html#ARKG-P256
 
     The identifier ARKG-P256 represents the following ARKG instance:
 
@@ -458,14 +458,15 @@ class ARKG_P256_PLACEHOLDER(CoseKey):
         pk_cose = ESP256(
             {
                 1: 2,  # kty: EC
-                3: self[-3],  # alg: derived key alg (key -3) from seed (value -9)
                 -1: 1,
                 -2: point_enc[1 : ln + 1],  # x-coordinate
                 -3: point_enc[1 + ln :],  # y-coordinate
             }
         )
+        if -3 in self:
+            pk_cose[3] = self[-3]  # alg: dkalg (-3) of the public seed
 
-        # COSE_Sign_Args: https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-10.html#name-cose-signing-arguments
+        # COSE_Sign_Args: https://www.ietf.org/archive/id/draft-bradleylundberg-cfrg-arkg-11.html#name-cose-signing-arguments
         args = {
             3: ESP256_SPLIT_ARKG_PLACEHOLDER,
             -1: kh,
