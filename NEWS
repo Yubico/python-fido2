@@ -9,6 +9,10 @@
     be passed by keyword, except authenticate_begin's credentials argument.
     Other positional optional arguments remain supported until version 3.0;
     enable features.server_kw_only for strict keyword-only behavior now.
+ ** WebAuthn: Add top_origin to CollectedClientData.
+ ** Server: Reject cross-origin (iframe) responses by default, as they were
+    previously accepted without verification. Pass verify_top_origin to
+    Fido2Server to accept them from expected top-level origins.
  ** Attestation: Use cryptography's certificate issuer verification when available,
     supporting additional signature algorithms while retaining the legacy fallback.
  ** MDS: Allow omitted userVerificationDetails and attachmentHint fields, as

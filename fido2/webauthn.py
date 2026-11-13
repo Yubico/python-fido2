@@ -378,6 +378,7 @@ class CollectedClientData(bytes):
     challenge: bytes
     origin: str
     cross_origin: bool = False
+    top_origin: str | None = None
 
     def __init__(self, _: bytes):
         super().__init__()
@@ -387,6 +388,7 @@ class CollectedClientData(bytes):
         object.__setattr__(self, "challenge", websafe_decode(self._data["challenge"]))
         object.__setattr__(self, "origin", self._data["origin"])
         object.__setattr__(self, "cross_origin", self._data.get("crossOrigin", False))
+        object.__setattr__(self, "top_origin", self._data.get("topOrigin"))
 
     @classmethod
     def create(
@@ -395,12 +397,16 @@ class CollectedClientData(bytes):
         challenge: bytes | str,
         origin: str,
         cross_origin: bool = False,
+        top_origin: str | None = None,
         **kwargs,
     ) -> CollectedClientData:
         if isinstance(challenge, bytes):
             encoded_challenge = websafe_encode(challenge)
         else:
             encoded_challenge = challenge
+
+        if top_origin is not None:
+            kwargs["topOrigin"] = top_origin
 
         return cls(
             json.dumps(

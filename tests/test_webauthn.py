@@ -110,6 +110,18 @@ class TestWebAuthnDataTypes(unittest.TestCase):
             True,
         )
         assert o.cross_origin is True
+        assert o.top_origin is None
+        assert b"topOrigin" not in o
+
+        o = CollectedClientData.create(
+            "webauthn.get",
+            "cdySOP-1JI4J_BpOeO9ut25rlZJueF16aO6auTTYAis",
+            "https://demo.yubico.com",
+            True,
+            "https://top.example.com",
+        )
+        assert o.top_origin == "https://top.example.com"
+        assert CollectedClientData(bytes(o)).top_origin == "https://top.example.com"
 
     def test_authenticator_selection_criteria(self):
         o = AuthenticatorSelectionCriteria(

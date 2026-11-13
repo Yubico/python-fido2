@@ -90,6 +90,11 @@ ML-DSA algorithms are included when supported by the cryptography backend.
 
 VerifyAttestation = Callable[[AttestationObject, bytes], None]
 VerifyOrigin = Callable[[str], bool]
+VerifyTopOrigin = Callable[[str | None], bool]
+
+
+def _reject_cross_origin(top_origin: str | None) -> bool:
+    raise ValueError("Cross-origin response, but verify_top_origin not set.")
 
 
 def _verify_origin_for_rp(rp_id: str) -> VerifyOrigin:
@@ -160,6 +165,10 @@ class Fido2Server:
     :param timeout: (optional) Ceremony timeout hint in milliseconds.
     :param allowed_algorithms: (optional) Ordered COSE algorithm identifiers to
         offer during registration. Defaults to DEFAULT_ALLOWED_ALGORITHMS.
+    :param verify_top_origin: (optional) Function to accept cross-origin (iframe)
+        responses. It is called with the top-level origin, or None if the client
+        did not provide one, and should return True to accept the response. By
+        default, cross-origin responses are rejected.
 
     Optional arguments should be passed by keyword. Positional optional arguments
     are deprecated and will be removed in version 3.0. Enable
@@ -178,10 +187,12 @@ class Fido2Server:
         verify_attestation: VerifyAttestation | None = None,
         timeout: int | None = None,
         allowed_algorithms: Sequence[int] = DEFAULT_ALLOWED_ALGORITHMS,
+        verify_top_origin: VerifyTopOrigin = _reject_cross_origin,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         assert self.rp.id is not None  # noqa: S101
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
+        self._verify_top_origin = verify_top_origin
         self.timeout = timeout
         self.attestation = AttestationConveyancePreference(attestation)
         self.allowed_algorithms = [
@@ -302,6 +313,7 @@ class Fido2Server:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
+        self._check_cross_origin(client_data)
         if not constant_time.bytes_eq(
             websafe_decode(state["challenge"]), client_data.challenge
         ):
@@ -423,6 +435,7 @@ class Fido2Server:
             raise ValueError("Incorrect type in CollectedClientData.")
         if not self._verify(client_data.origin):
             raise ValueError("Invalid origin in CollectedClientData.")
+        self._check_cross_origin(client_data)
         if not constant_time.bytes_eq(
             websafe_decode(state["challenge"]), client_data.challenge
         ):
@@ -449,6 +462,12 @@ class Fido2Server:
                 logger.info(f"Credential authenticated: {credential_id.hex()}")
                 return cred
         raise ValueError("Unknown credential ID.")
+
+    def _check_cross_origin(self, client_data: CollectedClientData) -> None:
+        if not client_data.cross_origin and client_data.top_origin is None:
+            return
+        if not self._verify_top_origin(client_data.top_origin):
+            raise ValueError("Invalid top origin in CollectedClientData.")
 
     @staticmethod
     def _make_internal_state(

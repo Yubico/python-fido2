@@ -79,6 +79,7 @@ class CollectedClientPaymentData(CollectedClientData):
         challenge: bytes | str,
         origin: str,
         cross_origin: bool = False,
+        top_origin: str | None = None,
         **kwargs,
     ) -> CollectedClientData:
         return super().create(
@@ -86,6 +87,7 @@ class CollectedClientPaymentData(CollectedClientData):
             challenge=challenge,
             origin=origin,
             cross_origin=cross_origin,
+            top_origin=top_origin,
             payment=dict(kwargs.pop("payment")),
             **kwargs,
         )

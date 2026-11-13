@@ -281,3 +281,70 @@ def test_authentication_positional_credentials(monkeypatch, feature_state, crede
     else:
         assert descriptors is not None
         assert [d.id for d in descriptors] == [c.credential_id for c in credentials]
+
+
+def _authenticate_cross_origin(server, cross_origin=True, top_origin=None):
+    client_data = CollectedClientData.create(
+        CollectedClientData.TYPE.GET,
+        "GAZPACHO!",
+        "https://example.com",
+        cross_origin,
+        top_origin,
+    )
+    response = AuthenticationResponse(
+        raw_id=_CRED_ID,
+        response=AuthenticatorAssertionResponse(
+            client_data=client_data,
+            authenticator_data=AuthenticatorData(
+                bytes.fromhex(
+                    "A379A6F6EEAFB9A55E378C118034E2751E682FAB9F2D30AB13D2125586CE19"
+                    "47010000001D"
+                )
+            ),
+            signature=b"INVALID",
+        ),
+    )
+    state = {"challenge": "GAZPACHO!", "user_verification": None}
+    server.authenticate_complete(
+        state, [AttestedCredentialData(_ATT_CRED_DATA)], response
+    )
+
+
+@pytest.mark.parametrize(
+    "cross_origin, top_origin",
+    [(True, None), (True, "https://top.example"), (False, "https://top.example")],
+)
+def test_cross_origin_rejected_by_default(cross_origin, top_origin):
+    server = Fido2Server(PublicKeyCredentialRpEntity(name="Ex", id="example.com"))
+    with pytest.raises(ValueError, match="verify_top_origin not set"):
+        _authenticate_cross_origin(server, cross_origin, top_origin)
+
+
+@pytest.mark.parametrize(
+    "top_origin, accepted",
+    [("https://top.example", True), ("https://evil.example", False), (None, False)],
+)
+def test_verify_top_origin(top_origin, accepted):
+    seen = []
+
+    def verify(origin):
+        seen.append(origin)
+        return origin == "https://top.example"
+
+    server = Fido2Server(
+        PublicKeyCredentialRpEntity(name="Ex", id="example.com"),
+        verify_top_origin=verify,
+    )
+    message = "Invalid signature" if accepted else "Invalid top origin"
+    with pytest.raises(ValueError, match=message):
+        _authenticate_cross_origin(server, top_origin=top_origin)
+    assert seen == [top_origin]
+
+
+def test_same_origin_skips_top_origin_check():
+    server = Fido2Server(
+        PublicKeyCredentialRpEntity(name="Ex", id="example.com"),
+        verify_top_origin=lambda origin: pytest.fail("Should not be called"),
+    )
+    with pytest.raises(ValueError, match="Invalid signature"):
+        _authenticate_cross_origin(server, cross_origin=False)
