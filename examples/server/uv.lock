@@ -207,7 +207,7 @@ wheels = [
 
 [[package]]
 name = "fido2"
-version = "2.2.2.dev0"
+version = "2.3.0.dev0"
 source = { editable = "../../" }
 dependencies = [
     { name = "cryptography" },

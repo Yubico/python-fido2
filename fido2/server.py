@@ -34,6 +34,7 @@ from typing import Any, Callable, Mapping, Sequence
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
 from cryptography.hazmat.primitives import constant_time
 
+from . import features
 from .cose import CoseKey
 from .rpid import verify_rp_id
 from .utils import websafe_decode, websafe_encode
@@ -50,6 +51,7 @@ from .webauthn import (
     CredentialRequestOptions,
     PublicKeyCredentialCreationOptions,
     PublicKeyCredentialDescriptor,
+    PublicKeyCredentialHint,
     PublicKeyCredentialParameters,
     PublicKeyCredentialRequestOptions,
     PublicKeyCredentialRpEntity,
@@ -132,32 +134,59 @@ class Fido2Server:
         invoked with attestation_object and client_data_hash. It should return nothing
         and raise an exception on failure. By default, attestation is ignored.
         Attestation is also ignored if `attestation` is set to `none`.
+    :param timeout: (optional) Ceremony timeout hint in milliseconds.
+    :param allowed_algorithms: (optional) Ordered COSE algorithm identifiers to
+        offer during registration. Defaults to CoseKey.supported_algorithms().
+
+    Optional arguments should be passed by keyword. Positional optional arguments
+    are deprecated and will be removed in version 3.0. Enable
+    ``fido2.features.server_kw_only`` to reject them now.
     """
 
+    @features._deprecated_positional_args(
+        features.server_kw_only, "attestation", "verify_origin", "verify_attestation"
+    )
     def __init__(
         self,
         rp: PublicKeyCredentialRpEntity,
+        *,
         attestation: AttestationConveyancePreference | None = None,
         verify_origin: VerifyOrigin | None = None,
         verify_attestation: VerifyAttestation | None = None,
+        timeout: int | None = None,
+        allowed_algorithms: Sequence[int] | None = None,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         assert self.rp.id is not None  # noqa: S101
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
-        self.timeout = None
+        self.timeout = timeout
         self.attestation = AttestationConveyancePreference(attestation)
         self.allowed_algorithms = [
             PublicKeyCredentialParameters(
                 type=PublicKeyCredentialType.PUBLIC_KEY, alg=alg
             )
-            for alg in CoseKey.supported_algorithms()
+            for alg in (
+                CoseKey.supported_algorithms()
+                if allowed_algorithms is None
+                else allowed_algorithms
+            )
         ]
         self._verify_attestation = verify_attestation or _ignore_attestation
         logger.debug(f"Fido2Server initialized for RP: {self.rp}")
 
+    @features._deprecated_positional_args(
+        features.server_kw_only,
+        "credentials",
+        "resident_key_requirement",
+        "user_verification",
+        "authenticator_attachment",
+        "challenge",
+        "extensions",
+    )
     def register_begin(
         self,
         user: PublicKeyCredentialUserEntity,
+        *,
         credentials: (
             Sequence[AttestedCredentialData | PublicKeyCredentialDescriptor] | None
         ) = None,
@@ -166,10 +195,15 @@ class Fido2Server:
         authenticator_attachment: AuthenticatorAttachment | None = None,
         challenge: bytes | None = None,
         extensions=None,
+        hints: Sequence[PublicKeyCredentialHint] | None = None,
+        attestation_formats: Sequence[str] | None = None,
     ) -> tuple[CredentialCreationOptions, Any]:
         """Return a PublicKeyCredentialCreationOptions registration object and
         the internal state dictionary that needs to be passed as is to the
         corresponding `register_complete` call.
+
+        Optional arguments should be passed by keyword; positional optional
+        arguments are deprecated and will be removed in version 3.0.
 
         :param user: The dict containing the user data.
         :param credentials: The list of previously registered credentials, these can be
@@ -180,6 +214,9 @@ class Fido2Server:
             or None to not provide a preference (and get both types).
         :param challenge: A custom challenge to sign and verify or None to use
             OS-specific random bytes.
+        :param extensions: Extension inputs to include in the request.
+        :param hints: Hints guiding the client's choice of authenticator.
+        :param attestation_formats: Preferred attestation statement formats.
         :return: Registration data, internal state."""
         if not self.allowed_algorithms:
             raise ValueError("Server has no allowed algorithms.")
@@ -218,6 +255,8 @@ class Fido2Server:
                     ),
                     attestation=self.attestation,
                     extensions=extensions,
+                    hints=hints,
+                    attestation_formats=attestation_formats,
                 )
             ),
             state,
@@ -277,24 +316,40 @@ class Fido2Server:
         )
         return auth_data
 
+    @features._deprecated_positional_args(
+        features.server_kw_only,
+        "user_verification",
+        "challenge",
+        "extensions",
+    )
     def authenticate_begin(
         self,
         credentials: (
             Sequence[AttestedCredentialData | PublicKeyCredentialDescriptor] | None
         ) = None,
+        *,
         user_verification: UserVerificationRequirement | None = None,
         challenge: bytes | None = None,
         extensions=None,
+        hints: Sequence[PublicKeyCredentialHint] | None = None,
     ) -> tuple[CredentialRequestOptions, Any]:
         """Return a PublicKeyCredentialRequestOptions assertion object and the internal
         state dictionary that needs to be passed as is to the corresponding
         `authenticate_complete` call.
 
+        Credentials may be passed positionally or by keyword. The remaining
+        arguments should be passed by keyword; positional use of those arguments
+        is deprecated and will be removed in version 3.0.
+
         :param credentials: The list of previously registered credentials, these can be
-            of type AttestedCredentialData, or PublicKeyCredentialDescriptor.
+            of type AttestedCredentialData, or PublicKeyCredentialDescriptor. Omit
+            this argument, pass None, or pass an empty sequence to use discoverable
+            credentials. Non-discoverable credentials require their IDs in this list.
         :param user_verification: The desired USER_VERIFICATION level.
         :param challenge: A custom challenge to sign and verify or None to use
             OS-specific random bytes.
+        :param extensions: Extension inputs to include in the request.
+        :param hints: Hints guiding the client's choice of authenticator.
         :return: Assertion data, internal state."""
         challenge = _validata_challenge(challenge)
         descriptors = _wrap_credentials(credentials)
@@ -316,6 +371,7 @@ class Fido2Server:
                     allow_credentials=descriptors,
                     user_verification=user_verification,
                     extensions=extensions,
+                    hints=hints,
                 )
             ),
             state,

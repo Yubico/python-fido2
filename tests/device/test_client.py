@@ -59,7 +59,7 @@ def discoverable_credential(request, dev_manager):
 
 
 def test_exclude_credentials_single(credential, client, excluded_match):
-    create_options, state = server.register_begin(user, [credential])
+    create_options, state = server.register_begin(user, credentials=[credential])
     with pytest.raises(ClientError, match=excluded_match):
         client.make_credential(create_options.public_key)
 
@@ -67,7 +67,7 @@ def test_exclude_credentials_single(credential, client, excluded_match):
 def test_exclude_credentials_multiple(credential, client, excluded_match):
     exclude = [{"id": os.urandom(32), "type": "public-key"} for _ in range(5)]
     exclude.insert(3, to_descriptor(credential))
-    create_options, state = server.register_begin(user, exclude)
+    create_options, state = server.register_begin(user, credentials=exclude)
     with pytest.raises(ClientError, match=excluded_match):
         client.make_credential(create_options.public_key)
 
@@ -78,13 +78,13 @@ def test_exclude_credentials_max(info, client):
     exclude = [
         {"id": os.urandom(max_len), "type": "public-key"} for _ in range(n_creds)
     ]
-    create_options, state = server.register_begin(user, exclude)
+    create_options, state = server.register_begin(user, credentials=exclude)
     client.make_credential(create_options.public_key)
 
 
 def test_exclude_credentials_others(client):
     exclude = [{"id": os.urandom(32), "type": "public-key"} for _ in range(5)]
-    create_options, state = server.register_begin(user, exclude)
+    create_options, state = server.register_begin(user, credentials=exclude)
     client.make_credential(create_options.public_key)
 
 

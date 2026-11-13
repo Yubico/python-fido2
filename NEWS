@@ -1,4 +1,11 @@
-* Version 2.2.2 (unreleased)
+* Version 2.3.0 (unreleased)
+ ** Server: Add hints to registration and authentication requests, and preferred
+    attestation formats to registration requests.
+ ** Server: Add keyword-only timeout and allowed_algorithms constructor options.
+ ** Deprecation: Optional arguments to Fido2Server and its begin methods should
+    be passed by keyword, except authenticate_begin's credentials argument.
+    Other positional optional arguments remain supported until version 3.0;
+    enable features.server_kw_only for strict keyword-only behavior now.
  ** Attestation: Use cryptography's certificate issuer verification when available,
     supporting additional signature algorithms while retaining the legacy fallback.
  ** MDS: Allow omitted userVerificationDetails and attachmentHint fields, as

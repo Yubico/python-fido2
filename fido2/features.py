@@ -27,6 +27,12 @@
 
 
 import warnings
+from functools import wraps
+from inspect import Parameter, signature
+from typing import Any, Callable, ParamSpec, TypeVar
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class FeatureNotEnabledError(Exception):
@@ -41,7 +47,7 @@ class _Feature:
 
     @property
     def enabled(self) -> bool:
-        self.warn()
+        self.warn(stacklevel=3)
         return self._enabled is True
 
     @enabled.setter
@@ -54,12 +60,12 @@ class _Feature:
 
     def require(self, state=True) -> None:
         if self._enabled != state:
-            self.warn()
+            self.warn(stacklevel=3)
             raise FeatureNotEnabledError(
                 f"Usage requires {self._name}.enabled = {state}"
             )
 
-    def warn(self) -> None:
+    def warn(self, *, stacklevel: int = 2) -> None:
         if self._enabled is None:
             warnings.warn(
                 f"""Deprecated use of {self._name}.
@@ -77,4 +83,51 @@ To silence this warning but retain the current behavior, instead set enabled to 
 {self._desc}
             """,
                 DeprecationWarning,
+                stacklevel=stacklevel,
             )
+
+
+server_kw_only = _Feature(
+    "server_kw_only",
+    """Optional arguments to Fido2Server, register_begin, and authenticate_begin will
+be keyword-only in python-fido2 3.0, except authenticate_begin's credentials.
+Required rp and user arguments remain positional-compatible. Keyword calls need
+no opt-in. Set enabled to True to reject deprecated positional arguments now,
+or False to retain them without warnings.""",
+)
+
+
+def _deprecated_positional_args(
+    feature: _Feature, *names: str
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    def decorate(func: Callable[P, R]) -> Callable[P, R]:
+        qualname = getattr(func, "__qualname__", type(func).__qualname__)
+        positional_count = sum(
+            p.kind in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
+            for p in signature(func).parameters.values()
+        )
+
+        @wraps(func)
+        def wrapped(*args: Any, **kwargs: Any) -> R:
+            extra_args = args[positional_count:]
+            if extra_args:
+                if len(extra_args) > len(names):
+                    raise TypeError(
+                        f"{qualname}() received too many positional arguments"
+                    )
+                for name, value in zip(names, extra_args):
+                    if name in kwargs:
+                        raise TypeError(
+                            f"{qualname}() got multiple values for argument '{name}'"
+                        )
+                    kwargs[name] = value
+                if feature._enabled is True:
+                    raise TypeError(
+                        f"{qualname}() optional arguments must be passed by keyword"
+                    )
+                feature.warn(stacklevel=3)
+            return func(*args[:positional_count], **kwargs)
+
+        return wrapped
+
+    return decorate

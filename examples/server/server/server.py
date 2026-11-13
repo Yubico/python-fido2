@@ -38,8 +38,11 @@ import os
 
 from flask import Flask, abort, jsonify, redirect, request, session
 
+from fido2 import features
 from fido2.server import Fido2Server
 from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
+
+features.server_kw_only.enabled = True
 
 app = Flask(__name__, static_url_path="")
 app.secret_key = os.urandom(32)  # Used for session.
@@ -66,7 +69,7 @@ def register_begin():
             name="a_user",
             display_name="A. User",
         ),
-        credentials,
+        credentials=credentials,
         user_verification="discouraged",
         authenticator_attachment="cross-platform",
     )
