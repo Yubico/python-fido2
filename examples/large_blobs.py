@@ -57,18 +57,14 @@ create_options, state = server.register_begin(
     resident_key_requirement="required",
     user_verification=uv,
     authenticator_attachment="cross-platform",
+    # Enable largeBlob
+    extensions={"largeBlob": {"support": "required"}},
 )
 
 print("Creating a credential with LargeBlob support...")
 
 # Create a credential
-result = client.make_credential(
-    {
-        **create_options["publicKey"],
-        # Enable largeBlob
-        "extensions": {"largeBlob": {"support": "required"}},
-    }
-)
+result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 auth_data = server.register_complete(state, result)
@@ -85,18 +81,15 @@ if not result.client_extension_results.get("largeBlob", {}).get("supported"):
 print("Credential created! Writing a blob...")
 
 # Prepare parameters for getAssertion
-request_options, state = server.authenticate_begin(credentials, user_verification=uv)
+request_options, state = server.authenticate_begin(
+    credentials,
+    user_verification=uv,
+    # Write a large blob
+    extensions={"largeBlob": {"write": websafe_encode(b"Here is some data to store!")}},
+)
 
 # Authenticate the credential
-selection = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        # Write a large blob
-        "extensions": {
-            "largeBlob": {"write": websafe_encode(b"Here is some data to store!")}
-        },
-    }
-)
+selection = client.get_assertion(request_options["publicKey"])
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)
@@ -106,14 +99,16 @@ if not result.client_extension_results.get("largeBlob", {}).get("written"):
 
 print("Blob written! Reading back the blob...")
 
-# Authenticate the credential
-selection = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        # Read the blob
-        "extensions": {"largeBlob": {"read": True}},
-    }
+# Prepare parameters for getAssertion
+request_options, state = server.authenticate_begin(
+    credentials,
+    user_verification=uv,
+    # Read the blob
+    extensions={"largeBlob": {"read": True}},
 )
+
+# Authenticate the credential
+selection = client.get_assertion(request_options["publicKey"])
 
 # Only one cred in allowCredentials, only one response.
 result = selection.get_response(0)

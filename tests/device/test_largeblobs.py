@@ -125,47 +125,41 @@ def test_large_blob_key(client, ctap2, pin_protocol, clear_creds):
         user,
         resident_key_requirement="required",
         user_verification="required",
+        extensions={"largeBlob": {"support": "required"}},
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"largeBlob": {"support": "required"}},
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
     auth_data = server.register_complete(state, result)
     credentials = [auth_data.credential_data]
 
     assert result.client_extension_results.large_blob.supported is True
     assert result.client_extension_results["largeBlob"]["supported"] is True
 
-    request_options, state = server.authenticate_begin(
-        credentials, user_verification="required"
-    )
-
     data = b"test data"
 
-    selection = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            # Write a large blob
-            "extensions": {"largeBlob": {"write": websafe_encode(data)}},
-        }
+    request_options, state = server.authenticate_begin(
+        credentials,
+        user_verification="required",
+        # Write a large blob
+        extensions={"largeBlob": {"write": websafe_encode(data)}},
     )
+
+    selection = client.get_assertion(request_options["publicKey"])
     result = selection.get_response(0)
 
     assert result.client_extension_results.large_blob.written is True
     assert result.client_extension_results["largeBlob"]["written"] is True
 
-    # Authenticate the credential
-    selection = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            # Read back the blob
-            "extensions": {"largeBlob": {"read": True}},
-        }
+    request_options, state = server.authenticate_begin(
+        credentials,
+        user_verification="required",
+        # Read back the blob
+        extensions={"largeBlob": {"read": True}},
     )
+
+    # Authenticate the credential
+    selection = client.get_assertion(request_options["publicKey"])
     result = selection.get_response(0)
 
     assert result.client_extension_results.large_blob.blob == data

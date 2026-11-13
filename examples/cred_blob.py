@@ -51,24 +51,20 @@ if info and (info.options.get("uv") or info.options.get("bioEnroll")):
 server = Fido2Server({"id": "example.com", "name": "Example RP"})
 user = {"id": b"user_id", "name": "A. User"}
 
+# Data to store using the CredBlob extension
+blob = os.urandom(32)  # 32 random bytes
+
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
     resident_key_requirement="required",
     user_verification=uv,
     authenticator_attachment="cross-platform",
+    extensions={"credBlob": blob},
 )
-
-# Add CredBlob extension, attach data
-blob = os.urandom(32)  # 32 random bytes
 
 # Create a credential
-result = client.make_credential(
-    {
-        **create_options["publicKey"],
-        "extensions": {"credBlob": blob},
-    }
-)
+result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 auth_data = server.register_complete(state, result)
@@ -83,16 +79,11 @@ if not auth_data.extensions.get("credBlob"):
 print("New credential created, with the CredBlob extension.")
 
 # Prepare parameters for getAssertion
-request_options, state = server.authenticate_begin()
+request_options, state = server.authenticate_begin(extensions={"getCredBlob": True})
 
 # Authenticate the credential
 # Only one cred in allowCredentials, only one response.
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        "extensions": {"getCredBlob": True},
-    }
-).get_response(0)
+result = client.get_assertion(request_options["publicKey"]).get_response(0)
 
 blob_res = result.response.authenticator_data.extensions.get("credBlob")
 

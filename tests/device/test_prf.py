@@ -22,15 +22,12 @@ def test_prf(client, pin_protocol):
     user = {"id": b"user_id", "name": "A. User"}
     uv = "required"
 
-    create_options, state = server.register_begin(user, user_verification=uv)
+    create_options, state = server.register_begin(
+        user, user_verification=uv, extensions={"prf": {}}
+    )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"prf": {}},
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
     assert result.client_extension_results.prf.enabled is True
     assert result.client_extension_results["prf"]["enabled"] is True
 
@@ -47,16 +44,13 @@ def test_prf(client, pin_protocol):
     # Prepare parameters for getAssertion
     credentials = [credential]
     request_options, state = server.authenticate_begin(
-        credentials, user_verification=uv
+        credentials,
+        user_verification=uv,
+        extensions={"prf": {"eval": {"first": salt}}},
     )
 
     # Authenticate the credential
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {"prf": {"eval": {"first": salt}}},
-        }
-    )
+    result = client.get_assertion(request_options["publicKey"])
 
     # Only one cred in allowCredentials, only one response.
     response = result.get_response(0)
@@ -75,22 +69,22 @@ def test_prf(client, pin_protocol):
     # Generate a second salt for PRF:
     salt2 = websafe_encode(os.urandom(32))
     # The first salt is reused, which should result in the same secret.
-
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {
-                "prf": {
-                    "evalByCredential": {
-                        websafe_encode(credential.credential_id): {
-                            "first": salt,
-                            "second": salt2,
-                        }
+    request_options, state = server.authenticate_begin(
+        credentials,
+        user_verification=uv,
+        extensions={
+            "prf": {
+                "evalByCredential": {
+                    websafe_encode(credential.credential_id): {
+                        "first": salt,
+                        "second": salt2,
                     }
                 }
-            },
-        }
+            }
+        },
     )
+
+    result = client.get_assertion(request_options["publicKey"])
 
     response = result.get_response(0)
 
@@ -108,7 +102,9 @@ def test_hmac_secret(device, pin_protocol, printer):
     user = {"id": b"user_id", "name": "A. User"}
     uv = "required"
 
-    create_options, state = server.register_begin(user, user_verification=uv)
+    create_options, state = server.register_begin(
+        user, user_verification=uv, extensions={"hmacCreateSecret": True}
+    )
 
     client = Fido2Client(
         device,
@@ -118,12 +114,7 @@ def test_hmac_secret(device, pin_protocol, printer):
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"hmacCreateSecret": True},
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
     assert result.client_extension_results.hmac_create_secret is True
     assert result.client_extension_results["hmacCreateSecret"] is True
 
@@ -136,15 +127,12 @@ def test_hmac_secret(device, pin_protocol, printer):
 
     # Prepare parameters for getAssertion
     request_options, state = server.authenticate_begin(
-        credentials, user_verification=uv
+        credentials,
+        user_verification=uv,
+        extensions={"hmacGetSecret": {"salt1": salt}},
     )
 
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {"hmacGetSecret": {"salt1": salt}},
-        }
-    )
+    result = client.get_assertion(request_options["publicKey"])
     result = result.get_response(0)
 
     output1 = result.client_extension_results.hmac_get_secret.output1
@@ -154,12 +142,13 @@ def test_hmac_secret(device, pin_protocol, printer):
 
     salt2 = os.urandom(32)
 
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {"hmacGetSecret": {"salt1": salt, "salt2": salt2}},
-        }
+    request_options, state = server.authenticate_begin(
+        credentials,
+        user_verification=uv,
+        extensions={"hmacGetSecret": {"salt1": salt, "salt2": salt2}},
     )
+
+    result = client.get_assertion(request_options["publicKey"])
     result = result.get_response(0)
 
     output = result.client_extension_results.hmac_get_secret
@@ -176,19 +165,18 @@ def test_prf_mc(client, pin_protocol, info):
     user = {"id": b"user_id", "name": "A. User"}
     uv = "required"
 
-    create_options, state = server.register_begin(user, user_verification=uv)
-
     # Generate salts for PRF:
     salt1 = websafe_encode(os.urandom(32))
     salt2 = websafe_encode(os.urandom(32))
 
-    # Create a credential, with salts
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"prf": {"eval": {"first": salt1, "second": salt2}}},
-        }
+    create_options, state = server.register_begin(
+        user,
+        user_verification=uv,
+        extensions={"prf": {"eval": {"first": salt1, "second": salt2}}},
     )
+
+    # Create a credential, with salts
+    result = client.make_credential(create_options["publicKey"])
     auth_data = server.register_complete(state, result)
     credential = auth_data.credential_data
 
@@ -202,25 +190,22 @@ def test_prf_mc(client, pin_protocol, info):
     # Prepare parameters for getAssertion
     credentials = [credential]
     request_options, state = server.authenticate_begin(
-        credentials, user_verification=uv
+        credentials,
+        user_verification=uv,
+        extensions={
+            "prf": {
+                "evalByCredential": {
+                    websafe_encode(credential.credential_id): {
+                        "first": salt1,
+                        "second": salt2,
+                    }
+                }
+            }
+        },
     )
 
     # Authenticate the credential
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {
-                "prf": {
-                    "evalByCredential": {
-                        websafe_encode(credential.credential_id): {
-                            "first": salt1,
-                            "second": salt2,
-                        }
-                    }
-                }
-            },
-        }
-    )
+    result = client.get_assertion(request_options["publicKey"])
 
     response = result.get_response(0)
     assert output == response.client_extension_results.prf.results

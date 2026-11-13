@@ -29,22 +29,17 @@ def test_list_and_delete(client, ctap2, pin_protocol, algorithm):
     assert remaining > 0
 
     rp = {"id": "example.com", "name": "Example RP"}
-    server = Fido2Server(rp)
+    server = Fido2Server(rp, allowed_algorithms=[algorithm["alg"]])
     user = {"id": b"user_id", "name": "A. User"}
 
     create_options, state = server.register_begin(
         user,
         resident_key_requirement="required",
+        extensions={"credProps": True},
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "pubKeyCredParams": [algorithm],
-            "extensions": {"credProps": True},
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
 
     # Need new PIN token as old one is expired by make_credential
     credman = get_credman(ctap2, pin_protocol)
@@ -92,15 +87,11 @@ def test_update(client, ctap2, pin_protocol):
     create_options, state = server.register_begin(
         user,
         resident_key_requirement="required",
+        extensions={"credProps": True},
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"credProps": True},
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
     auth_data = server.register_complete(state, result)
     cred_id = {"id": auth_data.credential_data.credential_id, "type": "public-key"}
 

@@ -46,25 +46,21 @@ uv = "discouraged"
 server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
 user = {"id": b"user_id", "name": "A. User"}
 
+# Generate salts for PRF:
+salt = websafe_encode(os.urandom(32))
+salt2 = websafe_encode(os.urandom(32))
+
 # Prepare parameters for makeCredential
 create_options, state = server.register_begin(
     user,
     resident_key_requirement="discouraged",
     user_verification=uv,
     authenticator_attachment="cross-platform",
+    extensions={"prf": {"eval": {"first": salt, "second": salt2}}},
 )
-
-# Generate salts for PRF:
-salt = websafe_encode(os.urandom(32))
-salt2 = websafe_encode(os.urandom(32))
 
 # Create a credential
-result = client.make_credential(
-    {
-        **create_options["publicKey"],
-        "extensions": {"prf": {"eval": {"first": salt, "second": salt2}}},
-    }
-)
+result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 auth_data = server.register_complete(state, result)
@@ -84,22 +80,22 @@ if auth_data.is_user_verified():
 
 print("First salt:", salt)
 
-# Prepare parameters for getAssertion
 credentials = [credential]
-request_options, state = server.authenticate_begin(credentials, user_verification=uv)
 
 prf_results = result.client_extension_results.get("prf", {}).get("results")
 if prf_results:
     output1 = prf_results["first"]
     print("Credential created, with salt. Secret:", output1)
 else:
-    # Authenticate the credential
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {"prf": {"eval": {"first": salt}}},
-        }
+    # Prepare parameters for getAssertion
+    request_options, state = server.authenticate_begin(
+        credentials,
+        user_verification=uv,
+        extensions={"prf": {"eval": {"first": salt}}},
     )
+
+    # Authenticate the credential
+    result = client.get_assertion(request_options["publicKey"])
 
     # Only one cred in allowCredentials, only one response.
     response = result.get_response(0)
@@ -115,22 +111,22 @@ else:
 
 print("Authenticate with second salt:", salt2)
 # The first salt is reused, which should result in the same secret.
-
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        "extensions": {
-            "prf": {
-                "evalByCredential": {
-                    websafe_encode(credential.credential_id): {
-                        "first": salt,
-                        "second": salt2,
-                    }
+request_options, state = server.authenticate_begin(
+    credentials,
+    user_verification=uv,
+    extensions={
+        "prf": {
+            "evalByCredential": {
+                websafe_encode(credential.credential_id): {
+                    "first": salt,
+                    "second": salt2,
                 }
             }
-        },
-    }
+        }
+    },
 )
+
+result = client.get_assertion(request_options["publicKey"])
 
 # Only one cred in allowCredentials, only one response.
 response = result.get_response(0)

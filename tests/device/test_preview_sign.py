@@ -39,21 +39,17 @@ def test_client_arkg_p256(device, printer):
         resident_key_requirement="discouraged",
         user_verification=uv,
         authenticator_attachment="cross-platform",
+        extensions={
+            PreviewSignExtension.NAME: {
+                "generateKey": {
+                    "algorithms": [ESP256_SPLIT_ARKG_PLACEHOLDER],
+                }
+            }
+        },
     )
 
     # Create a credential with the sign extension
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {
-                PreviewSignExtension.NAME: {
-                    "generateKey": {
-                        "algorithms": [ESP256_SPLIT_ARKG_PLACEHOLDER],
-                    }
-                }
-            },
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
 
     auth_data = server.register_complete(state, result)
     credentials = [auth_data.credential_data]
@@ -93,26 +89,23 @@ def test_client_arkg_p256(device, printer):
 
     # Prepare parameters for getAssertion
     request_options, state = server.authenticate_begin(
-        credentials, user_verification=uv
+        credentials,
+        user_verification=uv,
+        extensions={
+            PreviewSignExtension.NAME: {
+                "signByCredential": {
+                    websafe_encode(credentials[0].credential_id): {
+                        "keyHandle": sign_key.key_handle,
+                        "tbs": ph_data,
+                        "additionalArgs": cbor.encode(args),
+                    },
+                },
+            }
+        },
     )
 
     # Authenticate with the sign extension
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {
-                PreviewSignExtension.NAME: {
-                    "signByCredential": {
-                        websafe_encode(credentials[0].credential_id): {
-                            "keyHandle": sign_key.key_handle,
-                            "tbs": ph_data,
-                            "additionalArgs": cbor.encode(args),
-                        },
-                    },
-                }
-            },
-        }
-    )
+    result = client.get_assertion(request_options["publicKey"])
 
     response = result.get_response(0)
     sign_result = response.client_extension_results[PreviewSignExtension.NAME]

@@ -42,6 +42,7 @@ from fido2.client import (
     UserInteraction,
 )
 from fido2.hid import CtapHidDevice
+from fido2.server import Fido2Server
 
 # Locate a device
 devs = list(CtapHidDevice.list_devices())
@@ -73,10 +74,9 @@ clients = [
     for d in devs
 ]
 
-# Prepare parameters for makeCredential
-rp = {"id": "example.com", "name": "Example RP"}
+server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="none")
 user = {"id": b"user_id", "name": "A. User"}
-challenge = b"Y2hhbGxlbmdl"
+
 cancel = Event()
 selected = None
 
@@ -108,19 +108,17 @@ for t in threads:
 if cancel.is_set():
     print("Authenticator selected, making credential...")
 
-    result = selected.make_credential(
-        {
-            "rp": rp,
-            "user": user,
-            "challenge": challenge,
-            "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
-        },
-    )
+    # Prepare parameters for makeCredential
+    create_options, state = server.register_begin(user)
+
+    result = selected.make_credential(create_options["publicKey"])
+
+    # Complete registration
+    auth_data = server.register_complete(state, result)
 
     print("New credential created!")
-    response = result.response
-    print("ATTESTATION OBJECT:", response.attestation_object)
+    print("ATTESTATION OBJECT:", result.response.attestation_object)
     print()
-    print("CREDENTIAL DATA:", response.attestation_object.auth_data.credential_data)
+    print("CREDENTIAL DATA:", auth_data.credential_data)
 else:
     print("Operation timed out!")

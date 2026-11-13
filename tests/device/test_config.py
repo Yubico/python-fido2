@@ -142,7 +142,9 @@ def test_min_pin_length(
         user = {"id": b"user_id", "name": "A. User"}
 
         create_options, state = server.register_begin(
-            user, user_verification="discouraged"
+            user,
+            user_verification="discouraged",
+            extensions={"minPinLength": True},
         )
 
         if "setMinPINLength" in ctap2.info.options:
@@ -154,12 +156,7 @@ def test_min_pin_length(
                 user_interaction=CliInteraction(printer, new_pin),
             )
 
-            result = client.make_credential(
-                {
-                    **create_options["publicKey"],
-                    "extensions": {"minPinLength": True},
-                }
-            )
+            result = client.make_credential(create_options["publicKey"])
             auth_data = server.register_complete(state, result)
             assert auth_data.extensions
             assert auth_data.extensions["minPinLength"] == expected_len

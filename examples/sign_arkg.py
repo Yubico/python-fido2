@@ -58,19 +58,15 @@ create_options, state = server.register_begin(
     resident_key_requirement="discouraged",
     user_verification=uv,
     authenticator_attachment="cross-platform",
+    extensions={
+        PreviewSignExtension.NAME: {
+            "generateKey": {"algorithms": [ESP256_SPLIT_ARKG_PLACEHOLDER]}
+        }
+    },
 )
 
 # Create a credential
-result = client.make_credential(
-    {
-        **create_options["publicKey"],
-        "extensions": {
-            PreviewSignExtension.NAME: {
-                "generateKey": {"algorithms": [ESP256_SPLIT_ARKG_PLACEHOLDER]}
-            }
-        },
-    }
-)
+result = client.make_credential(create_options["publicKey"])
 
 # Complete registration
 auth_data = server.register_complete(state, result)
@@ -112,27 +108,25 @@ message = b"New message"
 ph_data = sha256(message)
 
 # Prepare parameters for getAssertion
-request_options, state = server.authenticate_begin(credentials, user_verification=uv)
-
+request_options, state = server.authenticate_begin(
+    credentials,
+    user_verification=uv,
+    # Add extension inputs. We have only 1 credential in allowCredentials
+    extensions={
+        PreviewSignExtension.NAME: {
+            "signByCredential": {
+                websafe_encode(credentials[0].credential_id): {
+                    "keyHandle": sign_key.key_handle,
+                    "tbs": ph_data,
+                    "additionalArgs": cbor.encode(args),
+                },
+            },
+        }
+    },
+)
 
 # Authenticate the credential
-result = client.get_assertion(
-    {
-        **request_options["publicKey"],
-        # Add extension outputs. We have only 1 credential in allowCredentials
-        "extensions": {
-            PreviewSignExtension.NAME: {
-                "signByCredential": {
-                    websafe_encode(credentials[0].credential_id): {
-                        "keyHandle": sign_key.key_handle,
-                        "tbs": ph_data,
-                        "additionalArgs": cbor.encode(args),
-                    },
-                },
-            }
-        },
-    }
-)
+result = client.get_assertion(request_options["publicKey"])
 
 # Only one cred in allowCredentials, only one response.
 result = result.get_response(0)

@@ -3,18 +3,13 @@ from fido2.server import Fido2Server
 
 def test_make_assert(client, pin_protocol, algorithm):
     rp = {"id": "example.com", "name": "Example RP"}
-    server = Fido2Server(rp)
+    server = Fido2Server(rp, allowed_algorithms=[algorithm["alg"]])
     user = {"id": b"user_id", "name": "A. User"}
 
     create_options, state = server.register_begin(user)
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "pubKeyCredParams": [algorithm],
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
 
     auth_data = server.register_complete(state, result)
     cred = auth_data.credential_data

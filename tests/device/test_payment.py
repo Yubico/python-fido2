@@ -33,6 +33,7 @@ def test_payment_extension(device, printer, ctap2, pin_protocol):
         resident_key_requirement="required",
         user_verification="required",
         authenticator_attachment="cross-platform",
+        extensions={"payment": {"isPayment": True}},
     )
 
     client = Fido2Client(
@@ -43,12 +44,7 @@ def test_payment_extension(device, printer, ctap2, pin_protocol):
     )
 
     # Create a credential
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"payment": {"isPayment": True}},
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
 
     # Complete registration
     auth_data = server.register_complete(state, result)
@@ -66,11 +62,6 @@ def test_payment_extension(device, printer, ctap2, pin_protocol):
     creds = cm.enumerate_creds(rp_id_hash)
     assert creds[0][CredentialManagement.RESULT.THIRD_PARTY_PAYMENT] is True
 
-    # Prepare parameters for getAssertion
-    request_options, state = server.authenticate_begin(
-        credentials, user_verification="required"
-    )
-
     # Prepare payment options
     payment = CollectedClientAdditionalPaymentData(
         rp_id="example.com",
@@ -87,15 +78,15 @@ def test_payment_extension(device, printer, ctap2, pin_protocol):
         ),
     )
 
-    # Authenticate the credential
-    result = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {
-                "payment": dict(payment, isPayment=True),
-            },
-        }
+    # Prepare parameters for getAssertion
+    request_options, state = server.authenticate_begin(
+        credentials,
+        user_verification="required",
+        extensions={"payment": dict(payment, isPayment=True)},
     )
+
+    # Authenticate the credential
+    result = client.get_assertion(request_options["publicKey"])
 
     # Only one cred in allowCredentials, only one response.
     result = result.get_response(0)

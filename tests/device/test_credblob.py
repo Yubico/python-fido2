@@ -15,20 +15,16 @@ def test_read_write(client, ctap2, clear_creds):
     server = Fido2Server(rp)
     user = {"id": b"user_id", "name": "A. User"}
 
+    blob = os.urandom(32)
     create_options, state = server.register_begin(
         user,
         resident_key_requirement="required",
         user_verification="required",
+        extensions={"credBlob": blob},
     )
 
     # Create a credential
-    blob = os.urandom(32)
-    result = client.make_credential(
-        {
-            **create_options["publicKey"],
-            "extensions": {"credBlob": blob},
-        }
-    )
+    result = client.make_credential(create_options["publicKey"])
     auth_data = server.register_complete(state, result)
     credentials = [auth_data.credential_data]
 
@@ -36,15 +32,12 @@ def test_read_write(client, ctap2, clear_creds):
     assert auth_data.extensions["credBlob"] is True
 
     request_options, state = server.authenticate_begin(
-        credentials, user_verification="required"
+        credentials,
+        user_verification="required",
+        extensions={"getCredBlob": True},
     )
 
-    selection = client.get_assertion(
-        {
-            **request_options["publicKey"],
-            "extensions": {"getCredBlob": True},
-        }
-    )
+    selection = client.get_assertion(request_options["publicKey"])
     result = selection.get_response(0)
 
     assert result.response.authenticator_data.extensions.get("credBlob") == blob

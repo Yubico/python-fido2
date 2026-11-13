@@ -55,17 +55,13 @@ create_options, state = server.register_begin(
     resident_key_requirement="required",
     user_verification=uv,
     authenticator_attachment="cross-platform",
+    # This extension isn't needed, but can be used to verify that the created
+    # credential uses resident key
+    extensions={"credProps": True},
 )
 
 # Create a credential
-result = client.make_credential(
-    {
-        **create_options["publicKey"],
-        # This extension isn't needed, but can be used to verify that the created
-        # credential uses resident key
-        "extensions": {"credProps": True},
-    }
-)
+result = client.make_credential(create_options["publicKey"])
 
 
 # Complete registration
