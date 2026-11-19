@@ -10,9 +10,11 @@
     Other positional optional arguments remain supported until version 3.0;
     enable features.server_kw_only for strict keyword-only behavior now.
  ** WebAuthn: Add top_origin to CollectedClientData.
- ** Server: Reject cross-origin (iframe) responses by default, as they were
-    previously accepted without verification. Pass verify_top_origin to
-    Fido2Server to accept them from expected top-level origins.
+ ** Server: Add verify_top_origin to control which cross-origin (iframe)
+    responses are accepted. The permissive default emits a DeprecationWarning
+    at construction and logs a warning on use. Version 3.0 will reject these
+    responses by default. Pass verify_top_origin=reject_cross_origin to reject
+    them now.
  ** ARKG: Update references to draft-bradleylundberg-cfrg-arkg-11. The optional
     derived key algorithm (-3) of an ARKG public seed may now be omitted.
  ** Attestation: Use cryptography's certificate issuer verification when available,

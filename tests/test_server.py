@@ -1,11 +1,13 @@
+import logging
 import unittest
 import warnings
+from functools import partial
 from typing import Any, Callable, cast
 
 import pytest
 
 from fido2 import features
-from fido2.server import Fido2Server
+from fido2.server import Fido2Server, reject_cross_origin
 from fido2.utils import websafe_encode
 from fido2.webauthn import (
     AttestedCredentialData,
@@ -104,7 +106,7 @@ def test_positional_optional_arguments(monkeypatch, feature_state, method):
     server = Fido2Server(rp)
 
     if method == "constructor":
-        call = cast(Callable[..., Any], Fido2Server)
+        call = partial(Fido2Server, verify_top_origin=reject_cross_origin)
         required = (rp,)
         kwargs = {
             "attestation": "direct",
@@ -248,7 +250,7 @@ def test_default_algorithms_not_deprecated():
     rp = PublicKeyCredentialRpEntity(name="Example", id="example.com")
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        Fido2Server(rp).register_begin(USER)
+        Fido2Server(rp, verify_top_origin=reject_cross_origin).register_begin(USER)
 
 
 def test_zero_timeout():
@@ -314,17 +316,40 @@ def _authenticate_cross_origin(server, cross_origin=True, top_origin=None):
     "cross_origin, top_origin",
     [(True, None), (True, "https://top.example"), (False, "https://top.example")],
 )
-def test_cross_origin_rejected_by_default(cross_origin, top_origin):
-    server = Fido2Server(PublicKeyCredentialRpEntity(name="Ex", id="example.com"))
-    with pytest.raises(ValueError, match="verify_top_origin not set"):
+def test_cross_origin_allowed_by_default_with_warning(cross_origin, top_origin, caplog):
+    with pytest.warns(
+        DeprecationWarning, match="verify_top_origin=reject_cross_origin"
+    ) as caught:
+        server = Fido2Server(PublicKeyCredentialRpEntity(name="Ex", id="example.com"))
+    assert caught[0].filename == __file__
+    assert "Version 3.0 will deny them by default" in str(caught[0].message)
+    with pytest.raises(ValueError, match="Invalid signature"):
         _authenticate_cross_origin(server, cross_origin, top_origin)
+    [(logger, level, message)] = caplog.record_tuples
+    assert logger == "fido2.server"
+    assert level == logging.WARNING
+    assert "Accepting a cross-origin response without a configured" in message
+    assert "denied by default in version 3.0" in message
+
+
+@pytest.mark.parametrize("top_origin", [None, "https://top.example"])
+def test_reject_cross_origin(top_origin, caplog):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        server = Fido2Server(
+            PublicKeyCredentialRpEntity(name="Ex", id="example.com"),
+            verify_top_origin=reject_cross_origin,
+        )
+    with pytest.raises(ValueError, match="Invalid top origin"):
+        _authenticate_cross_origin(server, top_origin=top_origin)
+    assert not caplog.records
 
 
 @pytest.mark.parametrize(
     "top_origin, accepted",
     [("https://top.example", True), ("https://evil.example", False), (None, False)],
 )
-def test_verify_top_origin(top_origin, accepted):
+def test_verify_top_origin(top_origin, accepted, caplog):
     seen = []
 
     def verify(origin):
@@ -339,6 +364,7 @@ def test_verify_top_origin(top_origin, accepted):
     with pytest.raises(ValueError, match=message):
         _authenticate_cross_origin(server, top_origin=top_origin)
     assert seen == [top_origin]
+    assert not caplog.records
 
 
 def test_same_origin_skips_top_origin_check():

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from typing import Any, Callable, Mapping, Sequence
 
 from cryptography.exceptions import InvalidSignature as _InvalidSignature
@@ -93,8 +94,17 @@ VerifyOrigin = Callable[[str], bool]
 VerifyTopOrigin = Callable[[str | None], bool]
 
 
-def _reject_cross_origin(top_origin: str | None) -> bool:
-    raise ValueError("Cross-origin response, but verify_top_origin not set.")
+def _allow_cross_origin(top_origin: str | None) -> bool:
+    logger.warning(
+        "Accepting a cross-origin response without a configured verify_top_origin "
+        "callback. This will be denied by default in version 3.0."
+    )
+    return True
+
+
+def reject_cross_origin(top_origin: str | None) -> bool:
+    """Reject all cross-origin responses, even if no top-level origin is given."""
+    return False
 
 
 def _verify_origin_for_rp(rp_id: str) -> VerifyOrigin:
@@ -167,8 +177,10 @@ class Fido2Server:
         offer during registration. Defaults to DEFAULT_ALLOWED_ALGORITHMS.
     :param verify_top_origin: (optional) Function to accept cross-origin (iframe)
         responses. It is called with the top-level origin, or None if the client
-        did not provide one, and should return True to accept the response. By
-        default, cross-origin responses are rejected.
+        did not provide one, and should return True to accept the response.
+        Using the default emits a DeprecationWarning at construction and logs
+        a warning when accepting a cross-origin response. Version 3.0 will
+        reject them by default. Pass ``reject_cross_origin`` to reject them now.
 
     Optional arguments should be passed by keyword. Positional optional arguments
     are deprecated and will be removed in version 3.0. Enable
@@ -187,11 +199,20 @@ class Fido2Server:
         verify_attestation: VerifyAttestation | None = None,
         timeout: int | None = None,
         allowed_algorithms: Sequence[int] = DEFAULT_ALLOWED_ALGORITHMS,
-        verify_top_origin: VerifyTopOrigin = _reject_cross_origin,
+        verify_top_origin: VerifyTopOrigin = _allow_cross_origin,
     ):
         self.rp = PublicKeyCredentialRpEntity.from_dict(rp)
         assert self.rp.id is not None  # noqa: S101
         self._verify = verify_origin or _verify_origin_for_rp(self.rp.id)
+        if verify_top_origin is _allow_cross_origin:
+            warnings.warn(
+                "The default verify_top_origin accepts cross-origin responses. "
+                "Version 3.0 will deny them by default. "
+                "Pass verify_top_origin=reject_cross_origin to deny them now, "
+                "or pass a callback to allow expected top-level origins.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
         self._verify_top_origin = verify_top_origin
         self.timeout = timeout
         self.attestation = (
