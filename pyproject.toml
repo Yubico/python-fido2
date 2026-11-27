@@ -25,6 +25,7 @@ dependencies = ["cryptography (>=2.6, !=35, <53)"]
 
 [project.optional-dependencies]
 pcsc = ["pyscard (>=1.9, <3)"]
+win = ["pywin32 (>=311) ; sys_platform == 'win32'"]
 
 [dependency-groups]
 dev = [

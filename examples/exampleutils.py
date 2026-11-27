@@ -33,7 +33,7 @@ import ctypes
 from getpass import getpass
 
 from fido2.client import DefaultClientDataCollector, Fido2Client, UserInteraction
-from fido2.hid import CtapHidDevice
+from fido2.hid import CtapHidDevice, ipc_available
 
 # Support NFC devices if we can
 try:
@@ -46,7 +46,7 @@ try:
     from fido2.client.windows import WindowsClient
 
     use_winclient = (
-        WindowsClient.is_available() and not ctypes.windll.shell32.IsUserAnAdmin()
+        WindowsClient.is_available() and not (ctypes.windll.shell32.IsUserAnAdmin() or ipc_available())
     )
 except Exception:
     use_winclient = False
